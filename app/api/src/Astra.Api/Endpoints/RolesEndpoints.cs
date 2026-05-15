@@ -1,19 +1,30 @@
+using Astra.Api.Audit;
+using Astra.Api.Auth;
+using Astra.Api.Persistence;
+using Astra.Api.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
+
 namespace Astra.Api.Endpoints;
 
 /// <summary>
 /// Phase #4 / value-add #5 — Roles &amp; Permissions surface.
 ///
-///   GET /api/v1/personas            list the four personas + their charter
-///   GET /api/v1/personas/matrix     who-can-do-what action matrix
+///   GET    /api/v1/personas            list the four personas + their charter
+///   GET    /api/v1/personas/matrix     who-can-do-what action matrix
 ///
-/// Static today — the matrix is hand-curated to match the
-/// <c>if (persona.Persona != Persona.Engineer)</c> checks scattered
-/// across the endpoint surface. When real RBAC arrives in Phase D the
-/// shape stays the same and the source becomes a policy table rather
-/// than this constant.
+///   GET    /api/v1/users               list users (admin-only)
+///   POST   /api/v1/users               create a user (admin-only)
+///   PUT    /api/v1/users/{id}/persona  re-assign a user's persona (admin-only)
+///   DELETE /api/v1/users/{id}          remove a user (admin-only)
+///
+/// The persona/matrix endpoints stay static — they're the canonical
+/// charter and capability table. The /users surface is the operational
+/// CRUD an Admin uses to grant access.
 /// </summary>
 public static class RolesEndpoints
 {
+    private static readonly string[] ValidPersonas = { "engineer", "sme", "observer", "admin" };
+
     public static IEndpointRouteBuilder MapRolesEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/v1/personas", () =>
@@ -40,8 +51,147 @@ public static class RolesEndpoints
             });
         });
 
+        // ─── User CRUD (admin-only) ───────────────────────────────────────
+
+        app.MapGet("/api/v1/users", async (
+            AppDbContext db,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+            var users = await db.Users.AsNoTracking().OrderBy(u => u.DisplayName).ToListAsync(ct);
+            return Results.Ok(new
+            {
+                data = users.Select(u => new
+                {
+                    id = u.Id,
+                    email = u.Email,
+                    displayName = u.DisplayName,
+                    persona = u.Persona,
+                    createdAt = u.CreatedAt,
+                    updatedAt = u.UpdatedAt,
+                }),
+            });
+        });
+
+        app.MapPost("/api/v1/users", async (
+            CreateUserRequest body,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+            if (string.IsNullOrWhiteSpace(body.Email) || string.IsNullOrWhiteSpace(body.DisplayName))
+                return Results.BadRequest(new { error = new { code = "user.invalid", message = "email and displayName are required." } });
+            if (!ValidPersonas.Contains(body.Persona))
+                return Results.BadRequest(new { error = new { code = "user.invalid_persona", message = $"persona must be one of: {string.Join(", ", ValidPersonas)}." } });
+
+            var email = body.Email.Trim().ToLowerInvariant();
+            if (await db.Users.AnyAsync(u => u.Email == email, ct))
+                return Results.Conflict(new { error = new { code = "user.email_exists", message = "A user with that email already exists." } });
+
+            var now = DateTimeOffset.UtcNow;
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                DisplayName = body.DisplayName.Trim(),
+                Persona = body.Persona,
+                IdpSubject = "dev:" + email,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            await db.Users.AddAsync(user, ct);
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync("user.created", "user", user.Id, actor, payload: new
+            {
+                email = user.Email,
+                displayName = user.DisplayName,
+                persona = user.Persona,
+            }, ctx, ct);
+
+            return Results.Created($"/api/v1/users/{user.Id}", new
+            {
+                id = user.Id,
+                email = user.Email,
+                displayName = user.DisplayName,
+                persona = user.Persona,
+                createdAt = user.CreatedAt,
+                updatedAt = user.UpdatedAt,
+            });
+        });
+
+        app.MapPut("/api/v1/users/{id:guid}/persona", async (
+            Guid id,
+            UpdatePersonaRequest body,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+            if (!ValidPersonas.Contains(body.Persona))
+                return Results.BadRequest(new { error = new { code = "user.invalid_persona", message = $"persona must be one of: {string.Join(", ", ValidPersonas)}." } });
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+            if (user is null) return Results.NotFound(new { error = new { code = "user.not_found" } });
+
+            var previous = user.Persona;
+            if (previous == body.Persona)
+                return Results.Ok(new { id = user.Id, persona = user.Persona, unchanged = true });
+
+            user.Persona = body.Persona;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync("user.persona_changed", "user", user.Id, actor, payload: new
+            {
+                from = previous,
+                to = body.Persona,
+                email = user.Email,
+            }, ctx, ct);
+
+            return Results.Ok(new { id = user.Id, persona = user.Persona, previousPersona = previous });
+        });
+
+        app.MapDelete("/api/v1/users/{id:guid}", async (
+            Guid id,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+            if (user is null) return Results.NotFound(new { error = new { code = "user.not_found" } });
+
+            db.Users.Remove(user);
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync("user.deleted", "user", user.Id, actor, payload: new
+            {
+                email = user.Email,
+                displayName = user.DisplayName,
+                persona = user.Persona,
+            }, ctx, ct);
+
+            return Results.NoContent();
+        });
+
         return app;
     }
+
+    private sealed record CreateUserRequest(string Email, string DisplayName, string Persona);
+    private sealed record UpdatePersonaRequest(string Persona);
 
     private record PersonaDef(string id, string displayName, string charter, string[] ownsStages);
 

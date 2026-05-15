@@ -108,11 +108,22 @@ export type ValidationPolicy = {
 };
 
 // ─── Personas & roles (value-add #5: clear separation of duties) ────
+export type PersonaId = 'engineer' | 'sme' | 'observer' | 'admin';
+
 export type PersonaDef = {
-  id: 'engineer' | 'sme' | 'observer' | 'admin';
+  id: PersonaId;
   displayName: string;
   charter: string;
   ownsStages: string[];
+};
+
+export type UserRow = {
+  id: string;
+  email: string;
+  displayName: string;
+  persona: PersonaId;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PersonaActionDef = {
@@ -479,6 +490,21 @@ export const api = {
   // Phase #4 / value-add #5: persona model & permissions matrix
   listPersonas: () => apiFetch<{ data: PersonaDef[] }>('/api/v1/personas'),
   getPersonaMatrix: () => apiFetch<PersonaMatrix>('/api/v1/personas/matrix'),
+
+  // Phase #4 / users CRUD (admin-only)
+  listUsers: () => apiFetch<{ data: UserRow[] }>('/api/v1/users'),
+  createUser: (body: { email: string; displayName: string; persona: PersonaId }) =>
+    apiFetch<UserRow>('/api/v1/users', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateUserPersona: (id: string, persona: PersonaId) =>
+    apiFetch<{ id: string; persona: PersonaId; previousPersona?: PersonaId }>(
+      `/api/v1/users/${id}/persona`,
+      { method: 'PUT', body: JSON.stringify({ persona }) },
+    ),
+  deleteUser: (id: string) =>
+    apiFetch<void>(`/api/v1/users/${id}`, { method: 'DELETE' }),
 
   // Phase #4 / value-add #7: validation policy
   getValidationPolicy: () => apiFetch<ValidationPolicy>('/api/v1/validation/policy'),

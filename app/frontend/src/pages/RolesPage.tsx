@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Check, Minus, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Minus, Trash2, UserPlus, Users } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api, type PersonaDef, type PersonaActionDef } from '@/lib/api';
+import { api, ApiError, type PersonaDef, type PersonaId, type PersonaActionDef, type UserRow } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
+import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 
@@ -76,6 +78,8 @@ export function RolesPage() {
         ))}
       </div>
 
+      <UsersPanel />
+
       <Card>
         <CardHeader
           title={
@@ -98,6 +102,273 @@ export function RolesPage() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Users management panel — Phase #4.1 CRUD on the Users table.
+ *
+ * Lists every user with a persona-dropdown for in-place reassignment and
+ * a delete button. The "Add user" form sits in a collapsing section at
+ * the top.
+ */
+function UsersPanel() {
+  const queryClient = useQueryClient();
+  const users = useQuery({
+    queryKey: ['users'],
+    queryFn: api.listUsers,
+    staleTime: 0,
+  });
+
+  const [adding, setAdding] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newDisplay, setNewDisplay] = useState('');
+  const [newPersona, setNewPersona] = useState<PersonaId>('engineer');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const reset = () => {
+    setAdding(false);
+    setNewEmail('');
+    setNewDisplay('');
+    setNewPersona('engineer');
+    setFormError(null);
+  };
+
+  const create = useMutation({
+    mutationFn: () => api.createUser({ email: newEmail, displayName: newDisplay, persona: newPersona }),
+    onSuccess: () => {
+      reset();
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (e) => {
+      setFormError(e instanceof ApiError ? e.message : String(e));
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, persona }: { id: string; persona: PersonaId }) =>
+      api.updateUserPersona(id, persona),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteUser(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  });
+
+  return (
+    <Card data-testid="users-panel">
+      <CardHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Users className="h-4 w-4 text-ink-secondary" aria-hidden="true" />
+            Users
+          </span>
+        }
+        description="Every user belongs to one persona. Adjust below; every change is written to the audit log."
+        action={
+          !adding && (
+            <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+              <UserPlus className="h-4 w-4" />
+              Add user
+            </Button>
+          )
+        }
+      />
+      <CardBody className="space-y-4">
+        {adding && (
+          <div
+            className="rounded-md border border-border-subtle bg-sunken/40 p-4"
+            data-testid="user-add-form"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <LabelledInput
+                label="Email"
+                value={newEmail}
+                onChange={setNewEmail}
+                placeholder="alice@example.com"
+                type="email"
+              />
+              <LabelledInput
+                label="Display name"
+                value={newDisplay}
+                onChange={setNewDisplay}
+                placeholder="Alice Engineer"
+              />
+              <LabelledSelect
+                label="Persona"
+                value={newPersona}
+                onChange={(v) => setNewPersona(v as PersonaId)}
+                options={[
+                  { label: 'Engineer', value: 'engineer' },
+                  { label: 'SME', value: 'sme' },
+                  { label: 'Observer', value: 'observer' },
+                  { label: 'Admin', value: 'admin' },
+                ]}
+              />
+            </div>
+            {formError && (
+              <p className="mt-2 text-caption text-status-failed">{formError}</p>
+            )}
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setFormError(null);
+                  create.mutate();
+                }}
+                loading={create.isPending}
+                disabled={!newEmail || !newDisplay}
+              >
+                Create user
+              </Button>
+              <Button variant="secondary" size="sm" onClick={reset}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {users.isPending ? (
+          <Skeleton className="h-32 w-full" />
+        ) : users.isError || !users.data ? (
+          <ErrorBlock title="Could not load users" message={String(users.error)} />
+        ) : users.data.data.length === 0 ? (
+          <p className="text-body text-ink-secondary">
+            No users yet. Click "Add user" to create the first one.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-border-subtle">
+            <table className="w-full text-body">
+              <thead className="bg-sunken/60 text-caption text-ink-tertiary">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Display name</th>
+                  <th className="px-3 py-2 text-left font-medium">Email</th>
+                  <th className="px-3 py-2 text-left font-medium">Persona</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.data.data.map((u) => (
+                  <UserRowItem
+                    key={u.id}
+                    user={u}
+                    onPersonaChange={(persona) => update.mutate({ id: u.id, persona })}
+                    onDelete={() => {
+                      if (window.confirm(`Delete user ${u.displayName} (${u.email})?`)) {
+                        remove.mutate(u.id);
+                      }
+                    }}
+                    pending={update.isPending || remove.isPending}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function UserRowItem({
+  user,
+  onPersonaChange,
+  onDelete,
+  pending,
+}: {
+  user: UserRow;
+  onPersonaChange: (persona: PersonaId) => void;
+  onDelete: () => void;
+  pending: boolean;
+}) {
+  return (
+    <tr className="border-t border-border-subtle" data-testid={`user-row-${user.id}`}>
+      <td className="px-3 py-2 text-ink-primary">{user.displayName}</td>
+      <td className="px-3 py-2 font-mono text-caption text-ink-secondary">{user.email}</td>
+      <td className="px-3 py-2">
+        <select
+          value={user.persona}
+          onChange={(e) => onPersonaChange(e.target.value as PersonaId)}
+          disabled={pending}
+          aria-label="Persona"
+          className="rounded-md border border-border-subtle bg-raised px-2 py-1 text-caption text-ink-primary focus:border-accent focus:outline-none"
+        >
+          <option value="engineer">Engineer</option>
+          <option value="sme">SME</option>
+          <option value="observer">Observer</option>
+          <option value="admin">Admin</option>
+        </select>
+        {user.persona === 'admin' && <Badge tone="signed" className="ml-2">Admin</Badge>}
+      </td>
+      <td className="px-3 py-2 text-right">
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={pending}
+          className="inline-flex items-center gap-1 text-caption font-medium text-status-failed hover:underline disabled:opacity-50"
+          aria-label={`Delete ${user.displayName}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          Delete
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function LabelledInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: 'text' | 'email';
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+      />
+    </label>
+  );
+}
+
+function LabelledSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { label: string; value: string }[];
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
