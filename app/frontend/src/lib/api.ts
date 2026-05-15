@@ -146,9 +146,10 @@ export type SpecSchemaSummary = {
   claimKindCount: number;
   claimKinds: ClaimKindSummary[];
   owner?: string;
-  calibratedAgainst?: string;
-  status: string;
-  platformReadiness?: string;
+  /** May be a single label or a list of corpora the schema was tuned against. */
+  calibratedAgainst?: string | string[] | null;
+  status: string | null;
+  platformReadiness?: string | null;
 };
 
 // ─── Prompt library (value-add #2: calibrated prompts) ──────────────

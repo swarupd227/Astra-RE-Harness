@@ -124,7 +124,11 @@ function SchemaCard({
   schema: SpecSchemaSummary;
   onOpen: () => void;
 }) {
-  const isProd = schema.status.toLowerCase().includes('production');
+  // status may be null in schema.json (Fortran/COBOL ship without an
+  // explicit status string today); treat null as "production" — the
+  // schema is loaded so it's shippable.
+  const statusStr = schema.status ?? 'production';
+  const isProd = statusStr.toLowerCase().includes('production');
   return (
     <Card
       interactive
@@ -145,7 +149,7 @@ function SchemaCard({
         }
         action={
           <Badge tone={isProd ? 'success' : 'neutral'}>
-            {isProd ? 'Production' : prettyStatus(schema.status)}
+            {isProd ? 'Production' : prettyStatus(statusStr)}
           </Badge>
         }
       />
@@ -224,7 +228,7 @@ function SchemaDetailDrawer({
               {schema.displayName}
             </h3>
             <p className="mt-1 font-mono text-caption text-ink-tertiary">
-              id: {schema.id} · {schema.status}
+              id: {schema.id} · {schema.status ?? 'production'}
             </p>
           </div>
           <button
@@ -240,7 +244,9 @@ function SchemaDetailDrawer({
           <p className="text-body text-ink-secondary">{schema.description}</p>
           {schema.calibratedAgainst && (
             <div className="mt-4 rounded-md border border-border-subtle bg-sunken/40 px-3 py-2 font-mono text-caption text-ink-secondary">
-              Calibrated against: {schema.calibratedAgainst}
+              Calibrated against: {Array.isArray(schema.calibratedAgainst)
+                ? schema.calibratedAgainst.join(' · ')
+                : schema.calibratedAgainst}
             </div>
           )}
           <ClaimKindTable kinds={schema.claimKinds} />

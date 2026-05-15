@@ -40,6 +40,7 @@ e2e/.playwright/
 e2e/demo-output/narration-work/
 e2e/demo-output/narration-work*/
 e2e/demo-output/final-work/
+e2e/demo-output/tour-work/
 e2e/demo-output/piper-voices/
 e2e/demo-output/*.tmp
 e2e/demo-output/probe_*.jpg
