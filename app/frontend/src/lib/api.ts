@@ -552,6 +552,17 @@ export const api = {
     apiFetch<SignatureHealth>(`/api/v1/specs/${specId}/signature-health`),
   getSignatureHealthPortfolio: () =>
     apiFetch<SignatureHealthPortfolio>('/api/v1/signature-health'),
+  // Phase #4.5 admin re-verify actions
+  reverifySpec: (specId: string) =>
+    apiFetch<{ specId: string; state: string; previousSourceVersionId: string; newSourceVersionId: string; routineName: string }>(
+      `/api/v1/specs/${specId}/re-verify`,
+      { method: 'POST' },
+    ),
+  reverifyAllDrifted: () =>
+    apiFetch<{ resetCount: number; specIds: string[] }>(
+      '/api/v1/signature-health/re-verify-all',
+      { method: 'POST' },
+    ),
 
   // Phase #4 / value-add #2: prompt library
   listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),

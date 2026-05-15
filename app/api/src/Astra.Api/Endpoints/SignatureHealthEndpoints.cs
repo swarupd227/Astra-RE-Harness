@@ -1,3 +1,5 @@
+using Astra.Api.Audit;
+using Astra.Api.Auth;
 using Astra.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +8,13 @@ namespace Astra.Api.Endpoints;
 /// <summary>
 /// Phase #4 / value-add #8 — Signature Health surface.
 ///
-///   GET /api/v1/specs/{id}/signature-health   per-spec drift verdict
-///   GET /api/v1/signature-health              portfolio board (every signed spec)
+///   GET  /api/v1/specs/{id}/signature-health   per-spec drift verdict
+///   GET  /api/v1/signature-health              portfolio board (every signed spec)
+///   POST /api/v1/specs/{id}/re-verify          admin-only: clear signature
+///                                              + reset to IN_REVIEW so SME
+///                                              can re-walk against new source
+///   POST /api/v1/signature-health/re-verify-all admin-only: bulk re-verify
+///                                              every drifted spec
 ///
 /// "Healthy" means the corpus has not been re-ingested since this spec
 /// was signed — the SourceVersion the signature is bound to is still
@@ -60,7 +67,117 @@ public static class SignatureHealthEndpoints
             return Results.Ok(new { totalSigned = rows.Count, drifted = driftCount, rows });
         });
 
+        // ─── Phase #4.5 admin re-verify actions ──────────────────────────
+
+        app.MapPost("/api/v1/specs/{id:guid}/re-verify", async (
+            Guid id,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+
+            var (status, payload) = await ReverifyOneAsync(db, audit, actor, ctx, id, ct);
+            return status switch
+            {
+                ReverifyStatus.NotFound       => Results.NotFound(new { error = new { code = "spec.not_found" } }),
+                ReverifyStatus.NotSigned      => Results.BadRequest(new { error = new { code = "spec.not_signed", message = "Cannot re-verify an unsigned spec." } }),
+                ReverifyStatus.NotDrifted     => Results.BadRequest(new { error = new { code = "spec.not_drifted", message = "Spec signature is healthy — no re-verify required." } }),
+                _                             => Results.Ok(payload),
+            };
+        });
+
+        app.MapPost("/api/v1/signature-health/re-verify-all", async (
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.StatusCode(403);
+
+            // Find every spec whose signature is drifted (SourceVersionId !=
+            // corpus's latest SourceVersion). Tracked load — we need to mutate.
+            var specs = await db.Specs
+                .Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile).ThenInclude(f => f!.SourceVersion)
+                .Where(s => db.Signatures.Any(sig => sig.SpecId == s.Id))
+                .ToListAsync(ct);
+
+            var reset = new List<Guid>();
+            foreach (var spec in specs)
+            {
+                var (status, _) = await ReverifyOneAsync(db, audit, actor, ctx, spec.Id, ct);
+                if (status == ReverifyStatus.Ok) reset.Add(spec.Id);
+            }
+
+            return Results.Ok(new { resetCount = reset.Count, specIds = reset });
+        });
+
         return app;
+    }
+
+    private enum ReverifyStatus { Ok, NotFound, NotSigned, NotDrifted }
+
+    private static async Task<(ReverifyStatus Status, object? Payload)> ReverifyOneAsync(
+        AppDbContext db, IAuditLogger audit, DevPersonaContext actor, HttpContext ctx, Guid specId, CancellationToken ct)
+    {
+        var spec = await db.Specs
+            .Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile).ThenInclude(f => f!.SourceVersion)
+            .FirstOrDefaultAsync(s => s.Id == specId, ct);
+        if (spec is null) return (ReverifyStatus.NotFound, null);
+
+        var signature = await db.Signatures.FirstOrDefaultAsync(s => s.SpecId == specId, ct);
+        if (signature is null) return (ReverifyStatus.NotSigned, null);
+
+        var corpusId = spec.Subroutine?.SourceFile?.SourceVersion?.CorpusId ?? Guid.Empty;
+        var latestVersion = await db.SourceVersions
+            .AsNoTracking()
+            .Where(v => v.CorpusId == corpusId)
+            .OrderByDescending(v => v.IngestedAt)
+            .FirstOrDefaultAsync(ct);
+        var healthy = latestVersion != null && latestVersion.Id == spec.SourceVersionId;
+        if (healthy) return (ReverifyStatus.NotDrifted, null);
+
+        // Clear the signature (it's already cryptographically invalid against
+        // the new SourceVersion) and bounce the spec back to IN_REVIEW so the
+        // SME can walk the deltas. Claim reviews are preserved as a starting
+        // point — Phase D adds per-claim drift diffing.
+        var prevSignatureId = signature.Id;
+        var prevSourceVersionId = spec.SourceVersionId;
+        db.Signatures.Remove(signature);
+
+        // Re-point the spec to the latest source so the SME walks against
+        // the current corpus on the same Spec id.
+        if (latestVersion != null) spec.SourceVersionId = latestVersion.Id;
+        spec.State = "IN_REVIEW";
+        spec.UpdatedAt = DateTimeOffset.UtcNow;
+        if (spec.Subroutine is not null)
+        {
+            spec.Subroutine.State = "IN_REVIEW";
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        await audit.LogAsync("spec.reverify_triggered", "spec", specId, actor, payload: new
+        {
+            previousSignatureId = prevSignatureId,
+            previousSourceVersionId = prevSourceVersionId,
+            newSourceVersionId = latestVersion?.Id,
+            routineName = spec.Subroutine?.Name,
+        }, ctx, ct);
+
+        return (ReverifyStatus.Ok, new
+        {
+            specId,
+            state = spec.State,
+            previousSourceVersionId = prevSourceVersionId,
+            newSourceVersionId = latestVersion?.Id,
+            routineName = spec.Subroutine?.Name,
+        });
     }
 
     private static async Task<object?> ComputeAsync(AppDbContext db, Guid specId, CancellationToken ct)

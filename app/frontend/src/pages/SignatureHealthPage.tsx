@@ -1,10 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, ShieldAlert, ArrowRight } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ArrowRight, RefreshCcw } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api, type SignatureHealth } from '@/lib/api';
+import { api, ApiError, type SignatureHealth } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 
@@ -18,10 +20,33 @@ import { ErrorBlock } from '@/components/ErrorBlock';
  * Wraps GET /api/v1/signature-health.
  */
 export function SignatureHealthPage() {
+  const queryClient = useQueryClient();
+  const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
+  const isAdmin = whoami.data?.persona === 'admin';
+
   const q = useQuery({
     queryKey: ['signature-health-portfolio'],
     queryFn: api.getSignatureHealthPortfolio,
     staleTime: 30_000,
+  });
+
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const reverify = useMutation({
+    mutationFn: (specId: string) => api.reverifySpec(specId),
+    onSuccess: () => {
+      setActionError(null);
+      queryClient.invalidateQueries({ queryKey: ['signature-health-portfolio'] });
+    },
+    onError: (e) => setActionError(e instanceof ApiError ? e.message : String(e)),
+  });
+  const reverifyAll = useMutation({
+    mutationFn: () => api.reverifyAllDrifted(),
+    onSuccess: () => {
+      setActionError(null);
+      queryClient.invalidateQueries({ queryKey: ['signature-health-portfolio'] });
+    },
+    onError: (e) => setActionError(e instanceof ApiError ? e.message : String(e)),
   });
 
   if (q.isPending) {
@@ -61,8 +86,31 @@ export function SignatureHealthPage() {
         <StatCard label="Drifted" value={q.data.drifted} tone={q.data.drifted > 0 ? 'failed' : 'neutral'} />
       </div>
 
+      {actionError && <ErrorBlock title="Re-verify failed" message={actionError} />}
+
       <Card>
-        <CardHeader title="Portfolio" description="Drift-first ordering so actionable rows surface up." />
+        <CardHeader
+          title="Portfolio"
+          description="Drift-first ordering so actionable rows surface up."
+          action={
+            isAdmin && q.data.drifted > 0 && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  if (window.confirm(`Re-verify all ${q.data.drifted} drifted specs? Each will be reset to IN_REVIEW for the SME to re-walk.`)) {
+                    reverifyAll.mutate();
+                  }
+                }}
+                loading={reverifyAll.isPending}
+                data-testid="reverify-all"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Re-verify all drifted
+              </Button>
+            )
+          }
+        />
         <CardBody className="p-0">
           {q.data.rows.length === 0 ? (
             <p className="px-6 py-4 text-body text-ink-secondary">
@@ -81,7 +129,19 @@ export function SignatureHealthPage() {
                 </tr>
               </thead>
               <tbody>
-                {q.data.rows.map((row) => <PortfolioRow key={row.specId} row={row} />)}
+                {q.data.rows.map((row) => (
+                  <PortfolioRow
+                    key={row.specId}
+                    row={row}
+                    isAdmin={isAdmin}
+                    onReverify={() => {
+                      if (window.confirm(`Re-verify ${row.routineName}? The existing signature will be cleared and the spec returned to IN_REVIEW.`)) {
+                        reverify.mutate(row.specId);
+                      }
+                    }}
+                    reverifyPending={reverify.isPending && reverify.variables === row.specId}
+                  />
+                ))}
               </tbody>
             </table>
           )}
@@ -91,7 +151,17 @@ export function SignatureHealthPage() {
   );
 }
 
-function PortfolioRow({ row }: { row: SignatureHealth }) {
+function PortfolioRow({
+  row,
+  isAdmin,
+  onReverify,
+  reverifyPending,
+}: {
+  row: SignatureHealth;
+  isAdmin: boolean;
+  onReverify: () => void;
+  reverifyPending: boolean;
+}) {
   const isDrift = row.state === 'drift';
   return (
     <tr
@@ -121,12 +191,26 @@ function PortfolioRow({ row }: { row: SignatureHealth }) {
         )}
       </td>
       <td className="px-4 py-2">
-        <Link
-          to={`/subroutines/${row.subroutineId}/review`}
-          className="inline-flex items-center gap-1 text-caption font-medium text-accent hover:underline"
-        >
-          Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </Link>
+        <div className="flex items-center justify-end gap-3">
+          {isAdmin && isDrift && (
+            <button
+              type="button"
+              onClick={onReverify}
+              disabled={reverifyPending}
+              className="inline-flex items-center gap-1 text-caption font-medium text-status-failed hover:underline disabled:opacity-50"
+              data-testid={`reverify-${row.specId}`}
+            >
+              <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Re-verify
+            </button>
+          )}
+          <Link
+            to={`/subroutines/${row.subroutineId}/review`}
+            className="inline-flex items-center gap-1 text-caption font-medium text-accent hover:underline"
+          >
+            Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
       </td>
     </tr>
   );
