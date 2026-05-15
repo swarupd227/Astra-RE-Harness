@@ -63,10 +63,9 @@ const tiles: Tile[] = [
     to: '/platform/signatures',
     title: 'Signature Health',
     description:
-      'Cross-project health board: every signed routine, green if source unchanged since signing, red on byte-level drift.',
+      'Cross-project health board: every signed routine, green if source unchanged since signing, drift-aged if a newer ingest exists.',
     icon: ShieldCheck,
-    status: 'coming',
-    comingIn: '2.4',
+    status: 'live',
   },
   {
     to: '/platform/roles',

@@ -60,7 +60,7 @@ const platformItems: PlatformItem[] = [
   { to: '/platform/prompts',    label: 'Prompt Catalog',     icon: FileText },
   { to: '/platform/languages',  label: 'Languages',          icon: Languages },
   { to: '/platform/validation', label: 'Validation Policy',  icon: SlidersHorizontal },
-  { to: '/platform/signatures', label: 'Signature Health',   icon: ShieldCheck,        comingIn: '2.4' },
+  { to: '/platform/signatures', label: 'Signature Health',   icon: ShieldCheck },
   { to: '/platform/roles',      label: 'Roles & Permissions', icon: Users },
 ];
 

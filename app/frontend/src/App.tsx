@@ -25,6 +25,7 @@ import { PromptCatalogPage } from '@/pages/PromptCatalogPage';
 import { LanguagesPage } from '@/pages/LanguagesPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
+import { SignatureHealthPage } from '@/pages/SignatureHealthPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
@@ -222,6 +223,7 @@ export function App() {
             <Route path="/platform/languages" element={<LanguagesPage />} />
             <Route path="/platform/roles" element={<RolesPage />} />
             <Route path="/platform/validation" element={<ValidationPolicyPage />} />
+            <Route path="/platform/signatures" element={<SignatureHealthPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>

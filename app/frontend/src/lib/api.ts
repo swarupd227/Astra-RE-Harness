@@ -64,6 +64,28 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Signature Health (value-add #8: drift detection) ───────────────
+export type SignatureHealth = {
+  specId: string;
+  subroutineId: string;
+  routineName: string;
+  corpusId: string;
+  corpusName: string;
+  state: 'healthy' | 'drift' | 'unsigned';
+  signedAt: string | null;
+  signedSourceVersionId?: string;
+  currentSourceVersionId?: string;
+  signedSourceHash?: string;
+  driftAgeDays?: number;
+  signerDisplay?: string;
+};
+
+export type SignatureHealthPortfolio = {
+  totalSigned: number;
+  drifted: number;
+  rows: SignatureHealth[];
+};
+
 // ─── Validation policy (value-add #7: three independent gates) ──────
 export type ValidationGate = {
   id: string;
@@ -459,6 +481,12 @@ export const api = {
 
   // Phase #4 / value-add #7: validation policy
   getValidationPolicy: () => apiFetch<ValidationPolicy>('/api/v1/validation/policy'),
+
+  // Phase #4 / value-add #8: signature health (drift detection)
+  getSignatureHealth: (specId: string) =>
+    apiFetch<SignatureHealth>(`/api/v1/specs/${specId}/signature-health`),
+  getSignatureHealthPortfolio: () =>
+    apiFetch<SignatureHealthPortfolio>('/api/v1/signature-health'),
 
   // Phase #4 / value-add #2: prompt library
   listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),

@@ -12,6 +12,7 @@ import { Button } from '@/components/Button';
 import { ProviderStrip } from '@/components/ProviderStrip';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 import { TargetSelector } from '@/components/TargetSelector';
+import { SignatureHealthBadge } from '@/components/SignatureHealthBadge';
 import { MonacoSource, type Citation } from '@/components/MonacoSource';
 import { OutlinePane, type OutlineItem } from '@/components/OutlinePane';
 import { ReviewableClaimCard } from '@/components/ReviewableClaimCard';
@@ -199,6 +200,7 @@ export function SpecReviewPage() {
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
             </div>
             <Badge tone={signed ? 'signed' : inReview ? 'review' : 'draft'}>{sp.state}</Badge>
+            {signed && <SignatureHealthBadge specId={sp.id} compact />}
           </div>
           <div className="flex items-center gap-3 font-mono text-caption text-ink-secondary">
             <span><span className="text-ink-primary">{processed}</span> / {total} processed</span>
