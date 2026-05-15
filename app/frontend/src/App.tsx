@@ -22,6 +22,7 @@ import { ValidationReportPage } from '@/pages/ValidationReportPage';
 import { CompliancePage } from '@/pages/CompliancePage';
 import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
 import { PromptCatalogPage } from '@/pages/PromptCatalogPage';
+import { LanguagesPage } from '@/pages/LanguagesPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
@@ -216,6 +217,7 @@ export function App() {
             <Route path="/compliance" element={<CompliancePage />} />
             <Route path="/platform" element={<PlatformIndexPage />} />
             <Route path="/platform/prompts" element={<PromptCatalogPage />} />
+            <Route path="/platform/languages" element={<LanguagesPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>

@@ -64,6 +64,29 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Spec schemas (value-add #4: multi-language support) ────────────
+export type ClaimKindSummary = {
+  id: string;
+  label: string;
+  idPrefix: string;
+  displayTone?: string;
+  description: string;
+};
+
+export type SpecSchemaSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  supportedSourceExtensions: string[];
+  compatibleTargetStacks: string[];
+  claimKindCount: number;
+  claimKinds: ClaimKindSummary[];
+  owner?: string;
+  calibratedAgainst?: string;
+  status: string;
+  platformReadiness?: string;
+};
+
 // ─── Prompt library (value-add #2: calibrated prompts) ──────────────
 export type PromptSummary = {
   sourceSchema: string;
@@ -384,6 +407,9 @@ export const api = {
 
   // Phase #4 / value-add #1: provider trust signals
   getProviderSettings: () => apiFetch<ProviderSettings>('/api/v1/providers/settings'),
+
+  // Phase #4 / value-add #4: spec-schema discovery (multi-language)
+  listSpecSchemas: () => apiFetch<{ data: SpecSchemaSummary[] }>('/api/v1/spec-schemas'),
 
   // Phase #4 / value-add #2: prompt library
   listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),

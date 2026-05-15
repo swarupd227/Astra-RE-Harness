@@ -49,8 +49,7 @@ const tiles: Tile[] = [
     description:
       'Supported legacy languages and their typed claim schemas. Fortran live; COBOL pilot; RPG and PL/1 on the roadmap.',
     icon: Languages,
-    status: 'coming',
-    comingIn: '2.2',
+    status: 'live',
   },
   {
     to: '/platform/validation',
