@@ -64,6 +64,25 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Prompt library (value-add #2: calibrated prompts) ──────────────
+export type PromptSummary = {
+  sourceSchema: string;
+  targetStack: string;
+  kind: string;
+  version: string;
+  promptId: string;
+  owner?: string;
+  status?: string;
+  modelPreference?: string;
+  path: string;
+};
+
+export type PromptDetail = PromptSummary & {
+  frontmatter: Record<string, string>;
+  systemTemplate: string;
+  userTemplate: string;
+};
+
 // ─── Compliance feed (value-add #6: audit log) ──────────────────────
 export type ComplianceColumn = {
   id: string;
@@ -365,6 +384,15 @@ export const api = {
 
   // Phase #4 / value-add #1: provider trust signals
   getProviderSettings: () => apiFetch<ProviderSettings>('/api/v1/providers/settings'),
+
+  // Phase #4 / value-add #2: prompt library
+  listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),
+  getPrompt: (source: string, target: string, kind: string, version?: string) =>
+    apiFetch<PromptDetail>(
+      version
+        ? `/api/v1/prompts/${source}/${target}/${kind}/${version}`
+        : `/api/v1/prompts/${source}/${target}/${kind}`,
+    ),
 
   // Phase #4 / value-add #3: scaffold archetype catalog
   listArchetypes: () => apiFetch<{ data: ArchetypeManifest[] }>('/api/v1/archetypes'),

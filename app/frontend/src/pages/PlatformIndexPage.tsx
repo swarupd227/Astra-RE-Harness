@@ -39,10 +39,9 @@ const tiles: Tile[] = [
     to: '/platform/prompts',
     title: 'Prompt Catalog',
     description:
-      'Versioned prompt library per source language and target stack — diff between versions, pin a version per project.',
+      'Versioned prompt library per source language and target stack — view frontmatter, system + user templates.',
     icon: FileText,
-    status: 'coming',
-    comingIn: '2.1',
+    status: 'live',
   },
   {
     to: '/platform/languages',

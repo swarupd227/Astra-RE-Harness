@@ -21,6 +21,7 @@ import { ScaffoldArtifactPage } from '@/pages/ScaffoldArtifactPage';
 import { ValidationReportPage } from '@/pages/ValidationReportPage';
 import { CompliancePage } from '@/pages/CompliancePage';
 import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
+import { PromptCatalogPage } from '@/pages/PromptCatalogPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
@@ -214,6 +215,7 @@ export function App() {
             <Route path="/comments" element={<CommentsPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
             <Route path="/platform" element={<PlatformIndexPage />} />
+            <Route path="/platform/prompts" element={<PromptCatalogPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
