@@ -158,6 +158,88 @@ public static class ValidationEndpoints
             return Results.Text(content, "text/plain; charset=utf-8");
         });
 
+        // ─── Phase #5 — Per-routine equivalence preview ────────────────────
+        // Drives the CONSUME_ROLL gfortran driver + the inline C# reference
+        // with the canonical input vectors and returns the row-by-row
+        // comparison. Admin-only (Fortran compile is expensive, audit per
+        // invocation). Independent of any scaffold so the demo can show
+        // "real cross-runtime equivalence on the actual routine" without
+        // first running through the full pipeline.
+        app.MapPost("/api/v1/validation/equivalence/preview/consume-roll", async (
+            GfortranClient gfortran,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Admin)
+                return Forbid("auth.admin_required", "Only admins can run the equivalence preview.");
+
+            if (!await gfortran.PingAsync(ct))
+                return Results.Problem(detail: "gfortran sidecar unreachable", statusCode: 503);
+
+            var stdin = ConsumeRollEquivalence.RenderStdin();
+            var fortran = await gfortran.CompileAndRunAsync(new GfortranClient.CompileAndRunRequest(
+                Sources: new[] { new GfortranClient.Source("consume_roll_driver.f", ConsumeRollEquivalence.FortranDriverSource) },
+                Stdin: stdin,
+                TimeoutMs: 30_000), ct);
+
+            if (fortran.Compile.ExitCode != 0 || (fortran.Run?.ExitCode ?? -1) != 0)
+            {
+                return Results.Problem(detail: $"gfortran compile/run failed: {fortran.Compile.Log}", statusCode: 500);
+            }
+
+            var fortranLines = (fortran.Run?.Stdout ?? "")
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToArray();
+
+            var rows = new List<object>();
+            var allMatch = true;
+            for (int i = 0; i < ConsumeRollEquivalence.CanonicalInputs.Length; i++)
+            {
+                var input = ConsumeRollEquivalence.CanonicalInputs[i];
+                var csharp = ConsumeRollEquivalence.EvaluateCSharp(input);
+                JsonElement forr;
+                try
+                {
+                    using var doc = JsonDocument.Parse(i < fortranLines.Length ? fortranLines[i] : "{}");
+                    forr = doc.RootElement.Clone();
+                }
+                catch
+                {
+                    return Results.Problem(detail: $"Could not parse Fortran outcome line {i}: {(i < fortranLines.Length ? fortranLines[i] : "(missing)")}", statusCode: 500);
+                }
+
+                var match =
+                    forr.GetProperty("result_cd").GetInt32() == csharp.ResultCd
+                    && Math.Abs(forr.GetProperty("new_lf").GetSingle() - csharp.NewLf) < 0.0001f
+                    && forr.GetProperty("roll_status").GetInt32() == csharp.RollStatus
+                    && (forr.GetProperty("grade_cd").GetString() ?? "").TrimEnd() == csharp.GradeCd.TrimEnd()
+                    && forr.GetProperty("event_emitted").GetBoolean() == csharp.EventEmitted;
+                if (!match) allMatch = false;
+
+                rows.Add(new
+                {
+                    input = new { rollId = input.RollId, usedLf = input.UsedLf, operId = input.OperId, label = input.ExpectedLabel },
+                    fortran = forr,
+                    csharp,
+                    match,
+                });
+            }
+
+            return Results.Ok(new
+            {
+                routine = "CONSUME_ROLL",
+                inputCount = ConsumeRollEquivalence.CanonicalInputs.Length,
+                matched = rows.Count(r => (bool)((dynamic)r).match),
+                mismatched = rows.Count(r => !(bool)((dynamic)r).match),
+                verdict = allMatch ? "PASSED" : "FAILED",
+                fortranCompileMs = fortran.Compile.DurationMs,
+                fortranRunMs = fortran.Run?.DurationMs ?? -1,
+                rows,
+            });
+        });
+
         return app;
     }
 

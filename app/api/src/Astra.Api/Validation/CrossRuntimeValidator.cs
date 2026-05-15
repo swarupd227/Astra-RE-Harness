@@ -55,7 +55,9 @@ public sealed class CrossRuntimeValidator
         DevPersonaContext? actor,
         CancellationToken ct)
     {
-        var scaffold = await _db.Scaffolds.FirstOrDefaultAsync(s => s.Id == scaffoldId, ct)
+        var scaffold = await _db.Scaffolds
+            .Include(s => s.Spec).ThenInclude(s => s!.Subroutine)
+            .FirstOrDefaultAsync(s => s.Id == scaffoldId, ct)
             ?? throw new InvalidOperationException($"Scaffold {scaffoldId} not found.");
 
         var run = new ValidationRun
@@ -82,6 +84,17 @@ public sealed class CrossRuntimeValidator
             if (!await _gfortran.PingAsync(ct))
                 throw new InvalidOperationException(
                     "gfortran sidecar health probe failed (Validation:GfortranEndpoint).");
+
+            // ─── Per-routine route: CONSUME_ROLL ────────────────────────────
+            // If the scaffold derives from a spec on the CONSUME_ROLL routine,
+            // run the per-routine equivalence harness instead of the trivial
+            // adder smoke. The harness drives both runtimes with 5 canonical
+            // inputs and compares outputs row-for-row.
+            var routineName = (scaffold.Spec?.Subroutine?.Name ?? "").ToUpperInvariant();
+            if (routineName == "CONSUME_ROLL")
+            {
+                return await RunPerRoutineConsumeRollAsync(scaffold, run, actor, ct);
+            }
 
             // ─── Smoke case (canonical, baked in) ──────────────────────────
             // A trivial Fortran routine that reads two integers from stdin,
@@ -206,5 +219,164 @@ public sealed class CrossRuntimeValidator
                 ct: ct);
             return run;
         }
+    }
+
+    /// <summary>
+    /// Per-routine equivalence harness for CONSUME_ROLL. Drives both
+    /// runtimes with the same canonical inputs and compares outputs
+    /// row-for-row.
+    /// </summary>
+    private async Task<ValidationRun> RunPerRoutineConsumeRollAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var stdin = ConsumeRollEquivalence.RenderStdin();
+        var fortran = await _gfortran.CompileAndRunAsync(new GfortranClient.CompileAndRunRequest(
+            Sources: new[] { new GfortranClient.Source("consume_roll_driver.f", ConsumeRollEquivalence.FortranDriverSource) },
+            Stdin: stdin,
+            TimeoutMs: 30_000), ct);
+
+        if (fortran.Compile.ExitCode != 0 || (fortran.Run?.ExitCode ?? -1) != 0)
+        {
+            throw new InvalidOperationException(
+                $"gfortran sidecar failed (compile={fortran.Compile.ExitCode}, run={fortran.Run?.ExitCode}); log: {fortran.Compile.Log}");
+        }
+
+        // Parse one JSON line per outcome.
+        var fortranLines = (fortran.Run?.Stdout ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim()).Where(l => l.Length > 0).ToArray();
+        if (fortranLines.Length != ConsumeRollEquivalence.CanonicalInputs.Length)
+        {
+            throw new InvalidOperationException(
+                $"Fortran driver emitted {fortranLines.Length} outcomes; expected {ConsumeRollEquivalence.CanonicalInputs.Length}. Raw: {fortran.Run?.Stdout}");
+        }
+
+        var rowResults = new List<object>();
+        var allMatch = true;
+        for (int i = 0; i < ConsumeRollEquivalence.CanonicalInputs.Length; i++)
+        {
+            var input = ConsumeRollEquivalence.CanonicalInputs[i];
+            var csharp = ConsumeRollEquivalence.EvaluateCSharp(input);
+            FortranOutcome forr;
+            try
+            {
+                using var doc = JsonDocument.Parse(fortranLines[i]);
+                var root = doc.RootElement;
+                forr = new FortranOutcome(
+                    ResultCd: root.GetProperty("result_cd").GetInt32(),
+                    NewLf: root.GetProperty("new_lf").GetSingle(),
+                    RollStatus: root.GetProperty("roll_status").GetInt32(),
+                    GradeCd: root.GetProperty("grade_cd").GetString() ?? "",
+                    EventEmitted: root.GetProperty("event_emitted").GetBoolean(),
+                    EventGrade: root.GetProperty("event_grade").ValueKind == JsonValueKind.Null ? null : root.GetProperty("event_grade").GetString(),
+                    EventNewLf: root.GetProperty("event_new_lf").ValueKind == JsonValueKind.Null ? (float?)null : root.GetProperty("event_new_lf").GetSingle());
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Could not parse Fortran outcome line {i} ('{fortranLines[i]}'): {ex.Message}");
+            }
+
+            var match =
+                forr.ResultCd == csharp.ResultCd &&
+                MathF.Abs(forr.NewLf - csharp.NewLf) < 0.0001f &&
+                forr.RollStatus == csharp.RollStatus &&
+                (forr.GradeCd ?? "").TrimEnd() == (csharp.GradeCd ?? "").TrimEnd() &&
+                forr.EventEmitted == csharp.EventEmitted &&
+                (forr.EventGrade ?? "").TrimEnd() == (csharp.EventGrade ?? "").TrimEnd() &&
+                NullableSinglesEqual(forr.EventNewLf, csharp.EventNewLf);
+
+            if (!match) allMatch = false;
+
+            rowResults.Add(new
+            {
+                input = new { rollId = input.RollId, usedLf = input.UsedLf, operId = input.OperId, label = input.ExpectedLabel },
+                fortran = forr,
+                csharp,
+                match,
+            });
+        }
+
+        // ─── Transcript log ─────────────────────────────────────────────
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== Per-routine equivalence: CONSUME_ROLL ===");
+        transcript.AppendLine();
+        transcript.AppendLine("=== gfortran sidecar — compile ===");
+        transcript.AppendLine($"exit {fortran.Compile.ExitCode} · {fortran.Compile.DurationMs}ms · {fortran.Compile.ErrorCount} errors · {fortran.Compile.WarningCount} warnings");
+        if (!string.IsNullOrWhiteSpace(fortran.Compile.Log)) transcript.AppendLine(fortran.Compile.Log);
+        transcript.AppendLine();
+        transcript.AppendLine("=== gfortran sidecar — run ===");
+        transcript.AppendLine($"exit {fortran.Run?.ExitCode ?? -1} · {fortran.Run?.DurationMs ?? -1}ms · timedOut={fortran.Run?.TimedOut ?? false}");
+        transcript.AppendLine("stdin:");
+        transcript.AppendLine(stdin);
+        transcript.AppendLine("stdout:");
+        transcript.AppendLine(fortran.Run?.Stdout);
+        transcript.AppendLine();
+        transcript.AppendLine("=== row-by-row comparison ===");
+        foreach (var r in rowResults)
+        {
+            transcript.AppendLine(JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        transcript.AppendLine();
+        transcript.AppendLine($"=== verdict === {(allMatch ? "PASSED" : "FAILED")} · {ConsumeRollEquivalence.CanonicalInputs.Length} inputs");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "per-routine",
+            routine = "CONSUME_ROLL",
+            inputCount = ConsumeRollEquivalence.CanonicalInputs.Length,
+            matched = rowResults.Count(r => (bool)((dynamic)r).match),
+            mismatched = rowResults.Count(r => !(bool)((dynamic)r).match),
+            fortranCompileMs = fortran.Compile.DurationMs,
+            fortranRunMs = fortran.Run?.DurationMs ?? -1,
+            rows = rowResults,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+        if (allMatch)
+        {
+            run.Status = "PASSED";
+            run.Summary = $"Per-routine equivalence: CONSUME_ROLL on {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs · gfortran and C# agree row-for-row (result_cd, new_lf, status, grade, event payload).";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = "equivalence.outputs_differ";
+            var diffs = rowResults.Count(r => !(bool)((dynamic)r).match);
+            run.Summary = $"Per-routine equivalence: CONSUME_ROLL · {diffs} of {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs diverged between gfortran and C#. See log for the row diffs.";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                routine = "CONSUME_ROLL",
+                inputCount = ConsumeRollEquivalence.CanonicalInputs.Length,
+            },
+            ct: ct);
+
+        _log.LogInformation(
+            "Per-routine equivalence for scaffold {Scaffold} (CONSUME_ROLL): {Status} ({Summary})",
+            scaffold.Id, run.Status, run.Summary);
+        return run;
+    }
+
+    private sealed record FortranOutcome(int ResultCd, float NewLf, int RollStatus, string? GradeCd, bool EventEmitted, string? EventGrade, float? EventNewLf);
+
+    private static bool NullableSinglesEqual(float? a, float? b)
+    {
+        if (a is null && b is null) return true;
+        if (a is null || b is null) return false;
+        return MathF.Abs(a.Value - b.Value) < 0.0001f;
     }
 }
