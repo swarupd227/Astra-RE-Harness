@@ -259,6 +259,7 @@ app.MapArchetypeEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();
+app.MapValidationPolicyEndpoints();
 app.MapCommentEndpoints();
 app.MapNotificationEndpoints();
 app.MapEvidenceEndpoints();

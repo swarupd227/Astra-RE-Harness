@@ -64,6 +64,27 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Validation policy (value-add #7: three independent gates) ──────
+export type ValidationGate = {
+  id: string;
+  label: string;
+  description: string;
+  required: boolean;
+  coverageThreshold: string | null;
+  retryPolicy: string;
+  blockingCommitOnFailure: string;
+};
+
+export type ValidationPolicy = {
+  scope: string;
+  version: string;
+  ownedBy: string;
+  appliesTo: string;
+  commitGate: { requireAllGreen: boolean; description: string };
+  gates: ValidationGate[];
+  retryDefaults: { transientFlakeWindow: string; autoRetryCount: number; note: string };
+};
+
 // ─── Personas & roles (value-add #5: clear separation of duties) ────
 export type PersonaDef = {
   id: 'engineer' | 'sme' | 'observer' | 'admin';
@@ -435,6 +456,9 @@ export const api = {
   // Phase #4 / value-add #5: persona model & permissions matrix
   listPersonas: () => apiFetch<{ data: PersonaDef[] }>('/api/v1/personas'),
   getPersonaMatrix: () => apiFetch<PersonaMatrix>('/api/v1/personas/matrix'),
+
+  // Phase #4 / value-add #7: validation policy
+  getValidationPolicy: () => apiFetch<ValidationPolicy>('/api/v1/validation/policy'),
 
   // Phase #4 / value-add #2: prompt library
   listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),
