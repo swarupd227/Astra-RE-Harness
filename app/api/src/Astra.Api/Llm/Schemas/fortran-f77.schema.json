@@ -1,0 +1,93 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "fortran-f77",
+  "displayName": "Fortran F77 / F90 → modern stack",
+  "description": "Procedural Fortran subroutines with COMMON blocks and ISAM-style I/O callouts. Targets engineering / process control codebases (Kiwiplan-class, scientific solvers in MINPACK style, paper mill / wet-end controllers).",
+  "supportedSourceExtensions": [".f", ".f77", ".for", ".fpp", ".ftn", ".f90", ".f95", ".f03", ".f08"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring", "python-fastapi"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the subroutine must preserve across all valid inputs.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: ISAM rewrites, event emissions, COMMON-block updates.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure-mode conditions the subroutine handles (or is silent about).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities the source does not resolve and the SME must answer before sign-off.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "citations"]
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": ["invariant", "sideEffect", "edgeCase", "openQuestion"],
+    "minimumClaimsPerKind": { "invariant": 1, "sideEffect": 0, "edgeCase": 0, "openQuestion": 0 },
+    "emphasis": "Cite line ranges aggressively; legacy F77 logic depends on column positions and ordering. Prefer 'high' confidence only when the source is fully explicit; downgrade when behaviour depends on uninitialised COMMON state."
+  },
+  "owner": "Nous · Fortran migration accelerator",
+  "calibratedAgainst": ["MINPACK", "Kiwiplan RSS class corpora (synthesised)", "wet-end controller corpora"]
+}

@@ -1,0 +1,127 @@
+"""
+Astra parser sidecar — gRPC server.
+
+Serves on PARSER_GRPC_PORT (default 50051). Exposes:
+
+  - Ping(empty) -> PingReply              liveness for the API /health/ready check
+  - EchoSource(...) -> EchoSourceReply    round-trip test
+  - Parse(...) -> ParseResult             Phase C: real fparser2-backed parse
+
+The proto/parser.proto file is the contract. Generated Python stubs
+(parser_pb2.py, parser_pb2_grpc.py) are produced at container build time.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import signal
+import sys
+import threading
+import time
+from concurrent import futures
+
+import grpc
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
+
+from parser_sidecar import parser_pb2, parser_pb2_grpc, __version__
+from parser_sidecar.fortran_parser import parse_source
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"astra-parser","msg":"%(message)s"}',
+)
+log = logging.getLogger("astra.parser")
+
+# fparser2 keeps a global SymbolTable singleton (fparser.two.symbol_table.
+# SYMBOL_TABLES) that is mutated as the parser walks scopes. Concurrent
+# parses corrupt it — the failure mode is `SymbolTableError: exit_scope()
+# called but no current scope exists`. Serialising every Parse RPC behind
+# a process-wide lock is the simplest correct fix; throughput cost is
+# negligible because a single file parses in ≤1 s and the API only ever
+# issues one corpus-ingest at a time per worker.
+_PARSE_LOCK = threading.Lock()
+
+
+class ParserServicer(parser_pb2_grpc.ParserServicer):
+    def Ping(self, request, context):
+        return parser_pb2.PingReply(
+            service="astra-parser",
+            version=__version__,
+            epoch_ms=int(time.time() * 1000),
+        )
+
+    def EchoSource(self, request, context):
+        content = request.content or ""
+        return parser_pb2.EchoSourceReply(
+            filename=request.filename,
+            line_count=content.count("\n") + (1 if content and not content.endswith("\n") else 0),
+            byte_length=len(content.encode("utf-8")),
+        )
+
+    def Parse(self, request, context):
+        filename = request.filename or "<inline>.f90"
+        with _PARSE_LOCK:
+            outcome = parse_source(
+                content=request.content or "",
+                filename=filename,
+                form=request.form or "",
+            )
+        result = parser_pb2.ParseResult(
+            filename=outcome.filename,
+            line_count=outcome.line_count,
+            warnings=list(outcome.warnings),
+        )
+        for s in outcome.subroutines:
+            result.subroutines.add(
+                name=s.name,
+                signature=s.signature,
+                line_start=s.line_start,
+                line_end=s.line_end,
+                common_block_refs=list(s.common_block_refs),
+                called_subroutines=list(s.called_subroutines),
+            )
+        log.info(
+            "parsed file=%s lines=%d subroutines=%d warnings=%d",
+            filename,
+            outcome.line_count,
+            len(outcome.subroutines),
+            len(outcome.warnings),
+        )
+        return result
+
+
+def serve() -> None:
+    port = int(os.environ.get("PARSER_GRPC_PORT", "50051"))
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=8),
+        # Large enough for typical Fortran files; bump if a real corpus needs more.
+        options=[
+            ("grpc.max_receive_message_length", 32 * 1024 * 1024),
+            ("grpc.max_send_message_length", 32 * 1024 * 1024),
+        ],
+    )
+
+    parser_pb2_grpc.add_ParserServicer_to_server(ParserServicer(), server)
+
+    health_servicer = health.HealthServicer()
+    health_servicer.set("astra.parser.v1.Parser", health_pb2.HealthCheckResponse.SERVING)
+    health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+
+    server.add_insecure_port(f"[::]:{port}")
+    server.start()
+    log.info("Parser sidecar listening on :%s (version %s)", port, __version__)
+
+    def _shutdown(signum, _frame):
+        log.info("Received signal %s, shutting down", signum)
+        server.stop(grace=5).wait()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+    server.wait_for_termination()
+
+
+if __name__ == "__main__":
+    serve()

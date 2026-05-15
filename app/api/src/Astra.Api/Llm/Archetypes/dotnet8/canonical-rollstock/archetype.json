@@ -1,0 +1,26 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-rollstock",
+  "targetStack": "dotnet8",
+  "displayName": "Canonical roll-stock service (.NET 8 + xUnit + Moq)",
+  "description": "Reference Fortran→.NET-8 scaffold for the CONSUME_ROLL family: roll-stock service + DTOs + repository / event-notifier interfaces + adapter stub + engineer-authored xUnit fixtures. Produces a buildable, dotnet-test-runnable package that's the starting point for engineer implementation work.",
+  "compatibleSchemas": ["fortran-f77"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "CONSUME_ROLL" }
+    ],
+    "fallback": "Default dotnet8 archetype while the per-routine matcher (#3c.next) is still in development."
+  },
+  "owner": "Nous · Fortran migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.RollStock.csproj",                  "language": "xml",     "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.RollStock.Tests.csproj",      "language": "xml",     "derivedFromClaimIds": [] },
+    { "path": "src/ConsumeRollService.cs",              "language": "csharp",  "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-4","INV-5","INV-6"] },
+    { "path": "src/ConsumeRollDtos.cs",                 "language": "csharp",  "derivedFromClaimIds": ["in.ROLL_ID","in.USED_LF","in.OPER_ID","out.RESULT_CD"] },
+    { "path": "src/IRollRepository.cs",                 "language": "csharp",  "derivedFromClaimIds": ["SE-1"] },
+    { "path": "src/IEventNotifier.cs",                  "language": "csharp",  "derivedFromClaimIds": ["SE-2"] },
+    { "path": "src/RollRepositoryAdapter.cs",           "language": "csharp",  "derivedFromClaimIds": ["SE-1"] },
+    { "path": "tests/ConsumeRollServiceTests.cs",       "language": "csharp",  "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-5","INV-6","EC-4"] }
+  ]
+}

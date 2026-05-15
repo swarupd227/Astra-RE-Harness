@@ -1,0 +1,54 @@
+# Local env
+.env
+
+# .NET
+bin/
+obj/
+*.user
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Docker volumes (in case anything is bind-mounted under app/)
+data/
+
+# Playwright artifacts
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.playwright/
+
+# Demo-recording intermediates — heavy ffmpeg/piper artifacts that can
+# always be regenerated. We keep finished deliverables (the captioned
+# video, timeline JSON, screenshots) via negation patterns below.
+e2e/demo-output/narration-work/
+e2e/demo-output/narration-work*/
+e2e/demo-output/final-work/
+e2e/demo-output/piper-voices/
+e2e/demo-output/*.tmp
+e2e/demo-output/probe_*.jpg
+e2e/demo-output/check_*.jpg
+e2e/demo-output/cap_*.jpg
+e2e/demo-output/cap2_*.jpg
+e2e/demo-output/final_*.jpg
+e2e/demo-output/src_*.jpg
+e2e/demo-output/anchor_*.jpg
+e2e/demo-output/card_*.jpg
+e2e/demo-output/f_*.png
+

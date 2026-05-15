@@ -1,0 +1,21 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-rollstock",
+  "targetStack": "java-spring",
+  "displayName": "Canonical roll-stock service (Spring Boot 3 + JUnit 5 + Mockito)",
+  "description": "Java/Spring mirror of the dotnet8 canonical-rollstock archetype. Produces a buildable Maven module: roll-stock service + DTOs + JPA-style repository interface + event-publisher interface + stub adapter + JUnit 5 fixtures. Same claim-to-file mapping as the .NET 8 reference — proves the archetype registry is target-stack agnostic.",
+  "compatibleSchemas": ["fortran-f77", "cobol"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "CONSUME_ROLL" }
+    ]
+  },
+  "owner": "Nous · Fortran migration accelerator",
+  "status": "preview · pair-engagement only",
+  "platformReadiness": "Skeleton + a service stub + a test stub ship in-tree. Filling out the remaining files (DTO records, repository interface, event-publisher interface, adapter stub) follows the same pattern as the dotnet8 reference — engagement-time activity.",
+  "files": [
+    { "path": "pom.xml",                                                       "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/rollstock/ConsumeRollService.java",   "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-4","INV-5","INV-6"] },
+    { "path": "src/test/java/com/example/rollstock/ConsumeRollServiceTest.java","language": "java","derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-5","INV-6","EC-4"] }
+  ]
+}

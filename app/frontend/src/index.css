@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03', 'tnum';
+    color-scheme: light;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink-primary antialiased;
+    margin: 0;
+  }
+
+  /* Honest motion: kill animation/transitions for users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0ms !important;
+      transition-duration: 0ms !important;
+    }
+  }
+
+  /* Focus ring — visible, never removed */
+  :focus-visible {
+    outline: 2px solid #101728;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  code, pre, .mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  kbd {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+  }
+}
+
+@layer utilities {
+  /* Custom small motion primitives */
+  @keyframes astra-fade-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-fade-in {
+    animation: astra-fade-in 200ms ease-out both;
+  }
+
+  /* ── Monaco citation decorations ─────────────────────────────────────
+   * Three coordinated surfaces light up when a citation is active:
+   *   .astra-cite-bg       → the line content (background wash)
+   *   .astra-cite-gutter   → the gutter (left accent border)
+   *   .astra-cite-margin   → the editor margin (between gutter + content)
+   *
+   * Static (always-on, subtle) styles establish that a line IS cited.
+   * The `.astra-cite-*-pulse` siblings replay a 1.8s animation when a
+   * citation becomes active — strong start, smooth tail — so the eye
+   * snaps to the location without being annoying on repeat fires.
+   *
+   * Reduced motion (the @media rule at the top of the file) collapses
+   * all animation-duration to 0ms so the static styles still apply but
+   * the dramatic peaks don't fire — readable for vestibular users.
+   * ─────────────────────────────────────────────────────────────────── */
+  .astra-cite-bg {
+    background-color: rgba(229, 115, 44, 0.10) !important;
+    transition: background-color 200ms ease-out;
+  }
+  .astra-cite-gutter {
+    border-left: 3px solid #E5732C;
+    transition: border-left-width 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .astra-cite-margin {
+    background-color: rgba(229, 115, 44, 0.15) !important;
+    transition: background-color 200ms ease-out;
+  }
+
+  /* Line-content pulse: 75% peak → 10% rest, with a brief shadow-glow. */
+  @keyframes astra-cite-pulse {
+    0%   { background-color: rgba(229, 115, 44, 0.75); box-shadow: inset 4px 0 0 0 #E5732C; }
+    12%  { background-color: rgba(229, 115, 44, 0.70); box-shadow: inset 4px 0 0 0 #E5732C; }
+    100% { background-color: rgba(229, 115, 44, 0.10); box-shadow: inset 3px 0 0 0 transparent; }
+  }
+  .astra-cite-pulse {
+    animation: astra-cite-pulse 1800ms cubic-bezier(0.12, 0.7, 0.3, 1) both;
+  }
+
+  /* Gutter pulse: left border widens to 6px then settles back to 3px. */
+  @keyframes astra-cite-gutter-pulse {
+    0%   { border-left-width: 6px; box-shadow: 0 0 12px 1px rgba(229, 115, 44, 0.75); }
+    20%  { border-left-width: 6px; }
+    100% { border-left-width: 3px; box-shadow: 0 0 0 0 transparent; }
+  }
+  .astra-cite-gutter-pulse {
+    animation: astra-cite-gutter-pulse 1800ms cubic-bezier(0.12, 0.7, 0.3, 1) both;
+  }
+
+  /* Margin (between gutter + content) pulse: saturates briefly. */
+  @keyframes astra-cite-margin-pulse {
+    0%   { background-color: rgba(229, 115, 44, 0.65); }
+    100% { background-color: rgba(229, 115, 44, 0.15); }
+  }
+  .astra-cite-margin-pulse {
+    animation: astra-cite-margin-pulse 1800ms cubic-bezier(0.12, 0.7, 0.3, 1) both;
+  }
+
+  /* Brief editor-wide spotlight when revealLineInCenter scrolls a citation
+   * into view. Used by MonacoSource via a one-shot wrapper class. */
+  @keyframes astra-cite-spotlight {
+    0%   { box-shadow: inset 0 0 0 0 rgba(229, 115, 44, 0); }
+    25%  { box-shadow: inset 0 0 0 3px rgba(229, 115, 44, 0.45); }
+    100% { box-shadow: inset 0 0 0 0 rgba(229, 115, 44, 0); }
+  }
+  .astra-cite-spotlight {
+    animation: astra-cite-spotlight 900ms ease-out both;
+  }
+
+  /* Scaffold TODO markers — used by MonacoSource when language === 'csharp' */
+  .astra-todo-bg {
+    background-color: rgba(154, 110, 26, 0.08) !important;
+  }
+  .astra-todo-gutter {
+    border-left: 3px solid #9A6E1A;
+  }
+  .astra-todo-glyph {
+    background: #9A6E1A;
+    width: 4px !important;
+    margin-left: 6px;
+    border-radius: 2px;
+  }
+}

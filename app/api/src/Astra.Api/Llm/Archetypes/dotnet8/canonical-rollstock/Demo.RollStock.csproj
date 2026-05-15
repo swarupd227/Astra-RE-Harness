@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.RollStock</RootNamespace>
+    <AssemblyName>Demo.RollStock</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- Tests live in tests/Demo.RollStock.Tests.csproj; src project
+         should not pick those .cs files up by glob. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

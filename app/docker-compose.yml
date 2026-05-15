@@ -1,0 +1,253 @@
+name: astra-re-harness
+
+services:
+  # ─── Postgres (operational DB) ────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-astra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-astra_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-astra}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-astra} -d ${POSTGRES_DB:-astra}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [astra]
+
+  # ─── MinIO (S3-compatible blob store) ─────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-astra}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [astra]
+
+  # One-shot: create buckets at first start
+  minio-bootstrap:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-astra}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
+      MINIO_BUCKET_SOURCES: ${MINIO_BUCKET_SOURCES:-sources}
+      MINIO_BUCKET_SIGNED_SPECS: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
+      MINIO_BUCKET_SCAFFOLDS: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
+      MINIO_BUCKET_LLM_DEBUG: ${MINIO_BUCKET_LLM_DEBUG:-llm-debug-restricted}
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    volumes:
+      - ./infra/minio/bootstrap.sh:/bootstrap.sh:ro
+    networks: [astra]
+    restart: "no"
+
+  # ─── Parser sidecar (Python + fparser2 stub, gRPC) ────────────────────
+  parser-sidecar:
+    build:
+      context: ./parser-sidecar
+    ports:
+      - "${PARSER_PORT:-50051}:50051"
+    environment:
+      PARSER_GRPC_PORT: 50051
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost', 50051)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
+  # ─── gfortran sidecar (Phase #2c — cross-runtime equivalence) ─────────
+  # Compiles Fortran source on demand and runs the resulting binary
+  # against a JSON-encoded input vector. The API's CrossRuntimeValidator
+  # drives this side-by-side with the C# scaffold to assert behavioural
+  # equivalence.
+  gfortran-sidecar:
+    build:
+      context: ./gfortran-sidecar
+    ports:
+      - "${GFORTRAN_PORT:-51052}:51052"
+    environment:
+      GFORTRAN_PORT: 51052
+      GFORTRAN_WORKDIR: /var/tmp/gfortran-runs
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51052/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
+  # ─── API (.NET 8) ─────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      target: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      parser-sidecar:
+        condition: service_started
+      gfortran-sidecar:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-astra};Username=${POSTGRES_USER:-astra};Password=${POSTGRES_PASSWORD:-astra_dev_pw}"
+      Storage__Endpoint: "http://minio:9000"
+      Storage__AccessKey: ${MINIO_ROOT_USER:-astra}
+      Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
+      Validation__GfortranEndpoint: "http://gfortran-sidecar:51052"
+      Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
+      Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
+      Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
+      Storage__Buckets__LlmDebug: ${MINIO_BUCKET_LLM_DEBUG:-llm-debug-restricted}
+      Parser__GrpcEndpoint: "http://parser-sidecar:50051"
+      Auth__DevPersonaBypass: ${DEV_PERSONA_BYPASS:-true}
+      Auth__DevPersonaDefault: ${DEV_PERSONA_DEFAULT:-engineer}
+      # Allow the frontend's host-published port to call the API.
+      # Both localhost and 127.0.0.1 are listed because Windows Docker
+      # Desktop's IPv6 forwarder occasionally desyncs and forces users
+      # to fall back to 127.0.0.1.
+      Cors__AllowedOrigins__0: "http://localhost:${FRONTEND_PORT:-35173}"
+      Cors__AllowedOrigins__1: "http://127.0.0.1:${FRONTEND_PORT:-35173}"
+      Cors__AllowedOrigins__2: "http://localhost:5173"
+      Cors__AllowedOrigins__3: "http://127.0.0.1:5173"
+      # Phase B.5.x: data persists across API restarts by default. Schema is
+      # built once via EnsureCreated; the seeder is idempotent (skips if the
+      # demo corpus is already present). Flip RECREATE_ON_STARTUP=true to wipe.
+      # Phase D switches to EF Core migrations.
+      Database__RecreateOnStartup: "${DATABASE_RECREATE_ON_STARTUP:-false}"
+      Database__SeedDemo: "${DATABASE_SEED_DEMO:-true}"
+      # Phase C UX polish: seed MINPACK from GitHub on boot + on every
+      # /dev/reset so the demo always opens against a real corpus instead
+      # of the synthetic 66-LOC seed. Background task; the API serves
+      # requests immediately and the corpus appears within ~10s.
+      Database__SeedMinpack: "${DATABASE_SEED_MINPACK:-true}"
+      # Dev-only reset endpoint at POST /api/v1/dev/reset. ALWAYS off in any
+      # deployed environment.
+      Dev__ResetEnabled: "${DEV_RESET_ENABLED:-true}"
+      # LLM providers (Phase B.4 / B.5.x): mock | fail-mock | anthropic.
+      # If LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty, the API
+      # falls back to MockLlmProvider at startup with a warning so a fresh
+      # clone never breaks. Set ANTHROPIC_API_KEY to enable real Claude.
+      Llm__Provider: "${LLM_PROVIDER:-mock}"
+      Llm__ScaffoldProvider: "${LLM_SCAFFOLD_PROVIDER:-mock}"
+      Llm__Anthropic__ApiKey: "${ANTHROPIC_API_KEY:-}"
+      Llm__Anthropic__Model: "${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}"
+      Llm__Anthropic__BaseUrl: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+      Llm__Anthropic__MaxOutputTokens: "${ANTHROPIC_MAX_OUTPUT_TOKENS:-8192}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: astra-api
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./api/src:/src:cached
+      # Mask container build dirs so dotnet watch's polling watcher
+      # doesn't trip over the Windows bind-mount path layout.
+      - api-bin:/src/Astra.Api/bin
+      - api-obj:/src/Astra.Api/obj
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks: [astra]
+
+  # ─── Worker (.NET 8 + Hangfire) ───────────────────────────────────────
+  worker:
+    build:
+      context: ./worker
+      target: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8081
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-astra};Username=${POSTGRES_USER:-astra};Password=${POSTGRES_PASSWORD:-astra_dev_pw}"
+      Hangfire__DashboardEnabled: "true"
+      Hangfire__SchedulePingJob: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: astra-worker
+    ports:
+      - "${HANGFIRE_DASHBOARD_PORT:-8081}:8081"
+    volumes:
+      - ./worker/src:/src:cached
+      - worker-bin:/src/Astra.Worker/bin
+      - worker-obj:/src/Astra.Worker/obj
+    networks: [astra]
+
+  # ─── Frontend (React + Vite, dev mode with HMR) ───────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      # Use 127.0.0.1 so Windows Docker Desktop's flaky IPv6 forwarder is
+      # bypassed end-to-end (browser → frontend → API all via IPv4).
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:38080}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app:cached
+      - frontend-node-modules:/app/node_modules
+    networks: [astra]
+
+  # ─── OpenTelemetry collector + Jaeger (opt-in profile) ────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    profiles: [observability]
+    depends_on: [jaeger]
+    volumes:
+      - ./infra/otel/collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    networks: [astra]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    profiles: [observability]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+    networks: [astra]
+
+networks:
+  astra:
+    name: astra-net
+
+volumes:
+  postgres-data:
+  minio-data:
+  frontend-node-modules:
+  api-bin:
+  api-obj:
+  worker-bin:
+  worker-obj:

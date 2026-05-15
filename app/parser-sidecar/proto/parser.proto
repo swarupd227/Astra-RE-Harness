@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package astra.parser.v1;
+
+// Astra parser sidecar contract.
+// Phase A: liveness + echo (smoke test).
+// Phase C: real fparser2-backed Parse(SourceFile) → ParseResult.
+
+service Parser {
+  // Liveness probe used by the API's /health/ready check.
+  rpc Ping(PingRequest) returns (PingReply);
+
+  // Echo a Fortran source string back to the caller. Useful as a
+  // round-trip test before fparser2 is wired up.
+  rpc EchoSource(EchoSourceRequest) returns (EchoSourceReply);
+
+  // Phase C: real parse. Given a single Fortran source file, return its
+  // subroutine inventory + lightweight cross-references (COMMON blocks,
+  // called subroutines) so the API can persist real corpora.
+  rpc Parse(ParseRequest) returns (ParseResult);
+}
+
+message PingRequest {}
+message PingReply {
+  string service = 1;
+  string version = 2;
+  int64 epoch_ms = 3;
+}
+
+message EchoSourceRequest {
+  string filename = 1;
+  string content = 2;
+}
+message EchoSourceReply {
+  string filename = 1;
+  int32 line_count = 2;
+  int32 byte_length = 3;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase C: Parse contract
+// ────────────────────────────────────────────────────────────────────
+
+message ParseRequest {
+  // Display path / filename used by the parser to choose fixed vs free form
+  // when `form` is unset (`.f`, `.f77`, `.for` → fixed; `.f90`, `.f95`,
+  // `.f03`, `.f08` → free; anything else → caller must set `form`).
+  string filename = 1;
+  // UTF-8 source text. The sidecar normalises line endings before parsing.
+  string content = 2;
+  // Optional override: "fixed" | "free". Empty → infer from filename.
+  string form = 3;
+}
+
+message Subroutine {
+  // SUBROUTINE name, uppercased to match Fortran's case-insensitivity.
+  string name = 1;
+  // Declaration line as written, e.g. "SUBROUTINE CONSUME_ROLL(ROLL_ID, USED_LF, OPER_ID, RESULT_CD)".
+  string signature = 2;
+  // 1-based inclusive line range covering the SUBROUTINE … END SUBROUTINE block.
+  int32 line_start = 3;
+  int32 line_end = 4;
+  // Names of COMMON blocks referenced inside this subroutine.
+  repeated string common_block_refs = 5;
+  // Names of subroutines this routine CALLs.
+  repeated string called_subroutines = 6;
+}
+
+message ParseResult {
+  string filename = 1;
+  int32 line_count = 2;
+  // One entry per SUBROUTINE found. FUNCTIONs and PROGRAMs are out of
+  // scope for Phase C; if the file has none of those a partial parse
+  // still produces an empty `subroutines` list with `warnings` set.
+  repeated Subroutine subroutines = 3;
+  // Non-fatal diagnostics — parse fell back to a recovery path, unknown
+  // construct skipped, etc. Surfaced verbatim in the API audit row.
+  repeated string warnings = 4;
+}

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+// MIRROR of app/parser-sidecar/proto/parser.proto. Kept in sync with the
+// sidecar's contract. The API depends on this copy for client codegen
+// because the sidecar's source tree isn't mounted into the API image.
+//
+// If you edit this file, mirror the change into app/parser-sidecar/proto/
+// — there's no auto-sync. CI guards diff equality.
+
+package astra.parser.v1;
+
+option csharp_namespace = "Astra.Api.Parser.Grpc";
+
+service Parser {
+  rpc Ping(PingRequest) returns (PingReply);
+  rpc EchoSource(EchoSourceRequest) returns (EchoSourceReply);
+  rpc Parse(ParseRequest) returns (ParseResult);
+}
+
+message PingRequest {}
+message PingReply {
+  string service = 1;
+  string version = 2;
+  int64 epoch_ms = 3;
+}
+
+message EchoSourceRequest {
+  string filename = 1;
+  string content = 2;
+}
+message EchoSourceReply {
+  string filename = 1;
+  int32 line_count = 2;
+  int32 byte_length = 3;
+}
+
+message ParseRequest {
+  string filename = 1;
+  string content = 2;
+  string form = 3;
+}
+
+message Subroutine {
+  string name = 1;
+  string signature = 2;
+  int32 line_start = 3;
+  int32 line_end = 4;
+  repeated string common_block_refs = 5;
+  repeated string called_subroutines = 6;
+}
+
+message ParseResult {
+  string filename = 1;
+  int32 line_count = 2;
+  repeated Subroutine subroutines = 3;
+  repeated string warnings = 4;
+}

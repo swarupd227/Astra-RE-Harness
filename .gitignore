@@ -1,0 +1,17 @@
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log

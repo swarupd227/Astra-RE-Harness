@@ -1,0 +1,46 @@
+{
+  "_note": "Narration v3 for the take-6 fast-track demo (3:00). Sections target the visual beats: context over opener+HYBRD1 setup, claims/sign over the SME walk, scaffold+validation+commit over the matching beats, montage narration over the rapid five-routine flipbook, closer over progress view + dashboard. Voice: ljspeech-high.",
+  "voiceModel": "en_US-ljspeech-high",
+  "sections": [
+    {
+      "id": "01-context",
+      "startMs": 500,
+      "text": "Modernizing legacy systems is enterprise IT's hardest problem — not because the code is exotic, but because every line carries decades of undocumented business rules. This is the Astra Harness — Nous's accelerator for legacy modernization."
+    },
+    {
+      "id": "02-inventory-and-extract",
+      "startMs": 22000,
+      "text": "Today, we walk MINPACK — fifty Fortran files, sixty subroutines — to dot-NET eight. We open H Y B R D one, and ask Claude to draft a behavioural specification. This isn't a generic prompt. Nous ships a calibrated prompt library, pinned per source language and target stack, that produces structured citable claims."
+    },
+    {
+      "id": "03-claims",
+      "startMs": 48000,
+      "text": "What comes back is not code. It is invariants, side effects, edge cases, open questions — every claim tied to specific source lines. The taxonomy comes from Nous's Fortran spec schema. We ship parallel schemas for COBOL, with R P G and P L slash one on our roadmap."
+    },
+    {
+      "id": "04-sign",
+      "startMs": 72000,
+      "text": "The expert — not the AI — signs off. The signature is cryptographic, bound to this exact source revision. If the Fortran changes by a byte, the signature is automatically invalidated. If it does not, the signature carries forward — so you never re-validate code that hasn't changed. Every state transition lands in an immutable audit log, queryable as a SOX, HIPAA, or P C I evidence feed."
+    },
+    {
+      "id": "05-scaffold",
+      "startMs": 105000,
+      "text": "From the signed specification, the harness generates target-stack code. Nous ships scaffold archetypes per target — dot-NET eight here, Java Spring also in our catalog — with dependency injection, claim-mapped tests, and hash-traceable provenance."
+    },
+    {
+      "id": "06-validation",
+      "startMs": 124000,
+      "text": "Before the scaffold ships, three independent gates run. Compile. Test pack — every signed claim has an auto-generated fixture, and they all pass. Equivalence — the original Fortran, and the new C-sharp, are driven with the same inputs; outputs must match. Commit is blocked until every badge is green."
+    },
+    {
+      "id": "07-commit-montage-intro",
+      "startMs": 150000,
+      "text": "The commit lands in your existing Git workflow, with the validation attestation attached. And what you've just watched for H Y B R D one, repeats for the other fifty-nine routines — five of them, here, at speed."
+    },
+    {
+      "id": "08-closer",
+      "startMs": 168000,
+      "text": "Six signed specs. Six attestations. What Nous ships is the calibrated assets that make this work on day one — schemas per legacy language, tuned prompts, scaffold archetypes, three independent validation gates, and a compliance-ready audit feed. Months become weeks. Audit-grade by default. That is the time Nous gives you back."
+    }
+  ]
+}

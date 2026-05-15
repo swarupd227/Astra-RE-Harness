@@ -1,0 +1,167 @@
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useParams } from 'react-router-dom';
+import { ChevronRight, FileCode, Folder, GitMerge, RefreshCw } from 'lucide-react';
+import { api } from '@/lib/api';
+import { Card, CardBody, CardHeader } from '@/components/Card';
+import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
+import { ErrorBlock } from '@/components/ErrorBlock';
+import { Skeleton } from '@/components/Skeleton';
+import { ReingestModal } from '@/components/ReingestModal';
+
+export function CorpusDetailPage() {
+  const { id = '' } = useParams();
+  const qc = useQueryClient();
+  const [reingestOpen, setReingestOpen] = useState(false);
+  const corpus = useQuery({
+    queryKey: ['corpus', id],
+    queryFn: () => api.getCorpus(id),
+    enabled: !!id,
+  });
+
+  if (corpus.isPending) {
+    return (
+      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+  if (corpus.isError) {
+    return (
+      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+        <ErrorBlock
+          title="Could not load project"
+          message={corpus.error.message}
+          onRetry={() => corpus.refetch()}
+        />
+      </div>
+    );
+  }
+  const c = corpus.data;
+  const files = c.latestVersion?.files ?? [];
+
+  return (
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            Project
+          </p>
+          <h1 className="mt-2 text-display font-semibold text-ink-primary">{c.name}</h1>
+          <p className="mt-2 font-mono text-caption text-ink-tertiary">
+            {c.sourceType.toUpperCase()} · {c.fileCount} file{c.fileCount === 1 ? '' : 's'} ·{' '}
+            {c.totalLoc.toLocaleString()} LOC ·{' '}
+            ingested {c.latestVersion ? new Date(c.latestVersion.ingestedAt).toLocaleString() : '—'}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{c.state}</Badge>
+          <Button
+            variant="secondary"
+            onClick={() => setReingestOpen(true)}
+            data-testid="open-reingest"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Re-sync
+          </Button>
+        </div>
+      </header>
+
+      <ReingestModal
+        open={reingestOpen}
+        onClose={() => setReingestOpen(false)}
+        onSuccess={() => {
+          // Drop both the list and detail caches so the user sees the new version.
+          qc.invalidateQueries({ queryKey: ['corpora'] });
+          qc.invalidateQueries({ queryKey: ['corpus', id] });
+        }}
+        corpusId={c.id}
+        corpusName={c.name}
+        defaultSourceType={c.sourceType}
+        defaultGitUrl={null}
+        defaultBranch={null}
+        defaultSourceRoot={null}
+      />
+
+      <Card>
+        <CardHeader
+          title="Files in this version"
+          description="Click a subroutine to open its detail surface (Stage 2)."
+        />
+        <CardBody className="p-0">
+          <ul className="divide-y divide-border-subtle">
+            {files.map((file) => (
+              <li key={file.id}>
+                <FileBlock file={file} />
+              </li>
+            ))}
+          </ul>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function FileBlock({ file }: { file: NonNullable<ReturnType<typeof useFiles>>[number] }) {
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center gap-3 text-body">
+        <Folder className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
+        <FileCode className="h-4 w-4 text-ink-secondary" aria-hidden="true" />
+        <span className="font-mono text-ink-primary">{file.relativePath}</span>
+        <span className="ml-auto font-mono text-caption text-ink-tertiary">
+          {file.lineCount} lines
+        </span>
+      </div>
+      {file.subroutines.length > 0 && (
+        <ul className="mt-3 space-y-1 pl-7">
+          {file.subroutines.map((sub) => (
+            <li key={sub.id}>
+              <Link
+                to={`/subroutines/${sub.id}`}
+                className="group flex items-center justify-between rounded-md px-3 py-2 text-body transition-colors duration-fast hover:bg-sunken focus-visible:outline-2 focus-visible:outline-ink-primary"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="font-mono text-caption text-ink-tertiary">
+                    L{sub.lineStart}–{sub.lineEnd}
+                  </span>
+                  <span className="font-mono font-semibold text-ink-primary">{sub.name}</span>
+                  <Badge tone={subBadgeTone(sub.state)} className="text-[10px]">
+                    {sub.state}
+                  </Badge>
+                  {sub.carriedForward && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-sm border border-status-signed/40 bg-[#DCE6F5]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-status-signed"
+                      title="Spec carried forward from a previous source version (file hash unchanged)"
+                      data-testid={`carried-${sub.id}`}
+                    >
+                      <GitMerge className="h-3 w-3" aria-hidden="true" />
+                      carried fwd
+                    </span>
+                  )}
+                </span>
+                <ChevronRight className="h-4 w-4 text-ink-tertiary opacity-0 transition-opacity duration-fast group-hover:opacity-100" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function subBadgeTone(state: string): 'draft' | 'review' | 'signed' | 'scaffolded' | 'neutral' {
+  switch (state) {
+    case 'DRAFT': return 'draft';
+    case 'IN_REVIEW': return 'review';
+    case 'SIGNED': return 'signed';
+    case 'SCAFFOLDED': return 'scaffolded';
+    default: return 'neutral';
+  }
+}
+
+// Type helper to keep the FileBlock prop strongly typed without exporting internals
+type Files = NonNullable<NonNullable<Awaited<ReturnType<typeof api.getCorpus>>>['latestVersion']>['files'];
+function useFiles(): Files | null { return null; }
