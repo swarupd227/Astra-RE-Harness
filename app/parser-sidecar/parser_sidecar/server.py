@@ -25,7 +25,8 @@ import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from parser_sidecar import parser_pb2, parser_pb2_grpc, __version__
-from parser_sidecar.fortran_parser import parse_source
+from parser_sidecar.fortran_parser import parse_source as _fortran_parse
+from parser_sidecar.cobol_parser import parse_source as _cobol_parse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,18 +62,33 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
 
     def Parse(self, request, context):
         filename = request.filename or "<inline>.f90"
+        # Phase 5.1: route by extension. COBOL extensions (.cob, .cbl, .cpy
+        # — case-insensitive) hit the focused COBOL-85 parser; everything
+        # else falls through to fparser2 for Fortran.
+        is_cobol = _looks_like_cobol(filename)
         with _PARSE_LOCK:
-            outcome = parse_source(
-                content=request.content or "",
-                filename=filename,
-                form=request.form or "",
-            )
+            if is_cobol:
+                cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
+                outcome_line_count = cobol_outcome.line_count
+                outcome_subroutines = cobol_outcome.subroutines
+                outcome_warnings = cobol_outcome.warnings
+                outcome_filename = filename
+            else:
+                fortran_outcome = _fortran_parse(
+                    content=request.content or "",
+                    filename=filename,
+                    form=request.form or "",
+                )
+                outcome_line_count = fortran_outcome.line_count
+                outcome_subroutines = fortran_outcome.subroutines
+                outcome_warnings = fortran_outcome.warnings
+                outcome_filename = fortran_outcome.filename
         result = parser_pb2.ParseResult(
-            filename=outcome.filename,
-            line_count=outcome.line_count,
-            warnings=list(outcome.warnings),
+            filename=outcome_filename,
+            line_count=outcome_line_count,
+            warnings=list(outcome_warnings),
         )
-        for s in outcome.subroutines:
+        for s in outcome_subroutines:
             result.subroutines.add(
                 name=s.name,
                 signature=s.signature,
@@ -82,13 +98,27 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
                 called_subroutines=list(s.called_subroutines),
             )
         log.info(
-            "parsed file=%s lines=%d subroutines=%d warnings=%d",
+            "parsed lang=%s file=%s lines=%d subroutines=%d warnings=%d",
+            "cobol" if is_cobol else "fortran",
             filename,
-            outcome.line_count,
-            len(outcome.subroutines),
-            len(outcome.warnings),
+            outcome_line_count,
+            len(outcome_subroutines),
+            len(outcome_warnings),
         )
         return result
+
+
+def _looks_like_cobol(filename: str) -> bool:
+    """Return True when the file path's extension marks it as COBOL.
+
+    Phase 5: .cob / .cbl / .cpy (and uppercase variants). Detection by
+    extension is deliberately strict; magic-byte sniffing arrives in
+    Phase 7 when copybook headers + DBCS encodings need handling.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".cob", ".cbl", ".cpy"))
 
 
 def serve() -> None:
