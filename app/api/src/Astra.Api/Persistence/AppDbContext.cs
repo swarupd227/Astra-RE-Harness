@@ -22,10 +22,22 @@ public sealed class AppDbContext : DbContext
     public DbSet<ValidationRun> ValidationRuns => Set<ValidationRun>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<PlatformConfig>(b =>
+        {
+            b.ToTable("platform_configs");
+            b.HasKey(x => x.Key);
+            b.Property(x => x.Key).HasColumnName("key").HasMaxLength(64).IsRequired();
+            b.Property(x => x.ValueJson).HasColumnName("value_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.Property(x => x.UpdatedBy).HasColumnName("updated_by");
+            b.Property(x => x.UpdatedByDisplay).HasColumnName("updated_by_display").HasMaxLength(160);
+        });
 
         modelBuilder.Entity<User>(b =>
         {

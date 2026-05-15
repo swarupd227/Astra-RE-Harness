@@ -210,6 +210,27 @@ using (var scope = app.Services.CreateScope())
         await db.Database.ExecuteSqlRawAsync(script);
         Log.Information("Schema rebuilt from model ({Bytes} bytes of DDL)", script.Length);
     }
+
+    // Phase #4 additive schema — small CREATE TABLE IF NOT EXISTS statements
+    // for Admin-CRUD surfaces so existing dev databases pick them up without
+    // a full RecreateOnStartup cycle (which would wipe demo state).
+    // Phase D replaces these with proper EF migrations.
+    if (canConnect)
+    {
+        // ExecuteSqlRawAsync's "{}" parameter-substitution syntax conflicts
+        // with the jsonb literal `'{}'::jsonb` and with `varchar(160)
+        // DEFAULT ''`, so the column defaults are omitted here — every
+        // insert sets these columns explicitly.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS platform_configs (
+                key                varchar(64) PRIMARY KEY,
+                value_json         jsonb       NOT NULL,
+                updated_at         timestamptz NOT NULL,
+                updated_by         uuid        NULL,
+                updated_by_display varchar(160) NOT NULL
+            );
+            """);
+    }
     if (canConnect && seedDemo)
     {
         var seeder = scope.ServiceProvider.GetRequiredService<ConsumeRollSeed>();

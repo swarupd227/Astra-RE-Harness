@@ -105,6 +105,15 @@ export type ValidationPolicy = {
   commitGate: { requireAllGreen: boolean; description: string };
   gates: ValidationGate[];
   retryDefaults: { transientFlakeWindow: string; autoRetryCount: number; note: string };
+  overrideActive?: boolean;
+  overrideUpdatedAt?: string | null;
+  overrideUpdatedBy?: string | null;
+};
+
+export type ValidationPolicyOverride = {
+  gates?: Array<Partial<ValidationGate> & { id: string }>;
+  commitGate?: { requireAllGreen: boolean; description?: string };
+  retryDefaults?: { transientFlakeWindow?: string; autoRetryCount: number; note?: string };
 };
 
 // ─── Personas & roles (value-add #5: clear separation of duties) ────
@@ -508,6 +517,13 @@ export const api = {
 
   // Phase #4 / value-add #7: validation policy
   getValidationPolicy: () => apiFetch<ValidationPolicy>('/api/v1/validation/policy'),
+  updateValidationPolicy: (body: ValidationPolicyOverride) =>
+    apiFetch<ValidationPolicy>('/api/v1/validation/policy', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  revertValidationPolicy: () =>
+    apiFetch<void>('/api/v1/validation/policy/override', { method: 'DELETE' }),
 
   // Phase #4 / value-add #8: signature health (drift detection)
   getSignatureHealth: (specId: string) =>
