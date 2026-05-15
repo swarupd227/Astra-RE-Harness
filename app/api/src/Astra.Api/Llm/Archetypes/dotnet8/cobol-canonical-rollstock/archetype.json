@@ -1,0 +1,25 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "cobol-canonical-rollstock",
+  "targetStack": "dotnet8",
+  "displayName": "Canonical roll-stock service · COBOL → .NET 8 (xUnit + Moq)",
+  "description": "Reference COBOL→.NET-8 scaffold pair. Targets the COBOL claim taxonomy (invariants / section contracts / I/O side effects / edge cases / open questions) and produces a buildable .NET 8 package that mirrors the Fortran→.NET 8 scaffold one-for-one — proving the platform is target-stack agnostic across legacy languages.",
+  "compatibleSchemas": ["cobol"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "CONSUME-ROLL" },
+      { "subroutineName": "INV-CONSUME" }
+    ],
+    "fallback": "Default cobol→dotnet8 archetype while per-section matcher (#3c.next) is still in development."
+  },
+  "owner": "Nous · COBOL migration accelerator",
+  "status": "production",
+  "platformReadiness": "Schema + prompt + .NET 8 archetype ship in-tree (this directory). Engineer flow: ingest a COBOL corpus → extract spec via cobol→dotnet8 prompt → SME signs → scaffold lands as a Demo.RollStock.csproj package with claim-mapped sections.",
+  "files": [
+    { "path": "Demo.RollStock.csproj",          "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/ConsumeRollService.cs",      "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-4","INV-5","INV-6"] },
+    { "path": "src/IRollRepository.cs",         "language": "csharp", "derivedFromClaimIds": ["IO-1"] },
+    { "path": "src/IEventNotifier.cs",          "language": "csharp", "derivedFromClaimIds": ["IO-2"] },
+    { "path": "tests/ConsumeRollServiceTests.cs","language": "csharp","derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-5","EC-1"] }
+  ]
+}
