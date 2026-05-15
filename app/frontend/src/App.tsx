@@ -20,6 +20,7 @@ import { LiveScaffoldPage } from '@/pages/LiveScaffoldPage';
 import { ScaffoldArtifactPage } from '@/pages/ScaffoldArtifactPage';
 import { ValidationReportPage } from '@/pages/ValidationReportPage';
 import { CompliancePage } from '@/pages/CompliancePage';
+import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
@@ -97,6 +98,14 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
     return [{ label: 'Home', href: '/' }, { label: 'Comments' }];
   if (pathname === '/compliance')
     return [{ label: 'Home', href: '/' }, { label: 'Compliance' }];
+  if (pathname === '/platform')
+    return [{ label: 'Home', href: '/' }, { label: 'Platform' }];
+  if (pathname.startsWith('/platform/'))
+    return [
+      { label: 'Home', href: '/' },
+      { label: 'Platform', href: '/platform' },
+      { label: prettyPlatformLeaf(pathname) },
+    ];
   if (pathname === '/subroutines')
     return [{ label: 'Home', href: '/' }, { label: 'Subroutines' }];
   if (pathname.startsWith('/subroutines/'))
@@ -106,6 +115,18 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
       { label: 'Subroutine' },
     ];
   return [{ label: 'Home', href: '/' }];
+}
+
+function prettyPlatformLeaf(pathname: string): string {
+  const last = pathname.slice('/platform/'.length).split('/')[0] ?? '';
+  switch (last) {
+    case 'prompts':    return 'Prompt Catalog';
+    case 'languages':  return 'Languages';
+    case 'validation': return 'Validation Policy';
+    case 'signatures': return 'Signature Health';
+    case 'roles':      return 'Roles & Permissions';
+    default:           return last.charAt(0).toUpperCase() + last.slice(1);
+  }
 }
 
 export function App() {
@@ -192,6 +213,7 @@ export function App() {
             <Route path="/my-reviews" element={<MyReviewsPage />} />
             <Route path="/comments" element={<CommentsPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
+            <Route path="/platform" element={<PlatformIndexPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>

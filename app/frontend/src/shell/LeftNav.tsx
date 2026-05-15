@@ -5,17 +5,20 @@ import {
   ClipboardList,
   Database,
   FileSearch,
-  History,
+  FileText,
   Home,
+  Languages,
   MessageSquare,
   ShieldCheck,
+  SlidersHorizontal,
+  Users,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { LogoGlyph } from '@/components/Logo';
 import { Tooltip } from '@/components/Tooltip';
 import { PhaseChip, phaseWindow, type PhaseId } from '@/components/PhaseChip';
 import { buildInfo } from '@/lib/version';
-import { notificationsApi } from '@/lib/api';
+import { api, notificationsApi } from '@/lib/api';
 
 type Item = {
   to: string;
@@ -47,6 +50,20 @@ const items: Item[] = [
   },
 ];
 
+// Phase #4 / Platform — Admin-only config surfaces. Items appear on the
+// nav only when the current persona is "admin"; each item links to its
+// own page (some still showing a "Coming in 2.X" disabled state until
+// the page lands).
+type PlatformItem = Item & { comingIn?: string };
+
+const platformItems: PlatformItem[] = [
+  { to: '/platform/prompts',    label: 'Prompt Catalog',     icon: FileText,           comingIn: '2.1' },
+  { to: '/platform/languages',  label: 'Languages',          icon: Languages,          comingIn: '2.2' },
+  { to: '/platform/validation', label: 'Validation Policy',  icon: SlidersHorizontal,  comingIn: '2.3' },
+  { to: '/platform/signatures', label: 'Signature Health',   icon: ShieldCheck,        comingIn: '2.4' },
+  { to: '/platform/roles',      label: 'Roles & Permissions', icon: Users,             comingIn: '2.5' },
+];
+
 export function LeftNav() {
   // Poll the unread count every 30s. Cheap: a single COUNT on an indexed
   // (recipient_persona, read_at) query. Re-firing on persona switch is handled
@@ -57,6 +74,9 @@ export function LeftNav() {
     refetchInterval: 30_000,
   });
   const unreadCount = unread.data?.unread ?? 0;
+
+  const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
+  const isAdmin = whoami.data?.persona === 'admin';
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col justify-between border-r border-border-subtle bg-raised md:flex">
@@ -71,6 +91,24 @@ export function LeftNav() {
               badge={item.to === '/comments' && unreadCount > 0 ? unreadCount : undefined}
             />
           ),
+        )}
+
+        {isAdmin && (
+          <div
+            className="mt-3 border-t border-border-subtle pt-3"
+            data-testid="nav-platform-section"
+          >
+            <p className="px-3 pb-1 font-mono text-[10px] uppercase tracking-wider text-ink-tertiary">
+              Platform · Admin
+            </p>
+            {platformItems.map((item) =>
+              item.comingIn ? (
+                <PlatformPlaceholder key={item.to} item={item} />
+              ) : (
+                <ActiveItem key={item.to} item={item} />
+              ),
+            )}
+          </div>
         )}
       </nav>
 
@@ -125,6 +163,35 @@ function ActiveItem({ item, badge }: { item: Item; badge?: number }) {
         </>
       )}
     </NavLink>
+  );
+}
+
+function PlatformPlaceholder({ item }: { item: PlatformItem }) {
+  const Icon = item.icon;
+  return (
+    <Tooltip
+      side="bottom"
+      content={
+        <span className="block max-w-[260px] whitespace-normal text-left leading-snug">
+          <span className="block font-semibold">{item.label}</span>
+          <span className="mt-1 block text-ink-inverse/80">
+            Coming in Phase {item.comingIn}.
+          </span>
+        </span>
+      }
+    >
+      <span
+        aria-disabled="true"
+        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-body text-ink-tertiary"
+        data-testid={`nav-${item.label.toLowerCase().replace(/[\s&]+/g, '-')}`}
+      >
+        <Icon className="h-4 w-4 opacity-70" aria-hidden="true" />
+        <span className="flex-1">{item.label}</span>
+        <span className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-ink-tertiary">
+          {item.comingIn}
+        </span>
+      </span>
+    </Tooltip>
   );
 }
 
