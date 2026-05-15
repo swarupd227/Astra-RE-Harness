@@ -64,6 +64,24 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Compliance feed (value-add #6: audit log) ──────────────────────
+export type ComplianceColumn = {
+  id: string;
+  header: string;
+  description: string;
+};
+
+export type ComplianceFormat = {
+  id: string;
+  displayName: string;
+  description: string;
+  status: string;
+  contentType: string;
+  extension: string;
+  columnCount: number;
+  columns: ComplianceColumn[];
+};
+
 // ─── Archetypes (value-add #3: ready-made code templates) ───────────
 export type ArchetypeManifest = {
   id: string;
@@ -350,6 +368,44 @@ export const api = {
 
   // Phase #4 / value-add #3: scaffold archetype catalog
   listArchetypes: () => apiFetch<{ data: ArchetypeManifest[] }>('/api/v1/archetypes'),
+
+  // Phase #4 / value-add #6: SOX/HIPAA/PCI evidence bundles
+  listComplianceFormats: () =>
+    apiFetch<{ data: ComplianceFormat[] }>('/api/v1/compliance/formats'),
+  // Downloads as a Blob so we can attach a synthetic <a> click for the
+  // browser save dialog. Sends the X-Dev-Persona header that apiFetch
+  // would set, since plain href= cannot carry custom headers.
+  downloadComplianceFeed: async (params: {
+    format: string;
+    since?: string;
+    until?: string;
+    severity?: string;
+    limit?: number;
+  }): Promise<{ blob: Blob; fileName: string; rowCount: number }> => {
+    const qs = new URLSearchParams();
+    qs.set('format', params.format);
+    if (params.since) qs.set('since', params.since);
+    if (params.until) qs.set('until', params.until);
+    if (params.severity) qs.set('severity', params.severity);
+    if (params.limit) qs.set('limit', String(params.limit));
+    const res = await fetch(`${API_BASE}/api/v1/compliance/feed?${qs}`, {
+      headers: { 'X-Dev-Persona': getPersona() },
+    });
+    if (!res.ok) {
+      let msg = `Feed download failed (${res.status})`;
+      try {
+        const j = await res.json();
+        msg = j?.error?.message ?? msg;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const cd = res.headers.get('Content-Disposition') ?? '';
+    const fileNameMatch = /filename="([^"]+)"/.exec(cd);
+    const fileName = fileNameMatch?.[1] ?? `compliance-${params.format}.csv`;
+    const rowCount = Number(res.headers.get('X-Astra-Row-Count') ?? '0');
+    const blob = await res.blob();
+    return { blob, fileName, rowCount };
+  },
 
   // Phase C UX polish: evidence-trail endpoints
   getSpec: (specId: string) => apiFetch<EvidenceResponse>(`/api/v1/specs/${specId}`),

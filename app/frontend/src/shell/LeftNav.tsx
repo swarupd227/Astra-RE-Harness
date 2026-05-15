@@ -8,6 +8,7 @@ import {
   History,
   Home,
   MessageSquare,
+  ShieldCheck,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { LogoGlyph } from '@/components/Logo';
@@ -38,6 +39,11 @@ const items: Item[] = [
     to: '/comments',
     label: 'Comments',
     icon: MessageSquare,
+  },
+  {
+    to: '/compliance',
+    label: 'Compliance',
+    icon: ShieldCheck,
   },
 ];
 

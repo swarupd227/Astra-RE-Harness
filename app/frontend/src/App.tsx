@@ -19,6 +19,7 @@ import { AuditTrailPage } from '@/pages/AuditTrailPage';
 import { LiveScaffoldPage } from '@/pages/LiveScaffoldPage';
 import { ScaffoldArtifactPage } from '@/pages/ScaffoldArtifactPage';
 import { ValidationReportPage } from '@/pages/ValidationReportPage';
+import { CompliancePage } from '@/pages/CompliancePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
@@ -94,6 +95,8 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
     return [{ label: 'Home', href: '/' }, { label: 'My reviews' }];
   if (pathname === '/comments')
     return [{ label: 'Home', href: '/' }, { label: 'Comments' }];
+  if (pathname === '/compliance')
+    return [{ label: 'Home', href: '/' }, { label: 'Compliance' }];
   if (pathname === '/subroutines')
     return [{ label: 'Home', href: '/' }, { label: 'Subroutines' }];
   if (pathname.startsWith('/subroutines/'))
@@ -188,6 +191,7 @@ export function App() {
             <Route path="/scaffolds/:id/validation" element={<ValidationReportPage />} />
             <Route path="/my-reviews" element={<MyReviewsPage />} />
             <Route path="/comments" element={<CommentsPage />} />
+            <Route path="/compliance" element={<CompliancePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
