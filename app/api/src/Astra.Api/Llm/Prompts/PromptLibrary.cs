@@ -30,11 +30,14 @@ public sealed class PromptLibrary
     private readonly ConcurrentDictionary<Key, LoadedPrompt> _byKey = new();
     private readonly ConcurrentDictionary<(string Source, string Target, string Kind), LoadedPrompt> _latestByTriple = new();
     private readonly ILogger<PromptLibrary> _log;
+    private readonly string _dir;
+    public string BaseDir => _dir;
 
     public PromptLibrary(IHostEnvironment env, IConfiguration cfg, ILogger<PromptLibrary> log)
     {
         _log = log;
-        var dir = cfg["Llm:PromptDir"] ?? Path.Combine(AppContext.BaseDirectory, "Llm", "Prompts");
+        _dir = cfg["Llm:PromptDir"] ?? Path.Combine(AppContext.BaseDirectory, "Llm", "Prompts");
+        var dir = _dir;
         if (!Directory.Exists(dir))
         {
             log.LogWarning("No prompt directory at {Dir}; PromptLibrary will be empty", dir);
@@ -102,6 +105,139 @@ public sealed class PromptLibrary
     /// </summary>
     public LoadedPrompt? GetLatest(string sourceSchema, string targetStack, string kind) =>
         _latestByTriple.TryGetValue((sourceSchema, targetStack, kind), out var p) ? p : null;
+
+    // ────────────────────────────────────────────────────────────────────
+    // Admin CRUD — Phase #4.3
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Write a prompt file to disk and load it into memory. Throws on
+    /// directory-traversal attempts or malformed bodies.
+    /// </summary>
+    public LoadedPrompt SaveAndLoad(
+        string sourceSchema, string targetStack, string kind, string version,
+        string markdown, bool overwriteExisting)
+    {
+        var safeSource = SafeSegment(sourceSchema, nameof(sourceSchema));
+        var safeTarget = SafeSegment(targetStack, nameof(targetStack));
+        var safeKind = SafeSegment(kind, nameof(kind));
+        var safeVersion = SafeSegment(version, nameof(version));
+
+        var targetDir = Path.Combine(_dir, safeSource, safeTarget);
+        Directory.CreateDirectory(targetDir);
+        var file = Path.Combine(targetDir, $"{safeKind}.v{safeVersion}.md");
+
+        if (!overwriteExisting && File.Exists(file))
+            throw new InvalidOperationException($"Prompt file already exists at {file}. Use PUT to overwrite.");
+
+        // Parse-validate FIRST so we don't write a broken file.
+        var loaded = ParseLoaded(file, safeSource, safeTarget, markdown);
+        // Override version + kind from path so frontmatter typos don't drift.
+        var pinned = new LoadedPrompt
+        {
+            Path = file,
+            SourceSchema = loaded.SourceSchema,
+            TargetStack = loaded.TargetStack,
+            Kind = safeKind,
+            Version = safeVersion,
+            PromptId = loaded.PromptId,
+            SystemTemplate = loaded.SystemTemplate,
+            UserTemplate = loaded.UserTemplate,
+            Frontmatter = loaded.Frontmatter,
+        };
+
+        File.WriteAllText(file, markdown);
+        IndexPrompt(pinned);
+        _log.LogInformation("Saved prompt {Source}/{Target}/{Kind}@{Version} to {File}",
+            safeSource, safeTarget, safeKind, safeVersion, file);
+        return pinned;
+    }
+
+    /// <summary>Remove a prompt file + drop it from the in-memory index.</summary>
+    public bool DeletePrompt(string sourceSchema, string targetStack, string kind, string version)
+    {
+        var safeSource = SafeSegment(sourceSchema, nameof(sourceSchema));
+        var safeTarget = SafeSegment(targetStack, nameof(targetStack));
+        var safeKind = SafeSegment(kind, nameof(kind));
+        var safeVersion = SafeSegment(version, nameof(version));
+
+        var file = Path.Combine(_dir, safeSource, safeTarget, $"{safeKind}.v{safeVersion}.md");
+        var key = new Key(safeSource, safeTarget, safeKind, safeVersion);
+        var existed = _byKey.TryRemove(key, out _);
+
+        if (File.Exists(file)) File.Delete(file);
+
+        // Recompute the latest-by-triple entry for this (source, target, kind).
+        var triple = (safeSource, safeTarget, safeKind);
+        var remaining = _byKey.Values
+            .Where(p => p.SourceSchema == safeSource && p.TargetStack == safeTarget && p.Kind == safeKind)
+            .OrderByDescending(p => NormaliseVersion(p.Version), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (remaining is not null) _latestByTriple[triple] = remaining;
+        else _latestByTriple.TryRemove(triple, out _);
+
+        _log.LogInformation("Deleted prompt {Source}/{Target}/{Kind}@{Version}",
+            safeSource, safeTarget, safeKind, safeVersion);
+        return existed;
+    }
+
+    private void IndexPrompt(LoadedPrompt prompt)
+    {
+        var key = new Key(prompt.SourceSchema, prompt.TargetStack, prompt.Kind, prompt.Version);
+        _byKey[key] = prompt;
+        var triple = (prompt.SourceSchema, prompt.TargetStack, prompt.Kind);
+        if (!_latestByTriple.TryGetValue(triple, out var existing)
+            || string.Compare(NormaliseVersion(prompt.Version), NormaliseVersion(existing.Version), StringComparison.OrdinalIgnoreCase) > 0)
+        {
+            _latestByTriple[triple] = prompt;
+        }
+    }
+
+    private static LoadedPrompt ParseLoaded(string path, string sourceSchema, string targetStack, string text)
+    {
+        var m = FrontmatterSplit.Match(text);
+        if (!m.Success)
+            throw new InvalidOperationException("Prompt markdown is missing the --- frontmatter --- block.");
+        var frontmatter = ParseFrontmatter(m.Groups["body"].Value);
+        var body = m.Groups["rest"].Value;
+        var (system, user) = SplitSections(body, path);
+        var kind = frontmatter.GetValueOrDefault("kind") ?? GuessKindFromFilename(path);
+        var version = frontmatter.GetValueOrDefault("version") ?? GuessVersionFromFilename(path);
+        var id = frontmatter.GetValueOrDefault("id") ?? $"{sourceSchema}-{kind}";
+        return new LoadedPrompt
+        {
+            Path = path,
+            SourceSchema = sourceSchema,
+            TargetStack = targetStack,
+            Kind = kind,
+            Version = version,
+            PromptId = id,
+            SystemTemplate = system,
+            UserTemplate = user,
+            Frontmatter = frontmatter,
+        };
+    }
+
+    /// <summary>
+    /// Defensive path-segment validation: reject empty, slashes, ".."
+    /// or anything that would let a caller escape the prompts dir.
+    /// </summary>
+    private static string SafeSegment(string s, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            throw new ArgumentException($"{fieldName} is required.", fieldName);
+        var trimmed = s.Trim();
+        if (trimmed.Length > 64)
+            throw new ArgumentException($"{fieldName} is too long (max 64 chars).", fieldName);
+        foreach (var c in trimmed)
+        {
+            if (!(char.IsLetterOrDigit(c) || c is '-' || c is '_' || c is '.'))
+                throw new ArgumentException($"{fieldName} '{trimmed}' contains an invalid character. Allowed: A-Z a-z 0-9 . _ -", fieldName);
+        }
+        if (trimmed is "." or "..")
+            throw new ArgumentException($"{fieldName} cannot be '.' or '..'.", fieldName);
+        return trimmed;
+    }
 
     /// <summary>
     /// Render system + user with template variables substituted. Variables

@@ -189,6 +189,8 @@ export type PromptDetail = PromptSummary & {
   frontmatter: Record<string, string>;
   systemTemplate: string;
   userTemplate: string;
+  /** Raw markdown body of the prompt file (frontmatter + sections). */
+  body?: string | null;
 };
 
 // ─── Compliance feed (value-add #6: audit log) ──────────────────────
@@ -538,6 +540,29 @@ export const api = {
       version
         ? `/api/v1/prompts/${source}/${target}/${kind}/${version}`
         : `/api/v1/prompts/${source}/${target}/${kind}`,
+    ),
+
+  // Phase #4.3 admin mutations (filesystem-backed)
+  createPrompt: (body: {
+    sourceSchema: string;
+    targetStack: string;
+    kind: string;
+    version: string;
+    markdown: string;
+  }) =>
+    apiFetch<PromptDetail>('/api/v1/prompts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updatePrompt: (source: string, target: string, kind: string, version: string, markdown: string) =>
+    apiFetch<PromptDetail>(
+      `/api/v1/prompts/${source}/${target}/${kind}/${version}`,
+      { method: 'PUT', body: JSON.stringify({ markdown }) },
+    ),
+  deletePrompt: (source: string, target: string, kind: string, version: string) =>
+    apiFetch<void>(
+      `/api/v1/prompts/${source}/${target}/${kind}/${version}`,
+      { method: 'DELETE' },
     ),
 
   // Phase #4 / value-add #3: scaffold archetype catalog

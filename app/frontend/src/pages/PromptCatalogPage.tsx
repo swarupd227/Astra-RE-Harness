@@ -1,36 +1,65 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FileText, X, ChevronRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, FileText, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api, type PromptSummary } from '@/lib/api';
+import { api, ApiError, type PromptSummary } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
+
+const PROMPT_TEMPLATE = `---
+id: example-extract
+kind: extract
+version: 1.0
+status: preview
+owner: Nous
+modelPreference: claude-sonnet-4-5
+notes: |
+  Replace this body with the production prompt before promoting to status: production.
+---
+
+# System
+
+You are an expert assistant. Produce a structured behavioural spec for the supplied source.
+
+# User
+
+Read the source below and emit a JSON object with invariants, side_effects, edge_cases, open_questions.
+
+\`\`\`
+{{sourceCode}}
+\`\`\`
+`;
 
 /**
  * Prompt Catalog — value-add #2 in the Nous platform pitch.
  *
- * Surfaces the externalised prompt library that ships with the harness:
- * one calibrated prompt per (source schema × target stack × kind), each
- * versioned and authored. Buyers can browse the full asset and click
- * into the rendered system + user template to verify substance over
- * a vague "we have calibrated prompts" claim.
+ * Phase #4.3 adds admin CRUD on top of the existing browse surface:
+ *   - "New version" button → modal with form + markdown editor
+ *   - Drawer "Edit" mode → in-place markdown editor + save
+ *   - Drawer "Delete" button with confirm
  *
- * Wraps the existing GET /api/v1/prompts and /prompts/{src}/{tgt}/{kind}
- * endpoints from Phase #3b.
+ * Wraps GET /api/v1/prompts (Phase #3b) and the POST / PUT / DELETE
+ * mutations added in Phase #4.3.
  */
 export function PromptCatalogPage() {
+  const queryClient = useQueryClient();
+  const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
+  const isAdmin = whoami.data?.persona === 'admin';
+
   const list = useQuery({
     queryKey: ['prompts'],
     queryFn: api.listPrompts,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const [source, setSource] = useState<string>('all');
   const [target, setTarget] = useState<string>('all');
   const [kind, setKind] = useState<string>('all');
   const [open, setOpen] = useState<PromptSummary | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const filtered = useMemo(() => {
     if (!list.data) return [];
@@ -66,16 +95,24 @@ export function PromptCatalogPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="prompt-catalog-page">
-      <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-          Phase #3b · Prompt asset library
-        </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Prompt Catalog</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Calibrated prompts shipped per source language × target stack × kind.
-          Every Claude call records the exact prompt id @ version it used, so
-          spec provenance carries forward into every audit pull.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            Phase #3b · Prompt asset library
+          </p>
+          <h1 className="mt-1 text-display font-semibold text-ink-primary">Prompt Catalog</h1>
+          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+            Calibrated prompts shipped per source language × target stack × kind.
+            Every Claude call records the exact prompt id @ version it used, so
+            spec provenance carries forward into every audit pull.
+          </p>
+        </div>
+        {isAdmin && (
+          <Button variant="primary" size="sm" onClick={() => setCreating(true)} data-testid="prompt-new">
+            <Plus className="h-4 w-4" />
+            New version
+          </Button>
+        )}
       </header>
 
       <Card>
@@ -95,7 +132,27 @@ export function PromptCatalogPage() {
         ))}
       </div>
 
-      {open && <PromptDetailDrawer prompt={open} onClose={() => setOpen(null)} />}
+      {open && (
+        <PromptDetailDrawer
+          prompt={open}
+          isAdmin={isAdmin}
+          onClose={() => setOpen(null)}
+          onMutated={() => {
+            queryClient.invalidateQueries({ queryKey: ['prompts'] });
+          }}
+        />
+      )}
+
+      {creating && (
+        <NewPromptModal
+          existing={list.data.data}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
+            queryClient.invalidateQueries({ queryKey: ['prompts'] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -140,10 +197,49 @@ function PromptCard({ prompt, onOpen }: { prompt: PromptSummary; onOpen: () => v
   );
 }
 
-function PromptDetailDrawer({ prompt, onClose }: { prompt: PromptSummary; onClose: () => void }) {
+function PromptDetailDrawer({
+  prompt,
+  isAdmin,
+  onClose,
+  onMutated,
+}: {
+  prompt: PromptSummary;
+  isAdmin: boolean;
+  onClose: () => void;
+  onMutated: () => void;
+}) {
   const q = useQuery({
     queryKey: ['prompt-detail', prompt.sourceSchema, prompt.targetStack, prompt.kind, prompt.version],
     queryFn: () => api.getPrompt(prompt.sourceSchema, prompt.targetStack, prompt.kind, prompt.version),
+  });
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editing && q.data?.body != null) setDraft(q.data.body);
+  }, [editing, q.data]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.updatePrompt(prompt.sourceSchema, prompt.targetStack, prompt.kind, prompt.version, draft),
+    onSuccess: () => {
+      setEditing(false);
+      setError(null);
+      onMutated();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+  });
+
+  const remove = useMutation({
+    mutationFn: () =>
+      api.deletePrompt(prompt.sourceSchema, prompt.targetStack, prompt.kind, prompt.version),
+    onSuccess: () => {
+      onMutated();
+      onClose();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
   });
 
   return (
@@ -169,6 +265,135 @@ function PromptDetailDrawer({ prompt, onClose }: { prompt: PromptSummary; onClos
               {prompt.sourceSchema} → {prompt.targetStack} · {prompt.kind} · {prompt.path}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            {isAdmin && !editing && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                  data-testid="prompt-edit"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${prompt.promptId}@${prompt.version}? This removes the file from disk.`)) {
+                      remove.mutate();
+                    }
+                  }}
+                  loading={remove.isPending}
+                  data-testid="prompt-delete"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </>
+            )}
+            {isAdmin && editing && (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => save.mutate()}
+                  loading={save.isPending}
+                  data-testid="prompt-save"
+                >
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setError(null); }}>
+                  Cancel
+                </Button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        <div className="flex-1 overflow-y-auto p-6">
+          {q.isPending && <Skeleton className="h-[400px] w-full" />}
+          {q.isError && <ErrorBlock title="Could not load prompt body" message={String(q.error)} />}
+          {error && <ErrorBlock title="Save failed" message={error} />}
+          {q.data && !editing && (
+            <div className="space-y-6">
+              <FrontmatterTable rows={q.data.frontmatter} />
+              <TemplateBlock label="System template" body={q.data.systemTemplate} />
+              <TemplateBlock label="User template" body={q.data.userTemplate} />
+            </div>
+          )}
+          {q.data && editing && (
+            <div>
+              <div className="text-caption uppercase tracking-wide text-ink-tertiary">
+                Markdown body (frontmatter + # System + # User)
+              </div>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={28}
+                spellCheck={false}
+                className="mt-2 w-full rounded-md border border-border-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-accent focus:outline-none"
+                data-testid="prompt-edit-textarea"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewPromptModal({
+  existing,
+  onClose,
+  onCreated,
+}: {
+  existing: PromptSummary[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [sourceSchema, setSourceSchema] = useState('');
+  const [targetStack, setTargetStack] = useState('');
+  const [kind, setKind] = useState('extract');
+  const [version, setVersion] = useState('1.0');
+  const [markdown, setMarkdown] = useState(PROMPT_TEMPLATE);
+  const [error, setError] = useState<string | null>(null);
+
+  const knownSources = useMemo(() => uniq(existing.map((p) => p.sourceSchema)), [existing]);
+  const knownTargets = useMemo(() => uniq(existing.map((p) => p.targetStack)), [existing]);
+
+  const create = useMutation({
+    mutationFn: () => api.createPrompt({ sourceSchema, targetStack, kind, version, markdown }),
+    onSuccess: onCreated,
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+  });
+
+  const ready = sourceSchema.trim() && targetStack.trim() && kind.trim() && version.trim() && markdown.trim();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      data-testid="prompt-new-modal"
+    >
+      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div
+        className="relative flex h-[90vh] w-full max-w-[960px] flex-col rounded-lg border border-border-subtle bg-raised shadow-e3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-4">
+          <h3 className="text-h-md font-semibold text-ink-primary">Add a prompt version</h3>
           <button
             type="button"
             onClick={onClose}
@@ -179,16 +404,51 @@ function PromptDetailDrawer({ prompt, onClose }: { prompt: PromptSummary; onClos
           </button>
         </header>
         <div className="flex-1 overflow-y-auto p-6">
-          {q.isPending && <Skeleton className="h-[400px] w-full" />}
-          {q.isError && <ErrorBlock title="Could not load prompt body" message={String(q.error)} />}
-          {q.data && (
-            <div className="space-y-6">
-              <FrontmatterTable rows={q.data.frontmatter} />
-              <TemplateBlock label="System template" body={q.data.systemTemplate} />
-              <TemplateBlock label="User template" body={q.data.userTemplate} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <LabelledInput
+              label="Source schema"
+              value={sourceSchema}
+              onChange={setSourceSchema}
+              placeholder={knownSources[0] ?? 'fortran-f77'}
+            />
+            <LabelledInput
+              label="Target stack"
+              value={targetStack}
+              onChange={setTargetStack}
+              placeholder={knownTargets[0] ?? 'dotnet8'}
+            />
+            <LabelledInput label="Kind" value={kind} onChange={setKind} placeholder="extract" />
+            <LabelledInput label="Version" value={version} onChange={setVersion} placeholder="1.0" />
+          </div>
+          <div className="mt-4">
+            <div className="text-caption uppercase tracking-wide text-ink-tertiary">
+              Markdown body (frontmatter + # System + # User)
             </div>
-          )}
+            <textarea
+              value={markdown}
+              onChange={(e) => setMarkdown(e.target.value)}
+              rows={22}
+              spellCheck={false}
+              className="mt-2 w-full rounded-md border border-border-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-accent focus:outline-none"
+              data-testid="prompt-new-textarea"
+            />
+          </div>
+          {error && <ErrorBlock title="Could not create prompt" message={error} />}
         </div>
+        <footer className="flex items-center justify-end gap-2 border-t border-border-subtle px-6 py-3">
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!ready}
+            loading={create.isPending}
+            onClick={() => { setError(null); create.mutate(); }}
+            data-testid="prompt-new-submit"
+          >
+            <Plus className="h-4 w-4" />
+            Create
+          </Button>
+        </footer>
       </div>
     </div>
   );
@@ -253,6 +513,31 @@ function Filter({
           <option key={o} value={o}>{o}</option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function LabelledInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+      />
     </label>
   );
 }
