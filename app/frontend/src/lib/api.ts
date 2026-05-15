@@ -64,6 +64,27 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Personas & roles (value-add #5: clear separation of duties) ────
+export type PersonaDef = {
+  id: 'engineer' | 'sme' | 'observer' | 'admin';
+  displayName: string;
+  charter: string;
+  ownsStages: string[];
+};
+
+export type PersonaActionDef = {
+  id: string;
+  label: string;
+  description: string;
+  category: string;
+  allowedPersonas: string[];
+};
+
+export type PersonaMatrix = {
+  personas: { id: string; displayName: string }[];
+  actions: PersonaActionDef[];
+};
+
 // ─── Spec schemas (value-add #4: multi-language support) ────────────
 export type ClaimKindSummary = {
   id: string;
@@ -410,6 +431,10 @@ export const api = {
 
   // Phase #4 / value-add #4: spec-schema discovery (multi-language)
   listSpecSchemas: () => apiFetch<{ data: SpecSchemaSummary[] }>('/api/v1/spec-schemas'),
+
+  // Phase #4 / value-add #5: persona model & permissions matrix
+  listPersonas: () => apiFetch<{ data: PersonaDef[] }>('/api/v1/personas'),
+  getPersonaMatrix: () => apiFetch<PersonaMatrix>('/api/v1/personas/matrix'),
 
   // Phase #4 / value-add #2: prompt library
   listPrompts: () => apiFetch<{ data: PromptSummary[] }>('/api/v1/prompts'),

@@ -73,10 +73,9 @@ const tiles: Tile[] = [
     to: '/platform/roles',
     title: 'Roles & Permissions',
     description:
-      'Who-can-do-what matrix across the Engineer, SME, Observer, and Admin personas. Add/remove users and re-assign roles.',
+      'Who-can-do-what matrix across the Engineer, SME, Observer, and Admin personas — grouped by Pipeline / Review / Audit / Platform.',
     icon: Users,
-    status: 'coming',
-    comingIn: '2.5',
+    status: 'live',
   },
 ];
 
