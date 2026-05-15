@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Languages as LanguagesIcon, X } from 'lucide-react';
-import { api, type SpecSchemaSummary, type ClaimKindSummary } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, Languages as LanguagesIcon, Pencil, RotateCcw, Save, X } from 'lucide-react';
+import { api, ApiError, type SpecSchemaSummary, type ClaimKindSummary } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 
@@ -49,13 +50,23 @@ const ROADMAP: RoadmapEntry[] = [
 ];
 
 export function LanguagesPage() {
+  const queryClient = useQueryClient();
+  const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
+  const isAdmin = whoami.data?.persona === 'admin';
+
   const list = useQuery({
     queryKey: ['spec-schemas'],
     queryFn: api.listSpecSchemas,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const [openSchema, setOpenSchema] = useState<SpecSchemaSummary | null>(null);
+
+  const toggleEnabled = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.putSchemaOverride(id, { enabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spec-schemas'] }),
+  });
 
   const items = useMemo(() => {
     const loaded = list.data?.data ?? [];
@@ -104,7 +115,12 @@ export function LanguagesPage() {
             <SchemaCard
               key={item.data.id}
               schema={item.data}
+              isAdmin={isAdmin}
               onOpen={() => setOpenSchema(item.data)}
+              onToggleEnabled={(enabled) =>
+                toggleEnabled.mutate({ id: item.data.id, enabled })
+              }
+              togglePending={toggleEnabled.isPending}
             />
           ) : (
             <RoadmapCard key={item.data.id} entry={item.data} />
@@ -112,28 +128,46 @@ export function LanguagesPage() {
         )}
       </div>
 
-      {openSchema && <SchemaDetailDrawer schema={openSchema} onClose={() => setOpenSchema(null)} />}
+      {openSchema && (
+        <SchemaDetailDrawer
+          schema={openSchema}
+          isAdmin={isAdmin}
+          onClose={() => setOpenSchema(null)}
+          onMutated={() => {
+            queryClient.invalidateQueries({ queryKey: ['spec-schemas'] });
+            setOpenSchema(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function SchemaCard({
   schema,
+  isAdmin,
   onOpen,
+  onToggleEnabled,
+  togglePending,
 }: {
   schema: SpecSchemaSummary;
+  isAdmin: boolean;
   onOpen: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
+  togglePending: boolean;
 }) {
   // status may be null in schema.json (Fortran/COBOL ship without an
   // explicit status string today); treat null as "production" — the
   // schema is loaded so it's shippable.
   const statusStr = schema.status ?? 'production';
   const isProd = statusStr.toLowerCase().includes('production');
+  const enabled = schema.enabled ?? true;
   return (
     <Card
       interactive
       onClick={onOpen}
       data-testid={`language-card-${schema.id}`}
+      className={!enabled ? 'opacity-60' : undefined}
     >
       <CardHeader
         title={
@@ -145,12 +179,35 @@ function SchemaCard({
         description={
           <span className="font-mono text-[11px] text-ink-tertiary">
             id: {schema.id} · {schema.claimKindCount} claim kinds
+            {schema.overrideActive && (
+              <span className="ml-1.5 text-status-failed">· override</span>
+            )}
           </span>
         }
         action={
-          <Badge tone={isProd ? 'success' : 'neutral'}>
-            {isProd ? 'Production' : prettyStatus(statusStr)}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge tone={enabled ? (isProd ? 'success' : 'neutral') : 'failed'}>
+              {enabled ? (isProd ? 'Production' : prettyStatus(statusStr)) : 'Disabled'}
+            </Badge>
+            {isAdmin && (
+              <label
+                className="inline-flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  onChange={(e) => onToggleEnabled(e.target.checked)}
+                  disabled={togglePending}
+                  aria-label={`Enable ${schema.id}`}
+                  data-testid={`schema-toggle-${schema.id}`}
+                />
+                <span className="font-mono text-[10px] uppercase tracking-wider">
+                  enabled
+                </span>
+              </label>
+            )}
+          </div>
         }
       />
       <CardBody className="space-y-3">
@@ -203,11 +260,50 @@ function RoadmapCard({ entry }: { entry: RoadmapEntry }) {
 
 function SchemaDetailDrawer({
   schema,
+  isAdmin,
   onClose,
+  onMutated,
 }: {
   schema: SpecSchemaSummary;
+  isAdmin: boolean;
   onClose: () => void;
+  onMutated: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    displayName: schema.displayName,
+    description: schema.description,
+    status: schema.status ?? 'production',
+    platformReadiness: schema.platformReadiness ?? '',
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.putSchemaOverride(schema.id, {
+        displayName: draft.displayName,
+        description: draft.description,
+        status: draft.status,
+        platformReadiness: draft.platformReadiness || undefined,
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      setError(null);
+      onMutated();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+  });
+
+  const revert = useMutation({
+    mutationFn: () => api.revertSchemaOverride(schema.id),
+    onSuccess: () => {
+      setEditing(false);
+      setError(null);
+      onMutated();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+  });
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch justify-end"
@@ -229,38 +325,127 @@ function SchemaDetailDrawer({
             </h3>
             <p className="mt-1 font-mono text-caption text-ink-tertiary">
               id: {schema.id} · {schema.status ?? 'production'}
+              {schema.overrideActive && <span className="ml-1.5 text-status-failed">· override</span>}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdmin && !editing && (
+              <>
+                {schema.overrideActive && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm(`Revert ${schema.id} override? The schema will return to its shipped defaults.`)) {
+                        revert.mutate();
+                      }
+                    }}
+                    loading={revert.isPending}
+                    data-testid="schema-revert"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Revert
+                  </Button>
+                )}
+                <Button variant="primary" size="sm" onClick={() => setEditing(true)} data-testid="schema-edit">
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Button>
+              </>
+            )}
+            {isAdmin && editing && (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => save.mutate()}
+                  loading={save.isPending}
+                  data-testid="schema-save"
+                >
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setError(null); }}>
+                  Cancel
+                </Button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         </header>
         <div className="flex-1 overflow-y-auto p-6">
-          <p className="text-body text-ink-secondary">{schema.description}</p>
-          {schema.calibratedAgainst && (
-            <div className="mt-4 rounded-md border border-border-subtle bg-sunken/40 px-3 py-2 font-mono text-caption text-ink-secondary">
-              Calibrated against: {Array.isArray(schema.calibratedAgainst)
-                ? schema.calibratedAgainst.join(' · ')
-                : schema.calibratedAgainst}
+          {error && <ErrorBlock title="Save failed" message={error} />}
+          {editing ? (
+            <div className="space-y-3">
+              <Field label="Display name" value={draft.displayName} onChange={(v) => setDraft({ ...draft, displayName: v })} />
+              <Field label="Status" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v })} />
+              <Field label="Description" value={draft.description} onChange={(v) => setDraft({ ...draft, description: v })} multiline />
+              <Field label="Platform readiness" value={draft.platformReadiness} onChange={(v) => setDraft({ ...draft, platformReadiness: v })} multiline />
             </div>
-          )}
-          <ClaimKindTable kinds={schema.claimKinds} />
-          {schema.platformReadiness && (
-            <div className="mt-6">
-              <div className="text-caption uppercase tracking-wide text-ink-tertiary">
-                Platform readiness
-              </div>
-              <p className="mt-1 text-body text-ink-secondary">{schema.platformReadiness}</p>
-            </div>
+          ) : (
+            <>
+              <p className="text-body text-ink-secondary">{schema.description}</p>
+              {schema.calibratedAgainst && (
+                <div className="mt-4 rounded-md border border-border-subtle bg-sunken/40 px-3 py-2 font-mono text-caption text-ink-secondary">
+                  Calibrated against: {Array.isArray(schema.calibratedAgainst)
+                    ? schema.calibratedAgainst.join(' · ')
+                    : schema.calibratedAgainst}
+                </div>
+              )}
+              <ClaimKindTable kinds={schema.claimKinds} />
+              {schema.platformReadiness && (
+                <div className="mt-6">
+                  <div className="text-caption uppercase tracking-wide text-ink-tertiary">
+                    Platform readiness
+                  </div>
+                  <p className="mt-1 text-body text-ink-secondary">{schema.platformReadiness}</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  multiline?: boolean;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</span>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+        />
+      )}
+    </label>
   );
 }
 

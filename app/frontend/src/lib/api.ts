@@ -170,6 +170,18 @@ export type SpecSchemaSummary = {
   calibratedAgainst?: string | string[] | null;
   status: string | null;
   platformReadiness?: string | null;
+  /** Effective enabled state (merged canonical + override). Defaults to true. */
+  enabled?: boolean;
+  /** True when an admin override is in place for this language. */
+  overrideActive?: boolean;
+};
+
+export type SchemaOverrideRequest = {
+  enabled?: boolean;
+  displayName?: string;
+  description?: string;
+  status?: string;
+  platformReadiness?: string;
 };
 
 // ─── Prompt library (value-add #2: calibrated prompts) ──────────────
@@ -497,6 +509,14 @@ export const api = {
 
   // Phase #4 / value-add #4: spec-schema discovery (multi-language)
   listSpecSchemas: () => apiFetch<{ data: SpecSchemaSummary[] }>('/api/v1/spec-schemas'),
+  // Phase #4.4 admin override (admin-only)
+  putSchemaOverride: (id: string, body: SchemaOverrideRequest) =>
+    apiFetch<SpecSchemaSummary>(`/api/v1/spec-schemas/${id}/override`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  revertSchemaOverride: (id: string) =>
+    apiFetch<void>(`/api/v1/spec-schemas/${id}/override`, { method: 'DELETE' }),
 
   // Phase #4 / value-add #5: persona model & permissions matrix
   listPersonas: () => apiFetch<{ data: PersonaDef[] }>('/api/v1/personas'),
