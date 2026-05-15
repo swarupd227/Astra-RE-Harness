@@ -64,6 +64,20 @@ export type WhoamiResponse = {
   defaultPersona: string;
 };
 
+// ─── Archetypes (value-add #3: ready-made code templates) ───────────
+export type ArchetypeManifest = {
+  id: string;
+  targetStack: string;
+  displayName: string;
+  description: string;
+  compatibleSchemas: string[];
+  owner?: string;
+  /** "production" | "preview · pair-engagement only" | etc. */
+  status: string;
+  platformReadiness?: string;
+  fileCount: number;
+};
+
 // ─── Provider Settings (value-add #1: AI hygiene visibility) ─────────
 export type ProviderSettings = {
   provider: {
@@ -333,6 +347,9 @@ export const api = {
 
   // Phase #4 / value-add #1: provider trust signals
   getProviderSettings: () => apiFetch<ProviderSettings>('/api/v1/providers/settings'),
+
+  // Phase #4 / value-add #3: scaffold archetype catalog
+  listArchetypes: () => apiFetch<{ data: ArchetypeManifest[] }>('/api/v1/archetypes'),
 
   // Phase C UX polish: evidence-trail endpoints
   getSpec: (specId: string) => apiFetch<EvidenceResponse>(`/api/v1/specs/${specId}`),

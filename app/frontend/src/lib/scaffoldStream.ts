@@ -39,10 +39,28 @@ export type ScaffoldEvent =
 
 export async function streamScaffold(
   specId: string,
-  signal: AbortSignal,
-  onEvent: (evt: ScaffoldEvent) => void,
+  options: { targetStack?: string } | AbortSignal,
+  signalOrCallback: AbortSignal | ((evt: ScaffoldEvent) => void),
+  maybeOnEvent?: (evt: ScaffoldEvent) => void,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/specs/${specId}/scaffold`, {
+  // Backwards-compatible overload: streamScaffold(specId, signal, onEvent)
+  // still works for callers that haven't been updated yet.
+  let targetStack: string | undefined;
+  let signal: AbortSignal;
+  let onEvent: (evt: ScaffoldEvent) => void;
+  if (options instanceof AbortSignal) {
+    signal = options;
+    onEvent = signalOrCallback as (evt: ScaffoldEvent) => void;
+  } else {
+    targetStack = options.targetStack;
+    signal = signalOrCallback as AbortSignal;
+    onEvent = maybeOnEvent!;
+  }
+
+  const qs = targetStack && targetStack !== 'dotnet8'
+    ? `?targetStack=${encodeURIComponent(targetStack)}`
+    : '';
+  const res = await fetch(`${API_BASE}/api/v1/specs/${specId}/scaffold${qs}`, {
     method: 'POST',
     headers: {
       'X-Dev-Persona': getPersona(),

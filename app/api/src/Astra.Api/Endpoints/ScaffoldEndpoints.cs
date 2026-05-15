@@ -2,6 +2,7 @@ using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Llm;
+using Astra.Api.Llm.Archetypes;
 using Astra.Api.Persistence;
 using Astra.Api.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -21,8 +22,10 @@ public static class ScaffoldEndpoints
         // ─── Stage-5 streaming generate ──────────────────────────────────
         app.MapPost("/api/v1/specs/{id:guid}/scaffold", async (
             Guid id,
+            string? targetStack,
             HttpContext ctx,
             ScaffoldPipeline pipeline,
+            ArchetypeRegistry archetypes,
             DevPersonaContext persona,
             ILogger<ScaffoldEndpointMarker> log,
             CancellationToken ct) =>
@@ -37,6 +40,47 @@ public static class ScaffoldEndpoints
                 return;
             }
 
+            // Phase #4 / value-add #3 — target-stack selection.
+            //
+            // Default to the production .NET 8 archetype when no choice is
+            // sent. If a target is specified, validate it against the
+            // archetype registry and reject preview/unknown stacks with an
+            // informative 400 (the FE is expected to disable preview cards
+            // already; this is the server-side belt-and-braces).
+            var chosenTarget = string.IsNullOrWhiteSpace(targetStack) ? "dotnet8" : targetStack.Trim();
+            var match = archetypes.All()
+                .FirstOrDefault(a => string.Equals(a.Manifest.TargetStack, chosenTarget, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                ctx.Response.StatusCode = 400;
+                await ctx.Response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        code = "scaffold.unknown_target",
+                        message = $"No archetype is registered for target stack '{chosenTarget}'. " +
+                                  $"Available: {string.Join(", ", archetypes.All().Select(a => a.Manifest.TargetStack).Distinct())}.",
+                    }
+                }, ct);
+                return;
+            }
+            // Production archetypes are self-service. Anything else is gated.
+            var status = match.Manifest.Status ?? "";
+            if (!status.StartsWith("production", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Response.StatusCode = 400;
+                await ctx.Response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        code = "scaffold.target_gated",
+                        message = $"The '{chosenTarget}' archetype is currently {status}. " +
+                                  "It ships as part of a Nous pair-engagement — contact your Nous representative to enable.",
+                    }
+                }, ct);
+                return;
+            }
+
             ctx.Response.ContentType = "text/event-stream";
             ctx.Response.Headers["Cache-Control"] = "no-cache, no-transform";
             ctx.Response.Headers["X-Accel-Buffering"] = "no";
@@ -45,7 +89,7 @@ public static class ScaffoldEndpoints
 
             try
             {
-                await foreach (var evt in pipeline.RunAsync(id, ct))
+                await foreach (var evt in pipeline.RunAsync(id, chosenTarget, ct))
                 {
                     await WriteEventAsync(ctx, evt, ct);
                 }

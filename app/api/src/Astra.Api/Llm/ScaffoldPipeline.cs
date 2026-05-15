@@ -41,10 +41,20 @@ public sealed class ScaffoldPipeline
         _logger = logger;
     }
 
+    public IAsyncEnumerable<ExtractionEvent> RunAsync(
+        Guid specId,
+        CancellationToken ct) => RunAsync(specId, TargetPlatform, ct);
+
     public async IAsyncEnumerable<ExtractionEvent> RunAsync(
         Guid specId,
+        string targetStack,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        // Phase #4 / value-add #3 — engineer-chosen target stack.
+        // The pipeline currently delegates to a single scaffold provider, but
+        // recording the requested stack on the LlmCall + Scaffold row gives
+        // us provenance for the day Java-Spring (or any preview archetype)
+        // gets its own provider wired in.
         var spec = await _db.Specs
             .Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile)
             .FirstOrDefaultAsync(s => s.Id == specId, ct);
@@ -78,7 +88,7 @@ public sealed class ScaffoldPipeline
             configVersion = _provider.Info.ConfigVersion,
             promptTemplateId = PromptTemplateId,
             promptTemplateVersion = PromptTemplateVersion,
-            targetPlatform = TargetPlatform,
+            targetPlatform = targetStack,
         });
 
         var req = new ScaffoldRequest(
@@ -86,7 +96,7 @@ public sealed class ScaffoldPipeline
             spec.Subroutine?.Name ?? "",
             spec.Subroutine?.SourceFile?.RelativePath ?? "",
             spec.SpecJson.RootElement.GetRawText(),
-            TargetPlatform,
+            targetStack,
             PromptTemplateId,
             PromptTemplateVersion);
 
@@ -140,7 +150,7 @@ public sealed class ScaffoldPipeline
             scaffoldId,
             specId = spec.Id,
             subroutineId = spec.SubroutineId,
-            targetPlatform = TargetPlatform,
+            targetPlatform = targetStack,
             generatedAt = DateTimeOffset.UtcNow,
             generatedBy = _persona.DisplayName,
             files = JsonDocument.Parse(filesJson).RootElement,
@@ -163,7 +173,7 @@ public sealed class ScaffoldPipeline
                 SpecId = spec.Id,
                 State = "SCAFFOLDED",
                 LlmCallId = llmCall.Id,
-                TargetPlatform = TargetPlatform,
+                TargetPlatform = targetStack,
                 PackageBlobUri = blobUri,
                 FileCount = fileCount,
                 TotalLines = totalLines,
@@ -176,7 +186,7 @@ public sealed class ScaffoldPipeline
         {
             existing.State = "SCAFFOLDED";
             existing.LlmCallId = llmCall.Id;
-            existing.TargetPlatform = TargetPlatform;
+            existing.TargetPlatform = targetStack;
             existing.PackageBlobUri = blobUri;
             existing.FileCount = fileCount;
             existing.TotalLines = totalLines;
@@ -200,7 +210,7 @@ public sealed class ScaffoldPipeline
                 scaffoldId = scaffold.Id,
                 provider = _provider.Info.Name,
                 model = _provider.Info.Model,
-                targetPlatform = TargetPlatform,
+                targetPlatform = targetStack,
                 fileCount, totalLines, todoCount,
                 inputTokens, outputTokens, latencyMs,
                 blobUri,

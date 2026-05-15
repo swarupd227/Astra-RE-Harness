@@ -11,6 +11,7 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ProviderStrip } from '@/components/ProviderStrip';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
+import { TargetSelector } from '@/components/TargetSelector';
 import { MonacoSource, type Citation } from '@/components/MonacoSource';
 import { OutlinePane, type OutlineItem } from '@/components/OutlinePane';
 import { ReviewableClaimCard } from '@/components/ReviewableClaimCard';
@@ -32,6 +33,26 @@ export function SpecReviewPage() {
   const [activeLine, setActiveLine] = useState<number | undefined>(undefined);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [signOpen, setSignOpen] = useState(false);
+
+  // Phase #4 / value-add #3 — engineer-chosen target stack. Persists
+  // across reloads so the demo can switch once and keep the choice; the
+  // server-side guard still rejects gated stacks (e.g. java-spring) so
+  // self-service .NET 8 is the only thing that actually generates today.
+  const [targetStack, setTargetStack] = useState<string>(() => {
+    try {
+      return localStorage.getItem('astra.targetStack') ?? 'dotnet8';
+    } catch {
+      return 'dotnet8';
+    }
+  });
+  const onTargetChange = (next: string) => {
+    setTargetStack(next);
+    try {
+      localStorage.setItem('astra.targetStack', next);
+    } catch {
+      /* ignore — private mode etc. */
+    }
+  };
 
   const sections: Section[] = useMemo(() => {
     const s = spec.data?.spec;
@@ -191,7 +212,7 @@ export function SpecReviewPage() {
               </Button>
             )}
             {signed && whoami.data?.persona === 'engineer' && (
-              <ScaffoldCta specId={sp.id} />
+              <ScaffoldCta specId={sp.id} targetStack={targetStack} />
             )}
           </div>
         </div>
@@ -206,6 +227,12 @@ export function SpecReviewPage() {
       <div className="border-b border-border-subtle bg-canvas/40 px-6 py-2">
         <ProviderSettingsCard compact />
       </div>
+
+      {signed && whoami.data?.persona === 'engineer' && (
+        <div className="border-b border-border-subtle bg-canvas/40 px-6 py-3">
+          <TargetSelector value={targetStack} onChange={onTargetChange} />
+        </div>
+      )}
 
       {signed && sp.signature && (
         <div className="px-6 pt-4">
@@ -307,7 +334,7 @@ function ClaimCommentsToggle({ specId, claimPath }: { specId: string; claimPath:
  * otherwise offer "Generate scaffold". A single round-trip to the scaffold
  * endpoint disambiguates without needing a separate probe.
  */
-function ScaffoldCta({ specId }: { specId: string }) {
+function ScaffoldCta({ specId, targetStack }: { specId: string; targetStack: string }) {
   const probe = useQuery({
     queryKey: ['scaffold-by-spec', specId],
     queryFn: () => api.getScaffoldForSpec(specId).catch(() => null),
@@ -323,8 +350,11 @@ function ScaffoldCta({ specId }: { specId: string }) {
       </Link>
     );
   }
+  // Forward the engineer-chosen target stack on the navigation URL so the
+  // LiveScaffoldPage can pass it through to POST /scaffold.
+  const qs = targetStack && targetStack !== 'dotnet8' ? `?target=${encodeURIComponent(targetStack)}` : '';
   return (
-    <Link to={`/specs/${specId}/scaffold`}>
+    <Link to={`/specs/${specId}/scaffold${qs}`}>
       <Button variant="primary" size="md">
         <Cog className="h-4 w-4" /> Generate scaffold
       </Button>

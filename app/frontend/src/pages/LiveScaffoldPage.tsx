@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Cog, X } from 'lucide-react';
 import { api, type SpecResponse } from '@/lib/api';
 import {
@@ -39,6 +39,10 @@ const STAGES = [
 export function LiveScaffoldPage() {
   const { id = '' } = useParams<{ id: string }>();  // spec id
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // The Spec-review surface forwards the chosen target stack here. Default
+  // to dotnet8 so deep links still work.
+  const targetStack = searchParams.get('target') ?? 'dotnet8';
   const subroutineId = useResolveSubroutineId(id);
 
   const [status, setStatus] = useState<Status>('idle');
@@ -118,7 +122,7 @@ export function LiveScaffoldPage() {
       }
     };
 
-    streamScaffold(id, controller.signal, onEvent).catch((err) => {
+    streamScaffold(id, { targetStack }, controller.signal, onEvent).catch((err) => {
       if (controller.signal.aborted) return;
       setErrorMessage(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -126,7 +130,7 @@ export function LiveScaffoldPage() {
     });
 
     return () => controller.abort();
-  }, [id]);
+  }, [id, targetStack]);
 
   const treeFiles = useMemo(() =>
     orderedPaths.map((p) => {
