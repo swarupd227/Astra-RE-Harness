@@ -1,0 +1,29 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "cobol-canonical-payroll",
+  "targetStack": "java-spring",
+  "displayName": "Canonical COBOL payroll/reporting service · Java Spring 3 + JUnit 5 + AssertJ",
+  "description": "Reference COBOL → Java Spring 3 scaffold for the openmainframeproject cobol-programming-course demo programs (DEPTPAY / EMPPAY / CBL0106). Generates a buildable Maven module with a claim-mapped service skeleton, request + result records, JPA-style repository boundary, and JUnit 5 fixtures cited to the signed COBOL spec.",
+  "compatibleSchemas": ["cobol"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "DEPTPAY" },
+      { "subroutineName": "DEPTPAYE2E" },
+      { "subroutineName": "EMPPAY" },
+      { "subroutineName": "CBL0106" }
+    ],
+    "fallback": "Default cobol→java-spring archetype while the per-paragraph matcher (#3c.next) is in development."
+  },
+  "owner": "Nous · COBOL migration accelerator",
+  "status": "production",
+  "platformReadiness": "Schema (cobol) + prompts (cobol/java-spring/extract.v0.1) + this archetype ship in-tree. Engineer flow: ingest a COBOL corpus, extract claims via the cobol→java-spring prompt, SME signs, scaffold lands as Demo.Payroll Maven module with claim-mapped JUnit fixtures. Phase 5.5 wires the maven-sidecar to drive mvn compile + mvn test against the generated package.",
+  "files": [
+    { "path": "pom.xml",                                                       "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/payroll/PayrollService.java",         "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-4","INV-5"] },
+    { "path": "src/main/java/com/example/payroll/PayrollRequest.java",         "language": "java", "derivedFromClaimIds": ["SC-1"] },
+    { "path": "src/main/java/com/example/payroll/PayrollResult.java",          "language": "java", "derivedFromClaimIds": ["SC-2"] },
+    { "path": "src/main/java/com/example/payroll/IPayrollRepository.java",     "language": "java", "derivedFromClaimIds": ["IO-1"] },
+    { "path": "src/main/java/com/example/payroll/IPayrollEventNotifier.java",  "language": "java", "derivedFromClaimIds": ["IO-2"] },
+    { "path": "src/test/java/com/example/payroll/PayrollServiceTest.java",     "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-5","EC-1"] }
+  ]
+}

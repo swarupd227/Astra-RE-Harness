@@ -26,6 +26,7 @@ public static class ScaffoldEndpoints
             HttpContext ctx,
             ScaffoldPipeline pipeline,
             ArchetypeRegistry archetypes,
+            AppDbContext db,
             DevPersonaContext persona,
             ILogger<ScaffoldEndpointMarker> log,
             CancellationToken ct) =>
@@ -41,16 +42,27 @@ public static class ScaffoldEndpoints
             }
 
             // Phase #4 / value-add #3 — target-stack selection.
-            //
-            // Default to the production .NET 8 archetype when no choice is
-            // sent. If a target is specified, validate it against the
-            // archetype registry and reject preview/unknown stacks with an
-            // informative 400 (the FE is expected to disable preview cards
-            // already; this is the server-side belt-and-braces).
+            // Phase 5.4 — gate evaluates the archetype that actually
+            // matches the spec's subroutine, not "first by stack". With
+            // multiple archetypes per stack (e.g. java-spring has both
+            // canonical-rollstock @ preview and cobol-canonical-payroll
+            // @ production), the previous gate rejected production
+            // requests whenever a preview archetype was registered first.
             var chosenTarget = string.IsNullOrWhiteSpace(targetStack) ? "dotnet8" : targetStack.Trim();
-            var match = archetypes.All()
-                .FirstOrDefault(a => string.Equals(a.Manifest.TargetStack, chosenTarget, StringComparison.OrdinalIgnoreCase));
-            if (match is null)
+
+            // Look up the spec's subroutine name so PickForSubroutine
+            // can match correctly. Spec → Subroutine join lives in the DB.
+            var spec = await db.Specs
+                .Include(s => s.Subroutine)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == id, ct);
+            var subroutineName = spec?.Subroutine?.Name ?? "";
+
+            // Any archetype registered for this target stack at all?
+            var anyForTarget = archetypes.All()
+                .Where(a => string.Equals(a.Manifest.TargetStack, chosenTarget, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (anyForTarget.Length == 0)
             {
                 ctx.Response.StatusCode = 400;
                 await ctx.Response.WriteAsJsonAsync(new
@@ -64,6 +76,14 @@ public static class ScaffoldEndpoints
                 }, ct);
                 return;
             }
+
+            // Pick the archetype the scaffold pipeline will actually use.
+            // Falls back to the first archetype for the stack when the
+            // subroutine name doesn't match any anyOf clause — same
+            // behaviour as ArchetypeRegistry.PickForSubroutine.
+            var match = archetypes.PickForSubroutine(chosenTarget, subroutineName)
+                ?? anyForTarget[0];
+
             // Production archetypes are self-service. Anything else is gated.
             var status = match.Manifest.Status ?? "";
             if (!status.StartsWith("production", StringComparison.OrdinalIgnoreCase))
@@ -74,7 +94,7 @@ public static class ScaffoldEndpoints
                     error = new
                     {
                         code = "scaffold.target_gated",
-                        message = $"The '{chosenTarget}' archetype is currently {status}. " +
+                        message = $"Archetype '{match.Manifest.Id}' for target '{chosenTarget}' is currently {status}. " +
                                   "It ships as part of a Nous pair-engagement — contact your Nous representative to enable.",
                     }
                 }, ct);
