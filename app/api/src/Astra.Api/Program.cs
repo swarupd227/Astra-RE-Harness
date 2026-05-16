@@ -230,6 +230,16 @@ using (var scope = app.Services.CreateScope())
                 updated_by_display varchar(160) NOT NULL
             );
             """);
+
+        // Phase 5.2 — per-Subroutine source-language column. Default keeps
+        // existing rows valid as fortran-f77; future inserts set it
+        // explicitly per-file. Idempotent.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE subroutines
+              ADD COLUMN IF NOT EXISTS source_language varchar(32) NOT NULL DEFAULT 'fortran-f77';
+            CREATE INDEX IF NOT EXISTS ix_subroutines_source_language
+              ON subroutines (source_language);
+            """);
     }
     if (canConnect && seedDemo)
     {

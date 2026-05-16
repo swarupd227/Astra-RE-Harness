@@ -21,5 +21,13 @@ public sealed class Subroutine
     public string? ParsedAstBlobUri { get; set; }
     public string State { get; set; } = "PARSED";
 
+    /// <summary>
+    /// Source-language id the parser identified — matches the
+    /// spec-schema id (e.g. "fortran-f77", "cobol"). Drives prompt +
+    /// archetype routing in the extraction and scaffold pipelines.
+    /// Default keeps rows from pre-Phase-5.2 deployments valid.
+    /// </summary>
+    public string SourceLanguage { get; set; } = "fortran-f77";
+
     public SourceFile? SourceFile { get; set; }
 }

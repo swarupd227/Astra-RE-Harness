@@ -18,7 +18,12 @@ public sealed record ExtractionRequest(
     string SourceText,
     int LineCount,
     string PromptTemplateId,
-    string PromptTemplateVersion);
+    string PromptTemplateVersion,
+    // Phase 5.2 — language + target stack drive prompt-library routing
+    // inside the provider. Default values keep pre-5.2 call sites
+    // compiling without explicit migration.
+    string SourceLanguage = "fortran-f77",
+    string TargetStack = "dotnet8");
 
 public sealed record ExtractionResult(
     string SpecJson,

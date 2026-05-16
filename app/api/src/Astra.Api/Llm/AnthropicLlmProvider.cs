@@ -68,11 +68,12 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         yield return Stage("streaming", 3, "Streaming behavioural spec from Claude");
 
         // Resolve the prompt from the externalised library (Phase #3b).
-        // Today every corpus is Fortran → .NET 8; when corpus-level
-        // schema/target pinning lands we'll switch on `request.SchemaId`
-        // and `request.TargetStack`.
-        const string schemaId = "fortran-f77";
-        const string targetStack = "dotnet8";
+        // Phase 5.2 routes by the request's SourceLanguage + TargetStack
+        // so COBOL corpora reach cobol/<target>/extract while Fortran
+        // continues to reach fortran-f77/<target>/extract. Defaults on
+        // the record keep pre-5.2 callers safe.
+        var schemaId = string.IsNullOrEmpty(request.SourceLanguage) ? "fortran-f77" : request.SourceLanguage;
+        var targetStack = string.IsNullOrEmpty(request.TargetStack) ? "dotnet8" : request.TargetStack;
         const string kind = "extract";
         var loaded = _prompts.GetLatest(schemaId, targetStack, kind)
             ?? throw new InvalidOperationException(

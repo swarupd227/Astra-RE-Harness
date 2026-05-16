@@ -22,11 +22,13 @@ public static class IngestEndpoints
     private const int MaxFilesPerCorpus = 500;
     private const int MaxFileBytes = 8 * 1024 * 1024;        // 8 MiB per individual file
 
+    // Phase 5.2 — extension catalog now lives in
+    // <see cref="Ingest.SourceLanguageDetector"/> so the per-language
+    // routing (parser-sidecar, schema, prompt) has a single source of
+    // truth. The fortran-only constant remains for the legacy paths in
+    // this file that still reference Fortran-specific behaviour.
     private static readonly string[] FortranExtensions =
-    {
-        ".f", ".f77", ".for", ".fpp", ".ftn",
-        ".f90", ".f95", ".f03", ".f08", ".f15", ".f18",
-    };
+        Ingest.SourceLanguageDetector.FortranExtensions;
 
     public static IEndpointRouteBuilder MapIngestEndpoints(this IEndpointRouteBuilder app)
     {
@@ -69,7 +71,7 @@ public static class IngestEndpoints
                                 $"Corpus exceeds {MaxFilesPerCorpus} files. Split or filter the archive.");
                     }
                 }
-                else if (FortranExtensions.Contains(ext))
+                else if (Ingest.SourceLanguageDetector.FromExtension(ext) is not null)
                 {
                     if (file.Length > MaxFileBytes)
                         return BadRequest("ingest.file_too_large",
@@ -84,13 +86,13 @@ public static class IngestEndpoints
                 else
                 {
                     return BadRequest("ingest.unsupported_extension",
-                        $"Unsupported file type: {file.FileName}. Use .f/.for/.f90/.f95 or a .zip archive.");
+                        $"Unsupported file type: {file.FileName}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) source, or a .zip archive.");
                 }
             }
 
             if (collected.Count == 0)
-                return BadRequest("ingest.no_fortran_files",
-                    "Archive contained no Fortran source files (.f, .for, .f90, etc.).");
+                return BadRequest("ingest.no_supported_files",
+                    "Archive contained no Fortran or COBOL source files.");
 
             try
             {
@@ -216,6 +218,18 @@ public static class IngestEndpoints
                 return BadRequest("ingest.no_files", "At least one file is required.");
             if (body.Files.Count > MaxFilesPerCorpus)
                 return BadRequest("ingest.too_many_files", $"Maximum {MaxFilesPerCorpus} files per corpus.");
+
+            // Phase 5.2 — extension gate matches the multipart path so
+            // CLI / e2e callers can't sneak unsupported types past.
+            foreach (var f in body.Files)
+            {
+                if (Ingest.SourceLanguageDetector.FromFilename(f.Path) is null)
+                {
+                    return BadRequest(
+                        "ingest.unsupported_extension",
+                        $"Unsupported file type: {f.Path}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) source.");
+                }
+            }
 
             var collected = body.Files.Select(f => new IngestPipeline.IncomingFile(
                 RelativePath: f.Path,
@@ -411,7 +425,7 @@ public static class IngestEndpoints
                             $"Corpus exceeds {MaxFilesPerCorpus} files. Split or filter the archive.");
                 }
             }
-            else if (FortranExtensions.Contains(ext))
+            else if (Ingest.SourceLanguageDetector.FromExtension(ext) is not null)
             {
                 if (file.Length > MaxFileBytes)
                     return new(collected, "ingest.file_too_large",
@@ -424,7 +438,7 @@ public static class IngestEndpoints
             else
             {
                 return new(collected, "ingest.unsupported_extension",
-                    $"Unsupported file type: {file.FileName}. Use .f/.for/.f90/.f95 or a .zip archive.");
+                    $"Unsupported file type: {file.FileName}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) or a .zip archive.");
             }
         }
         return new(collected, null, null);
@@ -444,7 +458,7 @@ public static class IngestEndpoints
             if (string.IsNullOrEmpty(entry.Name)) continue;  // directory
             if (entry.Length > MaxFileBytes) continue;       // silently skip oversize
             var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
-            if (!FortranExtensions.Contains(ext)) continue;
+            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null) continue;
 
             string text;
             using (var es = entry.Open())
@@ -465,7 +479,7 @@ public static class IngestEndpoints
         foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (!FortranExtensions.Contains(ext)) continue;
+            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null) continue;
 
             var fi = new FileInfo(path);
             if (fi.Length > maxFileBytes) continue;

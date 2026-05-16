@@ -198,6 +198,13 @@ public sealed class IngestPipeline
                 foreach (var w in outcome.Warnings)
                     warnings.Add($"{fileRow.RelativePath}: {w}");
 
+                // Phase 5.2 — detect source language from the file's
+                // extension and persist it on every parsed subroutine.
+                // Default fortran-f77 keeps pre-Phase-5.2 callers valid.
+                var sourceLanguage =
+                    SourceLanguageDetector.FromFilename(fileRow.RelativePath)
+                    ?? SourceLanguageDetector.Fortran;
+
                 foreach (var sub in outcome.Subroutines)
                 {
                     var commonRefs = JsonSerializer.Serialize(sub.CommonBlockRefs);
@@ -214,6 +221,7 @@ public sealed class IngestPipeline
                         CalledSubroutines = JsonDocument.Parse(calls),
                         IoPatterns = null,  // C.2 doesn't infer IO patterns yet
                         State = "PARSED",
+                        SourceLanguage = sourceLanguage,
                     });
                     totalSubs++;
                 }

@@ -50,12 +50,15 @@ public sealed class ExtractionPipeline
     }
 
     /// <summary>Resolve the active prompt's id+version for the audit trail.</summary>
-    private (string Id, string Version) ResolvePromptMeta()
+    /// <param name="sourceLanguage">Subroutine.SourceLanguage — "fortran-f77" or "cobol".</param>
+    /// <param name="targetStack">Project's target stack (default "dotnet8"; "java-spring" once Phase 5.4 lands).</param>
+    private (string Id, string Version) ResolvePromptMeta(string sourceLanguage, string targetStack)
     {
-        // Today every corpus is Fortran → .NET 8. When corpus-level
-        // schema/target pinning lands (Phase D), switch this on
-        // `corpus.SchemaId` / `corpus.TargetStack` lookups.
-        var loaded = _prompts.GetLatest("fortran-f77", "dotnet8", "extract");
+        // Phase 5.2 — route by sourceLanguage. The prompt-library lookup
+        // returns null when no matching prompt ships for the
+        // (schema × target × kind) tuple; fall back to the Fortran
+        // defaults so audit trails stay informative even on misroute.
+        var loaded = _prompts.GetLatest(sourceLanguage, targetStack, "extract");
         return loaded is not null
             ? (loaded.PromptId, loaded.Version)
             : (DefaultPromptTemplateId, DefaultPromptTemplateVersion);
@@ -105,8 +108,13 @@ public sealed class ExtractionPipeline
         sub.State = "EXTRACTING";
         await _db.SaveChangesAsync(ct);
 
-        // 2. Provider context (visible to the user)
-        var (promptId, promptVersion) = ResolvePromptMeta();
+        // 2. Provider context (visible to the user).
+        // Phase 5.2 — pick the prompt by the subroutine's parsed language.
+        // Target stack stays "dotnet8" for now; Phase 5.4 introduces the
+        // engineer-chosen target-stack override on the scaffold path.
+        var sourceLanguage = string.IsNullOrEmpty(sub.SourceLanguage) ? "fortran-f77" : sub.SourceLanguage;
+        const string defaultTargetStack = "dotnet8";
+        var (promptId, promptVersion) = ResolvePromptMeta(sourceLanguage, defaultTargetStack);
         yield return new("provider_info", new
         {
             name = _provider.Info.Name,
@@ -124,7 +132,9 @@ public sealed class ExtractionPipeline
             sourceText,
             sub.SourceFile.LineCount,
             promptId,
-            promptVersion);
+            promptVersion,
+            SourceLanguage: sourceLanguage,
+            TargetStack: defaultTargetStack);
 
         object? finalPayload = null;
         var providerEmittedError = false;

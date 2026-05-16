@@ -118,10 +118,12 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.IoPatterns).HasColumnName("io_patterns").HasColumnType("jsonb");
             b.Property(x => x.ParsedAstBlobUri).HasColumnName("parsed_ast_blob_uri").HasMaxLength(1024);
             b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.SourceLanguage).HasColumnName("source_language").HasMaxLength(32).IsRequired();
             b.HasOne(x => x.SourceFile).WithMany(f => f.Subroutines)
              .HasForeignKey(x => x.SourceFileId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.SourceFileId, x.Name });
             b.HasIndex(x => x.State);
+            b.HasIndex(x => x.SourceLanguage);
         });
 
         modelBuilder.Entity<LlmCall>(b =>

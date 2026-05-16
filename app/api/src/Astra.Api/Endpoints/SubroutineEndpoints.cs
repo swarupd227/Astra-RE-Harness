@@ -120,6 +120,7 @@ public static class SubroutineEndpoints
                 lineStart = sub.LineStart,
                 lineEnd = sub.LineEnd,
                 state = sub.State,
+                sourceLanguage = sub.SourceLanguage,
                 commonBlockRefs = sub.CommonBlockRefs,
                 calledSubroutines = sub.CalledSubroutines,
                 ioPatterns = sub.IoPatterns,
