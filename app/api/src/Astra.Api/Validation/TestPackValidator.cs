@@ -53,6 +53,7 @@ public sealed class TestPackValidator
     private readonly IBlobClient _blob;
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
+    private readonly MavenClient _maven;
     private readonly ILogger<TestPackValidator> _log;
 
     public TestPackValidator(
@@ -60,12 +61,14 @@ public sealed class TestPackValidator
         IBlobClient blob,
         StorageOptions storage,
         IAuditLogger audit,
+        MavenClient maven,
         ILogger<TestPackValidator> log)
     {
         _db = db;
         _blob = blob;
         _storage = storage;
         _audit = audit;
+        _maven = maven;
         _log = log;
     }
 
@@ -92,9 +95,45 @@ public sealed class TestPackValidator
 
         await _audit.LogAsync(
             "validation.started", "scaffold", scaffold.Id, actor,
-            payload: new { runId = run.Id, stage = run.Stage },
+            payload: new { runId = run.Id, stage = run.Stage, targetPlatform = scaffold.TargetPlatform },
             ct: ct);
 
+        try
+        {
+            // Phase 5.5: dispatch by target platform. java-spring scaffolds
+            // round-trip through the maven sidecar (mvn test); dotnet8
+            // scaffolds keep the original in-process `dotnet test` path.
+            if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunJavaTestPackAsync(scaffold, run, actor, ct);
+                return run;
+            }
+            return await RunDotnetTestPackAsync(scaffold, run, actor, ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Test pack validation crashed for scaffold {Scaffold}", scaffold.Id);
+            run.Status = "ERRORED";
+            run.ErrorCode = "test_pack.runner_crashed";
+            run.Summary = $"Runner error: {ex.GetType().Name}: {ex.Message}";
+            run.CompletedAt = DateTimeOffset.UtcNow;
+            try { await _db.SaveChangesAsync(ct); }
+            catch (Exception saveEx) { _log.LogError(saveEx, "Could not persist ERRORED state"); }
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, error = ex.Message },
+                ct: ct);
+            return run;
+        }
+    }
+
+    private async Task<ValidationRun> RunDotnetTestPackAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
         var tempDir = Path.Combine(Path.GetTempPath(), $"astra-testpack-{run.Id:N}");
         try
         {
@@ -215,27 +254,162 @@ public sealed class TestPackValidator
 
             return run;
         }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Test pack validation crashed for scaffold {Scaffold}", scaffold.Id);
-            run.Status = "ERRORED";
-            run.ErrorCode = "test_pack.runner_crashed";
-            run.Summary = $"Runner error: {ex.GetType().Name}: {ex.Message}";
-            run.CompletedAt = DateTimeOffset.UtcNow;
-            try { await _db.SaveChangesAsync(ct); }
-            catch (Exception saveEx) { _log.LogError(saveEx, "Could not persist ERRORED state"); }
-
-            await _audit.LogAsync(
-                "validation.completed", "scaffold", scaffold.Id, actor,
-                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, error = ex.Message },
-                ct: ct);
-            return run;
-        }
         finally
         {
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
             catch (Exception ex) { _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir); }
         }
+    }
+
+    private async Task RunJavaTestPackAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        // 1. Pull the file manifest (Java sources + generated SignedSpecPack).
+        var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+        using var manifest = JsonDocument.Parse(manifestText);
+        var files = manifest.RootElement.GetProperty("files");
+
+        var sources = new List<MavenClient.JavaSource>();
+        foreach (var file in files.EnumerateArray())
+        {
+            var relPath = file.GetProperty("path").GetString()!;
+            var content = file.GetProperty("content").GetString() ?? "";
+            sources.Add(new MavenClient.JavaSource(relPath, content));
+        }
+
+        if (!await _maven.PingAsync(ct))
+            throw new InvalidOperationException("maven sidecar unreachable (GET /health failed).");
+
+        _log.LogInformation(
+            "Forwarding {Files} files for scaffold {Scaffold} to maven sidecar for test-pack",
+            sources.Count, scaffold.Id);
+
+        // 2. POST /compile-and-test — single round-trip that runs
+        //    `mvn test` and parses the surefire totals on the way out.
+        var result = await _maven.CompileAndTestAsync(
+            new MavenClient.CompileAndTestRequest(sources, TimeoutMs: 300_000), ct);
+
+        // 3. Stitch the compile + test logs into one blob for the report card.
+        var sb = new StringBuilder();
+        sb.AppendLine("=== mvn compile ===");
+        sb.AppendLine(result.Compile.Log);
+        sb.AppendLine($"=== compile exit {result.Compile.ExitCode} · {result.Compile.DurationMs} ms ===");
+        if (result.Test is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("=== mvn test (surefire) ===");
+            sb.AppendLine(result.Test.Stdout);
+            if (!string.IsNullOrWhiteSpace(result.Test.Stderr))
+            {
+                sb.AppendLine("--- stderr ---");
+                sb.AppendLine(result.Test.Stderr);
+            }
+            sb.AppendLine($"=== test exit {result.Test.ExitCode} · {result.Test.DurationMs} ms ===");
+        }
+        else
+        {
+            sb.AppendLine();
+            sb.AppendLine($"=== test skipped: {result.SkippedTestReason ?? "(no reason given)"} ===");
+        }
+
+        var logKey = $"validation/{run.Id:N}/test-pack.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, sb.ToString(), "text/plain", ct);
+
+        // 4. Map mvn/surefire counts into the same shape the dotnet path
+        //    persists, so the report card UI works for both.
+        int passed = 0, failed = 0, skipped = 0, total = 0;
+        if (result.Test is not null)
+        {
+            total = result.Test.Tests;
+            failed = result.Test.Failures + result.Test.Errors;
+            skipped = result.Test.Skipped;
+            passed = Math.Max(0, total - failed - skipped);
+        }
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            runner = "maven",
+            artifactId = result.Compile.ArtifactId,
+            compileExitCode = result.Compile.ExitCode,
+            compileErrorCount = result.Compile.ErrorCount,
+            compileWarningCount = result.Compile.WarningCount,
+            compileDurationMs = result.Compile.DurationMs,
+            testExitCode = result.Test?.ExitCode,
+            testDurationMs = result.Test?.DurationMs,
+            testTimedOut = result.Test?.TimedOut ?? false,
+            passed,
+            failed,
+            skipped,
+            total,
+            fileCount = sources.Count,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (result.Compile.ExitCode != 0)
+        {
+            // Compile failure short-circuits the test-pack stage; the
+            // compile-stage report card already explains the failure but
+            // we want a sensible verdict here too so the gate stays simple.
+            run.Status = "FAILED";
+            run.ErrorCode = "test_pack.compile_failed";
+            run.Summary = $"mvn compile failed before tests ran · {result.Compile.ErrorCount} error{(result.Compile.ErrorCount == 1 ? "" : "s")}";
+        }
+        else if (result.Test is null)
+        {
+            run.Status = "ERRORED";
+            run.ErrorCode = "test_pack.no_tests_detected";
+            run.Summary = result.SkippedTestReason ?? "No tests detected";
+        }
+        else if (result.Test.TimedOut)
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = "test_pack.timed_out";
+            run.Summary = $"mvn test timed out after {result.Test.DurationMs} ms";
+        }
+        else if (total == 0)
+        {
+            run.Status = "ERRORED";
+            run.ErrorCode = "test_pack.no_tests_detected";
+            run.Summary = result.Test.ExitCode == 0
+                ? "No tests detected"
+                : $"mvn test exited {result.Test.ExitCode}; no test summary parsed";
+        }
+        else if (failed == 0 && result.Test.ExitCode == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = skipped == 0
+                ? $"All {total} tests passed"
+                : $"{passed}/{total} passed · {skipped} skipped";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = "test_pack.tests_failed";
+            run.Summary = $"{failed} of {total} tests failed · {passed} passed · {skipped} skipped";
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        _log.LogInformation(
+            "Java test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
+            scaffold.Id, run.Status, run.Summary);
     }
 
     private static async Task<(int ExitCode, string Log)> RunDotnetTestAsync(
