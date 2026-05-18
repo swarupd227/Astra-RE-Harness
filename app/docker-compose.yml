@@ -114,6 +114,28 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── gnucobol sidecar (Phase 5.6 — COBOL cross-runtime equivalence) ───
+  # Compiles COBOL source on demand and runs the resulting binary against
+  # a stdin-encoded input vector. Mirrors the gfortran sidecar so the
+  # per-routine equivalence preview can drive a COBOL reference binary
+  # the same way it drives a Fortran one — the demo recording (Phase
+  # 5.7) shows DEPTPAY's AVERAGE-SALARY paragraph producing identical
+  # output to the Java BigDecimal re-implementation, row-for-row.
+  gnucobol-sidecar:
+    build:
+      context: ./gnucobol-sidecar
+    ports:
+      - "${GNUCOBOL_PORT:-51054}:51054"
+    environment:
+      GNUCOBOL_PORT: 51054
+      GNUCOBOL_WORKDIR: /var/tmp/gnucobol-runs
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51054/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── API (.NET 8) ─────────────────────────────────────────────────────
   api:
     build:
@@ -130,6 +152,8 @@ services:
         condition: service_started
       maven-sidecar:
         condition: service_started
+      gnucobol-sidecar:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
@@ -139,6 +163,7 @@ services:
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
       Validation__GfortranEndpoint: "http://gfortran-sidecar:51052"
       Validation__MavenEndpoint: "http://maven-sidecar:51053"
+      Validation__GnucobolEndpoint: "http://gnucobol-sidecar:51054"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
       Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
