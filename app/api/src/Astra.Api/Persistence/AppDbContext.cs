@@ -25,6 +25,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
     public DbSet<GoldenDatasetEntry> GoldenDatasetEntries => Set<GoldenDatasetEntry>();
     public DbSet<GoldenDatasetRun> GoldenDatasetRuns => Set<GoldenDatasetRun>();
+    public DbSet<HarmonisationRun> HarmonisationRuns => Set<HarmonisationRun>();
+    public DbSet<HarmonisationFinding> HarmonisationFindings => Set<HarmonisationFinding>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -405,6 +407,55 @@ public sealed class AppDbContext : DbContext
             // by completed_at; per-entry detail: filter by entry_id.
             b.HasIndex(x => new { x.PromptId, x.PromptVersion, x.CompletedAt });
             b.HasIndex(x => new { x.EntryId, x.CompletedAt });
+        });
+
+        modelBuilder.Entity<HarmonisationRun>(b =>
+        {
+            b.ToTable("harmonisation_runs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id").IsRequired();
+            b.Property(x => x.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
+            b.Property(x => x.PromptId).HasColumnName("prompt_id").HasMaxLength(128).IsRequired();
+            b.Property(x => x.PromptVersion).HasColumnName("prompt_version").HasMaxLength(32).IsRequired();
+            b.Property(x => x.ModelName).HasColumnName("model_name").HasMaxLength(128).IsRequired();
+            b.Property(x => x.InputTokens).HasColumnName("input_tokens");
+            b.Property(x => x.OutputTokens).HasColumnName("output_tokens");
+            b.Property(x => x.CacheReadTokens).HasColumnName("cache_read_tokens");
+            b.Property(x => x.CacheCreationTokens).HasColumnName("cache_creation_tokens");
+            b.Property(x => x.SpecCount).HasColumnName("spec_count");
+            b.Property(x => x.FindingCount).HasColumnName("finding_count");
+            b.Property(x => x.Summary).HasColumnName("summary").IsRequired();
+            b.Property(x => x.ErrorMessage).HasColumnName("error_message");
+            b.Property(x => x.TriggeredBy).HasColumnName("triggered_by").HasMaxLength(160);
+            b.Property(x => x.StartedAt).HasColumnName("started_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+
+            b.HasIndex(x => new { x.CorpusId, x.CompletedAt });
+        });
+
+        modelBuilder.Entity<HarmonisationFinding>(b =>
+        {
+            b.ToTable("harmonisation_findings");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.HarmonisationRunId).HasColumnName("harmonisation_run_id").IsRequired();
+            b.Property(x => x.Category).HasColumnName("category").HasMaxLength(64).IsRequired();
+            b.Property(x => x.Severity).HasColumnName("severity").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
+            b.Property(x => x.Detail).HasColumnName("detail").IsRequired();
+            b.Property(x => x.AffectedSpecIdsJson).HasColumnName("affected_spec_ids").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+            b.Property(x => x.AdminNote).HasColumnName("admin_note");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.Property(x => x.UpdatedBy).HasColumnName("updated_by").HasMaxLength(160);
+
+            b.HasOne<HarmonisationRun>().WithMany()
+             .HasForeignKey(x => x.HarmonisationRunId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.HarmonisationRunId, x.Severity });
+            b.HasIndex(x => new { x.HarmonisationRunId, x.Status });
         });
     }
 }

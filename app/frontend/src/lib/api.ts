@@ -346,6 +346,48 @@ export type GoldenDatasetScoreAll = {
   runs: GoldenDatasetRun[];
 };
 
+// ─── Harmonisation (Phase 7.1: cross-routine consistency check) ──────
+export type HarmonisationRunSummary = {
+  id: string;
+  corpusId: string;
+  sourceVersionId: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  promptId: string;
+  promptVersion: string;
+  modelName: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  specCount: number;
+  findingCount: number;
+  summary: string;
+  errorMessage: string | null;
+  triggeredBy: string | null;
+  startedAt: string;
+  completedAt: string;
+};
+
+export type HarmonisationFinding = {
+  id: string;
+  harmonisationRunId: string;
+  category: string;
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  detail: string;
+  affectedSpecIds: string[];
+  status: 'open' | 'accepted' | 'dismissed';
+  adminNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type HarmonisationRunDetail = {
+  run: HarmonisationRunSummary;
+  findings: HarmonisationFinding[];
+};
+
 // ─── Provider Settings (value-add #1: AI hygiene visibility) ─────────
 export type ProviderSettings = {
   provider: {
@@ -746,6 +788,25 @@ export const api = {
       { method: 'POST' },
     );
   },
+  // Phase 7.1 — cross-routine harmonisation
+  runHarmonisation: (corpusId: string) =>
+    apiFetch<HarmonisationRunSummary>(`/api/v1/corpora/${encodeURIComponent(corpusId)}/harmonise`, {
+      method: 'POST',
+    }),
+  listHarmonisationRuns: (corpusId: string, limit?: number) => {
+    const q = limit ? `?limit=${limit}` : '';
+    return apiFetch<{ data: HarmonisationRunSummary[] }>(
+      `/api/v1/corpora/${encodeURIComponent(corpusId)}/harmonisation${q}`,
+    );
+  },
+  getHarmonisationRun: (runId: string) =>
+    apiFetch<HarmonisationRunDetail>(`/api/v1/harmonisation/runs/${encodeURIComponent(runId)}`),
+  updateHarmonisationFinding: (findingId: string, body: { status: string; adminNote?: string }) =>
+    apiFetch<HarmonisationFinding>(
+      `/api/v1/harmonisation/findings/${encodeURIComponent(findingId)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+
   listGoldenDatasetRuns: (params?: { entryId?: string; promptId?: string; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.entryId) qs.set('entryId', params.entryId);

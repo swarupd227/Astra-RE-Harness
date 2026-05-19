@@ -23,6 +23,7 @@ import { CompliancePage } from '@/pages/CompliancePage';
 import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
 import { PromptCatalogPage } from '@/pages/PromptCatalogPage';
 import { GoldenDatasetPage } from '@/pages/GoldenDatasetPage';
+import { HarmonisationPage } from '@/pages/HarmonisationPage';
 import { LanguagesPage } from '@/pages/LanguagesPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
@@ -222,6 +223,7 @@ export function App() {
             <Route path="/platform" element={<PlatformIndexPage />} />
             <Route path="/platform/prompts" element={<PromptCatalogPage />} />
             <Route path="/platform/golden-dataset" element={<GoldenDatasetPage />} />
+            <Route path="/platform/harmonisation" element={<HarmonisationPage />} />
             <Route path="/platform/languages" element={<LanguagesPage />} />
             <Route path="/platform/roles" element={<RolesPage />} />
             <Route path="/platform/validation" element={<ValidationPolicyPage />} />
