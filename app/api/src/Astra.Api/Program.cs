@@ -111,6 +111,9 @@ switch (llmProvider)
         throw new InvalidOperationException(
             $"Unknown Llm:Provider '{llmProvider}'. Valid values: mock, fail-mock, anthropic.");
 }
+// Phase 7.0 — structured cross-routine context builder. Used by
+// ExtractionPipeline to attach a neighbourhood to every ExtractionRequest.
+builder.Services.AddScoped<Astra.Api.Llm.NeighbourhoodBuilder>();
 builder.Services.AddScoped<ExtractionPipeline>();
 
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────

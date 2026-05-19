@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-callee-side-effect-inheritance",
+  "schemaId": "fortran-f77",
+  "title": "Caller inherits callee's I/O side effects — only visible with neighbourhood context",
+  "trapCategory": "neighbourhood/cross-file-io",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/callee_inherits_io.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE PROCESS_BATCH(N, OUT)\nC     Reads N records from the inventory file and accumulates a total.\nC     The actual file I/O is INSIDE INV_READ -- defined in another\nC     translation unit. A reader looking at PROCESS_BATCH alone sees\nC     no I/O verb and might conclude this routine is pure. The\nC     neighbourhood context tells the extractor that INV_READ does\nC     VSAM READ (its own spec is already extracted), so this routine\nC     INHERITS that I/O side effect.\n      IMPLICIT NONE\n      INTEGER I, N\n      REAL    OUT, X\n      OUT = 0.0\n      DO I = 1, N\n         CALL INV_READ(I, X)\n         OUT = OUT + X\n      END DO\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-CSI-1",
+      "pattern": "(?i)(accumulat\\w+\\s+total|sum|OUT\\s*=\\s*0\\.0|loop\\s+N\\s+times|N\\s+records)"
+    },
+    {
+      "kind": "side_effect",
+      "id": "SE-CSI-1",
+      "pattern": "(?i)(INV_READ|VSAM|file\\s+(read|I.?O)|inventory|callee\\s+(reads|performs)|inherits?\\s+(I.?O|from))"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-CSI-1",
+      "pattern": "(?i)(N\\s*<=?\\s*0|N\\s+bounds?|file\\s+exists?|missing\\s+record|short\\s+file|partial\\s+read)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "This entry is the regression test for Phase 7.0's neighbourhood\nfeature. WITHOUT neighbourhood context (legacy per-routine extract),\nthe LLM sees CALL INV_READ as just a name and produces an open\nquestion 'what does INV_READ do?' WITH neighbourhood context, the\nINV_READ callee comes with its spec summary ('VSAM READ ...') and\nthe LLM lifts that I/O into PROCESS_BATCH's `side_effects`. The\nscorer pattern for SE-CSI-1 requires INV_READ or VSAM/file I/O to\nappear in a side_effects claim — passes only when the neighbourhood\nis attached AND callee specs already exist.\n\nThe trap mirrors a real pattern from the Phase 5.6 PayrollEquivalence\nharness: AVERAGE-SALARY had to be analyzed alongside the surrounding\nDEPTPAY program for the spec to capture the right contract."
+}
