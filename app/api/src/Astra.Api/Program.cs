@@ -116,6 +116,12 @@ switch (llmProvider)
 builder.Services.AddScoped<Astra.Api.Llm.NeighbourhoodBuilder>();
 builder.Services.AddScoped<ExtractionPipeline>();
 
+// Phase 7.1 — Cross-routine harmonisation pipeline. Loads every signed
+// spec in a corpus, sends to the LLM in one call, persists structured
+// findings the SME can accept/dismiss.
+builder.Services.AddHttpClient("anthropic-harmonise");
+builder.Services.AddScoped<Astra.Api.Llm.HarmonisationPipeline>();
+
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
@@ -307,6 +313,53 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_golden_dataset_runs_entry
               ON golden_dataset_runs (entry_id, completed_at);
             """);
+
+        // Phase 7.1 — Cross-routine harmonisation. Additive
+        // create-if-not-exists; existing dev databases pick these up
+        // without a full recreate.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS harmonisation_runs (
+                id                      uuid        PRIMARY KEY,
+                corpus_id               uuid        NOT NULL,
+                source_version_id       uuid        NOT NULL,
+                status                  varchar(32) NOT NULL,
+                prompt_id               varchar(128) NOT NULL,
+                prompt_version          varchar(32)  NOT NULL,
+                model_name              varchar(128) NOT NULL,
+                input_tokens            integer      NOT NULL,
+                output_tokens           integer      NOT NULL,
+                cache_read_tokens       integer      NOT NULL,
+                cache_creation_tokens   integer      NOT NULL,
+                spec_count              integer      NOT NULL,
+                finding_count           integer      NOT NULL,
+                summary                 text         NOT NULL,
+                error_message           text         NULL,
+                triggered_by            varchar(160) NULL,
+                started_at              timestamptz  NOT NULL,
+                completed_at            timestamptz  NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_harmonisation_runs_corpus
+              ON harmonisation_runs (corpus_id, completed_at);
+
+            CREATE TABLE IF NOT EXISTS harmonisation_findings (
+                id                      uuid        PRIMARY KEY,
+                harmonisation_run_id    uuid        NOT NULL REFERENCES harmonisation_runs(id) ON DELETE CASCADE,
+                category                varchar(64) NOT NULL,
+                severity                varchar(16) NOT NULL,
+                title                   varchar(256) NOT NULL,
+                detail                  text         NOT NULL,
+                affected_spec_ids       jsonb        NOT NULL,
+                status                  varchar(16)  NOT NULL,
+                admin_note              text         NULL,
+                created_at              timestamptz  NOT NULL,
+                updated_at              timestamptz  NOT NULL,
+                updated_by              varchar(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_harmonisation_findings_run_severity
+              ON harmonisation_findings (harmonisation_run_id, severity);
+            CREATE INDEX IF NOT EXISTS ix_harmonisation_findings_run_status
+              ON harmonisation_findings (harmonisation_run_id, status);
+            """);
     }
     if (canConnect && seedDemo)
     {
@@ -363,6 +416,7 @@ app.MapSchemaEndpoints();
 app.MapPromptEndpoints();
 app.MapArchetypeEndpoints();
 app.MapGoldenDatasetEndpoints();
+app.MapHarmonisationEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();

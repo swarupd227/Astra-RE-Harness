@@ -3,6 +3,7 @@ import {
   ArrowRight,
   FileText,
   Gauge,
+  GitMerge,
   Languages,
   ShieldCheck,
   SlidersHorizontal,
@@ -82,6 +83,14 @@ const tiles: Tile[] = [
     description:
       'Calibration corpus of trap-laden Fortran + COBOL snippets paired with expected extract claims. Score regression on every prompt change.',
     icon: Gauge,
+    status: 'live',
+  },
+  {
+    to: '/platform/harmonisation',
+    title: 'Harmonisation',
+    description:
+      'Cross-routine consistency pass. Sends every signed spec to the LLM in one call; surfaces inconsistent claims, COMMON-layout drift, terminology drift, missing invariants.',
+    icon: GitMerge,
     status: 'live',
   },
 ];
