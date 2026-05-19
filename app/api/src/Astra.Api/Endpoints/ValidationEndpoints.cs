@@ -240,6 +240,95 @@ public static class ValidationEndpoints
             });
         });
 
+        // ─── Phase 5.6 — COBOL equivalence preview ─────────────────────────
+        // Mirrors the consume-roll preview above for the COBOL track:
+        // drives the AVG-DRIVER GnuCOBOL program (DEPTPAY's AVERAGE-SALARY
+        // paragraph wrapped in an ACCEPT/COMPUTE loop) and the inline C#
+        // reference (decimal HALF_UP, scale 2 — same shape as Java
+        // BigDecimal) with the canonical payroll vectors and returns the
+        // row-by-row comparison. Admin-only.
+        app.MapPost("/api/v1/validation/equivalence/preview/deptpay-average", async (
+            GnuCobolClient gnucobol,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Admin)
+                return Forbid("auth.admin_required", "Only admins can run the equivalence preview.");
+
+            if (!await gnucobol.PingAsync(ct))
+                return Results.Problem(detail: "gnucobol sidecar unreachable", statusCode: 503);
+
+            var stdin = PayrollEquivalence.RenderStdin();
+            var cobol = await gnucobol.CompileAndRunAsync(new GnuCobolClient.CompileAndRunRequest(
+                Sources: new[] { new GnuCobolClient.Source("avg_driver.cob", PayrollEquivalence.CobolDriverSource) },
+                Stdin: stdin,
+                TimeoutMs: 30_000), ct);
+
+            if (cobol.Compile.ExitCode != 0 || (cobol.Run?.ExitCode ?? -1) != 0)
+            {
+                return Results.Problem(
+                    detail: $"gnucobol compile/run failed: {cobol.Compile.Log}\n---run---\n{cobol.Run?.Stdout}\n{cobol.Run?.Stderr}",
+                    statusCode: 500);
+            }
+
+            // One DISPLAY per row → one stdout line per canonical input.
+            // The COBOL edit picture (ZZZZZZ9.99) leaves leading spaces,
+            // so trim before parsing with invariant culture.
+            var cobolLines = (cobol.Run?.Stdout ?? "")
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToArray();
+
+            var rows = new List<object>();
+            var allMatch = true;
+            for (int i = 0; i < PayrollEquivalence.CanonicalInputs.Length; i++)
+            {
+                var input = PayrollEquivalence.CanonicalInputs[i];
+                var csharp = PayrollEquivalence.EvaluateCSharp(input);
+
+                decimal cobolValue;
+                var raw = i < cobolLines.Length ? cobolLines[i] : "(missing)";
+                if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture, out cobolValue))
+                {
+                    return Results.Problem(
+                        detail: $"Could not parse COBOL outcome line {i}: '{raw}'",
+                        statusCode: 500);
+                }
+
+                // Decimal equality at scale 2 — both sides are scale 2 by
+                // construction, so straight == is the right comparison.
+                var match = cobolValue == csharp;
+                if (!match) allMatch = false;
+
+                rows.Add(new
+                {
+                    input = new
+                    {
+                        total = input.Total,
+                        count = input.Count,
+                        label = input.ExpectedLabel,
+                    },
+                    cobol = cobolValue,
+                    csharp,
+                    match,
+                });
+            }
+
+            return Results.Ok(new
+            {
+                routine = "DEPTPAY.AVERAGE-SALARY",
+                inputCount = PayrollEquivalence.CanonicalInputs.Length,
+                matched = rows.Count(r => (bool)((dynamic)r).match),
+                mismatched = rows.Count(r => !(bool)((dynamic)r).match),
+                verdict = allMatch ? "PASSED" : "FAILED",
+                cobolCompileMs = cobol.Compile.DurationMs,
+                cobolRunMs = cobol.Run?.DurationMs ?? -1,
+                rows,
+            });
+        });
+
         return app;
     }
 

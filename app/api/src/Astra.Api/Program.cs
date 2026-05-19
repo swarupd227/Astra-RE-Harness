@@ -151,6 +151,13 @@ builder.Services.AddScoped<Astra.Api.Validation.CrossRuntimeValidator>();
 builder.Services.AddHttpClient("maven");
 builder.Services.AddScoped<Astra.Api.Validation.MavenClient>();
 
+// ─── GnuCOBOL sidecar HTTP client (Phase 5.6) ────────────────────────
+// Same shape as the gfortran wiring above; drives the COBOL reference
+// binary for the per-routine equivalence harness (DEPTPAY's
+// AVERAGE-SALARY paragraph in Phase 5.6, more programs in Phase 5.7).
+builder.Services.AddHttpClient("gnucobol");
+builder.Services.AddScoped<Astra.Api.Validation.GnuCobolClient>();
+
 // ─── Software HSM signer (Phase B.3; Azure Key Vault Managed HSM in Phase D) ─
 builder.Services.AddSingleton<IHsmSigner, SoftwareHsmSigner>();
 
