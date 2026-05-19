@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-justified-right",
+  "schemaId": "cobol",
+  "title": "JUST RIGHT — alphanumeric field right-justified on MOVE; left-padded with spaces",
+  "trapCategory": "memory/group",
+  "difficulty": "easy",
+  "sourcePath": "cobol/snippets/justified_right.cbl",
+  "sourceLines": "1-14",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. RIGHT-JUSTIFY.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> WS-CODE has JUSTIFIED RIGHT (or JUST RIGHT). MOVE 'AB' to\n      *> it produces '   AB' (3 leading spaces, 2 trailing chars).\n      *> Default alphanumeric is LEFT-justified -> 'AB   '. The\n      *> Java port has to mirror the justification explicitly.\n       01  WS-CODE    PIC X(5) JUST RIGHT.\n       01  WS-DEFAULT PIC X(5).\n       PROCEDURE DIVISION.\n           MOVE \"AB\" TO WS-CODE.\n           MOVE \"AB\" TO WS-DEFAULT.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-JR-1", "pattern": "(?i)(JUST(IFIED)?\\s+RIGHT|right.?justif\\w*|leading\\s+spaces|opposite\\s+of\\s+default)" },
+    { "kind": "section_contract", "id": "SC-JR-1", "pattern": "(?i)(WS.CODE.*'   AB'|WS.DEFAULT.*'AB   '|differ\\w+\\s+(padding|alignment))" },
+    { "kind": "open_question", "id": "Q-JR-1", "pattern": "(?i)(String\\.format|padStart|leftPad|target\\s+padding|alignment\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "JUST RIGHT is common in customer-key fields where the key is right-aligned in a 10-char slot. A naive port that uses padEnd/padRight loses the alignment. Surface the explicit justification."
+}

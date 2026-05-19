@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-reference-modification",
+  "schemaId": "cobol",
+  "title": "Reference modification WS-FIELD(3:5) — 1-based start, length (NOT end); reading and writing both work",
+  "trapCategory": "string/reference-mod",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/reference_modification.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. REF-MOD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-LINE    PIC X(80).\n      *> WS-LINE(3:5) means: start at byte 3 (1-based), take 5 bytes.\n      *> NOT 'bytes 3 through 5' -- that would only be 3 chars.\n      *> Reading produces a 5-character value; the same expression\n      *> on the LHS overwrites those 5 bytes in place. A Java port\n      *> using String.substring(2, 7) is correct but the off-by-one\n      *> conversion is a common bug.\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE \"hello\" TO WS-LINE(3:5).\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-RM-1", "pattern": "(?i)(reference\\s+modif|\\(\\s*\\d+\\s*:\\s*\\d+\\s*\\)|1.based\\s+start|length\\s+(not|=)\\s+end)" },
+    { "kind": "section_contract", "id": "SC-RM-1", "pattern": "(?i)(read.*write|both\\s+directions|lvalue|substring\\s+overlay|in.place)" },
+    { "kind": "open_question", "id": "Q-RM-1", "pattern": "(?i)(substring|substr|target\\s+(slice|range)|0.based\\s+vs\\s+1.based|StringBuilder)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "The (start:length) syntax is unusual — most languages use (start, end). The off-by-one trap on the length side is silent and common. The lvalue form is the major port challenge: Java String is immutable."
+}

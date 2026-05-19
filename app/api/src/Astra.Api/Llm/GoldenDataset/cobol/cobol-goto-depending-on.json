@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-goto-depending-on",
+  "schemaId": "cobol",
+  "title": "GO TO ... DEPENDING ON — branch table by 1-based numeric index; out-of-range falls through silently",
+  "trapCategory": "control-flow/goto",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/goto_depending_on.cbl",
+  "sourceLines": "1-22",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. DISPATCH.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-OPCODE   PIC 9.\n       PROCEDURE DIVISION.\n       MAIN.\n      *> GO TO ... DEPENDING ON: WS-OPCODE = 1 branches to STEP-A,\n      *> 2 -> STEP-B, 3 -> STEP-C. WS-OPCODE outside [1,3] FALLS\n      *> THROUGH to the statement after the GO TO. Modern Java\n      *> needs a switch with explicit default.\n           GO TO STEP-A STEP-B STEP-C DEPENDING ON WS-OPCODE.\n           DISPLAY \"unknown opcode\"\n           STOP RUN.\n       STEP-A.\n           DISPLAY \"A\".\n           STOP RUN.\n       STEP-B.\n           DISPLAY \"B\".\n           STOP RUN.\n       STEP-C.\n           DISPLAY \"C\".\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-GDO-1", "pattern": "(?i)(GO\\s+TO.*DEPENDING\\s+ON|branch\\s+table|computed\\s+GOTO|1.based|paragraph\\s+name\\s+list)" },
+    { "kind": "edge_case", "id": "EC-GDO-1", "pattern": "(?i)(out.of.range|fall.?through|silent\\s+default|0|>\\s*3|unknown\\s+opcode)" },
+    { "kind": "open_question", "id": "Q-GDO-1", "pattern": "(?i)(switch|target\\s+default|reject\\s+invalid|enum|exhaustiv\\w+)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "GO TO DEPENDING ON is COBOL's computed GOTO. Same fall-through trap as the Fortran equivalent. A Java rewrite to switch is natural; the spec must surface the default branch as an explicit decision."
+}

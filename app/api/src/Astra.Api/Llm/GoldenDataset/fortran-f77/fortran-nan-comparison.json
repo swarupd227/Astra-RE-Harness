@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-nan-comparison",
+  "schemaId": "fortran-f77",
+  "title": "NaN compares unequal to itself — X .EQ. X is FALSE when X is NaN",
+  "trapCategory": "numeric/floating-point",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/nan_comparison.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE CHECK_FRESH(X, OK)\nC     OK is .TRUE. unless X has gone NaN (e.g. via 0.0/0.0 or sqrt\nC     of a negative number computed upstream). IEEE 754 says\nC     NaN .EQ. NaN is FALSE, so X .EQ. X is a stable NaN detector.\nC     Translating to Java's '!Double.isNaN(x)' preserves the meaning;\nC     translating to 'x == x' triggers static-analyzer warnings.\n      IMPLICIT NONE\n      REAL    X\n      LOGICAL OK\n      OK = (X .EQ. X)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-NAN-1", "pattern": "(?i)(NaN|IEEE\\s+754|X\\s*\\.EQ\\.\\s*X|stable\\s+NaN\\s+detect|X\\s*==\\s*X)" },
+    { "kind": "edge_case", "id": "EC-NAN-1", "pattern": "(?i)(NaN|divide\\s+by\\s+zero|0\\.0\\s*/\\s*0\\.0|SQRT.*negative|propagation)" },
+    { "kind": "open_question", "id": "Q-NAN-1", "pattern": "(?i)(isNaN|Double\\.isNaN|isnan|target.*NaN\\s+(detector|test)|static\\s+analy)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "X .EQ. X is the canonical Fortran NaN-detector idiom. A direct port to (x == x) often gets refactored by linters or LLMs to 'true' which silently breaks NaN propagation. The spec must capture the NaN-detector contract AND ask the rewrite to use the language's idiomatic isNaN/isnan function."
+}

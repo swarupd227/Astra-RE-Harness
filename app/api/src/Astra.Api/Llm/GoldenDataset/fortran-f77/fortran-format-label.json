@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-format-label",
+  "schemaId": "fortran-f77",
+  "title": "FORMAT statements use label numbers — moving them changes output layout if labels collide",
+  "trapCategory": "io/format",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/format_label.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE PRINT_HEADER(A, B)\nC     The WRITE references FORMAT 100. FORMAT 100 specifies\nC     (1X, A8, F8.2) -- one blank, 8-char string, 8-char real\nC     with 2 decimals. Removing or renumbering 100 silently changes\nC     the output. Many legacy programs share FORMAT labels across\nC     subroutines via INCLUDE, so the format used here may live in\nC     a copybook.\n      IMPLICIT NONE\n      CHARACTER*8 A\n      REAL        B\n      WRITE (6, 100) A, B\n  100 FORMAT (1X, A8, F8.2)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-FL-1", "pattern": "(?i)(FORMAT|label\\s+100|reference\\s+by\\s+label|output\\s+layout|edit\\s+descriptor)" },
+    { "kind": "section_contract", "id": "SC-FL-1", "pattern": "(?i)(1X|A8|F8\\.2|column\\s+width|two\\s+decimal|8.character)" },
+    { "kind": "open_question", "id": "Q-FL-1", "pattern": "(?i)(printf|String\\.format|target\\s+format|template\\s+string|width\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "FORMAT label resolution + edit descriptors (Aw, Fw.d, Iw, Ew.d) are everywhere in legacy report-printing code. A Java rewrite using String.format must mirror the exact widths to keep downstream report parsers happy. Surface the descriptor list as the rewrite contract."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-select-case",
+  "schemaId": "fortran-f77",
+  "title": "F90 SELECT CASE — supports ranges, multiple values, and CASE DEFAULT",
+  "trapCategory": "control-flow/select-case",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/select_case.f",
+  "sourceLines": "1-22",
+  "sourceContent": "      SUBROUTINE GRADE_FROM_SCORE(SCORE, GRADE)\nC     SELECT CASE with ranges (CASE (90:)), value lists\nC     (CASE (60, 70)), and a CASE DEFAULT for unmatched values.\nC     Java's switch has none of these; Java's enhanced switch (14+)\nC     supports ranges via 'when' clauses but earlier targets need\nC     a chain of if-else. Pattern faithful translation is\nC     non-trivial.\n      IMPLICIT NONE\n      INTEGER SCORE\n      CHARACTER*1 GRADE\n      SELECT CASE (SCORE)\n         CASE (90:)\n            GRADE = 'A'\n         CASE (80:89)\n            GRADE = 'B'\n         CASE (70:79)\n            GRADE = 'C'\n         CASE (60:69)\n            GRADE = 'D'\n         CASE DEFAULT\n            GRADE = 'F'\n      END SELECT\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SC-1", "pattern": "(?i)(SELECT\\s+CASE|range\\s+(case|expression)|CASE\\s+DEFAULT|multi.value\\s+CASE)" },
+    { "kind": "section_contract", "id": "SC-SC-1", "pattern": "(?i)(SCORE.*GRADE|90.*A|80.*B|70.*C|60.*D|default.*F)" },
+    { "kind": "open_question", "id": "Q-SC-1", "pattern": "(?i)(open.ended\\s+range|negative\\s+SCORE|SCORE\\s*<\\s*0|missing\\s+upper\\s+bound|enhanced\\s+switch)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "SELECT CASE is straightforward to port but worth surfacing because (a) the open-ended range CASE (90:) covers any score >= 90 including 1_000_000, which might not be the caller's intent, and (b) negative scores fall to CASE DEFAULT silently. Each is a candidate open question."
+}

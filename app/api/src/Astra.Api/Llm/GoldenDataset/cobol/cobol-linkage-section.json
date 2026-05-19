@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-linkage-section",
+  "schemaId": "cobol",
+  "title": "LINKAGE SECTION — declares parameters received from caller; storage is OWNED by the caller",
+  "trapCategory": "call/linkage",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/linkage_section.cbl",
+  "sourceLines": "1-20",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INCREMENT-COUNTER.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-LOCAL  PIC 9(4).\n       LINKAGE SECTION.\n       01  LS-COUNTER PIC 9(4).\n      *> The PROCEDURE DIVISION USING list names LINKAGE SECTION\n      *> items, NOT WORKING-STORAGE. The storage for LS-COUNTER is\n      *> the caller's variable -- mutating it mutates the caller.\n      *> Java's parameter list is conceptually similar but the\n      *> caller doesn't own the bytes; the spec must capture the\n      *> address-of contract.\n       PROCEDURE DIVISION USING LS-COUNTER.\n       MAIN.\n           ADD 1 TO LS-COUNTER.\n           GOBACK.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-LK-1", "pattern": "(?i)(LINKAGE\\s+SECTION|USING|caller.owned|address.of|parameter\\s+(declared|received))" },
+    { "kind": "section_contract", "id": "SC-LK-1", "pattern": "(?i)(LS.COUNTER|mutate\\w+\\s+caller|in.place|reference\\s+semantic)" },
+    { "kind": "open_question", "id": "Q-LK-1", "pattern": "(?i)(target\\s+(param|reference)|out\\s+param|return\\s+value|AtomicInteger)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "LINKAGE SECTION + PROCEDURE DIVISION USING is the COBOL way to declare parameters. Combined with default BY REFERENCE, mutations affect the caller. Surface this for every called subprogram."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-group-move-truncates",
+  "schemaId": "cobol",
+  "title": "MOVE WS-GROUP-A TO WS-GROUP-B — group MOVE is byte-by-byte; PIC details inside are ignored",
+  "trapCategory": "memory/group",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/group_move_truncates.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. GROUP-MOVE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-A.\n           05  A-CODE   PIC X(4)   VALUE \"ABCD\".\n           05  A-AMT    PIC 9(5)V99.\n       01  WS-B.\n           05  B-CODE   PIC X(4).\n           05  B-AMT    PIC 9(5)V99 COMP-3.\n      *> MOVE WS-A TO WS-B is a GROUP move -- byte-for-byte. It does\n      *> NOT see that B-AMT is COMP-3 (packed) while A-AMT is DISPLAY\n      *> (zoned). The bytes go through unchanged and B-AMT now holds\n      *> nonsensical packed-decimal data.\n       PROCEDURE DIVISION.\n           MOVE WS-A TO WS-B.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-GMT-1", "pattern": "(?i)(group\\s+MOVE|byte.for.byte|ignor\\w+\\s+PIC|elementary.by.elementary|raw\\s+copy)" },
+    { "kind": "edge_case", "id": "EC-GMT-1", "pattern": "(?i)(USAGE\\s+mismatch|COMP\\s+vs\\s+DISPLAY|packed\\s+vs\\s+zoned|conversion\\s+skipped|nonsensical)" },
+    { "kind": "open_question", "id": "Q-GMT-1", "pattern": "(?i)(per.field\\s+(MOVE|map)|target\\s+(record|copy|deep)|byte.exact\\s+vs\\s+typed)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Group MOVE is a silent USAGE-mismatch bug source. A Java rewrite that does record1 = record2 actually mirrors group MOVE — but a port that maps each field via a setter respects USAGE. The spec must capture which the legacy code expects."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-redefines-occurs",
+  "schemaId": "cobol",
+  "title": "REDEFINES of an OCCURS — same bytes viewed as a structured array and as a flat byte buffer",
+  "trapCategory": "memory/redefines",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/redefines_occurs.cbl",
+  "sourceLines": "1-16",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. RECORD-DUAL-VIEW.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> WS-DETAILS holds 5 elementary records (10 bytes each).\n      *> WS-DETAILS-BUF REDEFINES it as a flat 50-byte buffer for\n      *> low-level copying (e.g. CICS COMMAREA shuffling). Both\n      *> names address the same 50 bytes.\n       01  WS-RECORD.\n           05  WS-DETAILS OCCURS 5 TIMES.\n               10  WS-CODE   PIC X(4).\n               10  WS-VAL    PIC 9(6).\n           05  WS-DETAILS-BUF REDEFINES WS-DETAILS PIC X(50).\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-RO-1", "pattern": "(?i)(REDEFINES.*OCCURS|flat\\s+buffer|two\\s+views|structured\\s+vs\\s+flat|byte\\s+alias)" },
+    { "kind": "section_contract", "id": "SC-RO-1", "pattern": "(?i)(WS.DETAILS|WS.DETAILS.BUF|10\\s+bytes\\s+each|50\\s+bytes|both\\s+names)" },
+    { "kind": "open_question", "id": "Q-RO-1", "pattern": "(?i)(byte\\s+buffer|ByteBuffer|target\\s+(union|reinterpret)|raw\\s+memory)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "REDEFINES of an OCCURS pattern is heavily used in CICS COMMAREA shuffling and inter-program byte-blob passing. A Java rewrite usually needs a ByteBuffer view PLUS a typed structure. Surface this so the migration preserves both views."
+}

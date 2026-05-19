@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-multiple-entry",
+  "schemaId": "fortran-f77",
+  "title": "ENTRY — multiple entry points into a single subroutine, sharing local state",
+  "trapCategory": "control-flow/entry",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/multiple_entry.f",
+  "sourceLines": "1-19",
+  "sourceContent": "      SUBROUTINE STATS_INIT(N)\nC     Single program unit with three entry points: STATS_INIT,\nC     STATS_ADD, STATS_GET. All three share the SAVEd locals SUM\nC     and COUNT -- this is a stateful API built into one routine.\nC     Each ENTRY is callable by name; the body that runs is\nC     determined by which ENTRY was called. F90 deprecated this;\nC     F2008 marked it obsolescent.\n      IMPLICIT NONE\n      INTEGER N\n      REAL    X\n      REAL    SUM\n      INTEGER COUNT\n      SAVE    SUM, COUNT\n      SUM   = 0.0\n      COUNT = 0\n      RETURN\n      ENTRY STATS_ADD(X)\n      SUM   = SUM + X\n      COUNT = COUNT + 1\n      RETURN\n      ENTRY STATS_GET(X)\n      X = SUM / REAL(COUNT)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ME-1", "pattern": "(?i)(ENTRY|multiple\\s+entry\\s+points|shared\\s+(locals|state)|obsole\\w+|deprecated)" },
+    { "kind": "section_contract", "id": "SC-ME-1", "pattern": "(?i)(STATS_INIT|STATS_ADD|STATS_GET|SAVE|class.like|module.level)" },
+    { "kind": "open_question", "id": "Q-ME-1", "pattern": "(?i)(class|object|singleton|three\\s+methods|re.entrancy|thread.?safe)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "ENTRY is the closest F77 came to an object: three callable methods sharing state via SAVE. The natural Java/C# rewrite is a class. The spec must capture: (a) each ENTRY's individual contract, (b) the shared state semantic, (c) the re-entrancy / thread-safety question — the SAVE makes this single-instance by design."
+}

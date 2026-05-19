@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-do-while",
+  "schemaId": "fortran-f77",
+  "title": "DO WHILE — F90 construct; condition evaluated BEFORE each iteration (no do-until)",
+  "trapCategory": "control-flow/do-loop",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/do_while.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE FIND_FIRST_POSITIVE(A, N, IDX)\nC     DO WHILE (cond) is F90+ and evaluates the condition BEFORE\nC     each iteration -- like Java/C# 'while' (NOT 'do-while'). IDX\nC     left at 0 if the array is empty.\n      IMPLICIT NONE\n      INTEGER N, IDX\n      REAL    A(*)\n      IDX = 1\n      DO WHILE (IDX .LE. N .AND. A(IDX) .LE. 0.0)\n         IDX = IDX + 1\n      END DO\n      IF (IDX .GT. N) IDX = 0\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DW-1", "pattern": "(?i)(DO\\s+WHILE|while.loop|condition\\s+(checked|evaluated)\\s+before|pre.test|F90)" },
+    { "kind": "edge_case", "id": "EC-DW-1", "pattern": "(?i)(empty\\s+array|N\\s*=\\s*0|all\\s+(non.positive|negative)|IDX\\s*=\\s*0|sentinel)" },
+    { "kind": "open_question", "id": "Q-DW-1", "pattern": "(?i)(short.circuit|.AND.\\s+evaluation|target\\s+language\\s+.AND.|index\\s+bounds|guard\\s+order)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "DO WHILE is straightforward but easy to miss. The trap here is the .AND. short-circuit: F77 .AND. does NOT guarantee short-circuit evaluation, so A(IDX) may be read with IDX > N. Java's && DOES short-circuit. A literal port to (idx <= n & a[idx] <= 0.0) — Java's & is non-short-circuit — re-introduces the bug."
+}

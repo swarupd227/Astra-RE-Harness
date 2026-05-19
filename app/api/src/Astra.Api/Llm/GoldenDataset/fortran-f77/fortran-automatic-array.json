@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-automatic-array",
+  "schemaId": "fortran-f77",
+  "title": "REAL WORK(N) — automatic array; allocated on entry, lifetime = subroutine call",
+  "trapCategory": "memory/dimensions",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/automatic_array.f",
+  "sourceLines": "1-17",
+  "sourceContent": "      SUBROUTINE PROCESS_BLOCK(IN, OUT, N)\nC     The local array WORK is sized from the argument N. F90+\nC     compilers allocate it from the stack on entry and free it on\nC     return -- the lifetime IS the call. F77 forbade this (locals\nC     had to have constant bounds), but real-world F77 code uses it\nC     as a vendor extension.\nC\nC     A Java port using new float[N] inside the method works, but a\nC     port that hoists WORK to a field (assuming SAVE-like\nC     persistence) breaks re-entrancy.\n      IMPLICIT NONE\n      INTEGER N, I\n      REAL    IN(N), OUT(N)\n      REAL    WORK(N)\n      DO I = 1, N\n         WORK(I) = IN(I) * 2.0\n         OUT(I)  = WORK(I)\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-AUTO-1", "pattern": "(?i)(automatic\\s+array|WORK\\b|sized\\s+from\\s+N|allocated\\s+on\\s+entry|stack.allocated|call.scoped)" },
+    { "kind": "section_contract", "id": "SC-AUTO-1", "pattern": "(?i)(lifetime\\s+(is|=)\\s+(the\\s+)?call|freed\\s+on\\s+return|local\\s+to\\s+call)" },
+    { "kind": "open_question", "id": "Q-AUTO-1", "pattern": "(?i)(re.entran\\w+|thread.?safe|field.level|new\\s+float\\[N\\]|allocation\\s+strategy)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Automatic arrays are the F90 generalisation of vendor F77 extensions (IBM XL Fortran, DEC Fortran). The lifetime contract matters: a hoist-to-class-field rewrite breaks any caller that depends on the per-call reset. Surface this whenever local arrays are sized from arguments."
+}

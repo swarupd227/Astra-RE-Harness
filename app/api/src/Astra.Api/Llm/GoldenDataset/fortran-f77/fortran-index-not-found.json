@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-index-not-found",
+  "schemaId": "fortran-f77",
+  "title": "INDEX(STR, SUB) returns 0 when SUB is not found — NOT -1 like most modern indexOf",
+  "trapCategory": "intrinsics/string",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/index_not_found.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE FIND_DOT(STR, POS)\nC     INDEX(STR, '.') returns the 1-based position of the first\nC     occurrence, OR 0 if not present. Many engineers port this\nC     directly to Java's String.indexOf which returns -1 -- the\nC     downstream check 'POS > 0' silently breaks because\n      IMPLICIT NONE\n      CHARACTER*80 STR\n      INTEGER      POS\n      POS = INDEX(STR, '.')\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-INF-1", "pattern": "(?i)(INDEX|1.based|returns\\s+0|not\\s+found|sentinel\\s+(of|=)\\s+0)" },
+    { "kind": "edge_case", "id": "EC-INF-1", "pattern": "(?i)(POS\\s*>\\s*0|POS\\s*=\\s*0|no\\s+dot|absent|missing\\s+(substring|character))" },
+    { "kind": "open_question", "id": "Q-INF-1", "pattern": "(?i)(indexOf|target.*sentinel|-1\\s+vs\\s+0|guard\\s+condition|null\\s+vs\\s+0)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INDEX returning 0 (not -1) is a tiny detail with huge port impact: every downstream 'IF POS > 0' must become 'POS != -1' in Java/C#. A literal port of the guard breaks for valid 'no-such-substring' inputs."
+}

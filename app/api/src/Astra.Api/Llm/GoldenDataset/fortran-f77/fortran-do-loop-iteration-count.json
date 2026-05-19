@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-do-loop-iteration-count",
+  "schemaId": "fortran-f77",
+  "title": "DO-loop iteration count is computed ONCE at entry — modifying the bound inside the loop is ignored",
+  "trapCategory": "control-flow/do-loop",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/do_loop_iteration_count.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE GROW_THEN_PROCESS(N, A, SUM)\nC     The F77 standard says the trip count for DO is\nC     MAX(0, (END - START + STEP) / STEP) computed BEFORE the\nC     loop body. Re-assigning N inside the loop does not change\nC     how many times the loop runs.\n      IMPLICIT NONE\n      INTEGER N, I\n      REAL    A(*), SUM\n      SUM = 0.0\n      DO I = 1, N\n         SUM = SUM + A(I)\n         IF (SUM .GT. 100.0) N = I\nC        ^ Looks like an early exit -- it ISN'T. The loop still\nC          runs to the ORIGINAL N.\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DOI-1", "pattern": "(?i)(iteration\\s+count|trip\\s+count|computed\\s+(at|before)\\s+entry|frozen|once)" },
+    { "kind": "edge_case", "id": "EC-DOI-1", "pattern": "(?i)(N\\s*=\\s*I|modif\\w*\\s+(bound|N)|appears.*early\\s+exit|inside\\s+the\\s+loop)" },
+    { "kind": "open_question", "id": "Q-DOI-1", "pattern": "(?i)(EXIT\\s+statement|break|target\\s+early.exit|preserve\\s+full\\s+run)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "F77 DO loops do NOT honour modifications to the loop bound inside the body. Java/C# for-loops re-evaluate the condition each iteration — a literal port silently changes behaviour. The spec must surface this so the rewrite either uses a fixed trip count (preserve semantic) or an explicit break (intentional change)."
+}

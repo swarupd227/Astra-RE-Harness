@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-at-end-not-at-end",
+  "schemaId": "cobol",
+  "title": "READ ... AT END / NOT AT END — twin branches; default is fall-through to next statement",
+  "trapCategory": "io/sequential",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/at_end_not_at_end.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. LOAD-RECORDS.\n       DATA DIVISION.\n       FILE SECTION.\n       FD  INPUT-FILE.\n       01  INPUT-REC PIC X(80).\n       WORKING-STORAGE SECTION.\n       01  WS-EOF-FLAG PIC X VALUE 'N'.\n           88 IS-EOF VALUE 'Y'.\n      *> AT END fires on EOF; NOT AT END fires on a successful read.\n      *> Omitting NOT AT END just falls through. The two branches\n      *> are MUTUALLY EXCLUSIVE for one READ.\n       PROCEDURE DIVISION.\n       READ-NEXT.\n           READ INPUT-FILE\n              AT END SET IS-EOF TO TRUE\n              NOT AT END PERFORM PROCESS-RECORD\n           END-READ.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-AE-1", "pattern": "(?i)(AT\\s+END|NOT\\s+AT\\s+END|twin\\s+branch|EOF|mutually\\s+exclusive)" },
+    { "kind": "section_contract", "id": "SC-AE-1", "pattern": "(?i)(SET\\s+IS.EOF|PROCESS.RECORD|sentinel\\s+flag|control\\s+loop)" },
+    { "kind": "open_question", "id": "Q-AE-1", "pattern": "(?i)(target\\s+(iterator|stream|EOF\\s+marker)|hasNext|null\\s+return)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "AT END / NOT AT END is the COBOL counterpart of Fortran's END=. A Java Iterator.hasNext() is the natural rewrite; the spec must capture both branches so both translate."
+}

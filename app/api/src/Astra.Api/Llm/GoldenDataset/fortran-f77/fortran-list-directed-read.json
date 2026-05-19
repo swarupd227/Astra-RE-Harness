@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-list-directed-read",
+  "schemaId": "fortran-f77",
+  "title": "READ(*, *) — list-directed input is whitespace-and-comma-delimited; surprising on quoted strings",
+  "trapCategory": "io/format",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/list_directed_read.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE LOAD_TRIPLE(A, B, C)\nC     READ with format '*' is list-directed. Input '1 2 3' yields\nC     A=1, B=2, C=3. But '1, 2, 3' ALSO works (commas separate);\nC     'NAME 2 3' fails on a CHARACTER target because LIST-directed\nC     reads expect quoted strings ('NAME'). Translating to\nC     'Scanner.nextInt' in Java loses the comma-separator support.\n      IMPLICIT NONE\n      INTEGER A, B, C\n      READ (*, *) A, B, C\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-LDR-1", "pattern": "(?i)(list.directed|READ\\s*\\(\\s*\\*\\s*,\\s*\\*\\s*\\)|whitespace\\s+or\\s+comma|free.format)" },
+    { "kind": "edge_case", "id": "EC-LDR-1", "pattern": "(?i)(comma\\s+separat|quoted\\s+string|unquoted|character\\s+input|input\\s+format)" },
+    { "kind": "open_question", "id": "Q-LDR-1", "pattern": "(?i)(target\\s+parser|Scanner|tokeniz|CSV|input\\s+contract|locale)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "List-directed I/O is much more permissive than Java/C#'s Scanner — both whitespace and commas separate tokens, and CHARACTER values can be quoted. A direct port to Scanner.nextInt() breaks on comma-separated input. The spec must capture which delimiter forms are valid."
+}

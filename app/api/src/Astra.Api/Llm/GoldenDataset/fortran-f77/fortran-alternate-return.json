@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-alternate-return",
+  "schemaId": "fortran-f77",
+  "title": "RETURN 1 / RETURN 2 — alternate return jumps to a caller-supplied label",
+  "trapCategory": "control-flow/alternate-return",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/alternate_return.f",
+  "sourceLines": "1-19",
+  "sourceContent": "      SUBROUTINE PARSE(LINE, *, *)\nC     Two of the formal arguments are '*' (alternate return\nC     placeholders). The body's RETURN 1 jumps to the first '*'\nC     argument the caller supplied (a label like *100). RETURN 2\nC     jumps to the second. F90 marked alternate return obsolescent;\nC     F2008 deleted it.\n      IMPLICIT NONE\n      CHARACTER*80 LINE\n      IF (LINE(1:1) .EQ. '#') THEN\n         RETURN 1\nC                ^ caller's first alternate label\n      END IF\n      IF (LEN_TRIM(LINE) .EQ. 0) THEN\n         RETURN 2\nC                ^ caller's second alternate label\n      END IF\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-AR-1", "pattern": "(?i)(alternate\\s+return|RETURN\\s+1|RETURN\\s+2|caller.supplied\\s+label|asterisk|\\*\\s+argument)" },
+    { "kind": "section_contract", "id": "SC-AR-1", "pattern": "(?i)(comment\\s+line|#|blank\\s+line|LEN_TRIM\\s*=\\s*0|three\\s+paths)" },
+    { "kind": "open_question", "id": "Q-AR-1", "pattern": "(?i)(enum.*result|return\\s+code|exception|target.*signal\\s+outcome|three.way\\s+result)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Alternate return is a hidden control-flow construct: callers branch based on which '*' argument the callee picks. A Java/C# rewrite usually returns an enum (PARSED, COMMENT, BLANK). The spec must enumerate ALL alternate-return paths so the rewrite enum covers each."
+}

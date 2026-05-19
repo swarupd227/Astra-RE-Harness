@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-computed-goto",
+  "schemaId": "fortran-f77",
+  "title": "Computed GOTO — GOTO (10, 20, 30) K branches by 1-based index into a label list",
+  "trapCategory": "control-flow/computed-goto",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/computed_goto.f",
+  "sourceLines": "1-22",
+  "sourceContent": "      SUBROUTINE PROCESS_OP(OPCODE, V)\nC     Computed GOTO: branches to label_K when OPCODE = K. When\nC     OPCODE is outside [1..3], control falls through to the\nC     statement IMMEDIATELY AFTER the GOTO (silent default). Most\nC     modern languages refuse silent fall-through; the spec must\nC     capture both the branch table and the fall-through semantic.\n      IMPLICIT NONE\n      INTEGER OPCODE\n      REAL    V\n      GOTO (10, 20, 30) OPCODE\nC     <-- silent default lands here when OPCODE NOT in [1,3]\n      V = -1.0\n      RETURN\n   10 V = 1.0\n      RETURN\n   20 V = 2.0\n      RETURN\n   30 V = 3.0\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CG-1", "pattern": "(?i)(computed\\s+GOTO|GOTO\\s*\\(|branch\\s+(by\\s+)?index|label\\s+list|1.based)" },
+    { "kind": "edge_case", "id": "EC-CG-1", "pattern": "(?i)(OPCODE\\s+(out\\s+of|outside)|fall.through|silent\\s+default|<\\s*1|>\\s*3|out.of.range)" },
+    { "kind": "open_question", "id": "Q-CG-1", "pattern": "(?i)(switch|EVALUATE|target.*branch|default\\s+(value|case)|reject\\s+invalid)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Computed GOTO is a F77 idiom for dispatch tables. A Java/C# switch statement is the natural port, but the spec MUST capture the silent-default fall-through. Many migrations 'fix' this by raising an exception on unknown opcodes — that's a behavioural change requiring SME sign-off."
+}

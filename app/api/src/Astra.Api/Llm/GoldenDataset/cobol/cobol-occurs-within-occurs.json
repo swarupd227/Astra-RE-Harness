@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-occurs-within-occurs",
+  "schemaId": "cobol",
+  "title": "Multi-dimensional OCCURS — WS-CELL(I, J) is one subscript, NOT two field paths",
+  "trapCategory": "memory/occurs",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/occurs_within_occurs.cbl",
+  "sourceLines": "1-17",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. MATRIX-MUL.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-MATRIX.\n           05  WS-ROW OCCURS 10 TIMES.\n               10  WS-CELL OCCURS 10 TIMES   PIC 9(5).\n      *> WS-CELL(I, J) references the (I,J) cell. The two subscripts\n      *> are POSITIONAL (outer first). Reversing them silently reads\n      *> from the wrong cell. Some legacy code writes them on\n      *> separate lines (WS-ROW(I) WS-CELL(J)) which is invalid --\n      *> the parser rejects that.\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE 0 TO WS-CELL(1, 1).\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-OWO-1", "pattern": "(?i)(multi.dimensional|OCCURS\\s+within\\s+OCCURS|WS\\.CELL\\s*\\(\\s*I\\s*,\\s*J\\s*\\)|positional\\s+subscript|nested\\s+OCCURS)" },
+    { "kind": "section_contract", "id": "SC-OWO-1", "pattern": "(?i)(outer\\s+first|row\\s+then\\s+col|order\\s+matters|10\\s*x\\s*10)" },
+    { "kind": "open_question", "id": "Q-OWO-1", "pattern": "(?i)(target\\s+(2D\\s+array|matrix)|row.major|column.major|flat\\s+vs\\s+nested)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Multi-dim OCCURS is straightforward but the subscript order is easy to flip on port. Surface as a section-contract invariant pinning the (row, column) order."
+}

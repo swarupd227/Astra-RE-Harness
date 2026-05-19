@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-len-trim-vs-len",
+  "schemaId": "fortran-f77",
+  "title": "LEN gives declared length; LEN_TRIM gives logical content length — using the wrong one mishandles blank-padding",
+  "trapCategory": "intrinsics/string",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/len_vs_lentrim.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE EMIT_RECORD(NAME, RECLEN)\nC     LEN(NAME) returns the DECLARED length (CHARACTER*32 -> 32),\nC     regardless of content. LEN_TRIM(NAME) returns the position of\nC     the last non-blank character (i.e. content length). Confusing\nC     the two writes either a too-short record (NAME truncated) or\nC     a too-long one (blank-padded out to 32 every time).\n      IMPLICIT NONE\n      CHARACTER*32 NAME\n      INTEGER      RECLEN\nC     Engineer meant LEN_TRIM here:\n      RECLEN = LEN(NAME)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-LT-1", "pattern": "(?i)(LEN\\b|LEN_TRIM|declared\\s+length|content\\s+length|last\\s+non.blank)" },
+    { "kind": "edge_case", "id": "EC-LT-1", "pattern": "(?i)(blank.padded|trailing\\s+blank|truncat\\w+|too.long|too.short)" },
+    { "kind": "open_question", "id": "Q-LT-1", "pattern": "(?i)(String\\.length|trim\\b|target.*length|content\\s+vs\\s+capacity)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Engineers confuse LEN and LEN_TRIM constantly. The bug is invisible on inputs that happen to fill the entire CHARACTER*N width and breaks on shorter inputs. The spec must flag the intent + recommend the SME confirm which length the caller actually wants."
+}

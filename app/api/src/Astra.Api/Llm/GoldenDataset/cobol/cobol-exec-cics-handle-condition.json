@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exec-cics-handle-condition",
+  "schemaId": "cobol",
+  "title": "EXEC CICS HANDLE CONDITION — register error labels; subsequent EXEC CICS auto-jump on the condition",
+  "trapCategory": "cics/handle-condition",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/exec_cics_handle.cbl",
+  "sourceLines": "1-21",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CICS-READ.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-REC    PIC X(80).\n       01  WS-KEY    PIC X(10).\n      *> EXEC CICS HANDLE CONDITION registers labels for runtime\n      *> conditions. Subsequent EXEC CICS calls that raise NOTFND\n      *> or NOTOPEN automatically jump to NOTFND-LABEL or NOTOPEN-LABEL\n      *> -- the program does NOT inline a check. This is an\n      *> exception-handler-like construct that is invisible in the\n      *> straight-line code.\n       PROCEDURE DIVISION.\n       MAIN.\n           EXEC CICS HANDLE CONDITION\n              NOTFND(NOTFND-LABEL)\n              NOTOPEN(NOTOPEN-LABEL)\n           END-EXEC.\n           EXEC CICS READ FILE('POLICY')\n              INTO(WS-REC) RIDFLD(WS-KEY)\n           END-EXEC.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CHC-1", "pattern": "(?i)(EXEC\\s+CICS\\s+HANDLE\\s+CONDITION|NOTFND|NOTOPEN|register\\w+\\s+labels|auto.jump|exception.like)" },
+    { "kind": "section_contract", "id": "SC-CHC-1", "pattern": "(?i)(implicit\\s+branch|on\\s+condition|subsequent\\s+EXEC\\s+CICS|invisible\\s+control)" },
+    { "kind": "open_question", "id": "Q-CHC-1", "pattern": "(?i)(try.catch|target\\s+(exception|handler)|finally|scoped\\s+handler)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "HANDLE CONDITION is a particularly subtle CICS construct: the control flow it registers is OUT-OF-BAND from straight-line reads. A Java rewrite to try/catch is natural; the spec must capture every registered condition + target label so the rewrite's catches cover them."
+}

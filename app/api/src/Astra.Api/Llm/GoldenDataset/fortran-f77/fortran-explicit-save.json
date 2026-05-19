@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-explicit-save",
+  "schemaId": "fortran-f77",
+  "title": "SAVE keyword — explicit retention; without it, locals are 'undefined' on re-entry per F77 standard",
+  "trapCategory": "scope/save-attribute",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/explicit_save.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE TOTAL_TICK(DELTA, RUN)\nC     RUN persists across calls via explicit SAVE. Without SAVE,\nC     the F77 standard says RUN is 'undefined' after each RETURN.\nC     IBM XL and most legacy compilers happened to give SAVE-like\nC     behaviour anyway (stack-allocated locals stayed put), but\nC     standards-conformant compilers may zero or scramble.\n      IMPLICIT NONE\n      REAL DELTA, RUN\n      SAVE RUN\n      RUN = RUN + DELTA\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SAV-1", "pattern": "(?i)(SAVE\\b|explicit\\s+SAVE|retain\\w+\\s+across\\s+calls|persistent\\s+local|stateful)" },
+    { "kind": "section_contract", "id": "SC-SAV-1", "pattern": "(?i)(RUN|cumulat\\w+|accumulat\\w+|module.level|field)" },
+    { "kind": "open_question", "id": "Q-SAV-1", "pattern": "(?i)(initial\\s+value\\s+of\\s+RUN|first\\s+call|implicit\\s+zero|undefined\\s+initial|reset)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Explicit SAVE is the standard-correct way to keep state. The open question: what is the initial value? F77 says 'undefined'. Many compilers default to 0; many legacy code paths assume it. The spec must surface this so the rewrite explicitly initialises (e.g. RUN = 0.0 at module-init time)."
+}

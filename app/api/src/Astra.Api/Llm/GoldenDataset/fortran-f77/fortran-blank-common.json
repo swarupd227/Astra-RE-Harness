@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-blank-common",
+  "schemaId": "fortran-f77",
+  "title": "Blank COMMON // is shared across the entire program — invisible global state",
+  "trapCategory": "memory/common-block",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/blank_common.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE PUSH(X)\nC     The unnamed COMMON area (just COMMON / / X without a label) is\nC     shared across EVERY translation unit that declares it. It is\nC     the legacy equivalent of a process-global variable, but it\nC     never appears in the subroutine signature -- a reader who\nC     skims the args list misses that this routine mutates global\nC     state.\n      IMPLICIT NONE\n      REAL X\n      REAL STACK_TOP\n      COMMON / / STACK_TOP\n      STACK_TOP = X\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-BC-1", "pattern": "(?i)(blank\\s+COMMON|unnamed\\s+COMMON|/\\s*/|program.wide\\s+global|process.global)" },
+    { "kind": "section_contract", "id": "SC-BC-1", "pattern": "(?i)(STACK_TOP|mutates?\\s+global|writes?\\s+global|side.effect.*global|hidden\\s+output)" },
+    { "kind": "open_question", "id": "Q-BC-1", "pattern": "(?i)(singleton|module.level\\s+state|inject\\w*|static\\s+field|thread.?safe)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Blank COMMON is the closest thing legacy Fortran had to a Java static field. The rewrite has to decide: singleton, module-level variable, or inject through the signature? The spec must capture the global-state side effect AND surface the thread-safety question — blank COMMON has no defined concurrency semantics."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-low-value-high-value",
+  "schemaId": "cobol",
+  "title": "LOW-VALUES (0x00) and HIGH-VALUES (0xFF) — used as sentinels in sort/merge keys; not 'empty string'",
+  "trapCategory": "string/sentinel",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/low_high_values.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SORT-MARKER.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> LOW-VALUES = all 0x00 bytes. Sorts FIRST in collating order.\n      *> HIGH-VALUES = all 0xFF bytes. Sorts LAST.\n      *> Code that MOVE HIGH-VALUES TO WS-KEY is creating an\n      *> end-of-table marker. Java's empty string \"\" sorts to a\n      *> totally different place and breaks the SORT key.\n       01  WS-KEY    PIC X(10).\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE HIGH-VALUES TO WS-KEY.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-LHV-1", "pattern": "(?i)(LOW.VALUE|HIGH.VALUE|0x00|0xFF|sentinel|end.of.table\\s+marker|collat\\w+\\s+(first|last))" },
+    { "kind": "edge_case", "id": "EC-LHV-1", "pattern": "(?i)(SORT|MERGE|key.*marker|empty\\s+string\\s+is\\s+wrong|comparison\\s+order)" },
+    { "kind": "open_question", "id": "Q-LHV-1", "pattern": "(?i)(target\\s+(sentinel|min|max\\s+value)|byte\\s+array|Character\\.MIN_VALUE|StringComparator)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "LOW-VALUES / HIGH-VALUES are not 'null' or 'empty' — they're specific byte patterns chosen for their position in the EBCDIC/ASCII collating order. The spec must capture their use as sentinels so the rewrite picks an appropriate target (e.g. Character.MIN_VALUE)."
+}

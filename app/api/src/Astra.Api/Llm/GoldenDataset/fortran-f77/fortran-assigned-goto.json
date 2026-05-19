@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-assigned-goto",
+  "schemaId": "fortran-f77",
+  "title": "ASSIGN 100 TO IL; GOTO IL — dynamic GOTO, deleted from F95",
+  "trapCategory": "control-flow/assigned-goto",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/assigned_goto.f",
+  "sourceLines": "1-23",
+  "sourceContent": "      SUBROUTINE EXIT_PATH(MODE)\nC     ASSIGN ... TO ... + GOTO is the OBSOLETE F77 dynamic-GOTO\nC     idiom. The variable IL holds an unspecified type (label-like)\nC     and GOTO IL jumps to whichever label IL was last ASSIGNed.\nC     F90 marked it obsolescent, F95 deleted it. Real legacy code\nC     still has it and the rewrite must replace it with structured\nC     control flow.\n      IMPLICIT NONE\n      INTEGER MODE, IL\n      IF (MODE .EQ. 1) THEN\n         ASSIGN 100 TO IL\n      ELSE IF (MODE .EQ. 2) THEN\n         ASSIGN 200 TO IL\n      ELSE\n         ASSIGN 999 TO IL\n      END IF\n      GOTO IL\n  100 RETURN\n  200 RETURN\n  999 STOP\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-AG-1", "pattern": "(?i)(ASSIGN.*TO|dynamic\\s+GOTO|deleted\\s+in\\s+F95|obsole\\w+|label\\s+variable)" },
+    { "kind": "section_contract", "id": "SC-AG-1", "pattern": "(?i)(MODE.*1.*100|MODE.*2.*200|MODE.*else.*999|map\\s+from\\s+MODE)" },
+    { "kind": "open_question", "id": "Q-AG-1", "pattern": "(?i)(switch|sealed.*sum|enum|target\\s+control.flow|structured\\s+control)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Assigned GOTO is genuinely rare in modern review-able legacy code but appears in old NIST/MINPACK helper routines and IBM OS subroutines. The spec must capture the MODE -> path mapping; the rewrite is naturally a switch/enum but the analyst has to verify each label maps to the intended action."
+}

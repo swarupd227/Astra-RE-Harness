@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-character-trim",
+  "schemaId": "fortran-f77",
+  "title": "CHARACTER concatenation A // B keeps both fields' trailing blanks — TRIM is non-standard pre-F90",
+  "trapCategory": "types/character",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/character_trim.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE BUILD_PATH(DIR, FILE, FULL)\nC     DIR is CHARACTER*16, FILE is CHARACTER*16. The concatenation\nC     DIR // '/' // FILE produces a 33-character string where DIR\nC     occupies the first 16 (padded with blanks) -- the result\nC     looks like 'home            /report.txt     '. TRIM(DIR) (F90+)\nC     fixes this; in pure F77 the workaround is to track the\nC     'real' length manually with INDEX or LEN_TRIM.\n      IMPLICIT NONE\n      CHARACTER*16 DIR, FILE\n      CHARACTER*33 FULL\n      FULL = DIR // '/' // FILE\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CT-1", "pattern": "(?i)(concatenat\\w+|//|trailing\\s+blank|TRIM|LEN_TRIM)" },
+    { "kind": "edge_case", "id": "EC-CT-1", "pattern": "(?i)(spaces\\s+in\\s+middle|blank.embedded|interior\\s+blanks|wrong\\s+path|garbled\\s+output)" },
+    { "kind": "open_question", "id": "Q-CT-1", "pattern": "(?i)(target\\s+string\\s+(trim|concat)|StringBuilder|String\\.trim|interpolation)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Path-building (or any string concatenation) over fixed-width CHARACTER usually wants TRIM or LEN_TRIM. Pre-F90 code that doesn't have TRIM available uses INDEX(STR, ' ') as a workaround. The spec must capture the trim-or-pad intent so the port preserves it."
+}

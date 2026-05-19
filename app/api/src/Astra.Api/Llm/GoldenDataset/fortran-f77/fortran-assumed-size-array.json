@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-assumed-size-array",
+  "schemaId": "fortran-f77",
+  "title": "REAL A(*) — assumed-size array loses N; out-of-bounds is undefined",
+  "trapCategory": "memory/dimensions",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/assumed_size_array.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE SUM_ARR(A, N, S)\nC     A(*) tells the compiler 'A is a 1-D array whose upper bound is\nC     not known here'. The caller-supplied N is the actual length.\nC     The callee MUST honour N -- accessing A(N+1) is undefined.\nC     Translating to Java's float[] gives a length field for free,\nC     but legacy callers may pass N off-by-one and rely on the\nC     unchecked F77 behaviour.\n      IMPLICIT NONE\n      INTEGER N, I\n      REAL    A(*), S\n      S = 0.0\n      DO I = 1, N\n         S = S + A(I)\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ASZ-1", "pattern": "(?i)(assumed.size|A\\(\\*\\)|unknown\\s+upper\\s+bound|N\\s+governs|caller.supplied\\s+length)" },
+    { "kind": "edge_case", "id": "EC-ASZ-1", "pattern": "(?i)(A\\(N\\+1\\)|out.of.bounds|N\\s*=\\s*0|N\\s*<\\s*0|undefined\\s+access)" },
+    { "kind": "open_question", "id": "Q-ASZ-1", "pattern": "(?i)(target.*length\\s+field|array\\.length|bounds\\s+check|N\\s+correctness|caller\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Assumed-size arrays (A(*)) are everywhere in legacy F77 numerical libraries. The N argument is the actual contract — a Java rewrite to float[] gets a length 'for free' but legacy callers may pass N != A.length deliberately (e.g. processing a sub-vector). The spec must surface N as the authoritative length AND ask the SME whether 0 < N <= ACTUAL_LENGTH is invariant or assumption."
+}

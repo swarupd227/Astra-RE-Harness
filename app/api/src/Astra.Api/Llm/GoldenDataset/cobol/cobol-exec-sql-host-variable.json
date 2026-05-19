@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exec-sql-host-variable",
+  "schemaId": "cobol",
+  "title": "EXEC SQL ... :WS-FIELD — host variable binding; precompiler turns it into a parameter call",
+  "trapCategory": "sql/host-variable",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/exec_sql_host.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. UPDATE-BALANCE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-ACCT-ID    PIC X(10).\n       01  WS-NEW-BAL    PIC S9(7)V99 COMP-3.\n       01  SQLCODE       PIC S9(9) COMP.\n       PROCEDURE DIVISION.\n       MAIN.\n      *> The DB2 precompiler scans for EXEC SQL ... END-EXEC blocks\n      *> and rewrites them as CALL invocations to the runtime, with\n      *> host variables (colon-prefixed) mapped to bind parameters.\n      *> SQLCODE is a magic COMPILER-injected status. A Java/JDBC\n      *> port uses PreparedStatement + setObject(); the spec must\n      *> capture each host variable's PIC.\n           EXEC SQL\n              UPDATE ACCOUNTS SET BALANCE = :WS-NEW-BAL\n              WHERE ACCT_ID = :WS-ACCT-ID\n           END-EXEC.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ESH-1", "pattern": "(?i)(EXEC\\s+SQL|host\\s+variable|:WS|precompiler|bind\\s+parameter)" },
+    { "kind": "section_contract", "id": "SC-ESH-1", "pattern": "(?i)(SQLCODE|UPDATE\\s+ACCOUNTS|WS.NEW.BAL|WS.ACCT.ID|two\\s+host\\s+vars)" },
+    { "kind": "open_question", "id": "Q-ESH-1", "pattern": "(?i)(PreparedStatement|setObject|JDBC|JPA|target\\s+(persistence|SQL\\s+layer))" }
+  ],
+  "canonicalInputs": [],
+  "notes": "EXEC SQL is the legacy DB2 binding. The precompiler is the bridge — modern rewrites use JDBC PreparedStatement. The spec must list every host variable + its PIC so the rewrite's parameter types are correct."
+}

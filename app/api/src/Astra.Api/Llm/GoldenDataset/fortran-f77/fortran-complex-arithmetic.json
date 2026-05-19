@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-complex-arithmetic",
+  "schemaId": "fortran-f77",
+  "title": "COMPLEX*8 is two REAL*4 components — arithmetic ops broadcast over (re, im)",
+  "trapCategory": "numeric/complex",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/complex_arithmetic.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE COMPLEX_MUL(A, B, C)\nC     COMPLEX arithmetic. COMPLEX*8 is two REAL*4 components. AIMAG\nC     and REAL extract the parts. The * operator is overloaded to\nC     do (a+bi)*(c+di) = (ac-bd) + (ad+bc)i. Java/C# have no built-in\nC     COMPLEX -- the rewrite has to provide one (Apache Commons or\nC     System.Numerics) or unpack manually. Precision matters: REAL*4\nC     parts limit each component to ~7 decimal digits.\n      IMPLICIT NONE\n      COMPLEX A, B, C\n      C = A * B\nC     CMPLX(REAL(A)*REAL(B) - AIMAG(A)*AIMAG(B),\nC          REAL(A)*AIMAG(B) + AIMAG(A)*REAL(B)) is the unpacked form.\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CPLX-1", "pattern": "(?i)(COMPLEX|two\\s+REAL|real\\s+and\\s+imaginar|AIMAG|CMPLX|component)" },
+    { "kind": "section_contract", "id": "SC-CPLX-1", "pattern": "(?i)(REAL\\(A\\)|AIMAG\\(A\\)|\\(ac.bd\\)|multiplication\\s+rule|broadcast)" },
+    { "kind": "open_question", "id": "Q-CPLX-1", "pattern": "(?i)(Apache\\s+Commons|System\\.Numerics|target\\s+language|library|provide\\s+complex)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COMPLEX shows up in every Fortran numerical library that touches signal processing or eigenvalue computation. Target languages without native complex types need a library or unpacked components — the spec must surface this so the SME can pick before scaffolding."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-index-vs-subscript",
+  "schemaId": "cobol",
+  "title": "INDEXED BY vs SUBSCRIPT — INDEX holds a displacement, SUBSCRIPT holds an occurrence number",
+  "trapCategory": "memory/occurs",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/index_vs_subscript.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INDEX-VS-SUBSCRIPT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-TABLE.\n           05  WS-ROW OCCURS 100 TIMES\n                       INDEXED BY WS-IX.\n               10  WS-COL  PIC X(10).\n       01  WS-SUBSCRIPT    PIC 9(3).\n      *> WS-IX is an INDEX -- compile-time-bound to the table.\n      *>   Internally a byte displacement. SET WS-IX TO 3 -> points\n      *>   to row 3.\n      *> WS-SUBSCRIPT is a plain numeric -- WS-ROW(WS-SUBSCRIPT) is\n      *>   the same row 3 but goes via runtime multiplication.\n      *> SET WS-IX UP BY 1 = increment; you CANNOT do MOVE WS-IX TO\n      *>   WS-SUBSCRIPT without conversion.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IS-1", "pattern": "(?i)(INDEXED\\s+BY|INDEX\\b|subscript|displacement|occurrence|SET\\s+\\w+\\s+TO)" },
+    { "kind": "edge_case", "id": "EC-IS-1", "pattern": "(?i)(SET\\s+UP\\s+BY|increment|cannot\\s+MOVE|conversion|different\\s+(types|life))" },
+    { "kind": "open_question", "id": "Q-IS-1", "pattern": "(?i)(target\\s+(iterator|loop\\s+var)|long\\s+vs\\s+int|index\\s+lifecycle)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INDEXED BY behaves like a C/C++ pointer-into-array; plain SUBSCRIPT is a row number. The two cannot be assigned to each other directly. A Java rewrite collapses both to int but must respect the SET semantics."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-logical-encoding",
+  "schemaId": "fortran-f77",
+  "title": "LOGICAL — vendor-defined storage (IBM signed-int .TRUE. = -1, others 1) — bit-test idioms break",
+  "trapCategory": "types/logical",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/logical_encoding.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE FLAG_TO_INT(L, I)\nC     LOGICAL's underlying integer value is implementation-defined.\nC     IBM XL Fortran: .TRUE. = -1 (all bits set), .FALSE. = 0. GNU\nC     Fortran: .TRUE. = 1, .FALSE. = 0. Code that converts logical\nC     to integer with TRANSFER or relied on bitwise math is\nC     compiler-specific. The naive Java port to (L ? 1 : 0) is\nC     wrong for IBM-origin code.\n      IMPLICIT NONE\n      LOGICAL L\n      INTEGER I\n      I = TRANSFER(L, I)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-LE-1", "pattern": "(?i)(LOGICAL|implementation.defined|TRANSFER|vendor.specific|\\.TRUE\\.\\s*=\\s*-1)" },
+    { "kind": "edge_case", "id": "EC-LE-1", "pattern": "(?i)(IBM\\s+XL|GNU|compiler.*differ|bitwise\\s+math|all.bits.set)" },
+    { "kind": "open_question", "id": "Q-LE-1", "pattern": "(?i)(target\\s+boolean|true.*1|target\\s+integer\\s+encoding|cast\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "TRANSFER(LOGICAL) gives different results across compilers. This is rare in modern code but DOES show up in legacy IBM mainframe-origin Fortran. The spec must flag the assumption and surface the platform of origin as an open question."
+}

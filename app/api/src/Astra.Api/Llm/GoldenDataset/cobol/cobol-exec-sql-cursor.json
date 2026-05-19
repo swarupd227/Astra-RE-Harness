@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exec-sql-cursor",
+  "schemaId": "cobol",
+  "title": "EXEC SQL DECLARE CURSOR / OPEN / FETCH / CLOSE — server-side cursor for row-by-row streaming",
+  "trapCategory": "sql/cursor",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/exec_sql_cursor.cbl",
+  "sourceLines": "1-23",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CURSOR-LOOP.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  SQLCODE   PIC S9(9) COMP.\n       01  WS-NAME   PIC X(30).\n       PROCEDURE DIVISION.\n       MAIN.\n           EXEC SQL\n              DECLARE C1 CURSOR FOR\n                 SELECT NAME FROM CUSTOMERS WHERE STATUS = 'A'\n           END-EXEC.\n           EXEC SQL OPEN C1 END-EXEC.\n      *> SQLCODE = +100 signals 'no more rows'.\n       FETCH-LOOP.\n           EXEC SQL FETCH C1 INTO :WS-NAME END-EXEC.\n           IF SQLCODE = 100\n              EXEC SQL CLOSE C1 END-EXEC\n              STOP RUN\n           END-IF.\n           DISPLAY WS-NAME.\n           GO TO FETCH-LOOP.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ESC-1", "pattern": "(?i)(DECLARE\\s+CURSOR|OPEN|FETCH|CLOSE|server.side\\s+cursor|row.by.row)" },
+    { "kind": "section_contract", "id": "SC-ESC-1", "pattern": "(?i)(SQLCODE\\s*=?\\s*\\+?100|no\\s+more\\s+rows|EOF\\s+via\\s+SQLCODE|loop\\s+exit)" },
+    { "kind": "open_question", "id": "Q-ESC-1", "pattern": "(?i)(ResultSet|JDBC|stream|Iterator|JPA\\s+stream)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Cursor loops are the COBOL streaming pattern for large result sets. Java's ResultSet maps cleanly. The spec must capture the SQLCODE=100 exit condition AND the WHERE-clause invariant so the rewrite's stream filter matches."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-int-truncate-toward-zero",
+  "schemaId": "fortran-f77",
+  "title": "INT truncates toward zero — INT(-2.7) is -2, not -3",
+  "trapCategory": "numeric/rounding",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/int_truncate.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE FLOOR_NEG(X, IFLOOR)\nC     Engineer expected this to return mathematical floor(X). It\nC     doesn't -- INT truncates toward zero, so INT(-2.7) = -2 (not\nC     -3). Translating INT to Java's (int) cast preserves the bug;\nC     translating to Math.floor changes the contract.\n      IMPLICIT NONE\n      REAL    X\n      INTEGER IFLOOR\n      IFLOOR = INT(X)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-INT-1", "pattern": "(?i)(INT\\b|truncat\\w*\\s+toward\\s+zero|toward\\s+0|fix\\b|round\\s+toward\\s+zero)" },
+    { "kind": "edge_case", "id": "EC-INT-1", "pattern": "(?i)(negative\\s+X|X\\s*<\\s*0|-2\\.7|sign|floor\\s+vs\\s+truncate|asymmetr\\w+)" },
+    { "kind": "open_question", "id": "Q-INT-1", "pattern": "(?i)(Math\\.floor|FLOOR\\b|target.*(floor|truncate)|integer\\s+cast)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Pure F77 INT() truncates; INT(2.7) = 2 and INT(-2.7) = -2. This is asymmetric with FLOOR (which would give -3 for -2.7). Engineers reviewing the port assume 'cast to int' = 'floor' which is true for non-negative reals but wrong for negative. The spec must surface BOTH the truncate-toward-zero semantic AND the open question of which mapping the rewrite should use."
+}

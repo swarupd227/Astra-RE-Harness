@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-file-status-22-dup-key",
+  "schemaId": "cobol",
+  "title": "FILE STATUS 22 — VSAM duplicate-key on WRITE; legacy idiom branches to UPDATE-instead path",
+  "trapCategory": "io/file-status",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/file_status_22.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INSERT-OR-UPDATE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-STAT  PIC X(2).\n       01  WS-REC.\n           05  WS-KEY  PIC X(10).\n           05  WS-VAL  PIC 9(7)V99 COMP-3.\n      *> WRITE on a KEYED VSAM file with a duplicate key returns\n      *> FILE STATUS '22'. The legacy 'insert-or-update' idiom:\n      *>   WRITE; IF STAT = '22' THEN REWRITE.\n      *> Java/JDBC's MERGE or UPSERT is the natural target -- but the\n      *> spec must surface the dup-key handling explicitly.\n       PROCEDURE DIVISION.\n       MAIN.\n           WRITE WS-REC.\n           IF WS-STAT = \"22\" REWRITE WS-REC.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-FS22-1", "pattern": "(?i)(FILE\\s+STATUS|'22'|duplicate\\s+key|VSAM|WRITE\\s+after\\s+exists)" },
+    { "kind": "section_contract", "id": "SC-FS22-1", "pattern": "(?i)(insert.or.update|upsert|WRITE\\s+then\\s+REWRITE|conditional\\s+fallback)" },
+    { "kind": "open_question", "id": "Q-FS22-1", "pattern": "(?i)(MERGE|UPSERT|target\\s+(JDBC|JPA)|optimistic\\s+concurrency)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Status 22 dup-key handling is the COBOL upsert idiom. A Java rewrite to MERGE / UPSERT (or ConcurrentHashMap.compute) is natural; the spec must capture the two-step semantic so the rewrite doesn't drop a step."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-comp-vs-display",
+  "schemaId": "cobol",
+  "title": "USAGE COMP vs DISPLAY — same PIC, very different storage size + range",
+  "trapCategory": "numeric/comp",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/comp_vs_display.cbl",
+  "sourceLines": "1-13",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. POLICY-LIMITS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> Both fields are PIC 9(8) -- max 99,999,999. WS-AMT-DISP\n      *> takes 8 bytes (one digit per byte, DISPLAY/zoned). WS-AMT-COMP\n      *> takes 4 bytes (binary integer). A naive port to Java int\n      *> works for both BUT silently loses the storage-size invariant\n      *> that matters for fixed-width record I/O.\n       01  WS-AMT-DISP    PIC 9(8) USAGE DISPLAY.\n       01  WS-AMT-COMP    PIC 9(8) USAGE COMP.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CD-1", "pattern": "(?i)(USAGE\\s+(COMP|COMPUTATIONAL|DISPLAY|zoned)|storage\\s+size|byte\\s+layout|binary)" },
+    { "kind": "section_contract", "id": "SC-CD-1", "pattern": "(?i)(WS.AMT.DISP.*8\\s+bytes|WS.AMT.COMP.*4\\s+bytes|differ\\w+\\s+(width|size)|width\\s+contract)" },
+    { "kind": "open_question", "id": "Q-CD-1", "pattern": "(?i)(fixed.width\\s+record|file\\s+format|interop|byte.exact|target\\s+storage)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COMP vs DISPLAY changes the on-disk byte layout, not just the value. Programs that write COMP fields and read them back via DISPLAY (or vice versa) corrupt data. The spec must surface the byte width invariant whenever USAGE is non-default."
+}

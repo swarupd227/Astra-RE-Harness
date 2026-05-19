@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-88-level-condition",
+  "schemaId": "cobol",
+  "title": "88-level condition name — a named constant that tests its parent field for one or more values",
+  "trapCategory": "memory/level-88",
+  "difficulty": "easy",
+  "sourcePath": "cobol/snippets/level_88.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. STATUS-FLAGS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-STATE   PIC X.\n           88  IS-OPEN    VALUE \"O\".\n           88  IS-CLOSED  VALUE \"C\".\n           88  IS-PENDING VALUE \"P\" \"W\".\n      *> 88-level names are CONDITIONS, not fields. IF IS-OPEN is a\n      *> readable shorthand for IF WS-STATE = \"O\". SET IS-OPEN TO\n      *> TRUE writes \"O\" to WS-STATE. Naive Java port that defines\n      *> isOpen as a boolean misses the round-trip: the 88-level\n      *> sets back to the parent field.\n       PROCEDURE DIVISION.\n       MAIN.\n           SET IS-OPEN TO TRUE.\n           IF IS-PENDING DISPLAY \"pending\".\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-L88-1", "pattern": "(?i)(88.level|condition\\s+name|named\\s+(condition|value)|VALUE\\s+\".+\"|SET\\s+.+\\s+TO\\s+TRUE)" },
+    { "kind": "section_contract", "id": "SC-L88-1", "pattern": "(?i)(WS.STATE|read.write\\s+round.trip|IS.OPEN.*=.*\"O\"|multi.value\\s+condition)" },
+    { "kind": "open_question", "id": "Q-L88-1", "pattern": "(?i)(enum|sealed|target\\s+(boolean|enum)|state\\s+machine|named\\s+constant)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "88-level conditions are everywhere in COBOL business logic. They look like booleans but they're actually a syntactic shorthand for value comparison on the parent field. A Java rewrite to an enum is the natural target; the spec must capture the value mappings."
+}

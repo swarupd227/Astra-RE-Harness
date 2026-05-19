@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-inspect-tallying",
+  "schemaId": "cobol",
+  "title": "INSPECT TALLYING — count occurrences with positional BEFORE/AFTER qualifiers",
+  "trapCategory": "string/inspect",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/inspect_tallying.cbl",
+  "sourceLines": "1-17",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. COUNT-DOTS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-EMAIL    PIC X(80).\n       01  WS-DOT-COUNT PIC 9(3).\n      *> Counts the number of '.' characters in WS-EMAIL. The\n      *> BEFORE INITIAL '@' restricts the tally to the local part of\n      *> the email -- INSPECT scans left-to-right and stops at the\n      *> first '@'. A Java port using String.chars().filter must\n      *> mirror the positional restriction or count too many.\n       PROCEDURE DIVISION.\n       COUNT.\n           MOVE 0 TO WS-DOT-COUNT\n           INSPECT WS-EMAIL TALLYING WS-DOT-COUNT\n              FOR ALL '.' BEFORE INITIAL '@'.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IT-1", "pattern": "(?i)(INSPECT\\s+TALLYING|count\\s+occurrences|positional\\s+(BEFORE|AFTER)|left.to.right)" },
+    { "kind": "section_contract", "id": "SC-IT-1", "pattern": "(?i)(BEFORE\\s+INITIAL|stop\\s+at|restricted\\s+to|local\\s+part|FOR\\s+ALL)" },
+    { "kind": "open_question", "id": "Q-IT-1", "pattern": "(?i)(target\\s+(scan|count|stream)|chars.filter|indexOf\\s+then\\s+count|positional\\s+filter)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INSPECT TALLYING with positional qualifiers is more powerful than a simple count — it scans with a state machine. The spec must capture the BEFORE/AFTER condition so the rewrite preserves the substring-scoped count."
+}

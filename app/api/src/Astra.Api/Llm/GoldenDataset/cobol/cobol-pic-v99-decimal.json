@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-pic-v99-decimal",
+  "schemaId": "cobol",
+  "title": "PIC 9(7)V99 — V is an IMPLIED decimal point; the field stores 9 digits, not 10",
+  "trapCategory": "numeric/picture",
+  "difficulty": "easy",
+  "sourcePath": "cobol/snippets/pic_v99_decimal.cbl",
+  "sourceLines": "1-14",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CHARGE-AMOUNT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> The V in PIC 9(7)V99 is an IMPLIED decimal point -- it\n      *> occupies NO bytes. Storage is 9 digits (or 5 packed bytes\n      *> if COMP-3). The decimal is a SCALE attribute, not a\n      *> literal character. A direct port to a Java BigDecimal needs\n      *> scale=2.\n       01  WS-CHARGE    PIC 9(7)V99.\n       PROCEDURE DIVISION.\n           MOVE 1234567.89 TO WS-CHARGE.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-V99-1", "pattern": "(?i)(V\\s+is\\s+(an\\s+)?implied|implied\\s+decimal|V99|scale\\s*=\\s*2|two\\s+decimal\\s+digits)" },
+    { "kind": "section_contract", "id": "SC-V99-1", "pattern": "(?i)(no\\s+bytes|9\\s+digits|scale\\s+attribute|not\\s+a\\s+literal|invisible)" },
+    { "kind": "open_question", "id": "Q-V99-1", "pattern": "(?i)(BigDecimal\\.scale|target\\s+decimal|fixed.point|double\\s+representation)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "The V is invisible in storage. Engineers reviewing the port assume 'V99' means a literal decimal point. The spec must capture the scale-2 semantic so the rewrite uses BigDecimal scale=2 (or fixed-point integers with implicit scaling)."
+}

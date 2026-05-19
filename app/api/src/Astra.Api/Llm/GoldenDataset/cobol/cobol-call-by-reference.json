@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-call-by-reference",
+  "schemaId": "cobol",
+  "title": "CALL ... USING (default BY REFERENCE) — callee mutates the caller's variable in place",
+  "trapCategory": "call/by-reference",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/call_by_reference.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INCREMENT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-COUNTER  PIC 9(4).\n      *> Default for CALL ... USING is BY REFERENCE -- the called\n      *> program receives a POINTER to WS-COUNTER. Any modification\n      *> in the callee is visible to the caller. BY CONTENT (or BY\n      *> VALUE on COMP-only fields) copies on call. Java parameter\n      *> passing is always by value (of reference) -- no exact match.\n       PROCEDURE DIVISION.\n       MAIN.\n           CALL \"INCREMENT-COUNTER\" USING WS-COUNTER.\n           DISPLAY WS-COUNTER.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CR-1", "pattern": "(?i)(CALL\\s+.*USING|BY\\s+REFERENCE|default\\s+is\\s+reference|caller.visible\\s+mutation)" },
+    { "kind": "section_contract", "id": "SC-CR-1", "pattern": "(?i)(WS.COUNTER.*mutated|pointer\\s+(passed|to)|side.effect.*caller|in.place\\s+update)" },
+    { "kind": "open_question", "id": "Q-CR-1", "pattern": "(?i)(target\\s+(return\\s+value|out\\s+param|tuple)|AtomicInteger|wrapper\\s+class)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "BY REFERENCE is the default and the most common port surprise — Java passes 'value of reference' which means primitives are copied but objects are shared. A COBOL BY REFERENCE on PIC 9(4) is closer to AtomicInteger than to int."
+}

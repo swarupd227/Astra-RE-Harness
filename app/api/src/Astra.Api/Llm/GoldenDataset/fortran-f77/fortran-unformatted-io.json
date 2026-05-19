@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-unformatted-io",
+  "schemaId": "fortran-f77",
+  "title": "Unformatted I/O — binary write with vendor-specific record markers (4-byte length prefix on most Unix)",
+  "trapCategory": "io/sequential-direct",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/unformatted_io.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE DUMP_BLOCK(UNIT, A)\nC     WRITE without FORMAT writes binary. Most Unix Fortran\nC     compilers prefix each unformatted record with a 4-byte length\nC     marker AND append the same length at the end. A direct Java\nC     port that just writes 320 bytes of REAL*4 produces a file the\nC     legacy reader (which expects the markers) cannot parse.\n      IMPLICIT NONE\n      INTEGER UNIT\n      REAL    A(80)\n      WRITE (UNIT) A\nC     ^ writes [4-byte len][320 bytes data][4-byte len]\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-UFI-1", "pattern": "(?i)(unformatted|binary\\s+I.?O|record\\s+marker|length\\s+prefix|sequential\\s+unformatted)" },
+    { "kind": "edge_case", "id": "EC-UFI-1", "pattern": "(?i)(vendor.specific|compiler\\s+convention|4.byte\\s+marker|trailing\\s+length|Unix\\s+vs\\s+IBM)" },
+    { "kind": "open_question", "id": "Q-UFI-1", "pattern": "(?i)(STREAM\\s+access|target\\s+byte\\s+layout|consumer\\s+still\\s+legacy|migrate\\s+reader|both\\s+sides)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Unformatted sequential I/O has implementation-defined record markers. Migrating only the writer (or only the reader) means the two halves can no longer talk. The spec must surface this so the SME decides: migrate both endpoints in lockstep, or add a marker-aware adapter."
+}

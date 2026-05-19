@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-write-from",
+  "schemaId": "cobol",
+  "title": "WRITE record FROM WORKING-STORAGE — copy source-into-record then write; FROM is implicit MOVE",
+  "trapCategory": "io/write-record",
+  "difficulty": "easy",
+  "sourcePath": "cobol/snippets/write_from.cbl",
+  "sourceLines": "1-16",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. WRITE-LINE.\n       DATA DIVISION.\n       FILE SECTION.\n       FD  REPORT-FILE.\n       01  REPORT-REC PIC X(132).\n       WORKING-STORAGE SECTION.\n       01  WS-OUTPUT-LINE PIC X(132).\n      *> WRITE REPORT-REC FROM WS-OUTPUT-LINE is short-hand for:\n      *>   MOVE WS-OUTPUT-LINE TO REPORT-REC\n      *>   WRITE REPORT-REC\n      *> The MOVE happens before the WRITE. Mutating WS-OUTPUT-LINE\n      *> after the WRITE does not affect the written record.\n       PROCEDURE DIVISION.\n       MAIN.\n           WRITE REPORT-REC FROM WS-OUTPUT-LINE.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-WF-1", "pattern": "(?i)(WRITE\\s+\\w+\\s+FROM|implicit\\s+MOVE|copy.then.write|FROM\\s+clause)" },
+    { "kind": "section_contract", "id": "SC-WF-1", "pattern": "(?i)(WS.OUTPUT.LINE.*REPORT.REC|temp\\s+to\\s+record|reused\\s+buffer)" },
+    { "kind": "open_question", "id": "Q-WF-1", "pattern": "(?i)(target\\s+(write|append)|String\\s+vs\\s+record|deep\\s+copy)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "WRITE...FROM is a common idiom for line-printer / report-file output. A Java rewrite using PrintWriter.println(line) is the natural target; the spec must surface FROM as 'copy then write' so the rewrite doesn't accidentally hold a reference."
+}

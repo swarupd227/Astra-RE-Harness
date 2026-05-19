@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-pic-s9-sign",
+  "schemaId": "cobol",
+  "title": "PIC S9(n) without SIGN clause — sign embedded in the last digit's high nibble (overpunch)",
+  "trapCategory": "numeric/picture",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/pic_s9_sign.cbl",
+  "sourceLines": "1-14",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SIGN-VARIANTS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> WS-AMT-1 stores sign in the last byte's high nibble\n      *>   ('overpunch'): '5' = 0xF5 positive, 'N' = 0xD5 negative.\n      *> WS-AMT-2 stores sign as a SEPARATE character before or\n      *>   after the digits. Reading raw bytes assumes one or the\n      *>   other -- and silently produces garbage on the wrong\n      *>   guess.\n       01  WS-AMT-1    PIC S9(5)V99.\n       01  WS-AMT-2    PIC S9(5)V99 SIGN IS LEADING SEPARATE.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-PS9-1", "pattern": "(?i)(PIC\\s+S9|sign\\s+(clause|nibble|overpunch)|SIGN\\s+IS|LEADING\\s+SEPARATE|TRAILING\\s+SEPARATE)" },
+    { "kind": "section_contract", "id": "SC-PS9-1", "pattern": "(?i)(overpunch|high\\s+nibble|separate\\s+sign\\s+character|byte\\s+layout|encoding)" },
+    { "kind": "open_question", "id": "Q-PS9-1", "pattern": "(?i)(target\\s+integer|signed.byte|byte.exact|file\\s+layout|EBCDIC)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Sign storage variations are notoriously hard to spot on a code review. The same PIC S9(5)V99 produces 7 bytes (no SIGN clause), 7 bytes (LEADING/TRAILING SEPARATE adds a separate byte), depending on the clause. The spec must capture which variant is in use AND surface the byte-layout question."
+}

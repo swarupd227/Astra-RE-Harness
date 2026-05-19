@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-call-by-content",
+  "schemaId": "cobol",
+  "title": "CALL ... USING BY CONTENT — copy on call; protects the caller from callee mutation",
+  "trapCategory": "call/by-content",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/call_by_content.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SAFE-CALL.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-INPUT  PIC X(20).\n       01  WS-MSG    PIC X(40).\n      *> BY CONTENT makes a defensive COPY before the call. The\n      *> callee sees its own buffer; mutating it leaves WS-INPUT\n      *> untouched. Modern Java rewrites usually default to BY\n      *> CONTENT semantic for Strings (immutable) but reset to\n      *> BY REFERENCE for mutable records -- the spec must capture\n      *> which one the legacy used.\n       PROCEDURE DIVISION.\n       MAIN.\n           CALL \"FORMAT-MSG\" USING BY CONTENT WS-INPUT, WS-MSG.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CC-1", "pattern": "(?i)(BY\\s+CONTENT|defensive\\s+copy|copy.on.call|callee\\s+(buffer|isolat)|protects\\s+caller)" },
+    { "kind": "section_contract", "id": "SC-CC-1", "pattern": "(?i)(WS.INPUT\\s+(unchanged|preserved)|callee\\s+cannot\\s+mutate|read.only)" },
+    { "kind": "open_question", "id": "Q-CC-1", "pattern": "(?i)(immutab\\w+|deep\\s+copy|target\\s+(value|content)|new\\s+String|defensive)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "BY CONTENT signals 'this is an input, don't mutate'. The spec must capture which parameters are BY CONTENT vs BY REFERENCE so the rewrite preserves the contract."
+}

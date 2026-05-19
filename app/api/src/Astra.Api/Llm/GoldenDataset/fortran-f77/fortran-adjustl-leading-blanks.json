@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-adjustl-leading-blanks",
+  "schemaId": "fortran-f77",
+  "title": "ADJUSTL — shift leading blanks to the trailing end; the field's length is unchanged",
+  "trapCategory": "intrinsics/string",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/adjustl_leading.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE LEFT_JUSTIFY(STR)\nC     ADJUSTL moves leading blanks to the trailing end -- the field\nC     stays at its declared width. ADJUSTR is the mirror image. A\nC     Java String.trim() removes the blanks entirely AND shortens\nC     the string. The two operations are NOT interchangeable when\nC     the receiver of STR is width-sensitive (e.g. writing a\nC     fixed-width record).\n      IMPLICIT NONE\n      CHARACTER*16 STR\n      STR = ADJUSTL(STR)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-AJ-1", "pattern": "(?i)(ADJUSTL|ADJUSTR|shift\\s+leading\\s+(blank|space)|width.preservin|fixed.width)" },
+    { "kind": "section_contract", "id": "SC-AJ-1", "pattern": "(?i)(width\\s+unchanged|same\\s+length|in.place\\s+shift|blanks\\s+(to\\s+end|moved))" },
+    { "kind": "open_question", "id": "Q-AJ-1", "pattern": "(?i)(String\\.trim|stripLeading|target.*trim|width\\s+contract|field.based\\s+output)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "ADJUSTL preserves the field width while trim()-style functions don't. For width-sensitive consumers (fixed-width report output, mainframe-style records), the port must compose: trim then pad. Surface the width-preserving requirement."
+}

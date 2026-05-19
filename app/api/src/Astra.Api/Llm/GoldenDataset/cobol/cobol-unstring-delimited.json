@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-unstring-delimited",
+  "schemaId": "cobol",
+  "title": "UNSTRING ... DELIMITED BY — splits with COUNTERS for each receiving field; OVERFLOW on truncation",
+  "trapCategory": "string/unstring",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/unstring_delimited.cbl",
+  "sourceLines": "1-20",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PARSE-CSV.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-LINE     PIC X(80).\n       01  WS-A        PIC X(20).\n       01  WS-B        PIC X(20).\n       01  WS-C        PIC X(20).\n       01  WS-COUNT    PIC 9(3).\n      *> Splits WS-LINE on ',' into 3 receiving fields. COUNT IN\n      *> WS-COUNT records how many fields were extracted. ON\n      *> OVERFLOW fires when there are MORE delimiters than receivers\n      *> -- the extra content is silently dropped without OVERFLOW.\n       PROCEDURE DIVISION.\n       MAIN.\n           UNSTRING WS-LINE\n              DELIMITED BY ','\n              INTO WS-A, WS-B, WS-C\n              COUNT IN WS-COUNT\n              ON OVERFLOW DISPLAY \"too many fields\".\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-UD-1", "pattern": "(?i)(UNSTRING|DELIMITED\\s+BY|split|COUNT\\s+IN|OVERFLOW)" },
+    { "kind": "section_contract", "id": "SC-UD-1", "pattern": "(?i)(three\\s+receivers|WS.A.*WS.B.*WS.C|positional\\s+extract|comma.delim)" },
+    { "kind": "open_question", "id": "Q-UD-1", "pattern": "(?i)(String\\.split|target\\s+parser|csv\\s+library|escape\\s+rules|target\\s+overflow\\s+behaviour)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "UNSTRING is more powerful than String.split — it supports COUNT IN, multiple delimiters via OR, and the OVERFLOW branch. A naive String.split misses the overflow signal. Surface the COUNT semantic + OVERFLOW handler."
+}

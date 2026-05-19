@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-end-err-branch",
+  "schemaId": "fortran-f77",
+  "title": "READ(...END=900, ERR=999) — twin branches for EOF and read failure",
+  "trapCategory": "io/end-err",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/end_err_branch.f",
+  "sourceLines": "1-18",
+  "sourceContent": "      SUBROUTINE LOAD_NEXT(UNIT, X, STATE)\nC     END= branches when EOF is reached; ERR= branches on a read\nC     failure (malformed number, IO error). Both labels can co-exist\nC     in one READ. Translating to a Java try/catch must distinguish\nC     EOF (return -1) from IOException -- the legacy code's two\nC     paths often resolve to two distinct user-visible behaviours\nC     (\"end of input\" vs \"corrupt input\").\n      IMPLICIT NONE\n      INTEGER UNIT, STATE\n      REAL    X\n      READ (UNIT, *, END=900, ERR=999) X\n      STATE = 0\n      RETURN\n  900 STATE = 1\n      RETURN\n  999 STATE = 2\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-EE-1", "pattern": "(?i)(END\\s*=|ERR\\s*=|EOF|read\\s+(failure|error)|twin\\s+(branch|label))" },
+    { "kind": "edge_case", "id": "EC-EE-1", "pattern": "(?i)(STATE\\s*=\\s*[012]|three\\s+outcomes|EOF\\s+vs\\s+error|malformed\\s+input)" },
+    { "kind": "open_question", "id": "Q-EE-1", "pattern": "(?i)(try.catch|EOFException|IOException|target.*exception\\s+strategy|sentinel\\s+vs\\s+throw)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "END=/ERR= is one of the most common F77 I/O patterns. The 3-way outcome must port to a sealed result enum or an exception+sentinel mix. The spec captures the three paths so the rewrite preserves them."
+}

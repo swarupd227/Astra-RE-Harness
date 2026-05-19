@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-mod-vs-modulo",
+  "schemaId": "fortran-f77",
+  "title": "MOD takes sign of dividend; MODULO takes sign of divisor — differ on negative inputs",
+  "trapCategory": "numeric/integer-arithmetic",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/mod_vs_modulo.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE WRAP_INDEX(K, N, WRAPPED)\nC     Bucket-index helper. MOD(-7, 5) = -2 (sign of dividend), but\nC     MODULO(-7, 5) = 3 (sign of divisor). Java/C# % matches MOD,\nC     Python's % matches MODULO. A naive port to (K % N) is wrong\nC     for negative K when the legacy used MODULO -- and vice versa.\n      IMPLICIT NONE\n      INTEGER K, N, WRAPPED\nC     Source happens to use MOD here. The author MEANT MODULO; the\nC     bug shipped to production for years.\n      WRAPPED = MOD(K, N)\n      IF (WRAPPED .LT. 0) WRAPPED = WRAPPED + N\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-MOD-1", "pattern": "(?i)(MOD\\b|sign\\s+of\\s+dividend|MOD.*divisor|negative\\s+(K|input))" },
+    { "kind": "edge_case", "id": "EC-MOD-1", "pattern": "(?i)(K\\s*<\\s*0|negative\\s+K|WRAPPED\\s*<\\s*0|adjustment\\s+step)" },
+    { "kind": "open_question", "id": "Q-MOD-1", "pattern": "(?i)(MODULO|Math\\.floorMod|Python.like|positive\\s+remainder|target\\s+language\\s+operator)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "The MOD-vs-MODULO trap surfaces in EVERY hash-bucket / cyclic-index pattern translated from Fortran. The 2-line adjustment after MOD (the IF WRAPPED.LT.0 line) is the legacy fix for negative inputs — the spec MUST capture this as an invariant or the rewrite drops a critical 2 lines that look like dead code to a reviewer."
+}

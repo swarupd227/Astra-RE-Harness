@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-integer-overflow",
+  "schemaId": "fortran-f77",
+  "title": "INTEGER*2 multiplication overflows silently — wrapping at 2^15",
+  "trapCategory": "numeric/integer-arithmetic",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/integer_overflow.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE COUNT_TOTAL(N, K, TOTAL)\nC     Multiplies N*K into a 16-bit total. INTEGER*2 wraps at 32767\nC     -- inputs of (200, 300) silently produce -5536 instead of\nC     60000. The wider C/Java equivalent (int = 32 bits) does not\nC     reproduce this without an explicit (short) cast.\n      IMPLICIT NONE\n      INTEGER*2 N, K, TOTAL\n      TOTAL = N * K\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-OVF-1", "pattern": "(?i)(INTEGER\\*?2|16.?bit|32767|short\\s+integer|overflow|wrap\\w*)" },
+    { "kind": "edge_case", "id": "EC-OVF-1", "pattern": "(?i)(N\\s*\\*\\s*K\\s*>\\s*32767|product\\s+exceed|exceed\\w*\\s+range|wraparound|2.complement)" },
+    { "kind": "open_question", "id": "Q-OVF-1", "pattern": "(?i)(widen|int\\s*32|throw|exception|saturate|target\\s+type)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INTEGER*2 is extinct in modern languages — Java/C# default to int32. A direct port silently changes behaviour for valid inputs that USED to overflow. The spec must flag the 16-bit range and surface the open question of how the rewrite should handle inputs that would overflow in the legacy world."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-evaluate-also",
+  "schemaId": "cobol",
+  "title": "EVALUATE ... ALSO ... — multi-axis decision table; each WHEN matches a tuple",
+  "trapCategory": "control-flow/evaluate",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/evaluate_also.cbl",
+  "sourceLines": "1-25",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. DISCOUNT-TABLE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-AGE     PIC 9(3).\n       01  WS-CUST    PIC X.\n       01  WS-DISC    PIC 9(2)V99.\n      *> EVALUATE ... ALSO ... is a decision table with TWO axes.\n      *> Each WHEN matches a TUPLE of values. WHEN OTHER is the\n      *> catch-all. The natural Java port is a 2-axis switch or a\n      *> Map<Pair<int,char>, BigDecimal>.\n       PROCEDURE DIVISION.\n       MAIN.\n           EVALUATE WS-AGE ALSO WS-CUST\n              WHEN 65 THRU 999 ALSO \"P\"\n                 MOVE 25.00 TO WS-DISC\n              WHEN 0  THRU 17 ALSO \"P\"\n                 MOVE 15.00 TO WS-DISC\n              WHEN 0  THRU 999 ALSO \"S\"\n                 MOVE 10.00 TO WS-DISC\n              WHEN OTHER\n                 MOVE 0.00 TO WS-DISC\n           END-EVALUATE.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-EA-1", "pattern": "(?i)(EVALUATE.*ALSO|two.axis|multi.axis|decision\\s+table|tuple\\s+match)" },
+    { "kind": "section_contract", "id": "SC-EA-1", "pattern": "(?i)(WHEN.*ALSO|age.*customer|3\\s+rules|first.match|order)" },
+    { "kind": "open_question", "id": "Q-EA-1", "pattern": "(?i)(target\\s+(decision\\s+table|rule\\s+engine|switch.*tuple)|Map<Pair|pattern\\s+match)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "EVALUATE ALSO is COBOL's decision-table syntax — first match wins. Java rewrites usually use a chain of if-else; surface the first-match ordering AND the catch-all so the rewrite doesn't reorder."
+}

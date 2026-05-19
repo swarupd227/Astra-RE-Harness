@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-condition-implicit-and",
+  "schemaId": "cobol",
+  "title": "Abbreviated condition — IF X = 1 OR 2 OR 3 means IF X = 1 OR X = 2 OR X = 3",
+  "trapCategory": "control-flow/condition",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/condition_implicit_and.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. STATUS-CHECK.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-STATE  PIC 9.\n       01  WS-MSG    PIC X(20).\n      *> The condition 'WS-STATE = 1 OR 2 OR 3' is abbreviated:\n      *> the second and third '2' and '3' inherit the LHS 'WS-STATE\n      *> ='. Translating to Java's WS-STATE == 1 || 2 || 3 is\n      *> nonsensical because Java treats 2 and 3 as integer truthiness\n      *> (always true).\n       PROCEDURE DIVISION.\n       MAIN.\n           IF WS-STATE = 1 OR 2 OR 3\n              MOVE \"active\" TO WS-MSG\n           END-IF.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CIA-1", "pattern": "(?i)(abbreviat\\w+\\s+condition|implicit\\s+subject|=\\s*\\d+\\s+OR\\s+\\d+|LHS\\s+inherit)" },
+    { "kind": "edge_case", "id": "EC-CIA-1", "pattern": "(?i)(WS.STATE\\s*=\\s*1\\s+OR\\s+2|WS.STATE\\s+(in|matches)|set\\s+membership)" },
+    { "kind": "open_question", "id": "Q-CIA-1", "pattern": "(?i)(target\\s+(membership|in.list|contains|switch)|Set\\.of\\s*\\(|java\\s+\\|\\|)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Abbreviated conditions are the COBOL equivalent of Python's 'x in {1,2,3}'. A literal port to Java 'x == 1 || 2 || 3' is wrong (because 2 is truthy). Surface this so the rewrite uses a set-membership check."
+}

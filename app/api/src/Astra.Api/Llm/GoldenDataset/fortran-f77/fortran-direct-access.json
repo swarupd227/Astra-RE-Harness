@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-direct-access",
+  "schemaId": "fortran-f77",
+  "title": "ACCESS='DIRECT' with RECL — random-access fixed-length records; record number indexes from 1",
+  "trapCategory": "io/sequential-direct",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/direct_access.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE WRITE_REC(UNIT, RECNUM, X)\nC     Direct-access I/O. The file is a flat array of RECL-byte\nC     records. RECNUM=1 is the FIRST record (Fortran 1-based);\nC     RECNUM=N writes the Nth record. A Java RandomAccessFile.seek\nC     is 0-based and counts bytes -- the translation needs offset =\nC     (RECNUM - 1) * RECL. Off-by-one bugs here have shipped to\nC     production.\n      IMPLICIT NONE\n      INTEGER UNIT, RECNUM\n      REAL    X(80)\n      WRITE (UNIT, REC=RECNUM) X\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DA-1", "pattern": "(?i)(direct.access|RECL|REC\\s*=|fixed.length\\s+record|random.?access)" },
+    { "kind": "section_contract", "id": "SC-DA-1", "pattern": "(?i)(RECNUM\\s*=\\s*1|1.based|RECNUM.*first\\s+record|byte\\s+offset)" },
+    { "kind": "open_question", "id": "Q-DA-1", "pattern": "(?i)(RandomAccessFile|seek|0.based|byte.based|off.by.one|RECL.*byte\\s+count)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "ACCESS='DIRECT' is the IBM batch-job standard for VSAM-like flat files. The rewrite must (a) compute the byte offset correctly, (b) preserve the RECL contract (record length in bytes, possibly with vendor 'word' multipliers), and (c) ensure 1-based REC= translates to 0-based seek correctly."
+}

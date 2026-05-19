@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-comp-2-double",
+  "schemaId": "cobol",
+  "title": "COMP-2 — double-precision float; subject to the same HFP-vs-IEEE format question as COMP-1",
+  "trapCategory": "numeric/comp",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/comp_2_double.cbl",
+  "sourceLines": "1-13",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. ACTUARIAL-PV.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> COMP-2 = double-precision float (8 bytes). Same HFP-vs-IEEE\n      *> question as COMP-1 at higher resolution. Used heavily in\n      *> actuarial/financial COBOL where 7 decimal digits aren't\n      *> enough. A Java double port is bit-identical only when the\n      *> mainframe was configured for IEEE mode.\n       01  WS-PV    USAGE COMP-2.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-C2-1", "pattern": "(?i)(COMP.2|double.precision|8.byte\\s+float|HFP\\s+vs\\s+IEEE|format)" },
+    { "kind": "edge_case", "id": "EC-C2-1", "pattern": "(?i)(actuarial|financial|present\\s+value|15.digit|precision\\s+matter)" },
+    { "kind": "open_question", "id": "Q-C2-1", "pattern": "(?i)(IEEE\\s+mode|target\\s+double|bit.exact|tolerance|equivalence\\s+threshold)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COMP-2 is everywhere in financial/actuarial COBOL. The format question is the same as COMP-1 but the precision impact is amplified — present-value calculations propagating 1e-15 errors compound visibly over thousands of records."
+}

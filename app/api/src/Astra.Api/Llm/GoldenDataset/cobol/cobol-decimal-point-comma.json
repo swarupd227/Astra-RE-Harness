@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-decimal-point-comma",
+  "schemaId": "cobol",
+  "title": "DECIMAL-POINT IS COMMA — European locale; '.' and ',' swap roles globally for this program",
+  "trapCategory": "numeric/locale",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/decimal_point_comma.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. EU-LOCALE.\n       ENVIRONMENT DIVISION.\n       CONFIGURATION SECTION.\n       SPECIAL-NAMES.\n           DECIMAL-POINT IS COMMA.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> With DECIMAL-POINT IS COMMA, literal 1.234,56 is valid and\n      *> means 1234.56 in Anglo notation. Edit picture\n      *> PIC 9.999,99 produces output like '1.234,56'. A direct\n      *> Java port that uses Locale.US silently corrupts all\n      *> output.\n       01  WS-AMOUNT      PIC 9(7)V99.\n       01  WS-AMOUNT-OUT  PIC 9.999.999,99.\n       PROCEDURE DIVISION.\n           MOVE 1234567,89 TO WS-AMOUNT.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DPC-1", "pattern": "(?i)(DECIMAL.POINT\\s+IS\\s+COMMA|European\\s+locale|comma\\s+(as|for)\\s+decimal|swap\\w*\\s+\\.\\s+and\\s+,)" },
+    { "kind": "section_contract", "id": "SC-DPC-1", "pattern": "(?i)(SPECIAL.NAMES|configuration|program.wide|both\\s+literal\\s+and\\s+edit)" },
+    { "kind": "open_question", "id": "Q-DPC-1", "pattern": "(?i)(Locale|NumberFormat|target\\s+locale|configurable\\s+vs\\s+baked|i18n)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "DECIMAL-POINT IS COMMA shifts BOTH literal parsing and edit-picture rendering. A Java port using Locale.US works for English-locale data and silently corrupts European-locale input. Surface the locale as a program-wide configuration that the rewrite must replicate."
+}

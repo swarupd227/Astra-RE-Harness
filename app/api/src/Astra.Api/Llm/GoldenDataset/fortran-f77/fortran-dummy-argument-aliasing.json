@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-dummy-argument-aliasing",
+  "schemaId": "fortran-f77",
+  "title": "Passing the same variable as multiple args creates dummy-argument aliasing — undefined per F77",
+  "trapCategory": "memory/aliasing",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/dummy_argument_aliasing.f",
+  "sourceLines": "1-19",
+  "sourceContent": "      SUBROUTINE SWAP(A, B)\nC     If a caller writes CALL SWAP(X, X) -- passing the same\nC     variable for both -- the F77 standard says the behaviour is\nC     undefined. The dummy arguments A and B are now aliases, and\nC     A = TEMP corrupts B before its value is read. The legacy code\nC     'works' on aliased calls only by coincidence of compiler\nC     ordering.\n      IMPLICIT NONE\n      REAL A, B, TEMP\n      TEMP = A\n      A = B\n      B = TEMP\n      RETURN\n      END\n\n      SUBROUTINE MAIN\n      REAL X\n      X = 1.0\n      CALL SWAP(X, X)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DAA-1", "pattern": "(?i)(dummy\\s+argument|alias\\w*|undefined\\s+behavior|F77.*standard|same\\s+variable\\s+as)" },
+    { "kind": "edge_case", "id": "EC-DAA-1", "pattern": "(?i)(CALL\\s+SWAP\\s*\\(\\s*X\\s*,\\s*X\\s*\\)|self.alias|same\\s+actual\\s+argument|aliased\\s+call)" },
+    { "kind": "open_question", "id": "Q-DAA-1", "pattern": "(?i)(call\\s+sites|where.*invoked|copy.in.copy.out|defensive\\s+copy|enforce\\s+distinct)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Dummy-argument aliasing is one of the easiest bugs to port without noticing — Java/C# evaluation semantics quietly fix some cases (because the reference IS the same object), and silently break others. The spec must surface this whenever a subroutine writes to more than one of its args."
+}

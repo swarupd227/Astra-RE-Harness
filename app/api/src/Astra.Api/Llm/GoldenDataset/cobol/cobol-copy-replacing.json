@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-copy-replacing",
+  "schemaId": "cobol",
+  "title": "COPY ... REPLACING — preprocessor-level include with token substitution; affects compile-time layout",
+  "trapCategory": "preprocessor/copy",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/copy_replacing.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CUSTOMER-RECORD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> COPY pulls in a copybook (header file). REPLACING does\n      *> token-level substitution. The actual record layout is\n      *> hidden until you find COPYBOOK-CUSTREC. Migrating without\n      *> resolving COPY first leaves the rewrite blind to what\n      *> fields exist.\n       01  WS-CUSTOMER.\n           COPY COPYBOOK-CUSTREC REPLACING\n              ==:PFX:==  BY  ==WS-CUST==\n              ==:SIZE:== BY  ==30==.\n       PROCEDURE DIVISION.\n       MAIN.\n           DISPLAY WS-CUSTOMER.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CR-1", "pattern": "(?i)(COPY\\b|REPLACING|copybook|preprocessor|token\\s+(substitut|level))" },
+    { "kind": "section_contract", "id": "SC-CR-1", "pattern": "(?i)(PFX|SIZE|placeholder|template\\s+expansion|hidden\\s+layout)" },
+    { "kind": "open_question", "id": "Q-CR-1", "pattern": "(?i)(target\\s+(macro|generics|template)|copybook\\s+resolution|expand\\s+first)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COPY REPLACING is the COBOL macro system. The actual record layout depends on the copybook + substitutions. The spec must enumerate the resolved layout — leaving the COPY unresolved means the rewrite is missing fields."
+}
