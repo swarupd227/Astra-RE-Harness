@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-equivalence-aliasing",
+  "schemaId": "fortran-f77",
+  "title": "EQUIVALENCE makes two names share storage (mutating one mutates the other)",
+  "trapCategory": "memory/aliasing",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/equivalence_aliasing.f",
+  "sourceLines": "1-22",
+  "sourceContent": "      SUBROUTINE PACK_HEADER(HDR, MAGIC, SIZE)\nC     Encodes a record header in 4 bytes shared between an INTEGER\nC     and a 4-element CHARACTER*1 array. Updating one updates the\nC     other -- this is *not* a copy, it is an alias.\n      IMPLICIT NONE\n      INTEGER       HDR\n      CHARACTER*1   HDR_BYTES(4)\n      INTEGER       MAGIC, SIZE\n      EQUIVALENCE  (HDR, HDR_BYTES)\n\n      HDR = MAGIC\nC     The next line MUTATES HDR through the byte alias. Any caller\nC     that reads HDR after PACK_HEADER sees the patched value, not\nC     the MAGIC it passed in. This is intentional in 1970s style\nC     but invisible to a reader who skims for assignment to HDR.\n      HDR_BYTES(4) = CHAR(SIZE)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-ALIAS-1",
+      "pattern": "(?i)(EQUIVALENCE|share[ds]?\\s+storage|alias\\w*|same\\s+memory|overlapp\\w+)"
+    },
+    {
+      "kind": "section_contract",
+      "id": "SC-ALIAS-1",
+      "pattern": "(?i)(HDR_BYTES.*HDR|HDR.*HDR_BYTES|writes?\\s+through|mutate\\w*\\s+through)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-ALIAS-1",
+      "pattern": "(?i)(endian|byte\\s+order|alignment|target\\s+platform|portability)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "EQUIVALENCE is one of the most common silent-correctness traps\nin Fortran -> modern-language migrations. A Java/C# implementation\nwithout a union-type construct must either:\n  (a) preserve the aliasing semantically (one record, two views), or\n  (b) refactor to byte-buffer + accessors and accept that the spec\n      changed.\nEither way the spec MUST flag the storage sharing, AND surface\nendianness as an open question. Calibrated against real EQUIVALENCE\nusage in NIST/MINPACK helper utilities."
+}

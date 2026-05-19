@@ -1,0 +1,29 @@
+{
+  "entryId": "cobol-redefines-dual-view",
+  "schemaId": "cobol",
+  "title": "REDEFINES — same bytes interpreted as both numeric and alphanumeric",
+  "trapCategory": "memory/redefines",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/redefines_dual_view.cbl",
+  "sourceLines": "1-20",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CLAIM-CLASSIFY.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-CLAIM-REC.\n           05  WS-CLAIM-AMT-NUM    PIC 9(7)V99.\n           05  WS-CLAIM-AMT-TXT    REDEFINES WS-CLAIM-AMT-NUM\n                                   PIC X(9).\n           05  WS-CLAIM-STATUS     PIC X.\n      *> REDEFINES overlays WS-CLAIM-AMT-TXT on the same 9 bytes as\n      *> WS-CLAIM-AMT-NUM. The program writes the numeric, then reads\n      *> the same bytes as text to log a denormalised audit string.\n      *> Reordering the fields, or treating them as independent\n      *> properties in a modern record type, BREAKS the contract.\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE 1234567.89 TO WS-CLAIM-AMT-NUM\n           DISPLAY \"Raw bytes were: \" WS-CLAIM-AMT-TXT\n           STOP RUN.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-REDEF-1",
+      "pattern": "(?i)(REDEFINES|share[ds]?\\s+storage|overlap\\w*|dual\\s+view|same\\s+bytes|two\\s+name\\w*)"
+    },
+    {
+      "kind": "section_contract",
+      "id": "SC-REDEF-1",
+      "pattern": "(?i)(WS.CLAIM.AMT.NUM.*WS.CLAIM.AMT.TXT|numeric\\s+and\\s+(text|alphanumeric)|writes?\\s+numeric.*read\\w*\\s+text)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-REDEF-1",
+      "pattern": "(?i)(packed\\s+decimal|COMP-?3|usage|byte\\s+layout|encoding|EBCDIC|ASCII)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REDEFINES is the COBOL counterpart to Fortran EQUIVALENCE: two\nfield names share the same storage. A naive Java/C# port that\nmaps each name to an independent property silently drops the\noverlay. The spec must flag the storage sharing AND surface\nencoding/USAGE as an open question -- the visible bytes depend\non whether AMT-NUM is DISPLAY (zoned-decimal ASCII/EBCDIC) or\nCOMP-3 (packed). Calibrated against insurance-batch and banking-\nsample COBOL programs where REDEFINES is used as an audit-\nrendering hack."
+}

@@ -71,6 +71,7 @@ builder.Services.AddScoped<DevPersonaContext>();
 // ─── Seed pipeline ────────────────────────────────────────────────────
 builder.Services.AddScoped<ConsumeRollSeed>();
 builder.Services.AddScoped<MinpackDemoSeed>();
+builder.Services.AddScoped<GoldenDatasetSeed>();
 
 // ─── LLM provider + extraction pipeline ──────────────────────────────
 // Selectable via Llm:Provider — mock (default, offline), fail-mock (chaos),
@@ -141,6 +142,7 @@ builder.Services.AddScoped<Astra.Api.Compliance.ComplianceFeedExporter>();
 builder.Services.AddScoped<Astra.Api.Validation.CompileValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackGenerator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackValidator>();
+builder.Services.AddScoped<Astra.Api.Validation.GoldenDatasetScorer>();
 builder.Services.AddHttpClient("gfortran");
 builder.Services.AddScoped<Astra.Api.Validation.GfortranClient>();
 builder.Services.AddScoped<Astra.Api.Validation.CrossRuntimeValidator>();
@@ -240,11 +242,68 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_subroutines_source_language
               ON subroutines (source_language);
             """);
+
+        // Phase 6.0 — Golden dataset tables. Additive create-if-not-exists
+        // so existing dev databases pick them up without a full recreate.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS golden_dataset_entries (
+                id              uuid        PRIMARY KEY,
+                entry_id        varchar(128) NOT NULL,
+                schema_id       varchar(32)  NOT NULL,
+                title           varchar(256) NOT NULL,
+                trap_category   varchar(64)  NOT NULL,
+                difficulty      varchar(16)  NOT NULL,
+                source_path     varchar(512) NOT NULL,
+                source_content  text         NOT NULL,
+                source_lines    varchar(32)  NOT NULL,
+                expected_claims jsonb        NOT NULL,
+                canonical_inputs jsonb       NOT NULL,
+                notes           text         NOT NULL,
+                status          varchar(32)  NOT NULL,
+                created_at      timestamptz  NOT NULL,
+                updated_at      timestamptz  NOT NULL,
+                updated_by      varchar(160) NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_golden_dataset_entries_entry_id
+              ON golden_dataset_entries (entry_id);
+            CREATE INDEX IF NOT EXISTS ix_golden_dataset_entries_schema_status
+              ON golden_dataset_entries (schema_id, status);
+            CREATE INDEX IF NOT EXISTS ix_golden_dataset_entries_trap_category
+              ON golden_dataset_entries (trap_category);
+
+            CREATE TABLE IF NOT EXISTS golden_dataset_runs (
+                id              uuid        PRIMARY KEY,
+                entry_id        uuid        NOT NULL REFERENCES golden_dataset_entries(id) ON DELETE CASCADE,
+                llm_call_id     uuid        NULL,
+                prompt_id       varchar(128) NOT NULL,
+                prompt_version  varchar(32)  NOT NULL,
+                model_name      varchar(128) NOT NULL,
+                matched         integer      NOT NULL,
+                total           integer      NOT NULL,
+                score           double precision NOT NULL,
+                detail          jsonb        NOT NULL,
+                started_at      timestamptz  NOT NULL,
+                completed_at    timestamptz  NOT NULL,
+                triggered_by    varchar(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_golden_dataset_runs_prompt
+              ON golden_dataset_runs (prompt_id, prompt_version, completed_at);
+            CREATE INDEX IF NOT EXISTS ix_golden_dataset_runs_entry
+              ON golden_dataset_runs (entry_id, completed_at);
+            """);
     }
     if (canConnect && seedDemo)
     {
         var seeder = scope.ServiceProvider.GetRequiredService<ConsumeRollSeed>();
         await seeder.SeedAsync();
+    }
+    // Phase 6.0 — Golden dataset is seeded unconditionally (small payload,
+    // idempotent, exists independently of the corpus-demo seed).
+    if (canConnect)
+    {
+        var goldenSeeder = scope.ServiceProvider.GetRequiredService<GoldenDatasetSeed>();
+        try { await goldenSeeder.SeedAsync(); }
+        catch (Exception ex) { Log.Warning(ex, "Golden dataset seed failed"); }
     }
     if (canConnect && seedMinpack)
     {
@@ -287,6 +346,7 @@ app.MapValidationEndpoints();
 app.MapSchemaEndpoints();
 app.MapPromptEndpoints();
 app.MapArchetypeEndpoints();
+app.MapGoldenDatasetEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();

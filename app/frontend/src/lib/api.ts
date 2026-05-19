@@ -237,6 +237,115 @@ export type ArchetypeManifest = {
   fileCount: number;
 };
 
+// ─── Golden dataset (Phase 6.0: prompt regression measurement) ──────
+export type GoldenDatasetExpectedClaim = {
+  kind: 'invariant' | 'section_contract' | 'io_side_effect' | 'edge_case' | 'open_question';
+  id: string;
+  pattern: string;
+};
+
+export type GoldenDatasetSummary = {
+  id: string;
+  entryId: string;
+  schemaId: string;
+  title: string;
+  trapCategory: string;
+  difficulty: string;
+  status: string;
+  sourcePath: string;
+  sourceLines: string;
+  expectedClaimCount: number;
+  hasCanonicalInputs: boolean;
+  notes: string;
+  updatedAt: string;
+  updatedBy: string | null;
+  latestRun: {
+    id: string;
+    promptId: string;
+    promptVersion: string;
+    modelName: string;
+    score: number;
+    matched: number;
+    total: number;
+    completedAt: string;
+  } | null;
+};
+
+export type GoldenDatasetEntry = {
+  id: string;
+  entryId: string;
+  schemaId: string;
+  title: string;
+  trapCategory: string;
+  difficulty: string;
+  sourcePath: string;
+  sourceLines: string;
+  sourceContent: string;
+  expectedClaims: GoldenDatasetExpectedClaim[];
+  canonicalInputs: unknown[];
+  notes: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type GoldenDatasetUpsert = Partial<{
+  entryId: string;
+  schemaId: string;
+  title: string;
+  trapCategory: string;
+  difficulty: string;
+  sourcePath: string;
+  sourceLines: string;
+  sourceContent: string;
+  expectedClaims: GoldenDatasetExpectedClaim[];
+  canonicalInputs: unknown[];
+  notes: string;
+  status: string;
+}>;
+
+export type GoldenDatasetRun = {
+  id: string;
+  entryId: string;
+  promptId: string;
+  promptVersion: string;
+  modelName: string;
+  score: number;
+  matched: number;
+  total: number;
+  detail: Array<{
+    expectedClaimId: string;
+    kind: string;
+    pattern: string;
+    matched: boolean;
+    matchedAgainst: string | null;
+  }>;
+  startedAt: string;
+  completedAt: string;
+  triggeredBy: string | null;
+};
+
+export type GoldenDatasetRunSummary = {
+  id: string;
+  entryId: string;
+  promptId: string;
+  promptVersion: string;
+  modelName: string;
+  score: number;
+  matched: number;
+  total: number;
+  completedAt: string;
+};
+
+export type GoldenDatasetScoreAll = {
+  inputCount: number;
+  aggregateMatched: number;
+  aggregateTotal: number;
+  aggregateScore: number;
+  runs: GoldenDatasetRun[];
+};
+
 // ─── Provider Settings (value-add #1: AI hygiene visibility) ─────────
 export type ProviderSettings = {
   provider: {
@@ -598,6 +707,55 @@ export const api = {
 
   // Phase #4 / value-add #3: scaffold archetype catalog
   listArchetypes: () => apiFetch<{ data: ArchetypeManifest[] }>('/api/v1/archetypes'),
+
+  // Phase 6.0 — golden dataset (calibration corpus for prompt regression)
+  listGoldenDataset: (params?: { schemaId?: string; status?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.schemaId) qs.set('schemaId', params.schemaId);
+    if (params?.status) qs.set('status', params.status);
+    const q = qs.toString();
+    return apiFetch<{ data: GoldenDatasetSummary[] }>(
+      `/api/v1/golden-dataset${q ? `?${q}` : ''}`,
+    );
+  },
+  getGoldenDatasetEntry: (entryId: string) =>
+    apiFetch<GoldenDatasetEntry>(`/api/v1/golden-dataset/${encodeURIComponent(entryId)}`),
+  createGoldenDatasetEntry: (body: GoldenDatasetUpsert) =>
+    apiFetch<GoldenDatasetEntry>('/api/v1/golden-dataset', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateGoldenDatasetEntry: (entryId: string, body: GoldenDatasetUpsert) =>
+    apiFetch<GoldenDatasetEntry>(`/api/v1/golden-dataset/${encodeURIComponent(entryId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteGoldenDatasetEntry: (entryId: string) =>
+    apiFetch<void>(`/api/v1/golden-dataset/${encodeURIComponent(entryId)}`, {
+      method: 'DELETE',
+    }),
+  scoreGoldenDatasetEntry: (entryId: string) =>
+    apiFetch<GoldenDatasetRun>(
+      `/api/v1/golden-dataset/${encodeURIComponent(entryId)}/score`,
+      { method: 'POST' },
+    ),
+  scoreGoldenDatasetAll: (schemaId?: string) => {
+    const q = schemaId ? `?schemaId=${encodeURIComponent(schemaId)}` : '';
+    return apiFetch<GoldenDatasetScoreAll>(
+      `/api/v1/golden-dataset/score-all${q}`,
+      { method: 'POST' },
+    );
+  },
+  listGoldenDatasetRuns: (params?: { entryId?: string; promptId?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.entryId) qs.set('entryId', params.entryId);
+    if (params?.promptId) qs.set('promptId', params.promptId);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const q = qs.toString();
+    return apiFetch<{ data: GoldenDatasetRunSummary[] }>(
+      `/api/v1/golden-dataset/runs${q ? `?${q}` : ''}`,
+    );
+  },
 
   // Phase #4 / value-add #6: SOX/HIPAA/PCI evidence bundles
   listComplianceFormats: () =>

@@ -1,0 +1,38 @@
+{
+  "entryId": "cobol-rounded-off-by-one",
+  "schemaId": "cobol",
+  "title": "COMPUTE ROUNDED on PIC 9(7)V99 — hand-computed expected values land off-by-one",
+  "trapCategory": "numeric/rounded",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/avg_off_by_one.cbl",
+  "sourceLines": "1-22",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. AVG-OFF-BY-ONE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-TOTAL    PIC 9(7)V99.\n       01  WS-COUNT    PIC 9(7).\n       01  WS-AVG      PIC 9(7)V99.\n      *> AVERAGE-SALARY paragraph from DEPTPAY (Phase 5 in-scope).\n      *> Computes WS-AVG = WS-TOTAL / WS-COUNT with COBOL ROUNDED\n      *> semantics: half-away-from-zero at the LSD of the receiving\n      *> field. ON SIZE ERROR falls through to ZERO so a divide-by-\n      *> zero or overflow short-circuits without crashing.\n       PROCEDURE DIVISION.\n       AVERAGE-SALARY.\n           IF WS-COUNT = 0\n              MOVE 0 TO WS-AVG\n           ELSE\n              COMPUTE WS-AVG ROUNDED = WS-TOTAL / WS-COUNT\n                 ON SIZE ERROR MOVE 0 TO WS-AVG\n              END-COMPUTE\n           END-IF.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-RND-1",
+      "pattern": "(?i)(ROUNDED|half.?(away.from.zero|up)|HALF_UP|round\\w*\\s+to\\s+(2|two)\\s+decimal|PIC\\s*9\\(7\\)V99)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-RND-2",
+      "pattern": "(?i)(WS.COUNT.*=\\s*0|count.*zero|divide.?by.?zero.*ZERO|short.?circuit\\w*\\s+to\\s+(zero|0))"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-RND-1",
+      "pattern": "(?i)(ON\\s+SIZE\\s+ERROR|overflow|MOVE\\s+0\\s+TO\\s+WS.AVG|fall.through.*zero)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-RND-1",
+      "pattern": "(?i)(test\\s+(value|expected|fixture)|hand.computed|verify\\s+expected|cross.check)"
+    }
+  ],
+  "canonicalInputs": [
+    { "total": 111111.11, "count": 19, "expected": 5847.95, "note": "the off-by-one trap: 19 * 5848 = 111112, not 111111" },
+    { "total": 100.00,    "count":  0, "expected":    0.00, "note": "EC-1 fall-through to zero" },
+    { "total":  10.00,    "count":  3, "expected":    3.33, "note": "repeating decimal · HALF_UP" }
+  ],
+  "notes": "This is the trap PayrollEquivalence.cs surfaced live: the\nPhase 5.4 PayrollServiceTest fixture asserts 5848.06 for\n(111111.11 / 19) -- mathematically wrong; the correct\nHALF_UP scale-2 result is 5847.95. The extract pipeline\nmust capture the ROUNDED + scale-2 semantic AND surface\nthe SME open question 'have the test fixture's expected\nvalues been cross-checked?'. The harness then drives the\nGnuCOBOL sidecar with the canonicalInputs above and\nasserts row-for-row match against the in-process C# decimal\nreference, which is what made the off-by-one visible."
+}

@@ -1,0 +1,29 @@
+{
+  "entryId": "cobol-occurs-depending-on",
+  "schemaId": "cobol",
+  "title": "OCCURS DEPENDING ON — variable-length table tied to a separate count field",
+  "trapCategory": "memory/variable-length",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/occurs_depending_on.cbl",
+  "sourceLines": "1-22",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. POLICY-LOAD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-POLICY.\n           05  WS-RIDER-COUNT      PIC 9(2).\n           05  WS-RIDERS           OCCURS 1 TO 50 TIMES\n                                   DEPENDING ON WS-RIDER-COUNT\n                                   INDEXED BY WS-IX.\n               10  WS-RIDER-CODE   PIC X(4).\n               10  WS-RIDER-PREM   PIC 9(5)V99.\n      *> The record's *physical* length depends on WS-RIDER-COUNT at\n      *> the moment of file-WRITE. Reading the record back without\n      *> first restoring WS-RIDER-COUNT means OCCURS evaluates to a\n      *> stale length -- in the worst case OS-level memory corruption.\n       PROCEDURE DIVISION.\n       LOAD-RIDERS.\n           PERFORM VARYING WS-IX FROM 1 BY 1\n              UNTIL WS-IX > WS-RIDER-COUNT\n              DISPLAY WS-RIDERS(WS-IX)\n           END-PERFORM.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-ODO-1",
+      "pattern": "(?i)(OCCURS\\s+DEPENDING\\s+ON|variable.length|ODO|depends\\s+on\\s+WS.RIDER.COUNT|length\\s+(field|tied))"
+    },
+    {
+      "kind": "section_contract",
+      "id": "SC-ODO-1",
+      "pattern": "(?i)(WS.RIDER.COUNT|WS.IX|count\\s+field\\s+(governs|controls|drives)|must\\s+(set|restore))"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-ODO-1",
+      "pattern": "(?i)(allocat\\w*|max(imum)?\\s+(size|length|50)|memory\\s+layout|fixed.length\\s+rewrite|stale\\s+count)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "OCCURS DEPENDING ON is the COBOL idiom for variable-length lists\ninside fixed-position records. Migrating to a modern collection\ntype (List<T> / ArrayList) loses the *physical-length* contract\nthat callers writing/reading the record rely on, and is a frequent\nsource of 'works on synthetic data, corrupts on real data' bugs.\nThe spec must capture the count-field dependency AND surface the\nfixed-vs-variable allocation question for the SME."
+}

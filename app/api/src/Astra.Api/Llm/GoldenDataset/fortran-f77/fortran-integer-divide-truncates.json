@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-integer-divide-truncates",
+  "schemaId": "fortran-f77",
+  "title": "Integer division truncates toward zero (silent precision loss)",
+  "trapCategory": "numeric/integer-arithmetic",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/integer_divide_truncates.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE AVG_PCT(NUM, DEN, PCT)\nC     Compute PCT = 100 * NUM / DEN as an integer percentage.\nC     CLASSIC F77 TRAP: 100 * 3 / 4 evaluates left-to-right with\nC     INTEGER intermediate -> (300/4) = 75. But 100 * (3/4) inside\nC     the same expression style would be 100 * 0 = 0 because the\nC     inner 3/4 is INTEGER division that truncates toward zero.\nC     Callers expecting (NUM/DEN)*100 get 0 for any NUM < DEN.\n      IMPLICIT NONE\n      INTEGER NUM, DEN, PCT\n      PCT = NUM / DEN * 100\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-INTDIV-1",
+      "pattern": "(?i)(integer\\s+division|truncat\\w*\\s+toward|integer\\s+arithmetic|PCT\\s*=\\s*NUM\\s*/\\s*DEN)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-INTDIV-1",
+      "pattern": "(?i)(NUM\\s*<\\s*DEN|less\\s+than\\s+denominator|inner\\s+division|order\\s+of\\s+operations|left.to.right)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-INTDIV-1",
+      "pattern": "(?i)(rounding\\s+convention|caller\\s+expectation|whether.*PCT|integer\\s+rounding\\s+rule)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Real-world bug pattern from migration projects: developers see\nPCT = NUM / DEN * 100 and assume floating-point semantics. When the\nrewrite uses /, the int-vs-float behaviour is ambiguous unless the\nspec explicitly captures 'inputs are INTEGER, division truncates'.\nThe extract pipeline must flag this as an invariant AND surface the\nrounding convention as an open question for the SME — silently\npicking 'float division' in the rewrite is a behaviour change."
+}

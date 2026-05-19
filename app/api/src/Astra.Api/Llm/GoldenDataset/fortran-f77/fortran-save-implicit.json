@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-save-implicit",
+  "schemaId": "fortran-f77",
+  "title": "Initialized DATA implies SAVE — local variable persists between calls",
+  "trapCategory": "scope/save-attribute",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/save_implicit.f",
+  "sourceLines": "1-18",
+  "sourceContent": "      SUBROUTINE NEXT_TICKET(NUM)\nC     Returns a monotonically-increasing ticket number, starting at\nC     1 on the first call. The COUNTER is initialised via DATA which\nC     by F77 standard implies SAVE -- COUNTER retains its value\nC     across calls even without an explicit SAVE statement.\nC     A naive rewrite that allocates COUNTER on the stack per\nC     invocation will produce 1 every time.\n      IMPLICIT NONE\n      INTEGER NUM\n      INTEGER COUNTER\n      DATA    COUNTER /0/\n\n      COUNTER = COUNTER + 1\n      NUM     = COUNTER\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-SAVE-1",
+      "pattern": "(?i)(persist\\w*\\s+between\\s+calls|monoton\\w*\\s+increas\\w*|state\\s+across\\s+calls|SAVE)"
+    },
+    {
+      "kind": "section_contract",
+      "id": "SC-SAVE-1",
+      "pattern": "(?i)(COUNTER|module.level|static\\s+state|class\\s+level)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-SAVE-1",
+      "pattern": "(?i)(thread.?safe|concurrency|reset|initialization\\s+order)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "The F77 standard says DATA-initialised locals are implicitly SAVE.\nIBM XL Fortran honoured this. GCC's gfortran honours it. Some\nmodernised compilers and a naive Java/C# translation do not, so\nthe rewrite loses the monotonic-counter behaviour. The extract\npipeline MUST flag the cross-call state preservation; the open\nquestion on concurrency is also material -- F77 has no thread\nstory so the rewrite has to make one explicit."
+}

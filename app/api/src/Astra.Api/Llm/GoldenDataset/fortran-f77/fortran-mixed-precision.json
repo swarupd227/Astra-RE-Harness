@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-mixed-precision",
+  "schemaId": "fortran-f77",
+  "title": "REAL passed to DOUBLE PRECISION parameter loses precision silently",
+  "trapCategory": "numeric/precision",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/mixed_precision.f",
+  "sourceLines": "1-22",
+  "sourceContent": "      SUBROUTINE COMPUTE_NORM(X, Y, NORM)\nC     Caller-supplied X and Y are REAL*4 (single precision). The\nC     callee declares NORM as DOUBLE PRECISION. F77 silently widens\nC     each operand and stores the double result -- but the inputs\nC     already lost precision before they got here. A modernised\nC     version that types everything as 'double' will diverge by ~1e-7\n      IMPLICIT NONE\n      REAL              X, Y\n      DOUBLE PRECISION  NORM\n      DOUBLE PRECISION  DX, DY\n\nC     Widening REAL -> DOUBLE here preserves the bits already lost.\n      DX   = DBLE(X)\n      DY   = DBLE(Y)\n      NORM = SQRT(DX*DX + DY*DY)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-PREC-1",
+      "pattern": "(?i)(single\\s+precision|REAL\\*?4|float\\b|widening|precision\\s+loss|caller\\s+precision)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-PREC-2",
+      "pattern": "(?i)(double\\s+precision|REAL\\*?8|sqrt|NORM)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-PREC-1",
+      "pattern": "(?i)(tolerance|epsilon|equality\\s+test|float\\s+comparison|how\\s+much\\s+precision)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Mixed-precision Fortran calls are everywhere in numerical-library\nlegacy code (BLAS / LAPACK / MINPACK all have REAL and DOUBLE\nvariants of the same routine). Migrating to a language with one\n'double' default silently changes the precision contract --\nresults will differ in the 7th decimal. The spec must capture\nthe call-site precision AND surface the tolerance/equality\nquestion for the SME before the rewrite picks one."
+}
