@@ -32,6 +32,7 @@ public sealed class CompileValidator
     private readonly IBlobClient _blob;
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
+    private readonly MavenClient _maven;
     private readonly ILogger<CompileValidator> _log;
 
     public CompileValidator(
@@ -39,12 +40,14 @@ public sealed class CompileValidator
         IBlobClient blob,
         StorageOptions storage,
         IAuditLogger audit,
+        MavenClient maven,
         ILogger<CompileValidator> log)
     {
         _db = db;
         _blob = blob;
         _storage = storage;
         _audit = audit;
+        _maven = maven;
         _log = log;
     }
 
@@ -72,9 +75,49 @@ public sealed class CompileValidator
 
         await _audit.LogAsync(
             "validation.started", "scaffold", scaffold.Id, actor,
-            payload: new { runId = run.Id, stage = run.Stage },
+            payload: new { runId = run.Id, stage = run.Stage, targetPlatform = scaffold.TargetPlatform },
             ct: ct);
 
+        try
+        {
+            // Phase 5.5: dispatch by target platform. The dotnet8 path
+            // materialises the scaffold and shells out locally; the
+            // java-spring path POSTs the sources to the maven sidecar so
+            // mvn runs inside the pre-warmed image cache.
+            if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunJavaCompileAsync(scaffold, run, actor, ct);
+            }
+            else
+            {
+                await RunDotnetCompileAsync(scaffold, run, actor, ct);
+            }
+            return run;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Compile validation crashed for scaffold {Scaffold}", scaffold.Id);
+            run.Status = "ERRORED";
+            run.ErrorCode = "compile.runner_crashed";
+            run.Summary = $"Runner error: {ex.GetType().Name}: {ex.Message}";
+            run.CompletedAt = DateTimeOffset.UtcNow;
+            try { await _db.SaveChangesAsync(ct); }
+            catch (Exception saveEx) { _log.LogError(saveEx, "Could not persist ERRORED state"); }
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, error = ex.Message },
+                ct: ct);
+            return run;
+        }
+    }
+
+    private async Task RunDotnetCompileAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
         var tempDir = Path.Combine(Path.GetTempPath(), $"astra-validate-{run.Id:N}");
         try
         {
@@ -113,16 +156,13 @@ public sealed class CompileValidator
             // 4. Upload the build log to MinIO for posterity.
             var logKey = $"validation/{run.Id:N}/compile.log";
             var logUri = await _blob.PutTextAsync(
-                _storage.Buckets.Scaffolds,
-                logKey,
-                log,
-                "text/plain",
-                ct);
+                _storage.Buckets.Scaffolds, logKey, log, "text/plain", ct);
 
             // 5. Update the ValidationRun row with the verdict.
             run.LogBlobUri = logUri;
             run.MetricsJson = JsonSerializer.Serialize(new
             {
+                runner = "dotnet",
                 exitCode,
                 errorCount,
                 warningCount,
@@ -164,24 +204,6 @@ public sealed class CompileValidator
             _log.LogInformation(
                 "Compile validation for scaffold {Scaffold}: {Status} ({Summary})",
                 scaffold.Id, run.Status, run.Summary);
-
-            return run;
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Compile validation crashed for scaffold {Scaffold}", scaffold.Id);
-            run.Status = "ERRORED";
-            run.ErrorCode = "compile.runner_crashed";
-            run.Summary = $"Runner error: {ex.GetType().Name}: {ex.Message}";
-            run.CompletedAt = DateTimeOffset.UtcNow;
-            try { await _db.SaveChangesAsync(ct); }
-            catch (Exception saveEx) { _log.LogError(saveEx, "Could not persist ERRORED state"); }
-
-            await _audit.LogAsync(
-                "validation.completed", "scaffold", scaffold.Id, actor,
-                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, error = ex.Message },
-                ct: ct);
-            return run;
         }
         finally
         {
@@ -197,6 +219,96 @@ public sealed class CompileValidator
                 _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir);
             }
         }
+    }
+
+    private async Task RunJavaCompileAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        // 1. Pull the file manifest from MinIO.
+        var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+        using var manifest = JsonDocument.Parse(manifestText);
+        var files = manifest.RootElement.GetProperty("files");
+
+        // 2. Forward every file (pom.xml, sources, tests, resources) to the
+        //    maven sidecar. The sidecar materialises them into its workdir
+        //    so mvn can hit the warmed-up local Maven repo.
+        var sources = new List<MavenClient.JavaSource>();
+        foreach (var file in files.EnumerateArray())
+        {
+            var relPath = file.GetProperty("path").GetString()
+                ?? throw new InvalidOperationException("Manifest file entry missing 'path'.");
+            var content = file.GetProperty("content").GetString() ?? "";
+            sources.Add(new MavenClient.JavaSource(relPath, content));
+        }
+
+        if (!await _maven.PingAsync(ct))
+            throw new InvalidOperationException("maven sidecar unreachable (GET /health failed).");
+
+        _log.LogInformation(
+            "Forwarding {Files} files for scaffold {Scaffold} to maven sidecar",
+            sources.Count, scaffold.Id);
+
+        // 3. POST /compile — maven sidecar shells out to `mvn -o test-compile`
+        //    and parses its own [WARNING]/[ERROR] markers.
+        var summary = await _maven.CompileAsync(
+            new MavenClient.CompileRequest(sources), ct);
+
+        // 4. Persist the full sidecar log to MinIO so the report card UI
+        //    can render it next to the dotnet log.
+        var logKey = $"validation/{run.Id:N}/compile.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, summary.Log, "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            runner = "maven",
+            artifactId = summary.ArtifactId,
+            exitCode = summary.ExitCode,
+            errorCount = summary.ErrorCount,
+            warningCount = summary.WarningCount,
+            fileCount = sources.Count,
+            durationMs = summary.DurationMs,
+            logLines = summary.Log.Count(c => c == '\n'),
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (summary.ExitCode == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = summary.WarningCount == 0
+                ? $"mvn compile succeeded · 0 warnings · {summary.DurationMs} ms"
+                : $"mvn compile succeeded · {summary.WarningCount} warning{(summary.WarningCount == 1 ? "" : "s")} · {summary.DurationMs} ms";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = "compile.build_failed";
+            run.Summary = summary.ErrorCount > 0
+                ? $"mvn compile failed · {summary.ErrorCount} error{(summary.ErrorCount == 1 ? "" : "s")} · {summary.WarningCount} warning{(summary.WarningCount == 1 ? "" : "s")}"
+                : $"mvn compile failed · exit {summary.ExitCode}";
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        _log.LogInformation(
+            "Java compile validation for scaffold {Scaffold}: {Status} ({Summary})",
+            scaffold.Id, run.Status, run.Summary);
     }
 
     private static async Task<(int ExitCode, string Log)> RunDotnetBuildAsync(

@@ -145,6 +145,12 @@ builder.Services.AddHttpClient("gfortran");
 builder.Services.AddScoped<Astra.Api.Validation.GfortranClient>();
 builder.Services.AddScoped<Astra.Api.Validation.CrossRuntimeValidator>();
 
+// ─── Maven sidecar HTTP client (Phase 5.5) ────────────────────────────
+// Mirrors the gfortran wiring above so the validator path can dispatch
+// java-spring scaffolds through `mvn compile` + JUnit instead of dotnet.
+builder.Services.AddHttpClient("maven");
+builder.Services.AddScoped<Astra.Api.Validation.MavenClient>();
+
 // ─── Software HSM signer (Phase B.3; Azure Key Vault Managed HSM in Phase D) ─
 builder.Services.AddSingleton<IHsmSigner, SoftwareHsmSigner>();
 

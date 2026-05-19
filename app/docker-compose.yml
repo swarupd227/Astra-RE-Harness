@@ -93,6 +93,27 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── maven sidecar (Phase 5.5) ─────────────────────────────────────────
+  # Java 21 + Maven 3.9 + FastAPI shell. Drives `mvn test-compile` and
+  # `mvn test` against generated Java Spring scaffolds (Phase 5.4 archetype
+  # output). REST contract mirrors the gfortran sidecar so the API's
+  # validator stays symmetric.
+  maven-sidecar:
+    build:
+      context: ./maven-sidecar
+    ports:
+      - "${MAVEN_PORT:-51053}:51053"
+    environment:
+      MAVEN_PORT: 51053
+      MAVEN_WORKDIR: /var/tmp/maven-runs
+      MAVEN_OPTS: "-Xmx512m -Dfile.encoding=UTF-8"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51053/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── API (.NET 8) ─────────────────────────────────────────────────────
   api:
     build:
@@ -107,6 +128,8 @@ services:
         condition: service_started
       gfortran-sidecar:
         condition: service_started
+      maven-sidecar:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
@@ -115,6 +138,7 @@ services:
       Storage__AccessKey: ${MINIO_ROOT_USER:-astra}
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
       Validation__GfortranEndpoint: "http://gfortran-sidecar:51052"
+      Validation__MavenEndpoint: "http://maven-sidecar:51053"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
       Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
