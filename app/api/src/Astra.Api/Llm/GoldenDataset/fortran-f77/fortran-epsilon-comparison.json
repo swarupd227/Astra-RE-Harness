@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-epsilon-comparison",
+  "schemaId": "fortran-f77",
+  "title": "Floating-point equality through an EPSILON-tolerance is the actual contract",
+  "trapCategory": "numeric/floating-point",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/epsilon_comparison.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE CONVERGED(NEW, OLD, OK)\nC     Iterative-solver convergence test. The real contract is\nC     |NEW - OLD| < 1.0E-6 * MAX(|NEW|, 1.0) -- a relative tolerance\nC     with a 1.0 floor so the absolute tolerance kicks in near zero.\nC     A naive port to (NEW == OLD) never converges; a naive port to\nC     (abs(NEW - OLD) < 1e-6) is wrong for OLD = 1e9.\n      IMPLICIT NONE\n      REAL    NEW, OLD\n      LOGICAL OK\n      REAL    SCALE\n      SCALE = MAX(ABS(NEW), 1.0)\n      OK    = (ABS(NEW - OLD) .LT. 1.0E-6 * SCALE)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-EPS-1", "pattern": "(?i)(relative\\s+tolerance|1\\.0E.6|scale.?free|MAX\\b.*1\\.0|floor)" },
+    { "kind": "invariant", "id": "INV-EPS-2", "pattern": "(?i)(ABS\\b|absolute\\s+difference|\\|.*\\||magnitude)" },
+    { "kind": "open_question", "id": "Q-EPS-1", "pattern": "(?i)(target\\s+tolerance|constant.*literal|configur\\w*|named\\s+constant|hardcoded\\s+epsilon)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "The 1.0E-6 literal is a magic number that deserves SME review (Phase 5 OPEN-QUESTION). The relative-with-floor pattern is critical to preserve — most reviewers see ABS-LT-tolerance and assume it's absolute. A correct port keeps both terms."
+}

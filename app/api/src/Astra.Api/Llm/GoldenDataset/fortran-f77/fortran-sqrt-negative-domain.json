@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-sqrt-negative-domain",
+  "schemaId": "fortran-f77",
+  "title": "SQRT of a negative real — vendor-defined: some return NaN, some abort, some return |x| silently",
+  "trapCategory": "intrinsics/math",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/sqrt_negative.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE NORM_STD_DEV(VAR, SIGMA)\nC     SIGMA = SQRT(VAR). VAR is supposed to be a variance >= 0,\nC     but accumulated FP error can produce tiny negatives near zero.\nC     IBM XL Fortran (default): traps. GFortran: NaN. Some IRIX\nC     Fortran: returns SQRT(|VAR|). Behaviour is genuinely\nC     platform-dependent.\n      IMPLICIT NONE\n      REAL VAR, SIGMA\n      SIGMA = SQRT(VAR)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SQN-1", "pattern": "(?i)(SQRT|negative\\s+argument|VAR\\s*>=\\s*0|VAR\\s*<\\s*0|domain\\s+error)" },
+    { "kind": "edge_case", "id": "EC-SQN-1", "pattern": "(?i)(tiny\\s+negative|near\\s+zero|FP\\s+error|small\\s+negative|VAR\\s+slightly)" },
+    { "kind": "open_question", "id": "Q-SQN-1", "pattern": "(?i)(MAX\\s*\\(.*VAR.*0\\.0\\)|clamp|negative\\s+handling|target\\s+(NaN|exception))" }
+  ],
+  "canonicalInputs": [],
+  "notes": "The 'common fix' is SIGMA = SQRT(MAX(VAR, 0.0)) — a tiny defensive clamp that hides the FP-error-near-zero issue. Whether the legacy code applies it determines whether the rewrite needs the same guard. Surface as an SME open question."
+}

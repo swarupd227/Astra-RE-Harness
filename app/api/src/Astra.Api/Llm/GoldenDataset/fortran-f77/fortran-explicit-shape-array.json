@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-explicit-shape-array",
+  "schemaId": "fortran-f77",
+  "title": "REAL A(M, N) — explicit-shape array; column-major iteration is required for cache locality",
+  "trapCategory": "memory/dimensions",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/explicit_shape_array.f",
+  "sourceLines": "1-18",
+  "sourceContent": "      SUBROUTINE FILL_MATRIX(A, M, N)\nC     Fortran arrays are column-major. The inner loop varies the\nC     LEFT subscript so consecutive iterations touch consecutive\nC     memory addresses. Reversing the loop order (I outer, J inner)\nC     leaves the code correct but cache-thrashes for large N.\nC     Java/C# arrays are row-major -- the natural loop order\nC     reverses too. A port that preserves the F77 loop order on a\nC     row-major target silently turns a fast inner loop into a slow\nC     outer one.\n      IMPLICIT NONE\n      INTEGER M, N, I, J\n      REAL    A(M, N)\n      DO J = 1, N\n         DO I = 1, M\n            A(I, J) = REAL(I + J)\n         END DO\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ESA-1", "pattern": "(?i)(column.major|A\\(M.*N\\)|leftmost\\s+subscript|stride|cache.?locality)" },
+    { "kind": "section_contract", "id": "SC-ESA-1", "pattern": "(?i)(M.*outer|inner\\s+loop.*I|J\\s+outer|outer.*N|loop\\s+order)" },
+    { "kind": "open_question", "id": "Q-ESA-1", "pattern": "(?i)(row.major|target\\s+layout|loop\\s+(invert|reorder)|cache.unfriendly|performance\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Fortran's column-major layout is one of the few places where translating loop order matters for correctness-via-performance. A naive Java port that keeps J-outer/I-inner on a 2D array works but is 5-10x slower on large matrices. The spec should capture the column-major dependency AND ask whether the rewrite should preserve loop order or rewrite for the target's layout."
+}

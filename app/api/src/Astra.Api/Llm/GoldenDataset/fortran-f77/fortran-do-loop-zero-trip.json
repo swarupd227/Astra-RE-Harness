@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-do-loop-zero-trip",
+  "schemaId": "fortran-f77",
+  "title": "DO I = 1, N — when N < 1 the loop body NEVER executes (F77 zero-trip semantic)",
+  "trapCategory": "control-flow/do-loop",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/do_loop_zero_trip.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE SAFE_SUM(A, N, S)\nC     F77 (and F90 + modern Fortran) say: when the computed trip\nC     count is <= 0, the DO body does NOT execute even once. F66\nC     (pre-F77) executed the body at least once before checking.\nC     Old code translated from F66 idioms may rely on the\nC     once-around behaviour; modern Java for-loops match F77\nC     (zero-trip).\n      IMPLICIT NONE\n      INTEGER N, I\n      REAL    A(*), S\n      S = 0.0\n      DO I = 1, N\n         S = S + A(I)\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-DOZ-1", "pattern": "(?i)(zero.trip|N\\s*<\\s*1|N\\s*=\\s*0|never\\s+executes|trip\\s+count\\s*<=\\s*0|empty\\s+loop)" },
+    { "kind": "edge_case", "id": "EC-DOZ-1", "pattern": "(?i)(S\\s*=\\s*0\\.0|initial\\s+value|empty\\s+input|N\\s*=\\s*0|return\\s+default)" },
+    { "kind": "open_question", "id": "Q-DOZ-1", "pattern": "(?i)(F66|once.around|legacy\\s+(behavior|behaviour)|caller\\s+expectation\\s+on\\s+N\\s*=\\s*0)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Important on inputs where N comes from data: the legacy code may guard against N <= 0 elsewhere, or it may NOT and rely on zero-trip to return the initialised default (0.0 here). The spec must capture the zero-trip semantic AND surface whether N <= 0 is a valid input."
+}

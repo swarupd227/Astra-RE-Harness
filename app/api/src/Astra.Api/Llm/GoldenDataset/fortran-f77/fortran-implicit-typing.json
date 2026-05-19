@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-implicit-typing",
+  "schemaId": "fortran-f77",
+  "title": "F77 default — variables starting I–N are INTEGER, all others REAL (no IMPLICIT NONE)",
+  "trapCategory": "types/implicit",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/implicit_typing.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE COMPUTE_TOTAL(A, B, TOTAL)\nC     NO IMPLICIT NONE. By F77 default:\nC       A, B, TOTAL -> REAL (first letter R, A, T -- A and T are\nC                            non-I-to-N -> REAL; R likewise)\nC       I, J, K, L, M, N -> INTEGER\nC       NEW_TOTAL -> INTEGER (starts with N)\n      INTEGER I\n      DO I = 1, 10\n         TOTAL = TOTAL + A + B\nC        Watch out: if a typo wrote NEW_TOTAL by accident, the\nC        compiler would silently allocate it as INTEGER.\n      END DO\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IT-1", "pattern": "(?i)(implicit\\s+typing|I.N\\s+rule|I.through.N|default\\s+type|no\\s+IMPLICIT\\s+NONE)" },
+    { "kind": "edge_case", "id": "EC-IT-1", "pattern": "(?i)(typo|undeclared\\s+(variable|name)|silent\\s+integer|silent\\s+REAL|N\\w+\\s+is\\s+INTEGER)" },
+    { "kind": "open_question", "id": "Q-IT-1", "pattern": "(?i)(strict\\s+typing|target.*explicit|var\\s+declarations|null.safety|undeclared)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "I–N implicit typing is the single biggest source of accidental type bugs in legacy F77. A modern Java/C# rewrite enforces declared types, which often FIXES bugs the legacy code carried for decades. The spec must flag the implicit rule so the rewrite's type choices are deliberate."
+}

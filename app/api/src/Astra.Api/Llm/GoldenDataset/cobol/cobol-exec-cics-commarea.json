@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exec-cics-commarea",
+  "schemaId": "cobol",
+  "title": "DFHCOMMAREA — CICS communication area, the per-transaction shared byte buffer between LINKed programs",
+  "trapCategory": "cics/commarea",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/exec_cics_commarea.cbl",
+  "sourceLines": "1-21",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CICS-CHILD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-LOCAL  PIC X(20).\n       LINKAGE SECTION.\n       01  DFHCOMMAREA.\n           05  CA-OP     PIC X.\n           05  CA-INPUT  PIC X(40).\n           05  CA-OUTPUT PIC X(40).\n      *> The CICS transaction passes DFHCOMMAREA between programs.\n      *> The structure is a CONVENTION between caller and callee --\n      *> there is no compile-time check. Mismatched layouts cause\n      *> silent byte-level corruption. A Java port to a typed DTO is\n      *> safer but the spec must capture the exact byte layout.\n       PROCEDURE DIVISION.\n       MAIN.\n           IF CA-OP = 'R' MOVE CA-INPUT TO CA-OUTPUT.\n           EXEC CICS RETURN END-EXEC.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CCA-1", "pattern": "(?i)(DFHCOMMAREA|CICS\\s+communication\\s+area|byte\\s+buffer|shared\\s+buffer|LINKAGE\\s+SECTION)" },
+    { "kind": "section_contract", "id": "SC-CCA-1", "pattern": "(?i)(CA.OP|CA.INPUT|CA.OUTPUT|layout\\s+convention|byte\\s+layout)" },
+    { "kind": "open_question", "id": "Q-CCA-1", "pattern": "(?i)(target\\s+(DTO|record|JSON)|serializ\\w+|consumer\\s+enumeration|schema)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "DFHCOMMAREA is the COBOL-CICS analog of a function-call argument list — except it's a flat byte buffer with caller-defined layout. Migrating to a typed DTO needs the buffer layout enumerated AND every caller/callee verified."
+}

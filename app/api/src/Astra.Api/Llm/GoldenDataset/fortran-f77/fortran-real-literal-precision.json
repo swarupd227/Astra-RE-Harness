@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-real-literal-precision",
+  "schemaId": "fortran-f77",
+  "title": "REAL literal 0.1 is binary 0.10000000149... — comparisons depending on exact equality fail",
+  "trapCategory": "numeric/floating-point",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/real_literal_precision.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE TENTH(K, R)\nC     Multiplies K by 0.1 and tests equality. 0.1 has no exact\nC     binary representation in REAL*4. K = 10 here produces\nC     0.99999994 (not 1.0). A direct Java port keeps the bug.\n      IMPLICIT NONE\n      INTEGER K\n      REAL    R\n      R = REAL(K) * 0.1\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-FPL-1", "pattern": "(?i)(REAL\\*?4|single\\s+precision|0\\.1|binary\\s+representation|FP\\s+(error|drift))" },
+    { "kind": "edge_case", "id": "EC-FPL-1", "pattern": "(?i)(K\\s*=\\s*10|R\\s*=\\s*1\\.0|R\\s*<\\s*1\\.0|accumulated\\s+error|inexact)" },
+    { "kind": "open_question", "id": "Q-FPL-1", "pattern": "(?i)(BigDecimal|fixed.point|widen.*double|REAL\\*?8|target\\s+precision)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Multiplying integers by binary fractions (0.1, 0.25 except powers of 2, etc.) accumulates representation error. Quirk: this trap drives auditors crazy when the migration's results differ from the original by 1e-7 — they assume the LOGIC changed when actually the rewrite widened REAL*4 to double, exposing visible drift."
+}

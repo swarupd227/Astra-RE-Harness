@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-use-only-collision",
+  "schemaId": "fortran-f77",
+  "title": "USE M, ONLY: X => Y — rename-and-import; collisions surface at the use site",
+  "trapCategory": "scope/module",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/use_only_collision.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE COMPUTE_HASH(SEED, OUT)\nC     'USE M, ONLY :: LOCAL_NAME => MODULE_NAME' imports MODULE_NAME\nC     from module M but binds it locally as LOCAL_NAME. If M and\nC     this subroutine BOTH define HASH, the unqualified HASH inside\nC     the body refers to the LOCAL one, not the module's. A casual\nC     reader who scrolls past the USE statement misses the rename.\n      IMPLICIT NONE\n      USE HASH_LIB, ONLY :: COMPUTE => HASH\n      INTEGER SEED, OUT\n      INTEGER HASH\n      HASH = COMPUTE(SEED)\n      OUT  = HASH\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-UO-1", "pattern": "(?i)(USE.*ONLY|local.name\\s*=>\\s*module.name|rename|alias)" },
+    { "kind": "section_contract", "id": "SC-UO-1", "pattern": "(?i)(COMPUTE.*HASH|HASH_LIB|imported\\s+function|local\\s+HASH)" },
+    { "kind": "open_question", "id": "Q-UO-1", "pattern": "(?i)(naming\\s+collision|import\\s+as|target\\s+language|qualified\\s+name|disambig)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "USE/ONLY/=> is the F90 way to do qualified imports + rename. A Java rewrite naturally uses `import ... as ...` (Python-style) or fully-qualified names. The spec must capture the rename so the rewrite preserves the actual binding."
+}

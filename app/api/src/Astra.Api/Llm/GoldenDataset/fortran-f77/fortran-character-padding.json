@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-character-padding",
+  "schemaId": "fortran-f77",
+  "title": "CHARACTER*8 NAME — assignment pads short strings with trailing blanks (not nulls)",
+  "trapCategory": "types/character",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/character_padding.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE GREET(NAME)\nC     NAME is fixed-width CHARACTER*8. Assigning a 3-character\nC     literal leaves the remaining 5 characters as SPACES (' '),\nC     not null bytes. A Java String NAME = \"BOB\" is 3 characters\nC     long; a faithful port has to either pad to 8 or trim on\nC     read. Forgetting either side leads to silent length\nC     mismatches when NAME is compared with literals.\n      IMPLICIT NONE\n      CHARACTER*8 NAME\n      NAME = 'BOB'\nC     NAME is now 'BOB     ' -- 3 chars + 5 spaces.\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CP-1", "pattern": "(?i)(fixed.width|CHARACTER\\*\\d+|pad\\w*\\s+with\\s+(blank|space)|trailing\\s+blank|space.fill)" },
+    { "kind": "edge_case", "id": "EC-CP-1", "pattern": "(?i)(short\\s+assignment|literal\\s+shorter|truncat\\w+|length\\s+mismatch|comparison\\s+with\\s+spaces)" },
+    { "kind": "open_question", "id": "Q-CP-1", "pattern": "(?i)(rtrim|trim|String\\.trim|target\\s+string\\s+semantics|null.terminated)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Fixed-width CHARACTER with blank-padding is a recurring source of port bugs. A direct port to Java String preserves the trailing blanks (which break .equals on a literal 'BOB'); a port that trims silently loses them (which breaks anything that depended on the 8-byte width). The spec must capture the width semantic + the comparison policy."
+}

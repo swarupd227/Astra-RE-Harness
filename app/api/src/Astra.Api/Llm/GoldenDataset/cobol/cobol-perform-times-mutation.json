@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-perform-times-mutation",
+  "schemaId": "cobol",
+  "title": "PERFORM N TIMES — N evaluated ONCE before the first iteration; mutating N inside is ignored",
+  "trapCategory": "control-flow/perform-varying",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/perform_times_mutation.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. GROW-AND-PROCESS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-N      PIC 9(3).\n       01  WS-CTR    PIC 9(3).\n      *> PERFORM N TIMES evaluates N ONCE at entry. Re-assigning\n      *> WS-N inside the loop does NOT change the iteration count.\n      *> Java's for-loop with a re-read 'for(i=0; i<N; i++)' would\n      *> -- a literal port might silently increase the loop count.\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE 5 TO WS-N.\n           PERFORM ADD-ONE WS-N TIMES.\n           STOP RUN.\n       ADD-ONE.\n           ADD 1 TO WS-CTR.\n           IF WS-CTR > 3 ADD 1 TO WS-N.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-PT-1", "pattern": "(?i)(PERFORM\\s+\\w+\\s+TIMES|N\\s+evaluated\\s+once|iteration\\s+count\\s+frozen|count\\s+at\\s+entry)" },
+    { "kind": "edge_case", "id": "EC-PT-1", "pattern": "(?i)(mutat\\w+\\s+N|increment\\s+inside|loop\\s+still\\s+runs|appears.*more|ignored)" },
+    { "kind": "open_question", "id": "Q-PT-1", "pattern": "(?i)(target.*re.evaluate|loop\\s+count|fixed\\s+(repeat|trip)|stream\\s+limit)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Same trap as Fortran DO loop iteration count. The for-loop port in Java/C# re-reads the bound each iteration, which silently changes behaviour. The spec must capture the freeze-at-entry semantic."
+}

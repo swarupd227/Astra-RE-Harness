@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-signed-zero",
+  "schemaId": "fortran-f77",
+  "title": "IEEE -0.0 and +0.0 compare equal, but SIGN(1.0, -0.0) returns -1.0",
+  "trapCategory": "numeric/floating-point",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/signed_zero.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE COPY_SIGN(MAGN, FROM, OUT)\nC     SIGN(A, B) returns ABS(A) with the sign of B. The trap: B can\nC     be -0.0, in which case SIGN(1.0, -0.0) = -1.0 even though\nC     -0.0 .EQ. 0.0 is .TRUE. A naive port via Math.copySign or\nC     SIGN(A) * ABS(B) needs to preserve the negative-zero sign\nC     bit, not the value.\n      IMPLICIT NONE\n      REAL MAGN, FROM, OUT\n      OUT = SIGN(MAGN, FROM)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SZ-1", "pattern": "(?i)(SIGN\\b|copy.?sign|negative\\s+zero|-0\\.0|sign\\s+bit)" },
+    { "kind": "edge_case", "id": "EC-SZ-1", "pattern": "(?i)(FROM\\s*=\\s*-?0|sign\\s+of\\s+zero|tiebreak|IEEE\\s+754|preserves\\s+sign)" },
+    { "kind": "open_question", "id": "Q-SZ-1", "pattern": "(?i)(Math\\.copySign|target.*signum|signbit|portab\\w+|signed.zero\\s+semantics)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "SIGN's negative-zero handling is a known port hazard. The Java equivalent is Math.copySign(MAGN, FROM). The naive 'if FROM < 0 negate' breaks for -0.0 because FROM < 0 is false. Capture the IEEE sign-bit semantic explicitly."
+}

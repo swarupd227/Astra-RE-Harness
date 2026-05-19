@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-implicit-unit",
+  "schemaId": "fortran-f77",
+  "title": "WRITE(*, ...) and WRITE(6, ...) — implicit-default vs hardcoded unit 6 may diverge under redirection",
+  "trapCategory": "io/file-units",
+  "difficulty": "easy",
+  "sourcePath": "fortran/snippets/implicit_unit.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      SUBROUTINE TRACE(MSG)\nC     WRITE(*, ...) is 'the default output unit' (compiler picks --\nC     usually stdout). WRITE(6, ...) is hardcoded unit 6 (which on\nC     traditional Unix Fortran maps to stdout, but on IBM mainframe\nC     systems is a JCL SYSOUT slot). A direct port that maps both\nC     to System.out works on the Unix flavour but loses the JCL\nC     redirection on the IBM flavour.\n      IMPLICIT NONE\n      CHARACTER*(*) MSG\n      WRITE (*, '(A)') MSG\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IU-1", "pattern": "(?i)(default\\s+unit|WRITE.*\\*|unit\\s+6|stdout|standard\\s+output)" },
+    { "kind": "edge_case", "id": "EC-IU-1", "pattern": "(?i)(JCL|SYSOUT|redirect|mainframe|IBM|environment.specific)" },
+    { "kind": "open_question", "id": "Q-IU-1", "pattern": "(?i)(System\\.out|logger|target\\s+output\\s+channel|Console\\.WriteLine|sink\\s+abstraction)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Trace/log output via WRITE(*, ) or WRITE(6, ) is everywhere. The Java/C# port usually goes through a logger interface; the spec must surface this so the rewrite uses an abstraction (SLF4J / ILogger) and not hardcoded System.out."
+}

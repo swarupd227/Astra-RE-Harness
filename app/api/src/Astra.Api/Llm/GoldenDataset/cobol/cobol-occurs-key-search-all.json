@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-occurs-key-search-all",
+  "schemaId": "cobol",
+  "title": "OCCURS ... ASCENDING KEY IS — SEARCH ALL is binary search; table MUST be pre-sorted",
+  "trapCategory": "memory/occurs",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/occurs_key_search.cbl",
+  "sourceLines": "1-20",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PRICE-LOOKUP.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-PRICES.\n           05  WS-PRICE-ROW OCCURS 100 TIMES\n                            ASCENDING KEY IS WS-SKU\n                            INDEXED BY WS-IX.\n               10  WS-SKU     PIC X(10).\n               10  WS-AMOUNT  PIC 9(7)V99.\n      *> SEARCH ALL does a binary search and REQUIRES the table to\n      *> be sorted on WS-SKU. If the load step skipped the sort,\n      *> SEARCH ALL silently returns 'not found' for valid keys.\n       PROCEDURE DIVISION.\n       LOOKUP-PRICE.\n           SEARCH ALL WS-PRICE-ROW\n              AT END DISPLAY \"not found\"\n              WHEN WS-SKU(WS-IX) = \"AAA-001\"\n                 DISPLAY WS-AMOUNT(WS-IX).\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-OK-1", "pattern": "(?i)(SEARCH\\s+ALL|binary\\s+search|ASCENDING\\s+KEY|sorted\\s+(table|prerequisite)|requires\\s+sort)" },
+    { "kind": "edge_case", "id": "EC-OK-1", "pattern": "(?i)(unsorted|missing\\s+sort|silently\\s+(not\\s+found|fail)|invariant\\s+violation)" },
+    { "kind": "open_question", "id": "Q-OK-1", "pattern": "(?i)(target\\s+(binary\\s+search|HashMap|TreeMap)|sort\\s+verification|load.time\\s+contract)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "SEARCH ALL is one of the trickiest COBOL constructs — fast binary search if the precondition is met, silent failure if not. The spec must capture: (a) the binary-search semantic, (b) the sorted-precondition invariant, and (c) where the sort happens (often a separate program that ran before this one)."
+}

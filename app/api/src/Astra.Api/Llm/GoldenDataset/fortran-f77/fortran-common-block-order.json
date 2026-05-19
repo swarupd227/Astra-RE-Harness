@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-common-block-order",
+  "schemaId": "fortran-f77",
+  "title": "COMMON block declaration order IS the memory layout — reorder = silent corruption",
+  "trapCategory": "memory/common-block",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/common_block_order.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE LOAD_HEADER(X, Y, Z)\nC     COMMON /HDR/ X, Y, Z places X at offset 0, Y at offset 4,\nC     Z at offset 8 (assuming REAL*4). Another translation unit\nC     declaring COMMON /HDR/ A(3) reads the same 12 bytes as an\nC     array. Reordering the variables -- even putting them on\nC     separate lines for clarity -- silently rewrites the layout\nC     and any other unit reading /HDR/ now sees garbage.\n      IMPLICIT NONE\n      REAL X, Y, Z\n      COMMON /HDR/ X, Y, Z\n      X = 1.0\n      Y = 2.0\n      Z = 3.0\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CB-1", "pattern": "(?i)(COMMON\\s+block|memory\\s+layout|declaration\\s+order|offset|/HDR/|shared\\s+storage)" },
+    { "kind": "section_contract", "id": "SC-CB-1", "pattern": "(?i)(X.*offset\\s*0|Y.*offset\\s*4|Z.*offset\\s*8|consistent\\s+across\\s+units|same\\s+layout)" },
+    { "kind": "open_question", "id": "Q-CB-1", "pattern": "(?i)(other\\s+(units|programs|subroutines)|all\\s+/HDR/\\s+declar|other\\s+files\\s+reading|consumers)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COMMON-block layout is the most common silent-corruption migration trap. A modernised port that turns /HDR/ into a Record class with named fields must respect declaration order EVERYWHERE the block is consumed. The spec must flag the order-dependency AND ask the SME to enumerate every consumer of the block."
+}

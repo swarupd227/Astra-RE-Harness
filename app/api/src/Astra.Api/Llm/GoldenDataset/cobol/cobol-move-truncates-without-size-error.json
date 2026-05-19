@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-move-truncates-without-size-error",
+  "schemaId": "cobol",
+  "title": "MOVE 1234567 TO PIC 9(4) silently truncates — ON SIZE ERROR only on COMPUTE, not MOVE",
+  "trapCategory": "numeric/overflow",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/move_truncates.cbl",
+  "sourceLines": "1-14",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SHORT-FIELD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> WS-SHORT is 4 digits. Moving 1234567 in leaves '4567' --\n      *> truncated from the LEFT (not the right!). NO ON SIZE ERROR\n      *> is raised because ON SIZE ERROR only applies to COMPUTE,\n      *> ADD, SUBTRACT, MULTIPLY, DIVIDE -- not plain MOVE.\n       01  WS-SHORT    PIC 9(4).\n       PROCEDURE DIVISION.\n           MOVE 1234567 TO WS-SHORT.\n           DISPLAY WS-SHORT.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-MV-1", "pattern": "(?i)(MOVE\\b.*truncat|silent\\s+truncat|left.truncat|high.order\\s+digit\\s+(loss|lost)|no\\s+SIZE\\s+ERROR\\s+on\\s+MOVE)" },
+    { "kind": "edge_case", "id": "EC-MV-1", "pattern": "(?i)(source\\s+(longer|wider)|target\\s+too\\s+small|leftmost\\s+digit\\s+dropped|1234567)" },
+    { "kind": "open_question", "id": "Q-MV-1", "pattern": "(?i)(throw\\s+(arithmetic|exception)|target\\s+overflow\\s+strategy|null|cap)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Silent left-truncation on MOVE is a major source of data-loss bugs that survive testing because the test data fits. A Java rewrite that does '(int) longValue' truncates differently (low bits, not high digits). Surface the truncation direction + the no-error policy as invariants."
+}

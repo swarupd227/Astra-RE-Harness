@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-filler-positional",
+  "schemaId": "cobol",
+  "title": "FILLER — unnamed positional padding; removing or renaming silently shifts every byte after it",
+  "trapCategory": "memory/filler",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/filler_positional.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. RECORD-LAYOUT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> FILLER is anonymous padding. The 4-byte FILLER between\n      *> CUST-ID and CUST-NAME exists so the record matches the\n      *> on-disk file layout from 1988. Removing the FILLER 'to\n      *> clean up' silently shifts CUST-NAME to byte 9 and breaks\n      *> every reader.\n       01  CUST-RECORD.\n           05  CUST-ID    PIC 9(8).\n           05  FILLER     PIC X(4).\n           05  CUST-NAME  PIC X(30).\n           05  FILLER     PIC X(8).\n           05  CUST-AMT   PIC 9(7)V99 COMP-3.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-FI-1", "pattern": "(?i)(FILLER|anonymous\\s+padding|record\\s+layout|byte\\s+offset|positional)" },
+    { "kind": "section_contract", "id": "SC-FI-1", "pattern": "(?i)(CUST.ID.*8\\s+bytes|FILLER.*4\\s+bytes|on.disk\\s+layout|fixed.position\\s+contract)" },
+    { "kind": "open_question", "id": "Q-FI-1", "pattern": "(?i)(target\\s+(padding|reserved\\s+bytes)|byte\\s+offset|file\\s+layout|on.disk\\s+format)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "FILLER is the COBOL way to reserve bytes without naming them. Often there for historical/external-system reasons that aren't visible in the program. The spec must enumerate every FILLER and its width so the rewrite preserves the layout."
+}

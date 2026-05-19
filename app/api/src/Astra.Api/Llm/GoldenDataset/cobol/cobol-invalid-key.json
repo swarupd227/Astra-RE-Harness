@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-invalid-key",
+  "schemaId": "cobol",
+  "title": "READ / REWRITE / DELETE ... INVALID KEY — random-access keyed-file error branch",
+  "trapCategory": "io/file-status",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/invalid_key.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. KEYED-READ.\n       DATA DIVISION.\n       FILE SECTION.\n       FD  POLICY-FILE.\n       01  POLICY-REC.\n           05  POLICY-KEY  PIC X(10).\n           05  POLICY-DATA PIC X(70).\n       WORKING-STORAGE SECTION.\n       01  WS-LOOKUP-KEY PIC X(10).\n      *> INVALID KEY branches when the key is not found (KSDS) or\n      *> bounds-exceeded (RRDS). Functionally equivalent to file\n      *> status 23 + 24, but inline syntactically.\n       PROCEDURE DIVISION.\n       FIND-POLICY.\n           MOVE WS-LOOKUP-KEY TO POLICY-KEY.\n           READ POLICY-FILE\n              INVALID KEY DISPLAY \"missing policy: \" WS-LOOKUP-KEY\n           END-READ.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IK-1", "pattern": "(?i)(INVALID\\s+KEY|keyed.access|KSDS|RRDS|random.?access\\s+read)" },
+    { "kind": "section_contract", "id": "SC-IK-1", "pattern": "(?i)(WS.LOOKUP.KEY|MOVE.*TO\\s+\\w+.KEY|key.+set\\s+before\\s+READ|positioning)" },
+    { "kind": "open_question", "id": "Q-IK-1", "pattern": "(?i)(NoSuchElement|map\\.get|target\\s+(missing\\s+key|Optional|null))" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INVALID KEY is the inline form of dup-key/not-found. The key-into-record assignment BEFORE the READ is the actual lookup mechanism — easy to miss on review. The spec must capture the 'key first, READ second' pattern."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-real-typed-do-loop",
+  "schemaId": "fortran-f77",
+  "title": "DO X = 0.0, 1.0, 0.1 — iteration count is computed once at entry and rounds inconsistently",
+  "trapCategory": "control-flow/do-loop",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/real_do_loop.f",
+  "sourceLines": "1-16",
+  "sourceContent": "      SUBROUTINE SAMPLE_GRID(SUM)\nC     REAL-typed DO loop. The F77 standard says the iteration count\nC     is INT((stop - start + step) / step) computed at loop entry --\nC     for 0.0/1.0/0.1 that's INT(11.000001) or INT(10.999999)\nC     depending on the compiler's FP representation of 0.1. F90\nC     deprecated REAL-typed DO precisely because of this.\n      IMPLICIT NONE\n      REAL X, SUM\n      SUM = 0.0\n      DO X = 0.0, 1.0, 0.1\n         SUM = SUM + X\n      END DO\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-RDO-1", "pattern": "(?i)(REAL.?typed\\s+DO|REAL\\s+DO\\s+variable|deprecated|0\\.1|iteration\\s+count)" },
+    { "kind": "edge_case", "id": "EC-RDO-1", "pattern": "(?i)(10\\s+(or|vs)\\s+11|compiler.dependent|representation\\s+of\\s+0\\.1|FP\\s+rounding|count\\s+drift)" },
+    { "kind": "open_question", "id": "Q-RDO-1", "pattern": "(?i)(replace.*integer|loop\\s+count|INT\\(N\\)|exact\\s+iteration|deterministic\\s+ports)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL-typed DO loops were valid in F77 and deprecated in F90 for exactly this reason: 0.1 has no exact binary representation. The same source builds with 10 or 11 iterations depending on the compiler. A 'safe' port computes INT((stop-start)/step) + 1 explicitly and uses an INTEGER loop counter — surfaced as the rewrite question."
+}

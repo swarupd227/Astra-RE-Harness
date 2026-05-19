@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exit-perform-cycle",
+  "schemaId": "cobol",
+  "title": "EXIT PERFORM / EXIT PERFORM CYCLE — early break and continue inside a PERFORM (post-2002 standard)",
+  "trapCategory": "control-flow/exit",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/exit_perform_cycle.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. EARLY-EXIT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  I       PIC 9(3).\n       01  WS-A    PIC 9(5) OCCURS 100 TIMES.\n      *> EXIT PERFORM is the 'break' from an inline PERFORM (COBOL\n      *> 2002+); EXIT PERFORM CYCLE is 'continue'. Pre-2002 code\n      *> simulated these with PERFORM ... UNTIL flags or GO TO. The\n      *> spec must capture the early-exit condition explicitly.\n       PROCEDURE DIVISION.\n       MAIN.\n           PERFORM VARYING I FROM 1 BY 1 UNTIL I > 100\n              IF WS-A(I) = 0\n                 EXIT PERFORM\n              END-IF\n           END-PERFORM.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-EP-1", "pattern": "(?i)(EXIT\\s+PERFORM|early\\s+exit|break|COBOL\\s+2002|inline\\s+PERFORM)" },
+    { "kind": "edge_case", "id": "EC-EP-1", "pattern": "(?i)(WS.A\\(I\\)\\s*=\\s*0|first\\s+zero|sentinel|stop\\s+condition)" },
+    { "kind": "open_question", "id": "Q-EP-1", "pattern": "(?i)(target\\s+break|continue|streams\\s+findFirst|labelled\\s+break)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "EXIT PERFORM is the 2002+ way to write structured early-exit. Pre-2002 legacy uses PERFORM with a flag. A Java break/continue is the natural rewrite. Surface the early-exit condition."
+}

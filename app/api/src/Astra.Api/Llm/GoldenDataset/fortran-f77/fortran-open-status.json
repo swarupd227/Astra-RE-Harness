@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-open-status",
+  "schemaId": "fortran-f77",
+  "title": "OPEN(STATUS=) — NEW errors on exist, OLD errors on missing, UNKNOWN is implementation-defined",
+  "trapCategory": "io/file-units",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/open_status.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE OPEN_LOG(UNIT, FILE)\nC     STATUS='UNKNOWN' is the F77 default. Behaviour is\nC     implementation-defined: some compilers OPEN-or-CREATE, others\nC     just fail. STATUS='NEW' fails when the file exists;\nC     STATUS='OLD' fails when it doesn't; STATUS='REPLACE' truncates.\nC     Java equivalent depends on FileOutputStream constructor flags\nC     (append? truncate?).\n      IMPLICIT NONE\n      INTEGER UNIT\n      CHARACTER*(*) FILE\n      OPEN (UNIT=UNIT, FILE=FILE, STATUS='UNKNOWN')\n      WRITE (UNIT, *) 'log opened'\n      CLOSE (UNIT)\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-OS-1", "pattern": "(?i)(STATUS|UNKNOWN|NEW|OLD|REPLACE|implementation.defined|open.semantic)" },
+    { "kind": "edge_case", "id": "EC-OS-1", "pattern": "(?i)(file\\s+(exists|missing)|truncate|append|create.?if.?missing|destructive)" },
+    { "kind": "open_question", "id": "Q-OS-1", "pattern": "(?i)(FileOutputStream|StandardOpenOption|target\\s+constructor|append\\s+mode|truncate\\s+mode)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "STATUS='UNKNOWN' is a frequent legacy default that papers over the open-or-create question. The rewrite MUST pick a deterministic semantic. The spec should flag this so the SME sign-off names append-vs-truncate explicitly."
+}

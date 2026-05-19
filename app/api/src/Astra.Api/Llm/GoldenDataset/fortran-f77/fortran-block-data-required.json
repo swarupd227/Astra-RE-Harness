@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-block-data-required",
+  "schemaId": "fortran-f77",
+  "title": "BLOCK DATA — the only way to initialise COMMON-block variables in F77",
+  "trapCategory": "memory/common-block",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/block_data_required.f",
+  "sourceLines": "1-13",
+  "sourceContent": "      BLOCK DATA SETUP_TABLES\nC     A BLOCK DATA program unit is the ONLY F77 construct that can\nC     initialise COMMON-block variables via DATA. Trying to put the\nC     DATA inside a SUBROUTINE that declares the same COMMON is a\nC     compile error. Java/C# rewrites usually fold this into a\nC     static initializer -- but the BLOCK DATA must be REFERENCED\nC     somewhere (via EXTERNAL) or the linker drops it.\n      IMPLICIT NONE\n      REAL THRESHOLDS(3)\n      COMMON /CFG/ THRESHOLDS\n      DATA THRESHOLDS / 0.1, 0.5, 0.9 /\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-BD-1", "pattern": "(?i)(BLOCK\\s+DATA|initialise\\s+COMMON|DATA\\s+statement|program\\s+unit|EXTERNAL)" },
+    { "kind": "section_contract", "id": "SC-BD-1", "pattern": "(?i)(THRESHOLDS|0\\.1.*0\\.5.*0\\.9|/CFG/|table.*values|hardcoded\\s+(constants|tables))" },
+    { "kind": "open_question", "id": "Q-BD-1", "pattern": "(?i)(static\\s+initi|class\\s+initi|loader|linker|referenced|consumers)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "BLOCK DATA is a unique-to-Fortran construct. The legacy idiom is to put all configuration constants in one BLOCK DATA file. Rewriting to a Java 'static final' class works, but the spec must capture: (a) the table values themselves, (b) the fact they're meant to be visible globally, (c) that the rewrite needs to ensure the initialiser actually runs (the linker drop bug)."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-stop-run-vs-goback",
+  "schemaId": "cobol",
+  "title": "STOP RUN vs GOBACK — STOP RUN terminates the whole run unit; GOBACK returns to caller",
+  "trapCategory": "call/lifecycle",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/stop_run_vs_goback.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SUBPROGRAM.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> STOP RUN ends the entire run unit -- back to the OS. If\n      *> THIS subprogram was CALLed by another program, STOP RUN\n      *> exits BOTH. GOBACK returns to the caller. Inside the main\n      *> program, the two are equivalent. Inside a called program,\n      *> STOP RUN is a hard exit; GOBACK is a clean return.\n       PROCEDURE DIVISION.\n       MAIN.\n      *> Was: STOP RUN.  Now corrected to GOBACK.\n           GOBACK.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SR-1", "pattern": "(?i)(STOP\\s+RUN|GOBACK|run\\s+unit|return\\s+to\\s+caller|terminat\\w+\\s+(entire|whole))" },
+    { "kind": "edge_case", "id": "EC-SR-1", "pattern": "(?i)(called\\s+subprogram|main\\s+vs\\s+sub|hard\\s+exit|clean\\s+return)" },
+    { "kind": "open_question", "id": "Q-SR-1", "pattern": "(?i)(System\\.exit|return\\b|target\\s+(exit|finish)|process\\s+vs\\s+method)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "STOP RUN in a subprogram is a frequent bug source — terminates the whole transaction. Java's System.exit equivalent is rarely correct; GOBACK -> return is. Surface the construct in use."
+}

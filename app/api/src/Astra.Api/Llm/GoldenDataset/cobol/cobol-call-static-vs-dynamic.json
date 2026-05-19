@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-call-static-vs-dynamic",
+  "schemaId": "cobol",
+  "title": "CALL \"NAME\" vs CALL WS-NAME — static link vs runtime resolution; different binding semantics",
+  "trapCategory": "call/static-dynamic",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/call_static_dynamic.cbl",
+  "sourceLines": "1-17",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PLUGIN-DISPATCH.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-PLUGIN  PIC X(8).\n      *> CALL \"FOO\" resolves at link time: \"FOO\" must be a known\n      *> program in the load module. CALL WS-PLUGIN resolves at run\n      *> time -- WS-PLUGIN holds the name. The legacy uses this for\n      *> plugin-like dispatch; modules can be swapped without\n      *> relink. Java's natural target is reflection or a\n      *> ServiceLoader; the spec must surface the dynamic-link nature.\n       PROCEDURE DIVISION.\n       MAIN.\n           MOVE \"PROCESS1\" TO WS-PLUGIN.\n           CALL WS-PLUGIN.\n           MOVE \"PROCESS2\" TO WS-PLUGIN.\n           CALL WS-PLUGIN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CSD-1", "pattern": "(?i)(static\\s+(call|link)|dynamic\\s+(call|resolution)|CALL\\s+\\w+\\s+(literal|variable)|runtime\\s+resolved)" },
+    { "kind": "section_contract", "id": "SC-CSD-1", "pattern": "(?i)(WS.PLUGIN|name\\s+at\\s+runtime|plugin.like|swappable\\s+module)" },
+    { "kind": "open_question", "id": "Q-CSD-1", "pattern": "(?i)(reflection|ServiceLoader|target\\s+(plugin|registry|factory)|Class\\.forName)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Dynamic CALL is the COBOL plugin pattern. Java's reflection or ServiceLoader is the natural rewrite; the spec must capture the dispatch table (which strings map to which behaviour) so the rewrite enumerates all bindings."
+}

@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-comp-1-float",
+  "schemaId": "cobol",
+  "title": "COMP-1 — IBM single-precision floating point (NOT IEEE on legacy mainframes)",
+  "trapCategory": "numeric/comp",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/comp_1_float.cbl",
+  "sourceLines": "1-13",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INTEREST-CALC.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> COMP-1 = single-precision float (4 bytes). On IBM\n      *> z/OS mainframes the historical format is HEX FLOAT\n      *> (HFP) -- NOT IEEE 754. Migrating to Java float silently\n      *> rounds the low bits differently. Modern mainframes can\n      *> be configured for IEEE; whether THIS program ran in HFP\n      *> or IEEE mode is an open question.\n       01  WS-RATE    USAGE COMP-1.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-C1-1", "pattern": "(?i)(COMP.1|single.precision|4.byte\\s+float|HEX\\s+FLOAT|HFP|IEEE)" },
+    { "kind": "edge_case", "id": "EC-C1-1", "pattern": "(?i)(z.OS|mainframe|HFP\\s+vs\\s+IEEE|format\\s+mode|low.order\\s+bits)" },
+    { "kind": "open_question", "id": "Q-C1-1", "pattern": "(?i)(target\\s+(float|IEEE)|equivalence\\s+tolerance|tolerance\\s+vs\\s+exact|hex.binary\\s+migration)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "IBM HFP vs IEEE-754 is a one-bit difference at the format level but a 7th-decimal difference in computed results. Surface this for any program migrated FROM an IBM mainframe FROM the 1970s-1990s."
+}

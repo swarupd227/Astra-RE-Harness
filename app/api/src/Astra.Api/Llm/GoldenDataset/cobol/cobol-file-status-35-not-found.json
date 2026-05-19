@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-file-status-35-not-found",
+  "schemaId": "cobol",
+  "title": "FILE STATUS 35 (file not found) — distinct from generic open failure; programs branch on it",
+  "trapCategory": "io/file-status",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/file_status_35.cbl",
+  "sourceLines": "1-21",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. OPEN-OR-CREATE.\n       ENVIRONMENT DIVISION.\n       INPUT-OUTPUT SECTION.\n       FILE-CONTROL.\n           SELECT POLICY-FILE\n               ASSIGN TO POLICYFL\n               FILE STATUS IS WS-STAT.\n       DATA DIVISION.\n       FILE SECTION.\n       FD  POLICY-FILE.\n       01  POLICY-REC PIC X(80).\n       WORKING-STORAGE SECTION.\n       01  WS-STAT  PIC X(2).\n      *> FILE STATUS '35' = file does not exist on OPEN INPUT/I-O.\n      *> Legacy branches: '00' continue, '35' create-fallback,\n      *> anything else hard error. Java's Files.exists() then open\n      *> is correct but loses the atomic-check.\n       PROCEDURE DIVISION.\n       MAIN.\n           OPEN INPUT POLICY-FILE.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-FS35-1", "pattern": "(?i)(FILE\\s+STATUS|'35'|file\\s+(not\\s+found|does\\s+not\\s+exist)|OPEN\\s+INPUT)" },
+    { "kind": "edge_case", "id": "EC-FS35-1", "pattern": "(?i)('00'|three.way\\s+(branch|outcome)|create.fallback|atomic\\s+check)" },
+    { "kind": "open_question", "id": "Q-FS35-1", "pattern": "(?i)(Files\\.exists|NoSuchFileException|target\\s+exception|race\\s+condition)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "File status code '35' is the COBOL standard for 'file does not exist' on input/IO open. Programs branching on it usually have a create-fallback path. The spec must capture which status codes the program checks and what each one means."
+}

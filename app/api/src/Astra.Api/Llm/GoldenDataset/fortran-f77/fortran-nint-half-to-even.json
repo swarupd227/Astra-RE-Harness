@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-nint-half-to-even",
+  "schemaId": "fortran-f77",
+  "title": "NINT rounding: most compilers ship half-to-even; Java Math.round is half-up",
+  "trapCategory": "numeric/rounding",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/nint_rounding.f",
+  "sourceLines": "1-15",
+  "sourceContent": "      SUBROUTINE ROUND_TO_INT(X, R)\nC     NINT is the standard Fortran nearest-integer intrinsic. The\nC     F77/F90 standard is unspecified on midpoints (0.5, -0.5,\nC     1.5...): most modern compilers ship IEEE round-half-to-even\nC     (banker's rounding), but legacy IBM XL Fortran shipped\nC     half-away-from-zero. Reading code that called NINT and\nC     translating it to Java's Math.round (half-up) silently\nC     diverges on tied inputs.\n      IMPLICIT NONE\n      REAL X\n      INTEGER R\n      R = NINT(X)\n      RETURN\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-NINT-1", "pattern": "(?i)(NINT|nearest\\s+integer|tie.?breaking|midpoint|half.to.even|half.away.from.zero)" },
+    { "kind": "edge_case", "id": "EC-NINT-1", "pattern": "(?i)(0\\.5|1\\.5|-0\\.5|exact\\s+half|midpoint|negative\\s+X)" },
+    { "kind": "open_question", "id": "Q-NINT-1", "pattern": "(?i)(banker.?s?\\s+rounding|IEEE|compiler\\s+(default|behavior|behaviour)|target\\s+rounding\\s+mode)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "NINT's tie-breaking is the most under-documented Fortran-to-Java porting gotcha. Statistical-software migrations that match historical results to the cent depend on knowing the original compiler's rounding mode. The spec must surface this AND ask the SME to confirm — a hand-port that picks 'round-half-up' silently breaks the equivalence test on every 0.5 input."
+}

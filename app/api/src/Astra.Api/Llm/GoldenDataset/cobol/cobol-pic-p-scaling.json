@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-pic-p-scaling",
+  "schemaId": "cobol",
+  "title": "PIC P — scaling-only digits; PPP9 = 0.0009 unit scale; PP9 stores values as multiples of 100",
+  "trapCategory": "numeric/picture",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/pic_p_scaling.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. P-SCALING.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> PIC 9PP stores a multiple of 100 -- storing the number 47\n      *>   means a logical value of 4700. The two P digits do not\n      *>   occupy storage; they shift the implicit decimal point\n      *>   LEFT (PP9, where P is on the left) or RIGHT (9PP, where\n      *>   P is on the right).\n      *> PIC P99 = 0.99 max value, P precision; PIC 9PP = 9_900 max.\n       01  WS-COUNT-K    PIC 9PP.\n       01  WS-MILLI      PIC PP9.\n       PROCEDURE DIVISION.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-PP-1", "pattern": "(?i)(PIC\\s+P|scaling\\s+digit|implicit\\s+decimal\\s+shift|multiple\\s+of\\s+100|invisible\\s+P)" },
+    { "kind": "section_contract", "id": "SC-PP-1", "pattern": "(?i)(PP9|9PP|left\\s+shift|right\\s+shift|effective\\s+scale|stored\\s+vs\\s+logical)" },
+    { "kind": "open_question", "id": "Q-PP-1", "pattern": "(?i)(BigDecimal|integer.scaled|target\\s+scaling|fixed.point|multiplier)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "PIC P is the rarest of the PICTURE characters and the easiest to misread. The digits do NOT occupy storage but DO shift the decimal point. Migrating to BigDecimal requires picking the right scale signed-correctly. Surface as an open question + capture the storage layout."
+}

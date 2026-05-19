@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-string-overflow",
+  "schemaId": "cobol",
+  "title": "STRING ... ON OVERFLOW — concatenates with size check; OVERFLOW fires when target too short",
+  "trapCategory": "string/concat",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/string_overflow.cbl",
+  "sourceLines": "1-18",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. BUILD-KEY.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-PFX     PIC X(4)   VALUE \"USR-\".\n       01  WS-NUM     PIC X(8).\n       01  WS-KEY     PIC X(10).\n      *> STRING concatenates WS-PFX + WS-NUM into WS-KEY.\n      *> WS-KEY is 10 chars and the concatenation is 12; the\n      *> trailing 2 are dropped. ON OVERFLOW fires before the drop\n      *> is committed -- the legacy may use this to log a warning.\n       PROCEDURE DIVISION.\n       BUILD.\n           STRING WS-PFX DELIMITED BY SIZE,\n                  WS-NUM DELIMITED BY SIZE\n              INTO WS-KEY\n              ON OVERFLOW DISPLAY \"key truncated\".\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SO-1", "pattern": "(?i)(STRING\\b|concatenate|DELIMITED\\s+BY\\s+SIZE|truncat\\w+|ON\\s+OVERFLOW)" },
+    { "kind": "edge_case", "id": "EC-SO-1", "pattern": "(?i)(target\\s+(too\\s+short|insufficient)|trailing\\s+(chars\\s+)?dropped|silent\\s+truncate)" },
+    { "kind": "open_question", "id": "Q-SO-1", "pattern": "(?i)(target\\s+(concat|builder)|StringBuilder|target\\s+overflow|exception)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "STRING with DELIMITED BY SIZE is the COBOL counterpart of unchecked concatenation. The OVERFLOW handler is the signal that legacy code knows about the truncation. A Java rewrite that uses '+' loses the overflow signal."
+}

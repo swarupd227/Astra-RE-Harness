@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-module-public-private",
+  "schemaId": "fortran-f77",
+  "title": "F90 MODULE — PRIVATE by default for entities listed in PRIVATE; otherwise PUBLIC",
+  "trapCategory": "scope/module",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/module_public_private.f",
+  "sourceLines": "1-21",
+  "sourceContent": "      MODULE PAYROLL\nC     F90+ MODULE with PUBLIC + PRIVATE visibility. SECRET_RATE is\nC     private to the module; CALC_TAX is public. A USE PAYROLL\nC     statement in another unit can call CALC_TAX but cannot read\nC     SECRET_RATE. The trap on migration: 'PRIVATE :: SECRET_RATE'\nC     without the explicit list-form gets parsed inconsistently by\nC     older compilers.\n      IMPLICIT NONE\n      PRIVATE\n      PUBLIC :: CALC_TAX\n      REAL, PARAMETER :: SECRET_RATE = 0.21\n      CONTAINS\n         SUBROUTINE CALC_TAX(GROSS, TAX)\n            REAL, INTENT(IN)  :: GROSS\n            REAL, INTENT(OUT) :: TAX\n            TAX = GROSS * SECRET_RATE\n         END SUBROUTINE CALC_TAX\n      END MODULE PAYROLL\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-MPP-1", "pattern": "(?i)(MODULE|PRIVATE|PUBLIC|visibility|USE\\s+statement|encapsulat\\w+)" },
+    { "kind": "section_contract", "id": "SC-MPP-1", "pattern": "(?i)(CALC_TAX\\s+is\\s+public|SECRET_RATE\\s+(is\\s+)?private|only\\s+(callable|visible))" },
+    { "kind": "open_question", "id": "Q-MPP-1", "pattern": "(?i)(consumer\\s+modules|target.*(visibility|access)|sealed|internal|package.private)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "F90 MODULE with PRIVATE/PUBLIC is the closest legacy Fortran came to modern encapsulation. The natural Java rewrite uses a public class with private constants; the SME open question is whether the private rate is hardcoded forever or pulled from config (the spec must surface it as configurable-vs-baked)."
+}

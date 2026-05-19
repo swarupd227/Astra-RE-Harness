@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-start-key-positioning",
+  "schemaId": "cobol",
+  "title": "START ... KEY IS ... — position the VSAM cursor for the next READ; no record returned directly",
+  "trapCategory": "io/start",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/start_key.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. RANGE-SCAN.\n       DATA DIVISION.\n       FILE SECTION.\n       FD  POLICY-FILE.\n       01  POLICY-REC.\n           05  POLICY-KEY  PIC X(10).\n           05  POLICY-DATA PIC X(70).\n       WORKING-STORAGE SECTION.\n       01  WS-LO-KEY PIC X(10).\n      *> START positions the cursor at the FIRST record where the key\n      *> >= WS-LO-KEY. The next READ NEXT returns that record. START\n      *> does NOT itself return data. Java rewrites usually combine\n      *> position + read into a single getEntries(from, to) call.\n       PROCEDURE DIVISION.\n       MAIN.\n           START POLICY-FILE KEY IS NOT LESS THAN WS-LO-KEY\n              INVALID KEY DISPLAY \"no record at or after \" WS-LO-KEY.\n           READ POLICY-FILE NEXT.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-ST-1", "pattern": "(?i)(START\\b|KEY\\s+IS|positioning|cursor\\s+to\\s+key|next\\s+READ)" },
+    { "kind": "section_contract", "id": "SC-ST-1", "pattern": "(?i)(NOT\\s+LESS\\s+THAN|>=\\s*WS.LO.KEY|range\\s+(scan|start)|forward\\s+cursor)" },
+    { "kind": "open_question", "id": "Q-ST-1", "pattern": "(?i)(target\\s+(range\\s+query|tail|navigable)|TreeMap\\.tailMap|JPA\\s+Query|cursor\\s+API)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "START + READ NEXT is the COBOL pattern for range scans on a keyed file. Java rewrites usually collapse this into a stream/iterator. The spec must surface the two-step (position then read) so the rewrite covers both."
+}

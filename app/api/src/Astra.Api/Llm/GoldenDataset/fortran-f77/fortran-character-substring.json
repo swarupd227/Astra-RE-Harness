@@ -1,0 +1,17 @@
+{
+  "entryId": "fortran-character-substring",
+  "schemaId": "fortran-f77",
+  "title": "STR(I:J) substring — 1-based, inclusive both ends; lvalue assignment overwrites in place",
+  "trapCategory": "types/character",
+  "difficulty": "medium",
+  "sourcePath": "fortran/snippets/character_substring.f",
+  "sourceLines": "1-14",
+  "sourceContent": "      SUBROUTINE OVERWRITE_PREFIX(LINE, PREFIX)\nC     LINE(1:3) on the LHS is an LVALUE that overwrites the first\nC     3 characters of LINE in place. PREFIX is assumed to be exactly\nC     3 characters long (or longer; only the first 3 are used due\nC     to padding rules). Java String is immutable -- the port must\nC     either use StringBuilder or rebuild LINE.\n      IMPLICIT NONE\n      CHARACTER*80 LINE\n      CHARACTER*3  PREFIX\n      LINE(1:3) = PREFIX\n      END\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CSS-1", "pattern": "(?i)(substring|STR\\(I:J\\)|1.based|inclusive|lvalue|in.place\\s+overwrite)" },
+    { "kind": "section_contract", "id": "SC-CSS-1", "pattern": "(?i)(LINE\\s*\\(\\s*1\\s*:\\s*3\\s*\\)|first\\s+three\\s+chars|prefix\\s+overlay|destructive\\s+write)" },
+    { "kind": "open_question", "id": "Q-CSS-1", "pattern": "(?i)(StringBuilder|immutab\\w+|String\\.substring|substring\\s+(view|copy)|target\\s+string\\s+type)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Substring-on-LHS is a Fortran idiom Java/C# cannot replicate without converting to StringBuilder. The spec must surface the lvalue substring so the rewrite picks an appropriate mutable string container."
+}

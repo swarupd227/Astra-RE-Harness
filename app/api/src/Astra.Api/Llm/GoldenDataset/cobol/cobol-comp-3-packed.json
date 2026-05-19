@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-comp-3-packed",
+  "schemaId": "cobol",
+  "title": "COMP-3 packed decimal — two digits per byte, sign nibble in the last half-byte",
+  "trapCategory": "numeric/comp",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/comp_3_packed.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PACKED-AMOUNT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> PIC S9(7)V99 COMP-3 stores 9 digits + sign in CEILING(9/2) =\n      *> 5 bytes. Each digit nibble is 0x0..0x9; the LAST nibble is\n      *> the sign (0xC = positive, 0xD = negative, 0xF = unsigned).\n      *> Reading the same bytes as DISPLAY produces garbage. The\n      *> Java port to BigDecimal must understand this layout when\n      *> migrating data files in place.\n       01  WS-AMT    PIC S9(7)V99 USAGE COMP-3.\n       PROCEDURE DIVISION.\n           MOVE +1234567.89 TO WS-AMT.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-C3-1", "pattern": "(?i)(COMP.3|packed\\s+decimal|two\\s+digits\\s+per\\s+byte|sign\\s+nibble|half.byte)" },
+    { "kind": "section_contract", "id": "SC-C3-1", "pattern": "(?i)(0xC|0xD|0xF|positive|negative|unsigned|encoding)" },
+    { "kind": "open_question", "id": "Q-C3-1", "pattern": "(?i)(BigDecimal|decimal\\s+place|implicit\\s+V99|byte.exact\\s+migration|data\\s+file)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "COMP-3 is the workhorse mainframe numeric storage. Migrating to a Java BigDecimal loses the byte-exact layout — fine if all consumers also migrate, fatal if any legacy reader still parses the file. Surface the packed-decimal layout AND the consumer enumeration."
+}

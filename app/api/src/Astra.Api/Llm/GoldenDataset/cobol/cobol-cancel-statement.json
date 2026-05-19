@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-cancel-statement",
+  "schemaId": "cobol",
+  "title": "CANCEL — release a called program from memory; next CALL re-initialises its WORKING-STORAGE",
+  "trapCategory": "call/lifecycle",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/cancel_statement.cbl",
+  "sourceLines": "1-17",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. RESETTABLE-COUNTER.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-OUT  PIC 9(4).\n      *> A called program retains its WORKING-STORAGE between calls\n      *> by default. CANCEL releases the program from memory; the\n      *> NEXT CALL re-initialises everything. Legacy 'reset counter'\n      *> idiom: CALL COUNTER; CALL COUNTER; CANCEL COUNTER; CALL\n      *> COUNTER -- third call starts at zero.\n       PROCEDURE DIVISION.\n       MAIN.\n           CALL \"COUNTER\".\n           CALL \"COUNTER\".\n           CANCEL \"COUNTER\".\n           CALL \"COUNTER\".\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-CN-1", "pattern": "(?i)(CANCEL|release\\s+(from\\s+memory|program)|reset.*WORKING.STORAGE|fresh\\s+state)" },
+    { "kind": "section_contract", "id": "SC-CN-1", "pattern": "(?i)(retain\\w+\\s+between\\s+calls|stateful|reset\\s+pattern|reinitiali\\w+)" },
+    { "kind": "open_question", "id": "Q-CN-1", "pattern": "(?i)(target\\s+(singleton|new\\s+instance|fresh\\s+state)|lifecycle|reset\\s+method)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "CANCEL is the COBOL way to reset stateful subprograms. A Java rewrite to 'new Subprogram()' inverts the default — the spec must capture which calls intentionally retain state and which reset."
+}

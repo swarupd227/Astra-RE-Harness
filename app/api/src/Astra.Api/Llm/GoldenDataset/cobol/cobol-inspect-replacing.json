@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-inspect-replacing",
+  "schemaId": "cobol",
+  "title": "INSPECT REPLACING CHARACTERS BY — single-pass character substitution; non-idempotent on chains",
+  "trapCategory": "string/inspect",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/inspect_replacing.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SCRUB-NUL.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-LINE    PIC X(80).\n      *> INSPECT REPLACING CHARACTERS BY ' ' scans left-to-right and\n      *> replaces every LOW-VALUE byte (0x00) with a space. Single\n      *> pass: chaining REPLACING does NOT loop. A Java port using\n      *> String.replace works for simple cases; for CHARACTERS BY...\n      *> WHEN... the rewrite needs a state machine.\n       PROCEDURE DIVISION.\n       MAIN.\n           INSPECT WS-LINE REPLACING ALL LOW-VALUE BY ' '.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IR-1", "pattern": "(?i)(INSPECT\\s+REPLACING|REPLACING\\s+ALL|single.pass|LOW.VALUE|character\\s+substitution)" },
+    { "kind": "edge_case", "id": "EC-IR-1", "pattern": "(?i)(LOW.VALUE|0x00|null\\s+byte|non.idempotent|chain\\s+order)" },
+    { "kind": "open_question", "id": "Q-IR-1", "pattern": "(?i)(String\\.replace|replaceAll|regex|target\\s+(substitution|scan))" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INSPECT REPLACING with LOW-VALUE is common in mainframe-cleanup code that scrubs null bytes from inter-system data. A simple String.replace works; if multiple REPLACING clauses are chained their order matters and the spec must capture it."
+}

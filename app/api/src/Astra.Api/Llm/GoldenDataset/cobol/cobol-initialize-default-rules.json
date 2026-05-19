@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-initialize-default-rules",
+  "schemaId": "cobol",
+  "title": "INITIALIZE sets numeric fields to ZERO and alphanumeric to SPACES — REPLACING overrides per category",
+  "trapCategory": "memory/group",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/initialize_default.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INIT-RECORD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-CUST.\n           05  CUST-ID    PIC 9(8).\n           05  CUST-NAME  PIC X(20).\n           05  CUST-FLAG  PIC X.\n      *> INITIALIZE walks the group and sets:\n      *>   numeric (9, V) -> ZERO\n      *>   alphanumeric (X, A) -> SPACE\n      *> Filler items are skipped. REPLACING ALPHANUMERIC BY \"-\"\n      *> overrides the default for alphanumerics in one category at a\n      *> time -- NOT per field.\n       PROCEDURE DIVISION.\n           INITIALIZE WS-CUST.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-IZ-1", "pattern": "(?i)(INITIALIZE|ZERO\\s+for\\s+numeric|SPACE\\s+for\\s+alpha|per.category|category.based)" },
+    { "kind": "section_contract", "id": "SC-IZ-1", "pattern": "(?i)(CUST.ID\\s+->\\s+0|CUST.NAME\\s+->\\s+space|FILLER\\s+skipped|REPLACING)" },
+    { "kind": "open_question", "id": "Q-IZ-1", "pattern": "(?i)(default\\s+(field|record)\\s+values|null\\s+vs\\s+blank|target\\s+initi)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "INITIALIZE's per-category default is subtle. Java's 'new Record()' sets numeric to 0 and reference types to null — which is NOT the same as space. The spec must capture the per-category rules so the rewrite uses explicit defaults."
+}

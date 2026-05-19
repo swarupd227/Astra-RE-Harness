@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-exec-sql-sqlcode",
+  "schemaId": "cobol",
+  "title": "SQLCODE — every EXEC SQL writes to it; +100 = no data, negative = error, 0 = success",
+  "trapCategory": "sql/sqlcode",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/exec_sql_sqlcode.cbl",
+  "sourceLines": "1-19",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SQLCODE-BRANCH.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  SQLCODE   PIC S9(9) COMP.\n       01  WS-AMT    PIC S9(7)V99 COMP-3.\n      *> SQLCODE semantics:\n      *>   0     -> success\n      *>   +100  -> no row found\n      *>   -803  -> duplicate key\n      *>   -911  -> deadlock\n      *>   other -> generic error\n      *> Programs branch on these. The Java JDBC equivalent throws\n      *> SQLException with vendor-specific codes -- the mapping is\n      *> not 1:1.\n       PROCEDURE DIVISION.\n       MAIN.\n           EXEC SQL SELECT BALANCE INTO :WS-AMT FROM ACCOUNTS\n              WHERE ACCT_ID = '1' END-EXEC.\n           IF SQLCODE = 100 DISPLAY \"missing\"\n           ELSE IF SQLCODE < 0 DISPLAY \"error \" SQLCODE\n           END-IF.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-SCD-1", "pattern": "(?i)(SQLCODE|\\+100|no\\s+(row|data)|negative\\s+is\\s+error|0\\s+is\\s+success)" },
+    { "kind": "edge_case", "id": "EC-SCD-1", "pattern": "(?i)(-803|duplicate.key|-911|deadlock|specific\\s+(codes|values))" },
+    { "kind": "open_question", "id": "Q-SCD-1", "pattern": "(?i)(SQLException|JDBC|target\\s+(exception|error\\s+code)|sealed\\s+result)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "SQLCODE checks are everywhere in EXEC SQL programs. The Java JDBC SQLException model is exception-based, not return-code-based. The spec must enumerate every SQLCODE check so the rewrite preserves the branching."
+}

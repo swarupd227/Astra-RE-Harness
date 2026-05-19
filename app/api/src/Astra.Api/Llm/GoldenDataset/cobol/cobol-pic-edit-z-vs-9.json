@@ -1,0 +1,17 @@
+{
+  "entryId": "cobol-pic-edit-z-vs-9",
+  "schemaId": "cobol",
+  "title": "PIC Z(7)9 vs PIC 9(8) — leading-zero suppression on edit pictures only on the output side",
+  "trapCategory": "numeric/picture",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/pic_edit_z.cbl",
+  "sourceLines": "1-15",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. EDIT-OUTPUT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n      *> WS-AMT is a numeric field (PIC 9(8)) -- 12345 stored as\n      *>   '00012345'. WS-AMT-EDIT is an edit picture; MOVE into it\n      *>   produces '   12345' (5 leading spaces, last digit forced).\n      *>   The DISPLAY then renders with the spaces, NOT zeros.\n       01  WS-AMT          PIC 9(8).\n       01  WS-AMT-EDIT     PIC Z(7)9.\n       PROCEDURE DIVISION.\n           MOVE 12345 TO WS-AMT-EDIT.\n           DISPLAY WS-AMT-EDIT.\n           STOP RUN.\n",
+  "expectedClaims": [
+    { "kind": "invariant", "id": "INV-PEZ-1", "pattern": "(?i)(PIC\\s+Z|edit\\s+picture|leading.zero\\s+(suppress|edit)|space.fill|edited\\s+output)" },
+    { "kind": "section_contract", "id": "SC-PEZ-1", "pattern": "(?i)(MOVE\\s+.*\\s+TO\\s+WS.AMT.EDIT|render\\w+\\s+output|DISPLAY\\s+side|edit.only)" },
+    { "kind": "open_question", "id": "Q-PEZ-1", "pattern": "(?i)(String\\.format|target\\s+padding|leading\\s+(space|zero)|printf|right.justif)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Edit pictures (Z, *, $, ., ,, /) are output-side only — the underlying numeric field is unchanged. A Java port that bakes the edit format into the field's storage loses the round-trip. Surface this so the rewrite separates 'storage' from 'rendering'."
+}
