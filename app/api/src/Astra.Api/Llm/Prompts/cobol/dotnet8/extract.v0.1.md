@@ -70,6 +70,8 @@ Program / section: {{subroutineName}}
 File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
+{{neighbourhood}}
+
 Source:
 ```cobol
 {{sourceText}}
@@ -77,4 +79,8 @@ Source:
 
 Produce the behavioural specification as a single JSON object conforming
 to spec/v1 (COBOL flavour). Cite line numbers aggressively. Surface
-ambiguity as open questions.
+ambiguity as open questions. When the neighbourhood section above shows
+callees with existing spec summaries (e.g. PERFORM-target paragraphs
+this program invokes), lift their I/O verbs and edge cases into THIS
+spec's `io_side_effects` and `edge_cases` as appropriate — a paragraph
+that PERFORMs a sub-paragraph inherits its I/O contract.

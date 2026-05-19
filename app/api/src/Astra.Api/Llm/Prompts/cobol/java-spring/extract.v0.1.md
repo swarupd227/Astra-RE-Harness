@@ -103,6 +103,8 @@ Program / section: {{subroutineName}}
 File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
+{{neighbourhood}}
+
 Source:
 ```cobol
 {{sourceText}}
@@ -110,4 +112,11 @@ Source:
 
 Produce the behavioural specification as a single JSON object
 conforming to spec/v1 (COBOL flavour). Cite line numbers aggressively.
-Surface ambiguity as open questions — never invent semantics.
+Surface ambiguity as open questions — never invent semantics. When
+the neighbourhood section above lists callees (PERFORM-target
+paragraphs, called sub-programs, copybook-resolved fields), use that
+context to:
+  - Lift their I/O verbs into THIS spec's `io_side_effects`
+    (paragraph inheritance).
+  - Cross-check signatures: arg types must match callees'.
+  - Flag mismatches between caller and callee as open questions.

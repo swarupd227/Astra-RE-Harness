@@ -80,12 +80,33 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                 $"No prompt registered for ({schemaId}, {targetStack}, {kind}). " +
                 $"Check Llm/Prompts/{schemaId}/{targetStack}/{kind}.v*.md.");
         var prompt = AnthropicPromptTemplate.Build(_prompts, loaded, request);
+
+        // Phase 7.0 — prompt caching.
+        //   - System message is identical for every call within a given
+        //     (sourceLanguage × targetStack × kind × promptVersion)
+        //     tuple. It carries the persona, the rules, and the
+        //     ~500-token schema definition. Marking it `ephemeral` gets
+        //     a 5-minute cache with a 90% input-token discount on hit.
+        //   - The user message is structured so the variable part
+        //     (per-routine source + neighbourhood) sits at the END,
+        //     allowing future expansion of cache breakpoints into the
+        //     user message without re-engineering this call site.
+        // Anthropic's cache_control schema requires content blocks
+        // (array form), not bare strings.
         var requestBody = new Dictionary<string, object?>
         {
             ["model"] = _opts.Model,
             ["max_tokens"] = _opts.MaxOutputTokens,
             ["stream"] = true,
-            ["system"] = prompt.System,
+            ["system"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "text",
+                    ["text"] = prompt.System,
+                    ["cache_control"] = new { type = "ephemeral" },
+                },
+            },
             ["messages"] = new[]
             {
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = prompt.User },
@@ -146,6 +167,9 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         var textBuffer = new StringBuilder(8 * 1024);
         var inputTokens = 0;
         var outputTokens = 0;
+        // Phase 7.0 — surface prompt-caching savings.
+        var cacheCreationTokens = 0;
+        var cacheReadTokens = 0;
 
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -178,10 +202,14 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             {
                 case "message_start":
                     if (evRoot.TryGetProperty("message", out var msg) &&
-                        msg.TryGetProperty("usage", out var u0) &&
-                        u0.TryGetProperty("input_tokens", out var inT))
+                        msg.TryGetProperty("usage", out var u0))
                     {
-                        inputTokens = inT.GetInt32();
+                        if (u0.TryGetProperty("input_tokens", out var inT))
+                            inputTokens = inT.GetInt32();
+                        if (u0.TryGetProperty("cache_creation_input_tokens", out var ccT))
+                            cacheCreationTokens = ccT.GetInt32();
+                        if (u0.TryGetProperty("cache_read_input_tokens", out var crT))
+                            cacheReadTokens = crT.GetInt32();
                     }
                     break;
 
@@ -268,8 +296,16 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             ["specJson"] = specClone,
             ["inputTokens"] = inputTokens,
             ["outputTokens"] = outputTokens,
+            // Phase 7.0 — caching stats; non-zero on cache hit. The audit
+            // sink (ExtractionPipeline → LlmCall) records these so the
+            // Admin UI can render hit-rate over time.
+            ["cacheCreationInputTokens"] = cacheCreationTokens,
+            ["cacheReadInputTokens"] = cacheReadTokens,
             ["latencyMs"] = sw.ElapsedMilliseconds,
         });
+        _logger.LogInformation(
+            "Anthropic extract: input={Input} cached_read={Read} cached_create={Create} output={Output} latency={Ms}ms",
+            inputTokens, cacheReadTokens, cacheCreationTokens, outputTokens, sw.ElapsedMilliseconds);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

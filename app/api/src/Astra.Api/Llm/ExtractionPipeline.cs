@@ -29,6 +29,7 @@ public sealed class ExtractionPipeline
     private readonly IAuditLogger _audit;
     private readonly DevPersonaContext _persona;
     private readonly PromptLibrary _prompts;
+    private readonly NeighbourhoodBuilder _neighbourhood;
     private readonly ILogger<ExtractionPipeline> _logger;
 
     public ExtractionPipeline(
@@ -38,6 +39,7 @@ public sealed class ExtractionPipeline
         IAuditLogger audit,
         DevPersonaContext persona,
         PromptLibrary prompts,
+        NeighbourhoodBuilder neighbourhood,
         ILogger<ExtractionPipeline> logger)
     {
         _provider = provider;
@@ -46,6 +48,7 @@ public sealed class ExtractionPipeline
         _audit = audit;
         _persona = persona;
         _prompts = prompts;
+        _neighbourhood = neighbourhood;
         _logger = logger;
     }
 
@@ -124,6 +127,34 @@ public sealed class ExtractionPipeline
             promptTemplateVersion = promptVersion,
         });
 
+        // Phase 7.0 — build the structured cross-routine context from
+        // parser-extracted metadata already in Postgres. If the build
+        // throws (e.g. orphaned subroutine), we proceed without a
+        // neighbourhood — extraction must keep working in degraded mode.
+        Neighbourhood? neighbourhood = null;
+        try
+        {
+            neighbourhood = await _neighbourhood.BuildForSubroutineAsync(sub.Id, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Could not build neighbourhood for {Subroutine}; proceeding without",
+                sub.Id);
+        }
+        if (neighbourhood is not null && !neighbourhood.IsEmpty)
+        {
+            // Surface to the UI so reviewers can see what context the
+            // extract had access to.
+            yield return new("neighbourhood_attached", new
+            {
+                callees = neighbourhood.Callees.Count,
+                callers = neighbourhood.Callers.Count,
+                commonBlocks = neighbourhood.CommonBlocks.Count,
+                siblingsInFile = neighbourhood.SiblingsInFile.Count,
+            });
+        }
+
         // 3. Stream events from the provider, capturing the final payload
         var req = new ExtractionRequest(
             sub.Id,
@@ -134,7 +165,8 @@ public sealed class ExtractionPipeline
             promptId,
             promptVersion,
             SourceLanguage: sourceLanguage,
-            TargetStack: defaultTargetStack);
+            TargetStack: defaultTargetStack,
+            Neighbourhood: neighbourhood);
 
         object? finalPayload = null;
         var providerEmittedError = false;

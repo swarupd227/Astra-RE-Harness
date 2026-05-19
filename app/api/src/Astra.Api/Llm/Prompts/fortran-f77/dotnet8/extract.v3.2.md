@@ -67,6 +67,8 @@ Subroutine: {{subroutineName}}
 File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
+{{neighbourhood}}
+
 Source:
 ```fortran
 {{sourceText}}
@@ -74,4 +76,7 @@ Source:
 
 Produce the behavioural specification as a single JSON object
 conforming to spec/v1. Be specific. Cite. Question what cannot be
-confirmed.
+confirmed. When the neighbourhood section above shows callees with
+existing spec summaries, lift their side effects into THIS routine's
+spec as appropriate `side_effects` entries (a routine that CALLs
+something with file I/O inherits that I/O as a side effect).
