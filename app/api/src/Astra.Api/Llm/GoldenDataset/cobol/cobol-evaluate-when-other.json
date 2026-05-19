@@ -1,0 +1,29 @@
+{
+  "entryId": "cobol-evaluate-when-other",
+  "schemaId": "cobol",
+  "title": "EVALUATE without WHEN OTHER silently skips on unmatched value",
+  "trapCategory": "control-flow/evaluate",
+  "difficulty": "medium",
+  "sourcePath": "cobol/snippets/evaluate_when_other.cbl",
+  "sourceLines": "1-22",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. POLICY-DISCOUNT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-AGE-BAND        PIC X.\n       01  WS-DISCOUNT-PCT    PIC 9(2)V99.\n      *> Missing WHEN OTHER: any WS-AGE-BAND value not in {Y, M, S}\n      *> leaves WS-DISCOUNT-PCT at its prior value -- the EVALUATE\n      *> falls through silently. Real production bugs from this\n      *> pattern: a typo'd input ('y' lowercase) silently inherits\n      *> the previous record's discount.\n       PROCEDURE DIVISION.\n       SET-DISCOUNT.\n           EVALUATE WS-AGE-BAND\n              WHEN \"Y\"\n                 MOVE 5.00  TO WS-DISCOUNT-PCT\n              WHEN \"M\"\n                 MOVE 10.00 TO WS-DISCOUNT-PCT\n              WHEN \"S\"\n                 MOVE 15.00 TO WS-DISCOUNT-PCT\n           END-EVALUATE.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-EVAL-1",
+      "pattern": "(?i)(EVALUATE|when\\s+other|fall.through|unmatched\\s+value|silent\\s+skip|inherit\\w*\\s+prior)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-EVAL-1",
+      "pattern": "(?i)(case.insensitiv\\w*|lowercase|typo|invalid\\s+age.band|unknown\\s+value|else\\s+branch)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-EVAL-1",
+      "pattern": "(?i)(default\\s+(value|discount|0|zero)|reject\\s+invalid|throw\\s+exception|raise\\s+error|validation)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Missing-WHEN-OTHER is one of the most common COBOL silent-bug\npatterns surfaced in migration audits. A modernised rewrite with\nan exhaustive switch / sealed sum-type would force the engineer\nto handle the default branch -- which is *exactly* the behaviour\nchange the customer doesn't want without an explicit SME sign-off.\nThe extract must flag the fall-through semantic AND surface the\n'what should happen on unmatched input?' question for the SME."
+}

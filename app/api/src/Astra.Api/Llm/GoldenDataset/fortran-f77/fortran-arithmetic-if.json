@@ -1,0 +1,29 @@
+{
+  "entryId": "fortran-arithmetic-if",
+  "schemaId": "fortran-f77",
+  "title": "Arithmetic IF — three-way branch on sign of expression",
+  "trapCategory": "control-flow/arithmetic-if",
+  "difficulty": "hard",
+  "sourcePath": "fortran/snippets/arithmetic_if.f",
+  "sourceLines": "1-21",
+  "sourceContent": "      SUBROUTINE CLAMP_STATUS(X, CODE)\nC     Returns CODE = -1 (below range), 0 (in range), or +1 (above\nC     range). The dispatch uses an F66/F77 'arithmetic IF':\n\nC         IF (expr) label_neg, label_zero, label_pos\n\nC     branches to label_neg when expr < 0, label_zero when expr = 0,\nC     and label_pos when expr > 0. Easy to misread as an ordinary IF;\nC     a modernised rewrite that ignores the *order* of the three\nC     labels will silently swap the semantics of -1 and +1.\n      IMPLICIT NONE\n      REAL    X\n      INTEGER CODE\n\n      IF (X - 1.0) 10, 20, 30\n   10 CODE = -1\n      RETURN\n   20 CODE = 0\n      RETURN\n   30 CODE = 1\n      RETURN\n      END\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-ARITHIF-1",
+      "pattern": "(?i)(arithmetic\\s+IF|three.way\\s+branch|sign\\s+of|neg.*zero.*pos|<\\s*0.*=\\s*0.*>\\s*0)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-ARITHIF-1",
+      "pattern": "(?i)(X\\s*=\\s*1\\.0|exactly\\s+1\\.0|zero\\s+branch|equality\\s+branch|X\\s*-\\s*1\\.0\\s*=\\s*0)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-ARITHIF-1",
+      "pattern": "(?i)(floating.?point\\s+equality|epsilon|exact\\s+equality|NaN)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Arithmetic IF is one of the most-misread F66/F77 control-flow\nconstructs. Modern reviewers see 'IF (...) 10, 20, 30' and assume\na computed GOTO or a ternary -- it's neither. The branch is\nstrictly on sign(expr). The equality branch (label_zero) is the\nfloating-point trap: 'expr = 0' for REAL means *exactly* zero,\nso NaN inputs go nowhere defined. The pipeline must flag the\nthree-way semantic AND surface the FP-equality issue as an open\nquestion."
+}

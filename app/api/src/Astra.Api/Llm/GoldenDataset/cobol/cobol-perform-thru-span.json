@@ -1,0 +1,34 @@
+{
+  "entryId": "cobol-perform-thru-span",
+  "schemaId": "cobol",
+  "title": "PERFORM THRU spans multiple paragraphs — flow control with implicit exit",
+  "trapCategory": "control-flow/perform-thru",
+  "difficulty": "hard",
+  "sourcePath": "cobol/snippets/perform_thru_span.cbl",
+  "sourceLines": "1-30",
+  "sourceContent": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. INVOICE-POST.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-AMOUNT          PIC 9(7)V99.\n       01  WS-TAX             PIC 9(7)V99.\n       01  WS-TOTAL           PIC 9(7)V99.\n       PROCEDURE DIVISION.\n       MAIN.\n      *> PERFORM CALC-TAX THRU CALC-TOTAL executes EVERY paragraph\n      *> from CALC-TAX through CALC-TOTAL inclusive, in source order.\n      *> The intermediate paragraph LOG-PARTIAL is invoked even though\n      *> its name does not appear in the PERFORM. Reordering source\n      *> paragraphs to suit a reviewer's taste silently changes\n      *> behaviour.\n           PERFORM CALC-TAX THRU CALC-TOTAL\n           DISPLAY WS-TOTAL\n           STOP RUN.\n\n       CALC-TAX.\n           COMPUTE WS-TAX = WS-AMOUNT * 0.08.\n\n       LOG-PARTIAL.\n           DISPLAY \"Tax computed: \" WS-TAX.\n\n       CALC-TOTAL.\n           COMPUTE WS-TOTAL = WS-AMOUNT + WS-TAX.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-PERFTHRU-1",
+      "pattern": "(?i)(PERFORM\\s+THRU|THROUGH|source\\s+order|every\\s+paragraph|inclusive|paragraph\\s+span)"
+    },
+    {
+      "kind": "section_contract",
+      "id": "SC-PERFTHRU-1",
+      "pattern": "(?i)(CALC.TAX.*LOG.PARTIAL.*CALC.TOTAL|LOG.PARTIAL.*invoked|intermediate\\s+paragraph)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-PERFTHRU-1",
+      "pattern": "(?i)(reorder|move\\s+paragraph|paragraph\\s+order|source.layout|refactor\\w*\\s+order)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-PERFTHRU-1",
+      "pattern": "(?i)(extract\\s+(method|function)|inline\\s+paragraph\\w*|exit\\s+conditions?|fall.through\\s+sequence)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "PERFORM ... THRU ... runs *every* paragraph between the two labels\nin source order. A naive Java/C# port that translates each\nparagraph to a method and replaces PERFORM-THRU with a sequence of\ncalls -- without inlining the intermediate paragraphs -- silently\ndrops behaviour. A safe rewrite must either (a) preserve the\nin-order call chain or (b) refuse-to-port without SME sign-off.\nCalibrated against a public-domain batch-posting sample where\nLOG-PARTIAL was inserted between CALC-TAX and CALC-TOTAL years\nafter the original author left."
+}

@@ -1,0 +1,172 @@
+# Phase 6.0c — Golden-dataset regression gate.
+#
+# Runs on every PR that touches the prompt library, the golden-dataset
+# JSON manifests, or the scorer itself. Brings up the full Docker stack,
+# POSTs /score-all, and:
+#   1. Uploads the per-entry result as a workflow artifact.
+#   2. Posts (or updates) a PR comment with the aggregate score.
+#   3. Compares against the baseline `golden-dataset-baseline.json` at
+#      the repo root (when present) and fails the workflow if the
+#      aggregate score drops by more than 5 percentage points.
+#
+# The baseline is intentionally a checked-in file rather than a
+# downloaded artifact — refreshing the baseline is an explicit PR
+# (eyeball-reviewed) instead of a silent "main moved" event that lets
+# regressions through.
+name: Golden dataset regression
+
+on:
+  pull_request:
+    paths:
+      - 'app/api/src/Astra.Api/Llm/Prompts/**'
+      - 'app/api/src/Astra.Api/Llm/GoldenDataset/**'
+      - 'app/api/src/Astra.Api/Validation/GoldenDatasetScorer.cs'
+      - 'app/api/src/Astra.Api/Persistence/Seed/GoldenDatasetSeed.cs'
+      - 'app/api/src/Astra.Api/Persistence/Entities/GoldenDatasetEntry.cs'
+      - 'app/api/src/Astra.Api/Endpoints/GoldenDatasetEndpoints.cs'
+      - '.github/workflows/golden-dataset.yml'
+
+permissions:
+  contents: read
+  pull-requests: write   # required for the PR comment step
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bring up the API stack
+        run: |
+          docker compose up -d postgres minio parser-sidecar api
+          # Wait for the API health endpoint. The compose healthcheck
+          # gives us up to ~120s for cold-start (EF EnsureCreated +
+          # idempotent seed).
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8080/health > /dev/null; then
+              echo "API healthy after ${i} retries"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::API failed to become healthy in time"
+          docker compose logs api --tail=80
+          exit 1
+
+      - name: Score the corpus
+        id: score
+        run: |
+          # Hit /score-all as the admin persona. The mock provider
+          # ships in the default config; once ANTHROPIC_API_KEY is added
+          # as a repo secret the real provider can swap in by setting
+          # LLM_PROVIDER=anthropic on this job.
+          curl -sf -X POST \
+            -H 'X-Dev-Persona: admin' \
+            http://127.0.0.1:8080/api/v1/golden-dataset/score-all \
+            | tee golden-score-all.json
+
+          AGG=$(jq -r '.aggregateScore' golden-score-all.json)
+          MATCHED=$(jq -r '.aggregateMatched' golden-score-all.json)
+          TOTAL=$(jq -r '.aggregateTotal' golden-score-all.json)
+          COUNT=$(jq -r '.inputCount' golden-score-all.json)
+          echo "aggregateScore=$AGG"     >> "$GITHUB_OUTPUT"
+          echo "aggregateMatched=$MATCHED" >> "$GITHUB_OUTPUT"
+          echo "aggregateTotal=$TOTAL"   >> "$GITHUB_OUTPUT"
+          echo "inputCount=$COUNT"       >> "$GITHUB_OUTPUT"
+
+      - name: Compare against baseline (if present)
+        id: compare
+        run: |
+          if [ ! -f ../golden-dataset-baseline.json ]; then
+            echo "::notice::No golden-dataset-baseline.json — skipping regression gate"
+            echo "verdict=no-baseline" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE=$(jq -r '.aggregateScore' ../golden-dataset-baseline.json)
+          CURR=${{ steps.score.outputs.aggregateScore }}
+          # Tolerance: 5 percentage points. A drop of more than 0.05
+          # (e.g. 0.85 -> 0.79) fails the workflow.
+          DROP=$(python3 -c "print($BASE - $CURR)")
+          echo "baseline=$BASE current=$CURR drop=$DROP"
+          if python3 -c "import sys; sys.exit(0 if ($BASE - $CURR) > 0.05 else 1)"; then
+            echo "verdict=regressed" >> "$GITHUB_OUTPUT"
+            echo "::error::Aggregate score dropped from $BASE to $CURR (> 5pp tolerance)"
+            exit 1
+          fi
+          echo "verdict=ok" >> "$GITHUB_OUTPUT"
+
+      - name: Upload per-entry score result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-score-all
+          path: app/golden-score-all.json
+          retention-days: 30
+
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'app/golden-score-all.json';
+            if (!fs.existsSync(path)) {
+              core.info(`No ${path} produced; skipping comment`);
+              return;
+            }
+            const body = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const pct = (body.aggregateScore * 100).toFixed(1);
+
+            // Per-entry summary table — render the worst movers first.
+            const rows = [...body.runs]
+              .sort((a, b) => a.score - b.score)
+              .map(r => {
+                const label = r.entryId ?? '?';
+                const score = (r.score * 100).toFixed(0);
+                return `| \`${label}\` | ${score}% | ${r.matched}/${r.total} | ${r.promptId}@${r.promptVersion} |`;
+              });
+
+            const md = `### Golden dataset · regression scorer
+
+**Aggregate**: ${pct}% &nbsp; · &nbsp; ${body.aggregateMatched}/${body.aggregateTotal} claims matched across ${body.inputCount} entries.
+
+<details><summary>Per-entry breakdown (lowest score first)</summary>
+
+| entry | score | matched/total | prompt |
+|---|---|---|---|
+${rows.join('\n')}
+
+</details>
+
+_Posted by the \`golden-dataset\` workflow. Edit \`golden-dataset-baseline.json\` at repo root to update the regression gate._
+`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const prior = comments.find(c => c.body && c.body.startsWith('### Golden dataset · regression scorer'));
+            if (prior) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prior.id,
+                body: md,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: md,
+              });
+            }
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

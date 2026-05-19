@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   FileText,
+  Gauge,
   Languages,
   ShieldCheck,
   SlidersHorizontal,
@@ -73,6 +74,14 @@ const tiles: Tile[] = [
     description:
       'Who-can-do-what matrix across the Engineer, SME, Observer, and Admin personas — grouped by Pipeline / Review / Audit / Platform.',
     icon: Users,
+    status: 'live',
+  },
+  {
+    to: '/platform/golden-dataset',
+    title: 'Golden Dataset',
+    description:
+      'Calibration corpus of trap-laden Fortran + COBOL snippets paired with expected extract claims. Score regression on every prompt change.',
+    icon: Gauge,
     status: 'live',
   },
 ];

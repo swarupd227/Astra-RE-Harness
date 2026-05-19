@@ -90,4 +90,12 @@
     <Content Include="Llm/Archetypes/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Phase 6.0 — Golden dataset entries.
+         Per-schema directories of JSON manifests under
+         Llm/GoldenDataset/<schemaId>/<entryId>.json. Same shape as the
+         archetype tree: ship as Content, don't compile. -->
+    <Content Update="Llm/GoldenDataset/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

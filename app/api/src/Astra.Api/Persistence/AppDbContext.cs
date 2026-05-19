@@ -23,6 +23,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
+    public DbSet<GoldenDatasetEntry> GoldenDatasetEntries => Set<GoldenDatasetEntry>();
+    public DbSet<GoldenDatasetRun> GoldenDatasetRuns => Set<GoldenDatasetRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -346,6 +348,63 @@ public sealed class AppDbContext : DbContext
             b.HasIndex(x => new { x.TargetType, x.TargetId, x.OccurredAt });
             b.HasIndex(x => new { x.EventType, x.OccurredAt });
             b.HasIndex(x => x.OccurredAt);
+        });
+
+        modelBuilder.Entity<GoldenDatasetEntry>(b =>
+        {
+            b.ToTable("golden_dataset_entries");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.EntryId).HasColumnName("entry_id").HasMaxLength(128).IsRequired();
+            b.Property(x => x.SchemaId).HasColumnName("schema_id").HasMaxLength(32).IsRequired();
+            b.Property(x => x.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
+            b.Property(x => x.TrapCategory).HasColumnName("trap_category").HasMaxLength(64).IsRequired();
+            b.Property(x => x.Difficulty).HasColumnName("difficulty").HasMaxLength(16).IsRequired();
+            b.Property(x => x.SourcePath).HasColumnName("source_path").HasMaxLength(512).IsRequired();
+            b.Property(x => x.SourceContent).HasColumnName("source_content").IsRequired();
+            b.Property(x => x.SourceLines).HasColumnName("source_lines").HasMaxLength(32).IsRequired();
+            b.Property(x => x.ExpectedClaimsJson).HasColumnName("expected_claims").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.CanonicalInputsJson).HasColumnName("canonical_inputs").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.Notes).HasColumnName("notes").IsRequired();
+            b.Property(x => x.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.Property(x => x.UpdatedBy).HasColumnName("updated_by").HasMaxLength(160);
+
+            // EntryId is the natural key from YAML — must be unique so the
+            // idempotent seeder can find-or-create by id.
+            b.HasIndex(x => x.EntryId).IsUnique();
+            // Common filters: list-by-schema and list-by-status from the
+            // Admin UI; trap category for "show me all numeric/rounded traps".
+            b.HasIndex(x => new { x.SchemaId, x.Status });
+            b.HasIndex(x => x.TrapCategory);
+        });
+
+        modelBuilder.Entity<GoldenDatasetRun>(b =>
+        {
+            b.ToTable("golden_dataset_runs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.EntryId).HasColumnName("entry_id").IsRequired();
+            b.Property(x => x.LlmCallId).HasColumnName("llm_call_id");
+            b.Property(x => x.PromptId).HasColumnName("prompt_id").HasMaxLength(128).IsRequired();
+            b.Property(x => x.PromptVersion).HasColumnName("prompt_version").HasMaxLength(32).IsRequired();
+            b.Property(x => x.ModelName).HasColumnName("model_name").HasMaxLength(128).IsRequired();
+            b.Property(x => x.Matched).HasColumnName("matched");
+            b.Property(x => x.Total).HasColumnName("total");
+            b.Property(x => x.Score).HasColumnName("score");
+            b.Property(x => x.DetailJson).HasColumnName("detail").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.StartedAt).HasColumnName("started_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            b.Property(x => x.TriggeredBy).HasColumnName("triggered_by").HasMaxLength(160);
+
+            b.HasOne<GoldenDatasetEntry>().WithMany()
+             .HasForeignKey(x => x.EntryId).OnDelete(DeleteBehavior.Cascade);
+
+            // Score-over-time chart: filter by (prompt, version) ordered
+            // by completed_at; per-entry detail: filter by entry_id.
+            b.HasIndex(x => new { x.PromptId, x.PromptVersion, x.CompletedAt });
+            b.HasIndex(x => new { x.EntryId, x.CompletedAt });
         });
     }
 }
