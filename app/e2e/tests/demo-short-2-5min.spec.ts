@@ -1,18 +1,12 @@
 /**
- * Phase 5.7 — Short cut, ~2.5 minute total recording.
+ * Phase 5.7 — Short cut, ~2 minute total recording.
  *
- *   beat 1 (00:00–00:25)  open CONSUME_ROLL (Fortran)
- *   beat 2 (00:25–01:10)  extract spec (mock provider for determinism)
- *   beat 3 (01:10–01:30)  SME sign-off
- *   beat 4 (01:30–01:55)  engineer scaffold + .NET validation badge
- *   beat 5 (01:55–02:25)  admin DEPTPAY equivalence preview — 5847.95 row
- *   end   (02:25–02:30)   close on the audit timeline
+ * Hard rule: every navigation must land on a built, populated screen.
+ * No /audit (which is the NotFoundPage "Not yet built"); no /dev/reset
+ * (which drops the schema and only re-seeds the synthetic corpus, so
+ * the Golden Dataset + Harmonisation pages render empty after it).
  *
- * Pacing: the Playwright config's slowMo: 600 (RECORD_DEMO=1) gives
- * stakeholder-readable click timing without per-beat waits longer
- * than necessary. The total wall-clock at slowMo=600 is ~2:20–2:30
- * depending on provider speed; mock provider runs deterministically.
- *
+ * Run:
  *   RECORD_DEMO=1 BASE_URL=http://127.0.0.1:35173 \
  *     API_BASE=http://127.0.0.1:38080 \
  *     npx playwright test demo-short-2-5min
@@ -20,10 +14,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
-// 5.5s per beat lands the recording in the 1:45–2:15 range with the
-// 7-beat arc, which leaves comfortable room under the 2:30 cap and
-// reads as paced rather than rushed at slowMo=600.
-const BEAT = process.env.RECORD_DEMO === '1' ? 5_500 : 0;
+// 5s per surface lets the audience read each screen at slowMo=600.
+const BEAT = process.env.RECORD_DEMO === '1' ? 5_000 : 0;
 
 async function switchPersona(page: Page, persona: 'engineer' | 'sme' | 'observer' | 'admin') {
   const labelByPersona = { engineer: 'Engineer', sme: 'SME', observer: 'Observer', admin: 'Admin' } as const;
@@ -40,18 +32,27 @@ async function getSeededSubroutineId(page: Page): Promise<string> {
   return detail.latestVersion.files[0].subroutines[0].id;
 }
 
+async function getSeededCorpusId(page: Page): Promise<string> {
+  const corpora = await page.request.get(`${API_BASE}/api/v1/corpora`).then((r) => r.json());
+  const seed = corpora.data.find((c: { name: string }) => c.name === 'Roll-stock inventory demo (Fortran F77)');
+  if (!seed) throw new Error('CONSUME_ROLL seed missing.');
+  return seed.id;
+}
+
 test.describe('Demo · 2.5-minute cut', () => {
   test.beforeEach(async ({ page }) => {
-    await page.request.post(`${API_BASE}/api/v1/dev/reset`, {
-      headers: { 'X-Dev-Persona': 'engineer' },
-      timeout: 60_000,
-    });
+    // NO /dev/reset — it wipes the Golden Dataset + Harmonisation
+    // tables and the GoldenDatasetSeed only runs on API startup. We
+    // rely on whatever the running stack already has loaded.
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
   });
 
-  test('Fortran → .NET in 90s, COBOL equivalence punchline in 30s', async ({ page }) => {
+  test('Fortran → .NET happy path + COBOL equivalence punchline', async ({ page }) => {
     const subId = await getSeededSubroutineId(page);
+    // corpusId reserved for any future pre-warm or admin step that
+    // wants to scope by corpus; not used in the visual beats today.
+    await getSeededCorpusId(page);
 
     // ── 1 · CONSUME_ROLL (Fortran) ───────────────────────────────────
     await test.step('open CONSUME_ROLL', async () => {
@@ -101,11 +102,10 @@ test.describe('Demo · 2.5-minute cut', () => {
     // ── 5 · DEPTPAY equivalence — the 5847.95 punchline ──────────────
     await test.step('admin DEPTPAY equivalence (the 5847.95 row)', async () => {
       await switchPersona(page, 'admin');
-      // Drive directly via the API and land on a page that shows the
-      // run. The validation page renders any equivalence run for the
-      // current corpus; landing there gives the audience something to
-      // see while the call completes.
-      await page.goto('/audit');
+      // Land on /platform/validation (a real "validation policy" page)
+      // so the screen-time during the equivalence call shows the
+      // platform's validation surface, not an under-dev placeholder.
+      await page.goto('/platform/validation');
       const r = await page.request.post(
         `${API_BASE}/api/v1/validation/equivalence/preview/deptpay-average`,
         { headers: { 'X-Dev-Persona': 'admin' }, timeout: 90_000 },
@@ -123,9 +123,13 @@ test.describe('Demo · 2.5-minute cut', () => {
       await page.goto('/platform/golden-dataset');
       await expect(page.getByTestId('golden-dataset-page')).toBeVisible({ timeout: 30_000 });
       if (BEAT) await page.waitForTimeout(BEAT);
-      // Open the cobol-rounded-off-by-one entry — the 5847.95 trap in
-      // the calibration corpus itself.
-      const card = page.getByTestId('golden-entry-cobol-rounded-off-by-one');
+      // Open the cobol-rounded-off-by-one entry — the 5847.95 trap as
+      // a calibration entry. Falls back to ANY visible entry card if
+      // the specific testid isn't rendered.
+      let card = page.getByTestId('golden-entry-cobol-rounded-off-by-one');
+      if (await card.count() === 0) {
+        card = page.locator('[data-testid^="golden-entry-"]').first();
+      }
       if (await card.count() > 0) {
         await card.click();
         if (BEAT) await page.waitForTimeout(BEAT);
@@ -133,16 +137,28 @@ test.describe('Demo · 2.5-minute cut', () => {
       }
     });
 
-    // ── 7 · Harmonisation (corpus-wide consistency) ─────────────────
-    await test.step('Harmonisation pass', async () => {
-      await page.goto('/platform/harmonisation');
-      await expect(page.getByTestId('harmonisation-page')).toBeVisible({ timeout: 30_000 });
+    // ── 7 · Platform tiles (overview of configurable surfaces) ─────
+    // Earlier versions of this cut visited /platform/harmonisation,
+    // but the demo's signed-spec count is zero in both seed corpora,
+    // so the run summaries land on "No signed specs to harmonise · 0
+    // findings" — which reads as "the feature didn't find anything to
+    // do" rather than "the feature works". The platform tile page
+    // surfaces every configurable Nous asset (prompts, languages,
+    // validation policy, signature health, roles, golden dataset,
+    // harmonisation) as Live badges with descriptions — a stronger
+    // single visual than an empty runs list.
+    await test.step('platform overview', async () => {
+      await page.goto('/platform');
+      await expect(page.getByTestId('platform-index-page')).toBeVisible({ timeout: 30_000 });
       if (BEAT) await page.waitForTimeout(BEAT);
     });
 
-    // ── close on the audit timeline ─────────────────────────────────
-    await test.step('audit close', async () => {
-      await page.goto('/audit');
+    // ── close on the compliance / audit-export surface ──────────────
+    // /compliance is the real audit-trail / evidence-feed page. /audit
+    // does NOT exist as a route — it routes to NotFoundPage with the
+    // "Not yet built" message, which is what we explicitly avoid.
+    await test.step('audit close (compliance feed)', async () => {
+      await page.goto('/compliance');
       if (BEAT) await page.waitForTimeout(BEAT);
     });
   });
