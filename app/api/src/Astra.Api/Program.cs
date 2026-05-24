@@ -137,6 +137,11 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
 // no schema additions.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationContextService>();
 
+// Phase 8.0.d — Cross-corpus portfolio metrics. Reads + aggregates
+// every corpus + plan + LLM call + audit event into one summary
+// payload for the admin dashboard.
+builder.Services.AddScoped<Astra.Api.Llm.Dependency.PortfolioMetricsService>();
+
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
@@ -474,6 +479,7 @@ app.MapGoldenDatasetEndpoints();
 app.MapHarmonisationEndpoints();
 app.MapDependencyEndpoints();
 app.MapMigrationPlanEndpoints();
+app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();

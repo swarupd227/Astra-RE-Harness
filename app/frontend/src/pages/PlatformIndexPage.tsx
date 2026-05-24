@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  BarChart3,
   FileText,
   Gauge,
   GitMerge,
@@ -91,6 +92,14 @@ const tiles: Tile[] = [
     description:
       'Cross-routine consistency pass. Sends every signed spec to the LLM in one call; surfaces inconsistent claims, COMMON-layout drift, terminology drift, missing invariants.',
     icon: GitMerge,
+    status: 'live',
+  },
+  {
+    to: '/platform/portfolio',
+    title: 'Portfolio Dashboard',
+    description:
+      'Cross-corpus program-manager view: routine counts, signature progress, LLM spend, recent activity. Aggregates every corpus, plan, and audit event in one place.',
+    icon: BarChart3,
     status: 'live',
   },
 ];

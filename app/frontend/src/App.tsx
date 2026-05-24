@@ -26,6 +26,7 @@ import { GoldenDatasetPage } from '@/pages/GoldenDatasetPage';
 import { HarmonisationPage } from '@/pages/HarmonisationPage';
 import { DependencyGraphPage } from '@/pages/DependencyGraphPage';
 import { MigrationPlanPage } from '@/pages/MigrationPlanPage';
+import { PortfolioDashboardPage } from '@/pages/PortfolioDashboardPage';
 import { LanguagesPage } from '@/pages/LanguagesPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
@@ -228,6 +229,7 @@ export function App() {
             <Route path="/platform/prompts" element={<PromptCatalogPage />} />
             <Route path="/platform/golden-dataset" element={<GoldenDatasetPage />} />
             <Route path="/platform/harmonisation" element={<HarmonisationPage />} />
+            <Route path="/platform/portfolio" element={<PortfolioDashboardPage />} />
             <Route path="/platform/languages" element={<LanguagesPage />} />
             <Route path="/platform/roles" element={<RolesPage />} />
             <Route path="/platform/validation" element={<ValidationPolicyPage />} />
