@@ -346,6 +346,48 @@ export type GoldenDatasetScoreAll = {
   runs: GoldenDatasetRun[];
 };
 
+// ─── Dependency graph (Phase 8.0.a) ──────────────────────────────────
+export type DependencyGraphNode = {
+  id: string;
+  name: string;
+  sourcePath: string;
+  state: string;
+  specId: string | null;
+  isRoot: boolean;
+  isLeaf: boolean;
+  sccId: string | null;
+  calleeCount: number;
+  callerCount: number;
+};
+
+export type DependencyGraphEdge = {
+  from: string;
+  to: string;
+  type: 'call' | 'shared-storage';
+  viaBlock: string | null;
+};
+
+export type DependencyGraphSCC = { id: string; members: string[] };
+
+export type DependencyGraphResponse = {
+  corpusId: string;
+  sourceVersionId: string;
+  nodes: DependencyGraphNode[];
+  edges: DependencyGraphEdge[];
+  externalCallees: string[];
+  sccs: DependencyGraphSCC[];
+  stats: {
+    nodeCount: number;
+    callEdgeCount: number;
+    sharedStorageEdgeCount: number;
+    sccCount: number;
+    cyclicSccCount: number;
+    externalCalleeCount: number;
+    leafCount: number;
+    rootCount: number;
+  };
+};
+
 // ─── Harmonisation (Phase 7.1: cross-routine consistency check) ──────
 export type HarmonisationRunSummary = {
   id: string;
@@ -788,6 +830,12 @@ export const api = {
       { method: 'POST' },
     );
   },
+  // Phase 8.0.a — dependency graph
+  getDependencyGraph: (corpusId: string) =>
+    apiFetch<DependencyGraphResponse>(
+      `/api/v1/corpora/${encodeURIComponent(corpusId)}/dependency-graph`,
+    ),
+
   // Phase 7.1 — cross-routine harmonisation
   runHarmonisation: (corpusId: string) =>
     apiFetch<HarmonisationRunSummary>(`/api/v1/corpora/${encodeURIComponent(corpusId)}/harmonise`, {
