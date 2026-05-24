@@ -110,6 +110,7 @@ export function SubroutineDetailPage() {
 
         <aside className="space-y-4">
           <StructurePanel sub={s} />
+          <MigrationContextPanel subroutineId={s.id} />
           <NextStepCard />
         </aside>
       </div>
@@ -198,4 +199,163 @@ function badgeToneForState(state: string): 'draft' | 'review' | 'signed' | 'scaf
     case 'SCAFFOLDED': return 'scaffolded';
     default: return 'neutral';
   }
+}
+
+// ─── Phase 8.0.c — Migration context sidebar panel ─────────────────
+// Three cards stacked: wave assignment (only if a plan exists),
+// migration readiness classification, blast-radius summary. All
+// three fetch in parallel via react-query. 404s render as compact
+// "n/a" states rather than error blocks so the panel doesn't
+// dominate the page when no migration plan exists yet.
+
+function MigrationContextPanel({ subroutineId }: { subroutineId: string }) {
+  const wave = useQuery({
+    queryKey: ['wave-assignment', subroutineId],
+    queryFn: () => api.getWaveAssignment(subroutineId),
+    retry: false,
+  });
+  const readiness = useQuery({
+    queryKey: ['migration-readiness', subroutineId],
+    queryFn: () => api.getMigrationReadiness(subroutineId),
+    retry: false,
+  });
+  const blast = useQuery({
+    queryKey: ['blast-radius', subroutineId],
+    queryFn: () => api.getBlastRadius(subroutineId),
+    retry: false,
+  });
+
+  return (
+    <div className="space-y-3" data-testid="migration-context-panel">
+      <WaveCard q={wave} />
+      <ReadinessCard q={readiness} />
+      <BlastRadiusCard q={blast} />
+    </div>
+  );
+}
+
+function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getWaveAssignment>>>> }) {
+  const noPlan = q.isError; // 404 = no plan for this corpus
+  return (
+    <Card data-testid="wave-assignment-card">
+      <CardHeader title="Wave assignment" description="From the corpus's current migration plan." />
+      <CardBody className="space-y-2">
+        {q.isPending && <Skeleton className="h-5 w-32" />}
+        {noPlan && (
+          <p className="font-mono text-caption text-ink-tertiary">
+            No migration plan for this corpus yet.
+          </p>
+        )}
+        {q.data && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge tone={q.data.planStatus === 'approved' ? 'success' : 'review'}>
+                {q.data.planStatus}
+              </Badge>
+              <span className="font-mono text-body-sm text-ink-primary">
+                Wave {q.data.waveNumber} of {q.data.totalWaves}
+              </span>
+            </div>
+            <p className="text-body-sm text-ink-secondary">{q.data.waveName}</p>
+            <p className="font-mono text-caption text-ink-tertiary">{q.data.strategyName}</p>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getMigrationReadiness>>>> }) {
+  return (
+    <Card data-testid="migration-readiness-card">
+      <CardHeader title="Migration readiness" description="Decision-tree classification from the dependency graph." />
+      <CardBody className="space-y-2">
+        {q.isPending && <Skeleton className="h-5 w-40" />}
+        {q.isError && (
+          <p className="font-mono text-caption text-ink-tertiary">Could not classify.</p>
+        )}
+        {q.data && (
+          <>
+            <Badge tone={readinessTone(q.data.classification)}>{q.data.classification}</Badge>
+            <ul className="space-y-1 text-body-sm text-ink-secondary">
+              {q.data.reasons.map((r) => <li key={r}>{r}</li>)}
+            </ul>
+            <p className="font-mono text-caption text-ink-tertiary">
+              callees: {q.data.calleeCount} · callers: {q.data.callerCount}
+              {q.data.sharedBlockNames.length > 0 && (
+                <> · shared: {q.data.sharedBlockNames.map((b) => `/${b}/`).join(', ')}</>
+              )}
+            </p>
+            {q.data.blockingRoutineIds.length > 0 && (
+              <p className="font-mono text-caption text-amber-700">
+                Blocked by {q.data.blockingRoutineIds.length} routine{q.data.blockingRoutineIds.length === 1 ? '' : 's'}
+              </p>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function readinessTone(c: string): 'success' | 'review' | 'failed' | 'neutral' {
+  switch (c) {
+    case 'safe-leaf':
+    case 'safe-with-deps-done': return 'success';
+    case 'coordinated-only': return 'review';
+    case 'blocked-on-deps': return 'failed';
+    default: return 'neutral';
+  }
+}
+
+function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getBlastRadius>>>> }) {
+  return (
+    <Card data-testid="blast-radius-card">
+      <CardHeader title="Blast radius" description="Routines that depend on this one." />
+      <CardBody className="space-y-2">
+        {q.isPending && <Skeleton className="h-5 w-32" />}
+        {q.isError && (
+          <p className="font-mono text-caption text-ink-tertiary">Could not compute.</p>
+        )}
+        {q.data && (
+          <>
+            <p className="font-mono text-body-sm text-ink-primary">
+              {q.data.transitiveCallerCount} downstream
+              {q.data.directCallerCount > 0 && (
+                <> ({q.data.directCallerCount} direct)</>
+              )}
+              {q.data.sharedStorageConsumerCount > 0 && (
+                <> · {q.data.sharedStorageConsumerCount} shared-storage</>
+              )}
+            </p>
+            {q.data.affected.length === 0 && (
+              <p className="text-body-sm text-ink-secondary">
+                Nothing in this corpus depends on this routine.
+              </p>
+            )}
+            {q.data.affected.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-body-sm text-accent hover:underline">
+                  Show {q.data.affected.length} affected routine{q.data.affected.length === 1 ? '' : 's'}
+                </summary>
+                <ul className="mt-2 space-y-1 font-mono text-caption">
+                  {q.data.affected.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between gap-2">
+                      <Link to={`/subroutines/${a.id}`} className="truncate text-accent hover:underline">
+                        {a.name}
+                      </Link>
+                      <span className="flex items-center gap-1 text-ink-tertiary">
+                        <Badge tone={badgeToneForState(a.state)}>{a.state}</Badge>
+                        <span title={a.reason}>{a.reason.startsWith('direct') ? '↰' : a.reason === 'shared-storage' ? '↔' : '↑'}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
 }

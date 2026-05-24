@@ -388,6 +388,45 @@ export type DependencyGraphResponse = {
   };
 };
 
+// ─── Per-routine migration context (Phase 8.0.c) ─────────────────────
+export type BlastRadiusEntry = {
+  id: string;
+  name: string;
+  state: string;
+  reason: 'direct-caller' | 'transitive-caller' | 'shared-storage' | 'direct-caller+shared-storage';
+  sharedBlocks: string[];
+};
+
+export type BlastRadiusResponse = {
+  subroutineId: string;
+  subroutineName: string;
+  directCallerCount: number;
+  transitiveCallerCount: number;
+  sharedStorageConsumerCount: number;
+  stateBreakdown: { signed: number; scaffolded: number; draft: number; parsed: number };
+  affected: BlastRadiusEntry[];
+};
+
+export type MigrationReadinessResponse = {
+  subroutineId: string;
+  subroutineName: string;
+  classification: 'safe-leaf' | 'safe-with-deps-done' | 'blocked-on-deps' | 'coordinated-only';
+  reasons: string[];
+  blockingRoutineIds: string[];
+  calleeCount: number;
+  callerCount: number;
+  sharedBlockNames: string[];
+};
+
+export type WaveAssignmentResponse = {
+  planId: string;
+  planStatus: 'draft' | 'approved' | 'archived';
+  strategyName: string;
+  waveNumber: number;
+  totalWaves: number;
+  waveName: string;
+};
+
 // ─── Migration plan (Phase 8.0.b) ────────────────────────────────────
 export type MigrationPlanSummary = {
   id: string;
@@ -873,6 +912,20 @@ export const api = {
   getDependencyGraph: (corpusId: string) =>
     apiFetch<DependencyGraphResponse>(
       `/api/v1/corpora/${encodeURIComponent(corpusId)}/dependency-graph`,
+    ),
+
+  // Phase 8.0.c — per-routine migration context
+  getBlastRadius: (subroutineId: string) =>
+    apiFetch<BlastRadiusResponse>(
+      `/api/v1/subroutines/${encodeURIComponent(subroutineId)}/blast-radius`,
+    ),
+  getMigrationReadiness: (subroutineId: string) =>
+    apiFetch<MigrationReadinessResponse>(
+      `/api/v1/subroutines/${encodeURIComponent(subroutineId)}/migration-readiness`,
+    ),
+  getWaveAssignment: (subroutineId: string) =>
+    apiFetch<WaveAssignmentResponse>(
+      `/api/v1/subroutines/${encodeURIComponent(subroutineId)}/wave-assignment`,
     ),
 
   // Phase 8.0.b — migration plan

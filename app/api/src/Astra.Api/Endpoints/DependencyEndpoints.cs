@@ -39,8 +39,91 @@ public static class DependencyEndpoints
             return Results.Ok(RenderGraph(graph));
         });
 
+        // Phase 8.0.c — Per-routine migration context endpoints.
+        // All three reads share the same MigrationContextService so they
+        // can re-use the in-memory graph build when called in parallel
+        // (typical pattern: subroutine detail page fires all three at
+        // once via react-query).
+
+        app.MapGet("/api/v1/subroutines/{id:guid}/blast-radius", async (
+            Guid id,
+            MigrationContextService svc,
+            CancellationToken ct) =>
+        {
+            var br = await svc.ComputeBlastRadiusAsync(id, ct);
+            if (br is null)
+                return Results.NotFound(new { error = new { code = "subroutine.not_found" } });
+            return Results.Ok(RenderBlastRadius(br));
+        });
+
+        app.MapGet("/api/v1/subroutines/{id:guid}/migration-readiness", async (
+            Guid id,
+            MigrationContextService svc,
+            CancellationToken ct) =>
+        {
+            var mr = await svc.ClassifyAsync(id, ct);
+            if (mr is null)
+                return Results.NotFound(new { error = new { code = "subroutine.not_found" } });
+            return Results.Ok(RenderReadiness(mr));
+        });
+
+        app.MapGet("/api/v1/subroutines/{id:guid}/wave-assignment", async (
+            Guid id,
+            MigrationContextService svc,
+            CancellationToken ct) =>
+        {
+            var wa = await svc.GetWaveAssignmentAsync(id, ct);
+            if (wa is null)
+                return Results.NotFound(new { error = new { code = "wave_assignment.not_found" } });
+            return Results.Ok(new
+            {
+                planId = wa.PlanId,
+                planStatus = wa.PlanStatus,
+                strategyName = wa.StrategyName,
+                waveNumber = wa.WaveNumber,
+                totalWaves = wa.TotalWaves,
+                waveName = wa.WaveName,
+            });
+        });
+
         return app;
     }
+
+    private static object RenderBlastRadius(BlastRadius b) => new
+    {
+        subroutineId = b.SubroutineId,
+        subroutineName = b.SubroutineName,
+        directCallerCount = b.DirectCallerCount,
+        transitiveCallerCount = b.TransitiveCallerCount,
+        sharedStorageConsumerCount = b.SharedStorageConsumerCount,
+        stateBreakdown = new
+        {
+            signed = b.StateBreakdown.Signed,
+            scaffolded = b.StateBreakdown.Scaffolded,
+            draft = b.StateBreakdown.Draft,
+            parsed = b.StateBreakdown.Parsed,
+        },
+        affected = b.Affected.Select(a => new
+        {
+            id = a.Id,
+            name = a.Name,
+            state = a.State,
+            reason = a.Reason,
+            sharedBlocks = a.SharedBlocks,
+        }),
+    };
+
+    private static object RenderReadiness(MigrationReadiness r) => new
+    {
+        subroutineId = r.SubroutineId,
+        subroutineName = r.SubroutineName,
+        classification = r.Classification,
+        reasons = r.Reasons,
+        blockingRoutineIds = r.BlockingRoutineIds,
+        calleeCount = r.CalleeCount,
+        callerCount = r.CallerCount,
+        sharedBlockNames = r.SharedBlockNames,
+    };
 
     private static object RenderGraph(DependencyGraph g) => new
     {
