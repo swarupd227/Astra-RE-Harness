@@ -128,6 +128,10 @@ builder.Services.AddScoped<Astra.Api.Llm.HarmonisationPipeline>();
 // 8.0.c blast-radius services.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.DependencyGraphBuilder>();
 
+// Phase 8.0.b — Migration planner. Topological wave assignment over
+// the dependency graph; persists MigrationPlan + MigrationWave rows.
+builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
+
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
@@ -366,6 +370,46 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_harmonisation_findings_run_status
               ON harmonisation_findings (harmonisation_run_id, status);
             """);
+
+        // Phase 8.0.b — Migration plans + waves. Additive DDL so dev
+        // databases pick up without RecreateOnStartup.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS migration_plans (
+                id                  uuid        PRIMARY KEY,
+                corpus_id           uuid        NOT NULL,
+                source_version_id   uuid        NOT NULL,
+                status              varchar(16) NOT NULL,
+                strategy_name       varchar(64) NOT NULL,
+                strategy_options    jsonb       NOT NULL,
+                total_routines      integer     NOT NULL,
+                total_waves         integer     NOT NULL,
+                summary             text        NOT NULL,
+                generated_by        varchar(160) NULL,
+                approved_by         varchar(160) NULL,
+                created_at          timestamptz NOT NULL,
+                approved_at         timestamptz NULL,
+                archived_at         timestamptz NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_migration_plans_corpus_status
+              ON migration_plans (corpus_id, status);
+            CREATE INDEX IF NOT EXISTS ix_migration_plans_version_status
+              ON migration_plans (source_version_id, status);
+
+            CREATE TABLE IF NOT EXISTS migration_waves (
+                id                  uuid        PRIMARY KEY,
+                migration_plan_id   uuid        NOT NULL REFERENCES migration_plans(id) ON DELETE CASCADE,
+                wave_number         integer     NOT NULL,
+                name                varchar(256) NOT NULL,
+                planned_routine_ids jsonb       NOT NULL,
+                status              varchar(16) NOT NULL,
+                target_start_date   timestamptz NULL,
+                target_end_date     timestamptz NULL,
+                actual_completed_at timestamptz NULL,
+                routine_count       integer     NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_migration_waves_plan_wave
+              ON migration_waves (migration_plan_id, wave_number);
+            """);
     }
     if (canConnect && seedDemo)
     {
@@ -424,6 +468,7 @@ app.MapArchetypeEndpoints();
 app.MapGoldenDatasetEndpoints();
 app.MapHarmonisationEndpoints();
 app.MapDependencyEndpoints();
+app.MapMigrationPlanEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight, FileCode, Folder, GitBranch, GitMerge, RefreshCw } from 'lucide-react';
+import { ChevronRight, FileCode, Folder, GitBranch, GitMerge, Layers, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
@@ -59,6 +59,10 @@ export function CorpusDetailPage() {
         </div>
         <div className="flex items-center gap-3">
           <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{c.state}</Badge>
+          <Button variant="secondary" onClick={() => navigate(`/corpora/${id}/migration-plan`)} data-testid="open-migration-plan">
+            <Layers className="h-4 w-4" aria-hidden="true" />
+            Migration plan
+          </Button>
           <Button variant="secondary" onClick={() => navigate(`/corpora/${id}/dependency-graph`)} data-testid="open-dependency-graph">
             <GitBranch className="h-4 w-4" aria-hidden="true" />
             Dependency graph

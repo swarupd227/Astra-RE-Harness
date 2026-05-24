@@ -27,6 +27,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<GoldenDatasetRun> GoldenDatasetRuns => Set<GoldenDatasetRun>();
     public DbSet<HarmonisationRun> HarmonisationRuns => Set<HarmonisationRun>();
     public DbSet<HarmonisationFinding> HarmonisationFindings => Set<HarmonisationFinding>();
+    public DbSet<MigrationPlan> MigrationPlans => Set<MigrationPlan>();
+    public DbSet<MigrationWave> MigrationWaves => Set<MigrationWave>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -456,6 +458,49 @@ public sealed class AppDbContext : DbContext
              .HasForeignKey(x => x.HarmonisationRunId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.HarmonisationRunId, x.Severity });
             b.HasIndex(x => new { x.HarmonisationRunId, x.Status });
+        });
+
+        modelBuilder.Entity<MigrationPlan>(b =>
+        {
+            b.ToTable("migration_plans");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id").IsRequired();
+            b.Property(x => x.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+            b.Property(x => x.StrategyName).HasColumnName("strategy_name").HasMaxLength(64).IsRequired();
+            b.Property(x => x.StrategyOptionsJson).HasColumnName("strategy_options").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.TotalRoutines).HasColumnName("total_routines");
+            b.Property(x => x.TotalWaves).HasColumnName("total_waves");
+            b.Property(x => x.Summary).HasColumnName("summary").IsRequired();
+            b.Property(x => x.GeneratedBy).HasColumnName("generated_by").HasMaxLength(160);
+            b.Property(x => x.ApprovedBy).HasColumnName("approved_by").HasMaxLength(160);
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.ApprovedAt).HasColumnName("approved_at");
+            b.Property(x => x.ArchivedAt).HasColumnName("archived_at");
+
+            b.HasIndex(x => new { x.CorpusId, x.Status });
+            b.HasIndex(x => new { x.SourceVersionId, x.Status });
+        });
+
+        modelBuilder.Entity<MigrationWave>(b =>
+        {
+            b.ToTable("migration_waves");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.MigrationPlanId).HasColumnName("migration_plan_id").IsRequired();
+            b.Property(x => x.WaveNumber).HasColumnName("wave_number");
+            b.Property(x => x.Name).HasColumnName("name").HasMaxLength(256).IsRequired();
+            b.Property(x => x.PlannedRoutineIdsJson).HasColumnName("planned_routine_ids").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+            b.Property(x => x.TargetStartDate).HasColumnName("target_start_date");
+            b.Property(x => x.TargetEndDate).HasColumnName("target_end_date");
+            b.Property(x => x.ActualCompletedAt).HasColumnName("actual_completed_at");
+            b.Property(x => x.RoutineCount).HasColumnName("routine_count");
+
+            b.HasOne<MigrationPlan>().WithMany()
+             .HasForeignKey(x => x.MigrationPlanId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.MigrationPlanId, x.WaveNumber });
         });
     }
 }

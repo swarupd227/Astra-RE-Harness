@@ -388,6 +388,45 @@ export type DependencyGraphResponse = {
   };
 };
 
+// ─── Migration plan (Phase 8.0.b) ────────────────────────────────────
+export type MigrationPlanSummary = {
+  id: string;
+  corpusId: string;
+  sourceVersionId: string;
+  status: 'draft' | 'approved' | 'archived';
+  strategyName: string;
+  totalRoutines: number;
+  totalWaves: number;
+  summary: string;
+  generatedBy: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+  approvedAt: string | null;
+  archivedAt: string | null;
+};
+
+export type MigrationPlanWaveRoutine = {
+  id: string;
+  name: string;
+  state: string;
+  specId: string | null;
+};
+
+export type MigrationPlanWave = {
+  id: string;
+  waveNumber: number;
+  name: string;
+  status: 'planned' | 'in_progress' | 'completed';
+  routineCount: number;
+  liveCounts: { signed: number; scaffolded: number; committed: number };
+  routines: MigrationPlanWaveRoutine[];
+};
+
+export type MigrationPlanDetail = {
+  plan: MigrationPlanSummary;
+  waves: MigrationPlanWave[];
+};
+
 // ─── Harmonisation (Phase 7.1: cross-routine consistency check) ──────
 export type HarmonisationRunSummary = {
   id: string;
@@ -834,6 +873,31 @@ export const api = {
   getDependencyGraph: (corpusId: string) =>
     apiFetch<DependencyGraphResponse>(
       `/api/v1/corpora/${encodeURIComponent(corpusId)}/dependency-graph`,
+    ),
+
+  // Phase 8.0.b — migration plan
+  generateMigrationPlan: (corpusId: string, body?: { strategy?: string }) =>
+    apiFetch<MigrationPlanSummary>(
+      `/api/v1/corpora/${encodeURIComponent(corpusId)}/migration-plan/generate`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
+    ),
+  approveMigrationPlan: (planId: string) =>
+    apiFetch<MigrationPlanSummary>(
+      `/api/v1/migration-plans/${encodeURIComponent(planId)}/approve`,
+      { method: 'POST' },
+    ),
+  archiveMigrationPlan: (planId: string) =>
+    apiFetch<MigrationPlanSummary>(
+      `/api/v1/migration-plans/${encodeURIComponent(planId)}/archive`,
+      { method: 'POST' },
+    ),
+  getCurrentMigrationPlan: (corpusId: string) =>
+    apiFetch<MigrationPlanDetail>(
+      `/api/v1/corpora/${encodeURIComponent(corpusId)}/migration-plan`,
+    ),
+  getMigrationPlan: (planId: string) =>
+    apiFetch<MigrationPlanDetail>(
+      `/api/v1/migration-plans/${encodeURIComponent(planId)}`,
     ),
 
   // Phase 7.1 — cross-routine harmonisation
