@@ -122,6 +122,12 @@ builder.Services.AddScoped<ExtractionPipeline>();
 builder.Services.AddHttpClient("anthropic-harmonise");
 builder.Services.AddScoped<Astra.Api.Llm.HarmonisationPipeline>();
 
+// Phase 8.0.a — Dependency graph builder. Pure derived state from
+// the parser-extracted call-graph + COMMON-block metadata already on
+// every Subroutine row. Substrate for the Phase 8.0.b wave planner +
+// 8.0.c blast-radius services.
+builder.Services.AddScoped<Astra.Api.Llm.Dependency.DependencyGraphBuilder>();
+
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
@@ -417,6 +423,7 @@ app.MapPromptEndpoints();
 app.MapArchetypeEndpoints();
 app.MapGoldenDatasetEndpoints();
 app.MapHarmonisationEndpoints();
+app.MapDependencyEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();
 app.MapRolesEndpoints();

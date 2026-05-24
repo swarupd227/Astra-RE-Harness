@@ -24,6 +24,7 @@ import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
 import { PromptCatalogPage } from '@/pages/PromptCatalogPage';
 import { GoldenDatasetPage } from '@/pages/GoldenDatasetPage';
 import { HarmonisationPage } from '@/pages/HarmonisationPage';
+import { DependencyGraphPage } from '@/pages/DependencyGraphPage';
 import { LanguagesPage } from '@/pages/LanguagesPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
@@ -208,6 +209,7 @@ export function App() {
             <Route path="/corpora" element={<CorporaPage />} />
             <Route path="/corpora/new" element={<NewCorpusPage />} />
             <Route path="/corpora/:id" element={<CorpusDetailPage />} />
+            <Route path="/corpora/:id/dependency-graph" element={<DependencyGraphPage />} />
             <Route path="/subroutines" element={<SubroutinesPage />} />
             <Route path="/subroutines/:id" element={<SubroutineDetailPage />} />
             <Route path="/subroutines/:id/extract" element={<LiveExtractionPage />} />
