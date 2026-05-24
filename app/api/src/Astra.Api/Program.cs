@@ -132,6 +132,11 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.DependencyGraphBuilder>();
 // the dependency graph; persists MigrationPlan + MigrationWave rows.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
 
+// Phase 8.0.c — Per-routine migration context: blast radius +
+// readiness classification + wave assignment lookup. Reads only;
+// no schema additions.
+builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationContextService>();
+
 // ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
