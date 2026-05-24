@@ -388,6 +388,56 @@ export type DependencyGraphResponse = {
   };
 };
 
+// ─── Portfolio dashboard (Phase 8.0.d) ───────────────────────────────
+export type PortfolioCorpusRow = {
+  corpusId: string;
+  name: string;
+  state: string;
+  fileCount: number;
+  totalLoc: number;
+  lastActivity: string;
+  counts: {
+    total: number;
+    signed: number;
+    scaffolded: number;
+    committed: number;
+    draft: number;
+    parsed: number;
+  };
+  planStatus: 'draft' | 'approved' | 'archived' | null;
+  planId: string | null;
+  totalWaves: number | null;
+};
+
+export type PortfolioActivity = {
+  eventType: string;
+  actorDisplay: string;
+  actorPersona: string;
+  targetType: string;
+  targetId: string | null;
+  occurredAt: string;
+};
+
+export type PortfolioSummaryResponse = {
+  totals: {
+    corpusCount: number;
+    totalRoutines: number;
+    signedCount: number;
+    scaffoldedCount: number;
+    committedCount: number;
+    draftCount: number;
+    parsedCount: number;
+  };
+  llmTotals: {
+    callCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+  };
+  corpora: PortfolioCorpusRow[];
+  recent: PortfolioActivity[];
+};
+
 // ─── Per-routine migration context (Phase 8.0.c) ─────────────────────
 export type BlastRadiusEntry = {
   id: string;
@@ -952,6 +1002,10 @@ export const api = {
     apiFetch<MigrationPlanDetail>(
       `/api/v1/migration-plans/${encodeURIComponent(planId)}`,
     ),
+
+  // Phase 8.0.d — portfolio dashboard (cross-corpus aggregates, admin only)
+  getPortfolioSummary: () =>
+    apiFetch<PortfolioSummaryResponse>(`/api/v1/platform/portfolio-summary`),
 
   // Phase 7.1 — cross-routine harmonisation
   runHarmonisation: (corpusId: string) =>
