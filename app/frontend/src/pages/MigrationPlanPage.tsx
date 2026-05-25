@@ -1,10 +1,12 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Layers, Play } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronDown, Layers, Play, Settings2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
   api,
   ApiError,
+  type MigrationPlanStrategy,
   type MigrationPlanWave,
   type MigrationPlanWaveRoutine,
 } from '@/lib/api';
@@ -44,8 +46,54 @@ export function MigrationPlanPage() {
     retry: false,
   });
 
+  const strategiesQuery = useQuery({
+    queryKey: ['migration-plan-strategies'],
+    queryFn: () => api.listMigrationPlanStrategies(),
+  });
+  const strategies = strategiesQuery.data?.data ?? [];
+  const defaultStrategyName = useMemo(
+    () => strategies.find((s) => s.isDefault)?.name ?? strategies[0]?.name ?? '',
+    [strategies],
+  );
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('');
+  const [optionsText, setOptionsText] = useState<string>('{}');
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+
+  // Sync the picker default to the current plan's strategy (if any),
+  // otherwise to the platform default. Done in an effect so refetches
+  // don't fight user edits.
+  useEffect(() => {
+    if (selectedStrategy) return;
+    const planStrategy = plan.data?.plan.strategyName;
+    if (planStrategy) setSelectedStrategy(planStrategy);
+    else if (defaultStrategyName) setSelectedStrategy(defaultStrategyName);
+  }, [plan.data?.plan.strategyName, defaultStrategyName, selectedStrategy]);
+
+  const selectedStrategyDef = strategies.find((s) => s.name === selectedStrategy);
+
   const generate = useMutation({
-    mutationFn: () => api.generateMigrationPlan(corpusId, {}),
+    mutationFn: () => {
+      // Resolve options for the selected strategy. Strategies whose
+      // options schema is an empty object (no fields required) get
+      // sent {} even if the picker was never opened.
+      const hasOptionFields = strategyHasFields(selectedStrategyDef);
+      let options: Record<string, unknown> | undefined;
+      if (hasOptionFields) {
+        try {
+          options = optionsText.trim() ? JSON.parse(optionsText) : {};
+          setOptionsError(null);
+        } catch (e) {
+          setOptionsError(`Options JSON did not parse: ${(e as Error).message}`);
+          throw e;
+        }
+      }
+      return api.generateMigrationPlan(corpusId, {
+        strategy: selectedStrategy || undefined,
+        options,
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['migration-plan', corpusId] }),
   });
   const approve = useMutation({
@@ -78,6 +126,96 @@ export function MigrationPlanPage() {
           on routines in earlier waves.
         </p>
       </header>
+
+      {isAdmin && (
+        <Card data-testid="strategy-picker-card">
+          <CardBody className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-2 text-left"
+              data-testid="strategy-picker-toggle"
+            >
+              <span className="flex items-center gap-2 text-body text-ink-primary">
+                <Settings2 className="h-4 w-4 text-ink-tertiary" />
+                Strategy: <span className="font-mono">{selectedStrategy || '—'}</span>
+                {selectedStrategyDef?.isDefault && (
+                  <span className="font-mono text-caption text-ink-tertiary">[default]</span>
+                )}
+              </span>
+              <ChevronDown
+                className={clsx(
+                  'h-4 w-4 text-ink-tertiary transition-transform',
+                  pickerOpen && 'rotate-180',
+                )}
+              />
+            </button>
+            {pickerOpen && (
+              <div className="space-y-3 border-t border-border-subtle pt-3">
+                <div className="space-y-1">
+                  <label className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                    Strategy
+                  </label>
+                  <select
+                    value={selectedStrategy}
+                    onChange={(e) => {
+                      setSelectedStrategy(e.target.value);
+                      setOptionsText('{}');
+                      setOptionsError(null);
+                    }}
+                    disabled={strategiesQuery.isPending}
+                    className="w-full rounded border border-border-subtle bg-raised px-2 py-1 font-mono text-body-sm text-ink-primary"
+                    data-testid="strategy-select"
+                  >
+                    {strategies.map((s) => (
+                      <option key={s.name} value={s.name}>
+                        {s.name}
+                        {s.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedStrategyDef && (
+                    <p className="text-body-sm text-ink-secondary">
+                      {selectedStrategyDef.description}
+                    </p>
+                  )}
+                </div>
+                {selectedStrategyDef && strategyHasFields(selectedStrategyDef) && (
+                  <div className="space-y-1">
+                    <label className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                      Options (JSON)
+                    </label>
+                    <textarea
+                      value={optionsText}
+                      onChange={(e) => {
+                        setOptionsText(e.target.value);
+                        setOptionsError(null);
+                      }}
+                      rows={6}
+                      placeholder={placeholderFor(selectedStrategyDef.name)}
+                      className="w-full rounded border border-border-subtle bg-raised px-2 py-1 font-mono text-caption text-ink-primary"
+                      data-testid="strategy-options-textarea"
+                    />
+                    <details className="text-caption text-ink-tertiary">
+                      <summary className="cursor-pointer">Schema</summary>
+                      <pre className="mt-1 overflow-auto rounded bg-sunken p-2 font-mono">
+                        {JSON.stringify(selectedStrategyDef.optionsSchema, null, 2)}
+                      </pre>
+                    </details>
+                    {optionsError && (
+                      <p className="text-caption text-feedback-error">{optionsError}</p>
+                    )}
+                  </div>
+                )}
+                <p className="font-mono text-caption text-ink-tertiary">
+                  These values are used the next time you click <em>Generate</em> or{' '}
+                  <em>Recompute</em>.
+                </p>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {plan.isPending && !noPlanYet && <Skeleton className="h-40" />}
 
@@ -222,6 +360,25 @@ function planTone(status: string): 'success' | 'review' | 'superseded' | 'neutra
   if (status === 'draft') return 'review';
   if (status === 'archived') return 'superseded';
   return 'neutral';
+}
+
+/** True when the strategy declares any option fields beyond an empty {}. */
+function strategyHasFields(s: MigrationPlanStrategy | undefined): boolean {
+  if (!s) return false;
+  const schema = s.optionsSchema as { properties?: Record<string, unknown> };
+  return !!schema?.properties && Object.keys(schema.properties).length > 0;
+}
+
+/** Per-strategy hint text shown in the options textarea placeholder. */
+function placeholderFor(strategyName: string): string {
+  switch (strategyName) {
+    case 'business-priority':
+      return '{\n  "priorities": { "FIND_FIT": 1, "INV_READ": 2 },\n  "defaultPriority": 99\n}';
+    case 'pilot-then-scale':
+      return '{\n  "pilotRoutineNames": ["FIND_FIT", "HYBRD1"]\n}';
+    default:
+      return '{}';
+  }
 }
 
 function WaveCard({

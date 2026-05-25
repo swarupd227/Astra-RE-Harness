@@ -41,18 +41,25 @@ public sealed class MigrationPlanner
     private readonly DependencyGraphBuilder _graphBuilder;
     private readonly IAuditLogger _audit;
     private readonly ILogger<MigrationPlanner> _log;
+    private readonly IReadOnlyDictionary<string, IPlanStrategy> _strategiesByName;
 
     public MigrationPlanner(
         AppDbContext db,
         DependencyGraphBuilder graphBuilder,
         IAuditLogger audit,
+        IEnumerable<IPlanStrategy> strategies,
         ILogger<MigrationPlanner> log)
     {
         _db = db;
         _graphBuilder = graphBuilder;
         _audit = audit;
         _log = log;
+        _strategiesByName = strategies.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>Registered <see cref="IPlanStrategy"/> implementations.
+    /// Surfaced by the strategy-listing endpoint.</summary>
+    public IEnumerable<IPlanStrategy> AvailableStrategies => _strategiesByName.Values;
 
     /// <summary>
     /// Generate a NEW draft plan from the current state of the call
@@ -65,18 +72,19 @@ public sealed class MigrationPlanner
         Guid corpusId,
         string strategyName,
         DevPersonaContext? actor,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string strategyOptionsJson = "{}")
     {
-        if (strategyName != DefaultStrategy)
+        if (!_strategiesByName.TryGetValue(strategyName, out var strategy))
             throw new ArgumentException(
-                $"Strategy '{strategyName}' not supported in 8.0.b. " +
-                $"Phase 8.0.e ships additional strategies. v1 ships only '{DefaultStrategy}'.");
+                $"Strategy '{strategyName}' is not registered. " +
+                $"Available: {string.Join(", ", _strategiesByName.Keys.OrderBy(s => s))}.");
 
         var graph = await _graphBuilder.BuildAsync(corpusId, ct)
             ?? throw new InvalidOperationException(
                 $"Corpus {corpusId} has no source versions; cannot generate plan.");
 
-        var waveAssignments = AssignWavesTopological(graph);
+        var waveAssignments = strategy.AssignWaves(graph, strategyOptionsJson);
 
         var plan = new MigrationPlan
         {
@@ -84,11 +92,11 @@ public sealed class MigrationPlanner
             CorpusId = corpusId,
             SourceVersionId = graph.SourceVersionId,
             Status = "draft",
-            StrategyName = strategyName,
-            StrategyOptionsJson = "{}",
+            StrategyName = strategy.Name,
+            StrategyOptionsJson = string.IsNullOrWhiteSpace(strategyOptionsJson) ? "{}" : strategyOptionsJson,
             TotalRoutines = graph.Nodes.Count,
             TotalWaves = waveAssignments.Count,
-            Summary = BuildSummary(waveAssignments.Count, graph.Nodes.Count, graph.Stats.CyclicSccCount),
+            Summary = BuildSummary(waveAssignments.Count, graph.Nodes.Count, graph.Stats.CyclicSccCount, strategy.Name),
             GeneratedBy = actor?.DisplayName,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -186,103 +194,10 @@ public sealed class MigrationPlanner
         return plan;
     }
 
-    /// <summary>
-    /// Topological wave assignment via SCC condensation + Kahn's BFS.
-    /// </summary>
-    private static List<List<Guid>> AssignWavesTopological(DependencyGraph graph)
-    {
-        // 1. Build SCC membership lookup. Routines NOT in any SCC are
-        //    treated as singleton super-nodes.
-        var nodeToScc = new Dictionary<Guid, int>();
-        var sccMembers = new List<List<Guid>>();
-        int sccIdx = 0;
-        foreach (var s in graph.Sccs)
-        {
-            sccMembers.Add(s.Members.ToList());
-            foreach (var m in s.Members) nodeToScc[m] = sccIdx;
-            sccIdx++;
-        }
-        foreach (var n in graph.Nodes)
-        {
-            if (nodeToScc.ContainsKey(n.Id)) continue;
-            sccMembers.Add(new List<Guid> { n.Id });
-            nodeToScc[n.Id] = sccIdx++;
-        }
-
-        // 2. Build condensation: super-node → set of callee super-nodes.
-        var condOut = new Dictionary<int, HashSet<int>>();
-        for (int i = 0; i < sccMembers.Count; i++) condOut[i] = new HashSet<int>();
-        foreach (var e in graph.Edges)
-        {
-            if (e.Type != "call") continue;
-            if (!nodeToScc.TryGetValue(e.From, out var fromS)) continue;
-            if (!nodeToScc.TryGetValue(e.To, out var toS)) continue;
-            if (fromS == toS) continue; // intra-SCC edge
-            condOut[fromS].Add(toS);
-        }
-
-        // 3. Compute condensation in-degrees (i.e. who has callees not
-        //    yet placed). Note the direction: if A CALLS B, then A's
-        //    plan-time "dependency" is on B being ready first.
-        //    So we want: a super-node is ready when all its CALLEES are placed.
-        //    In Kahn terms: traverse the REVERSE of the call edge.
-        //    Wave 1 = super-nodes whose callee set is empty (true leaves).
-        var calleeRemaining = new Dictionary<int, int>();
-        for (int i = 0; i < sccMembers.Count; i++)
-            calleeRemaining[i] = condOut[i].Count;
-
-        // Reverse adjacency: caller list per super-node.
-        var callers = new Dictionary<int, List<int>>();
-        for (int i = 0; i < sccMembers.Count; i++) callers[i] = new List<int>();
-        foreach (var (from, tos) in condOut)
-            foreach (var to in tos) callers[to].Add(from);
-
-        // 4. Kahn's BFS by waves.
-        var waves = new List<List<Guid>>();
-        var current = Enumerable.Range(0, sccMembers.Count)
-            .Where(i => calleeRemaining[i] == 0)
-            .ToList();
-        var placed = new HashSet<int>();
-        while (current.Count > 0)
-        {
-            // Wave members in the original graph order, alphabetic by
-            // routine name for SCC ties.
-            var waveRoutines = current
-                .SelectMany(i => sccMembers[i])
-                .OrderBy(g => g)
-                .ToList();
-            waves.Add(waveRoutines);
-            foreach (var i in current) placed.Add(i);
-
-            var next = new HashSet<int>();
-            foreach (var i in current)
-            {
-                foreach (var caller in callers[i])
-                {
-                    if (placed.Contains(caller)) continue;
-                    calleeRemaining[caller]--;
-                    if (calleeRemaining[caller] == 0) next.Add(caller);
-                }
-            }
-            current = next.ToList();
-        }
-
-        // 5. Defensive: if there are super-nodes we couldn't place
-        //    (shouldn't happen after SCC condensation eliminates
-        //    cycles, but if the graph has a bug, surface as a final
-        //    wave so the plan covers every routine).
-        var unplaced = Enumerable.Range(0, sccMembers.Count)
-            .Where(i => !placed.Contains(i))
-            .SelectMany(i => sccMembers[i])
-            .OrderBy(g => g)
-            .ToList();
-        if (unplaced.Count > 0) waves.Add(unplaced);
-
-        return waves;
-    }
-
     private static string BuildWaveName(int waveNumber, int routineCount, bool isFirst, bool isLast)
     {
+        // Generic naming — strategies that need a fancier label (e.g.
+        // "Wave 1 · pilot" for pilot-then-scale) can override later.
         var qualifier = isFirst
             ? "leaf routines (no in-corpus callees)"
             : isLast
@@ -291,11 +206,11 @@ public sealed class MigrationPlanner
         return $"Wave {waveNumber} · {routineCount} {qualifier}";
     }
 
-    private static string BuildSummary(int waveCount, int routineCount, int cycleCount)
+    private static string BuildSummary(int waveCount, int routineCount, int cycleCount, string strategyName)
     {
         var cycles = cycleCount > 0
             ? $", {cycleCount} cycle{(cycleCount == 1 ? "" : "s")} treated as super-node"
             : "";
-        return $"{waveCount} wave{(waveCount == 1 ? "" : "s")}, {routineCount} routine{(routineCount == 1 ? "" : "s")}{cycles}.";
+        return $"{waveCount} wave{(waveCount == 1 ? "" : "s")}, {routineCount} routine{(routineCount == 1 ? "" : "s")}{cycles}. Strategy: {strategyName}.";
     }
 }

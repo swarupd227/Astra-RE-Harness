@@ -34,9 +34,12 @@ public static class MigrationPlanEndpoints
         {
             if (actor.Persona != Persona.Admin) return Forbid();
             var strategy = body?.Strategy ?? MigrationPlanner.DefaultStrategy;
+            var optionsJson = body?.Options is null
+                ? "{}"
+                : JsonSerializer.Serialize(body.Options);
             try
             {
-                var plan = await planner.GenerateDraftAsync(id, strategy, actor, ct);
+                var plan = await planner.GenerateDraftAsync(id, strategy, actor, ct, optionsJson);
                 return Results.Ok(RenderPlanSummary(plan));
             }
             catch (ArgumentException ex)
@@ -47,6 +50,27 @@ public static class MigrationPlanEndpoints
             {
                 return Results.BadRequest(new { error = new { code = "migration_plan.precondition_failed", message = ex.Message } });
             }
+        });
+
+        // Phase 8.0.e — Strategy listing. Open to every authenticated
+        // persona; the descriptions are UI affordance, not a security
+        // surface. The picker in the migration-plan page calls this
+        // to render the strategy dropdown.
+        app.MapGet("/api/v1/migration-plan-strategies", (
+            MigrationPlanner planner) =>
+        {
+            var strategies = planner.AvailableStrategies
+                .Select(s => new
+                {
+                    name = s.Name,
+                    description = s.Description,
+                    isDefault = s.Name == MigrationPlanner.DefaultStrategy,
+                    optionsSchema = s.OptionsSchema,
+                })
+                .OrderBy(s => s.isDefault ? 0 : 1)
+                .ThenBy(s => s.name, StringComparer.Ordinal)
+                .ToList();
+            return Results.Ok(new { data = strategies });
         });
 
         app.MapPost("/api/v1/migration-plans/{id:guid}/approve", async (
@@ -255,4 +279,4 @@ public static class MigrationPlanEndpoints
         Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
 }
 
-public sealed record MigrationPlanRequest(string? Strategy);
+public sealed record MigrationPlanRequest(string? Strategy, object? Options);

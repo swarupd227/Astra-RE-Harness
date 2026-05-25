@@ -477,6 +477,14 @@ export type WaveAssignmentResponse = {
   waveName: string;
 };
 
+// ─── Migration plan strategies (Phase 8.0.e) ─────────────────────────
+export type MigrationPlanStrategy = {
+  name: string;
+  description: string;
+  isDefault: boolean;
+  optionsSchema: Record<string, unknown>;
+};
+
 // ─── Migration plan (Phase 8.0.b) ────────────────────────────────────
 export type MigrationPlanSummary = {
   id: string;
@@ -978,12 +986,17 @@ export const api = {
       `/api/v1/subroutines/${encodeURIComponent(subroutineId)}/wave-assignment`,
     ),
 
-  // Phase 8.0.b — migration plan
-  generateMigrationPlan: (corpusId: string, body?: { strategy?: string }) =>
+  // Phase 8.0.b/e — migration plan (strategy + per-strategy options)
+  generateMigrationPlan: (
+    corpusId: string,
+    body?: { strategy?: string; options?: Record<string, unknown> },
+  ) =>
     apiFetch<MigrationPlanSummary>(
       `/api/v1/corpora/${encodeURIComponent(corpusId)}/migration-plan/generate`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },
     ),
+  listMigrationPlanStrategies: () =>
+    apiFetch<{ data: MigrationPlanStrategy[] }>('/api/v1/migration-plan-strategies'),
   approveMigrationPlan: (planId: string) =>
     apiFetch<MigrationPlanSummary>(
       `/api/v1/migration-plans/${encodeURIComponent(planId)}/approve`,

@@ -132,6 +132,16 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.DependencyGraphBuilder>();
 // the dependency graph; persists MigrationPlan + MigrationWave rows.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
 
+// Phase 8.0.e — Pluggable migration strategies. Each implementation
+// is registered as IPlanStrategy; MigrationPlanner picks one by name
+// at plan-generation time. Order doesn't matter — name lookup keys
+// the dispatch. Customers can register additional IPlanStrategy
+// implementations alongside these built-ins.
+builder.Services.AddSingleton<Astra.Api.Llm.Dependency.IPlanStrategy, Astra.Api.Llm.Dependency.Strategies.TopologicalLeavesFirstStrategy>();
+builder.Services.AddSingleton<Astra.Api.Llm.Dependency.IPlanStrategy, Astra.Api.Llm.Dependency.Strategies.BusinessPriorityStrategy>();
+builder.Services.AddSingleton<Astra.Api.Llm.Dependency.IPlanStrategy, Astra.Api.Llm.Dependency.Strategies.RiskFirstStrategy>();
+builder.Services.AddSingleton<Astra.Api.Llm.Dependency.IPlanStrategy, Astra.Api.Llm.Dependency.Strategies.PilotThenScaleStrategy>();
+
 // Phase 8.0.c — Per-routine migration context: blast radius +
 // readiness classification + wave assignment lookup. Reads only;
 // no schema additions.
