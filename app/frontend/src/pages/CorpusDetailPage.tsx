@@ -44,7 +44,7 @@ export function CorpusDetailPage() {
   const files = c.latestVersion?.files ?? [];
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">

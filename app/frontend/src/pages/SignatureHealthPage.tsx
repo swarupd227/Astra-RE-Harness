@@ -1,14 +1,26 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, ShieldAlert, ArrowRight, RefreshCcw } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ArrowRight, RefreshCcw, BadgeCheck } from 'lucide-react';
 import { clsx } from 'clsx';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api, ApiError, type SignatureHealth } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { PageHero } from '@/components/PageHero';
+import { KpiCard } from '@/components/KpiCard';
 
 /**
  * Signature Health portfolio — value-add #8.
@@ -66,24 +78,25 @@ export function SignatureHealthPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="signature-health-page">
-      <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-          Phase #4 · Signature health
-        </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Signature Health</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Every signed spec across every project. A spec is "healthy" when
-          the corpus hasn't been re-ingested since signing — i.e. the source
-          revision the signature is bound to is still the latest. Drift
-          means a newer revision exists and the spec needs to be re-verified.
-        </p>
-      </header>
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="signature-health-page">
+      <PageHero
+        tone="emerald"
+        eyebrow="Phase #4 · Signature health"
+        title="Signature Health"
+        lead={`Every signed spec across every project. A spec is "healthy" when the corpus hasn't been re-ingested since signing — i.e. the source revision the signature is bound to is still the latest. Drift means a newer revision exists and the spec needs to be re-verified.`}
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Signed specs" value={q.data.totalSigned} tone="neutral" />
-        <StatCard label="Healthy" value={q.data.totalSigned - q.data.drifted} tone="success" />
-        <StatCard label="Drifted" value={q.data.drifted} tone={q.data.drifted > 0 ? 'failed' : 'neutral'} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_1fr_2fr]">
+        <KpiCard label="Signed specs" value={q.data.totalSigned} icon={BadgeCheck} accent="indigo" />
+        <KpiCard label="Healthy"      value={q.data.totalSigned - q.data.drifted} icon={ShieldCheck} accent="emerald" />
+        <KpiCard
+          label="Drifted"
+          value={q.data.drifted}
+          icon={ShieldAlert}
+          accent={q.data.drifted > 0 ? 'rose' : 'slate'}
+          alert={q.data.drifted > 0}
+        />
+        <SigHealthByCorpusChart rows={q.data.rows} />
       </div>
 
       {actionError && <ErrorBlock title="Re-verify failed" message={actionError} />}
@@ -237,4 +250,59 @@ function StatCard({
       </CardBody>
     </Card>
   );
+}
+
+// ── Healthy-vs-drifted stacked bar by corpus ─────────────────────────
+//
+// Tucked into the KPI row's last column so the admin sees at a glance
+// where the drift concentration is. Recharts ResponsiveContainer keeps
+// it sized to whatever cell it lands in.
+function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
+  const data = useMemo(() => {
+    const byCorpus = new Map<string, { name: string; Healthy: number; Drifted: number }>();
+    for (const r of rows) {
+      const key = r.corpusName;
+      if (!byCorpus.has(key)) {
+        byCorpus.set(key, { name: shortName(r.corpusName), Healthy: 0, Drifted: 0 });
+      }
+      const bucket = byCorpus.get(key)!;
+      if (r.state === 'drift') bucket.Drifted++;
+      else bucket.Healthy++;
+    }
+    return Array.from(byCorpus.values());
+  }, [rows]);
+
+  return (
+    <div className="card p-4">
+      <p className="label mb-2">By corpus</p>
+      {data.length === 0 ? (
+        <p className="text-[12px] text-ink-secondary">No signed specs yet.</p>
+      ) : (
+        <div style={{ width: '100%', height: 130 }}>
+          <ResponsiveContainer>
+            <BarChart data={data} margin={{ top: 0, right: 4, left: -16, bottom: -4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748b' }} />
+              <YAxis tick={{ fontSize: 9, fill: '#64748b' }} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  boxShadow: '0 4px 12px rgba(16,24,40,.10)',
+                }}
+              />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }} />
+              <Bar dataKey="Healthy" stackId="a" fill="#059669" />
+              <Bar dataKey="Drifted" stackId="a" fill="#e11d48" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function shortName(name: string): string {
+  return name.length > 22 ? `${name.slice(0, 20)}…` : name;
 }

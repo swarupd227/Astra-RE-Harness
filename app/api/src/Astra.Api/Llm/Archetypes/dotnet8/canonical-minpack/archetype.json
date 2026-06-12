@@ -1,0 +1,25 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-minpack",
+  "targetStack": "dotnet8",
+  "displayName": "MINPACK HYBRD1 nonlinear solver (.NET 8 + xUnit)",
+  "description": "Reference Fortran→.NET-8 scaffold for MINPACK's HYBRD1 family: Powell hybrid Newton/Broyden nonlinear-equation solver. Produces a buildable, dotnet-test-runnable package with the entry-point service, the iterative-core skeleton, the user-objective contract, and an xUnit fixture set tied to the signed spec.",
+  "compatibleSchemas": ["fortran-f77"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "HYBRD1" },
+      { "subroutineName": "HYBRD" }
+    ],
+    "fallback": "Used whenever the routine name is a MINPACK hybrid-solver variant."
+  },
+  "owner": "Nous · Fortran migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.MinPack.csproj",                    "language": "xml",     "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.MinPack.Tests.csproj",        "language": "xml",     "derivedFromClaimIds": [] },
+    { "path": "src/Hybrd1Service.cs",                   "language": "csharp",  "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-4","INV-5"] },
+    { "path": "src/HybrdCore.cs",                       "language": "csharp",  "derivedFromClaimIds": ["INV-3","INV-4","INV-5"] },
+    { "path": "src/SolverTypes.cs",                     "language": "csharp",  "derivedFromClaimIds": ["in.FCN","in.N","in.X","in.TOL","out.INFO"] },
+    { "path": "tests/Hybrd1ServiceTests.cs",            "language": "csharp",  "derivedFromClaimIds": ["INV-1","INV-2","INV-3","INV-5","EC-2"] }
+  ]
+}

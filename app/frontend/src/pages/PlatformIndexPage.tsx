@@ -119,7 +119,7 @@ export function PlatformIndexPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="platform-index-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="platform-index-page">
       <header>
         <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
           Phase #4 · Platform configuration

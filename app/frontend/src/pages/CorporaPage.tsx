@@ -6,6 +6,7 @@ import { Card, CardBody } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { NoCorporaIllustration } from '@/illustrations/NoCorpora';
@@ -14,26 +15,21 @@ export function CorporaPage() {
   const corpora = useQuery({ queryKey: ['corpora'], queryFn: api.listCorpora });
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-            Phase C.1
-          </p>
-          <h1 className="mt-2 text-display font-semibold text-ink-primary">Projects</h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-            Each project is a versioned snapshot of Fortran source. Upload <span className="font-mono">.f / .for / .f90</span>{' '}
-            files or a <span className="font-mono">.zip</span>, or clone from a Git URL — the parser sidecar runs{' '}
-            <span className="font-mono">fparser2</span> and persists every subroutine.
-          </p>
-        </div>
-        <Link to="/projects/new" data-testid="add-corpus">
-          <Button variant="primary">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add project
-          </Button>
-        </Link>
-      </header>
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+      <PageHero
+        tone="emerald"
+        eyebrow="Phase C.1 · ingest"
+        title="Projects"
+        lead={<>Each project is a versioned snapshot of Fortran source. Upload <span className="font-mono">.f / .for / .f90</span>{' '}files or a <span className="font-mono">.zip</span>, or clone from a Git URL — the parser sidecar runs <span className="font-mono">fparser2</span> and persists every subroutine.</>}
+        actions={
+          <Link to="/projects/new" data-testid="add-corpus">
+            <Button variant="primary">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add project
+            </Button>
+          </Link>
+        }
+      />
 
       {corpora.isPending ? (
         <div className="grid gap-4 lg:grid-cols-2">

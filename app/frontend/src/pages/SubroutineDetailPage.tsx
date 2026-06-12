@@ -46,7 +46,7 @@ export function SubroutineDetailPage() {
   const s = sub.data;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">

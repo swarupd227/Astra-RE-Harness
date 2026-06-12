@@ -59,7 +59,7 @@ export function RolesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="roles-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="roles-page">
       <header>
         <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
           Phase #4 · Roles &amp; permissions

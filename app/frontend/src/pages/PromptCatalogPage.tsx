@@ -94,7 +94,7 @@ export function PromptCatalogPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="prompt-catalog-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="prompt-catalog-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">

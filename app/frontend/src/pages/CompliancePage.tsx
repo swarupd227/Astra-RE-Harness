@@ -8,6 +8,7 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { PageHero } from '@/components/PageHero';
 
 /**
  * Compliance page — value-add #6 in the Nous platform pitch.
@@ -87,20 +88,13 @@ export function CompliancePage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="compliance-page">
-      <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-          Phase #3d · Audit feed exporter
-        </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">
-          Audit &amp; compliance feed
-        </h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Every state transition in the harness is appended to an immutable
-          audit log. Pull it as a SOX, HIPAA, or PCI evidence bundle — one
-          click, every export itself logged as a <span className="font-mono text-caption">compliance.feed_exported</span> row.
-        </p>
-      </header>
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="compliance-page">
+      <PageHero
+        tone="amber"
+        eyebrow="Phase #3d · Audit feed exporter"
+        title="Audit & compliance feed"
+        lead={<>Every state transition in the harness is appended to an immutable audit log. Pull it as a SOX, HIPAA, or PCI evidence bundle — one click, every export itself logged as a <span className="font-mono text-caption">compliance.feed_exported</span> row.</>}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {formats.data.data.map((f) => (

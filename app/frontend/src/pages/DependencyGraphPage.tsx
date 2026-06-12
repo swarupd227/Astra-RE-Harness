@@ -1,45 +1,39 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import ReactFlow, {
-  Background,
-  Controls,
-  Handle,
-  MarkerType,
-  MiniMap,
-  Position,
-  type Edge as RfEdge,
-  type Node as RfNode,
-  type NodeProps,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { api, type DependencyGraphResponse, type DependencyGraphNode } from '@/lib/api';
-import { Badge } from '@/components/Badge';
-import { Card, CardBody } from '@/components/Card';
+import cytoscape from 'cytoscape';
+// @ts-expect-error — no bundled types for cytoscape-fcose
+import fcose from 'cytoscape-fcose';
+import { ZoomIn, ZoomOut, Maximize2, X } from 'lucide-react';
+import { clsx } from 'clsx';
+import { api } from '@/lib/api';
+import { CardBody, Card } from '@/components/Card';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
+import { StateBadge } from '@/components/StateBadge';
+
+cytoscape.use(fcose);
 
 /**
  * Phase 8.0.a — Interactive dependency graph for a corpus.
  *
- * Reads the parser-extracted call graph + COMMON / copybook refs and
- * renders them as a left-to-right layered diagram. Each node colours by
- * the routine's most-progressed state (PARSED grey → SIGNED green →
- * COMMITTED dark green). Click a node to drill into the subroutine.
- *
- * Layout: simple topological-depth-from-roots. Roots (in-degree 0) sit
- * at column 0; their immediate callees at column 1; and so on. Within
- * a column we sort alphabetically for determinism. This avoids pulling
- * in a force-directed layout dependency (elkjs / dagre) for the first
- * cut; we can swap in a real auto-layout when the graph density
- * actually demands it.
+ * Powered by Cytoscape with the fcose (Fast Compound Spring Embedder)
+ * layout — the same engine ACE uses for its ontology graph. Click any
+ * routine to highlight its full upstream + downstream neighbourhood
+ * (orange edges, focused-node halo, everything else fades). Double-click
+ * to drill into the routine.
  */
 export function DependencyGraphPage() {
   const params = useParams<{ id: string }>();
   const corpusId = params.id!;
   const navigate = useNavigate();
-  const [hideExternal, setHideExternal] = useState(false);
-  const [hideSharedStorage, setHideSharedStorage] = useState(true); // start clean
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
+  const lastTapRef = useRef<{ id: string; t: number } | null>(null);
+
+  const [hideSharedStorage, setHideSharedStorage] = useState(true);
+  const [selected, setSelected] = useState<string | null>(null);
 
   const graph = useQuery({
     queryKey: ['dependency-graph', corpusId],
@@ -52,10 +46,212 @@ export function DependencyGraphPage() {
     queryFn: () => api.getCorpus(corpusId),
   });
 
-  const { rfNodes, rfEdges } = useMemo(
-    () => layout(graph.data, { hideSharedStorage }),
-    [graph.data, hideSharedStorage],
-  );
+  const plan = useQuery({
+    queryKey: ['migration-plan', corpusId],
+    queryFn: () => api.getCurrentMigrationPlan(corpusId).catch(() => null),
+    retry: false,
+  });
+
+  const waveByRoutine = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!plan.data) return m;
+    for (const w of plan.data.waves) {
+      for (const r of w.routines) m.set(r.id, w.waveNumber);
+    }
+    return m;
+  }, [plan.data]);
+
+  const nodeById = useMemo(() => {
+    const m = new Map<string, { name: string; state: string; calleeCount: number; callerCount: number }>();
+    if (!graph.data) return m;
+    for (const n of graph.data.nodes) m.set(n.id, n);
+    return m;
+  }, [graph.data]);
+
+  // Build Cytoscape elements + style + layout. Runs once per (graph,
+  // wave-plan, hideSharedStorage) change. We tear down the previous
+  // Cytoscape instance on cleanup so React doesn't double-mount.
+  useEffect(() => {
+    if (!graph.data || !containerRef.current) return;
+    const visibleEdges = graph.data.edges.filter(
+      (e) => !(hideSharedStorage && e.type === 'shared-storage'),
+    );
+    const elements: cytoscape.ElementDefinition[] = [
+      ...graph.data.nodes.map((n) => {
+        const wave = waveByRoutine.get(n.id);
+        const accent = wave !== undefined ? WAVE_FILL[Math.min(5, wave) as 1 | 2 | 3 | 4 | 5] : '#94a3b8';
+        return {
+          data: {
+            id: n.id,
+            label: n.name,
+            wave: wave ?? null,
+            state: n.state,
+            accent,
+            statedot: STATE_DOT[n.state] ?? '#94a3b8',
+          },
+        };
+      }),
+      ...visibleEdges.map((e, i) => ({
+        data: {
+          id: `e${i}`,
+          source: e.from,
+          target: e.to,
+          rel: e.type === 'shared-storage' ? 'COMMON' : 'call',
+          shared: e.type === 'shared-storage' ? 1 : 0,
+        },
+      })),
+    ];
+
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': 'data(accent)',
+            'background-opacity': 0.18,
+            'border-color': 'data(accent)',
+            'border-width': 2,
+            'border-opacity': 0.9,
+            label: 'data(label)',
+            'font-size': 9,
+            color: '#0f172a',
+            'font-weight': 600,
+            'text-valign': 'bottom',
+            'text-halign': 'center',
+            'text-margin-y': 4,
+            width: 32,
+            height: 32,
+            shape: 'ellipse',
+          } as cytoscape.Css.Node,
+        },
+        // Coloured ring around each node keyed to wave (already on
+        // border-color above). Add a small inner glyph showing the
+        // wave number when assigned.
+        {
+          selector: 'node[wave]',
+          style: {
+            'font-size': 13,
+            color: 'data(accent)',
+            'font-weight': 800,
+            // Replace the routine name in the centre with the wave
+            // number — the routine name still shows below the node.
+            'text-margin-y': 4,
+          } as cytoscape.Css.Node,
+        },
+        {
+          selector: 'edge',
+          style: {
+            width: 1.4,
+            'line-color': '#cbd5e1',
+            'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle',
+            'target-arrow-color': '#cbd5e1',
+            'arrow-scale': 0.9,
+          } as cytoscape.Css.Edge,
+        },
+        {
+          selector: 'edge[shared = 1]',
+          style: {
+            'line-style': 'dashed',
+            'line-dash-pattern': [4, 4],
+          } as cytoscape.Css.Edge,
+        },
+        // Dimmed-out class for everything outside the focused subtree.
+        {
+          selector: '.faded',
+          style: { opacity: 0.12 } as cytoscape.Css.Node,
+        },
+        // Highlighted-edge class — bright brand orange.
+        {
+          selector: 'edge.hl',
+          style: {
+            'line-color': '#f26722',
+            'target-arrow-color': '#f26722',
+            width: 2.6,
+            opacity: 1,
+          } as cytoscape.Css.Edge,
+        },
+        // Highlighted-node class — kept fully opaque so the focused
+        // subtree pops against the dimmed background.
+        {
+          selector: 'node.hl',
+          style: {
+            'border-width': 3,
+            'border-color': '#f26722',
+            opacity: 1,
+          } as cytoscape.Css.Node,
+        },
+        // Selected node — bigger, brand-bordered, slight shadow.
+        {
+          selector: 'node:selected',
+          style: {
+            'border-width': 4,
+            'border-color': '#f26722',
+            'background-color': '#f26722',
+            'background-opacity': 0.22,
+            width: 42,
+            height: 42,
+          } as cytoscape.Css.Node,
+        },
+      ],
+      layout: {
+        name: 'fcose',
+        animate: true,
+        animationDuration: 600,
+        randomize: true,
+        idealEdgeLength: 95,
+        nodeRepulsion: 7000,
+        padding: 24,
+        nodeSeparation: 80,
+      } as cytoscape.LayoutOptions,
+      wheelSensitivity: 0.25,
+      minZoom: 0.25,
+      maxZoom: 3,
+    });
+    cyRef.current = cy;
+
+    // Single-tap on node: focus its neighbourhood.
+    // Double-tap on the same node: drill into the routine page.
+    cy.on('tap', 'node', (evt) => {
+      const id = evt.target.id();
+      const now = Date.now();
+      const last = lastTapRef.current;
+      if (last && last.id === id && now - last.t < 340) {
+        lastTapRef.current = null;
+        navigate(`/subroutines/${id}`);
+        return;
+      }
+      lastTapRef.current = { id, t: now };
+      setSelected(id);
+      // Compute the WHOLE neighbourhood (any-hop predecessors +
+      // any-hop successors). Cytoscape's `closedNeighborhood` only
+      // walks 1 hop — we need the full transitive closure to match
+      // the "blast radius" semantics in the sidebar.
+      cy.elements().addClass('faded').removeClass('hl');
+      const node = evt.target as cytoscape.NodeSingular;
+      const upstream = node.predecessors();
+      const downstream = node.successors();
+      const subtree = node.union(upstream).union(downstream);
+      subtree.removeClass('faded').addClass('hl');
+    });
+
+    // Background tap = clear.
+    cy.on('tap', (evt) => {
+      if (evt.target === cy) {
+        setSelected(null);
+        cy.elements().removeClass('faded hl');
+      }
+    });
+
+    return () => {
+      cy.destroy();
+      cyRef.current = null;
+    };
+  }, [graph.data, waveByRoutine, hideSharedStorage, navigate]);
+
+  const focused = selected ? nodeById.get(selected) : null;
 
   if (graph.isPending || corpus.isPending) {
     return (
@@ -76,251 +272,184 @@ export function DependencyGraphPage() {
   const g = graph.data;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10" data-testid="dependency-graph-page">
-      <header className="space-y-1">
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-          Phase 8.0 · dependency-aware migration · {corpus.data?.name ?? corpusId}
-        </p>
-        <h1 className="text-display font-semibold text-ink-primary">Dependency graph</h1>
-        <p className="max-w-3xl text-body-lg text-ink-secondary">
-          Parser-extracted call graph + shared-storage references for the corpus's latest source
-          version. Each node is a subroutine; arrows go from CALLER to CALLEE. This is the
-          substrate the Phase 8.0.b wave planner reads to assign routines to migration waves.
-        </p>
-      </header>
+    <div
+      className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10 fadeup"
+      data-testid="dependency-graph-page"
+    >
+      <PageHero
+        tone="violet"
+        eyebrow={`Phase 8.0 · dependency-aware migration · ${corpus.data?.name ?? corpusId}`}
+        title="Dependency graph"
+        lead="Parser-extracted call graph + shared-storage references. Nodes colour by their assigned migration wave. Click any routine to highlight its full upstream and downstream path · double-click to drill in."
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <Card className="overflow-hidden">
           <CardBody className="p-0">
-            <div style={{ height: 640 }} className="border-border-subtle">
-              <ReactFlow
-                nodes={rfNodes}
-                edges={rfEdges}
-                fitView
-                minZoom={0.2}
-                maxZoom={1.5}
-                nodeTypes={NODE_TYPES}
-                onNodeClick={(_e, n) => {
-                  if (n.data?.subroutineId) navigate(`/subroutines/${n.data.subroutineId}`);
-                }}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background gap={20} />
-                <Controls showInteractive={false} />
-                <MiniMap pannable zoomable />
-              </ReactFlow>
+            <div className="relative" style={{ height: 640, background: '#f8fafc' }}>
+              <div ref={containerRef} className="absolute inset-0" data-testid="dep-graph-canvas" />
+              {/* Floating control cluster — top-right. */}
+              <div className="absolute right-3 top-3 flex flex-col gap-1 rounded-lg border border-border-subtle bg-white/95 p-1 shadow-card">
+                <button
+                  type="button"
+                  onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 1.25)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-sunken"
+                  title="Zoom in"
+                >
+                  <ZoomIn size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 0.8)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-sunken"
+                  title="Zoom out"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cyRef.current?.fit(undefined, 32)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-sunken"
+                  title="Fit to view"
+                >
+                  <Maximize2 size={14} />
+                </button>
+              </div>
+              {/* Floating wave + state legend — bottom-left. */}
+              <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-border-subtle bg-white/95 p-2.5 shadow-card">
+                <p className="label mb-1.5">Wave</p>
+                <div className="space-y-1">
+                  {[1, 2, 3, 4, 5].map((w) => (
+                    <div key={w} className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ background: WAVE_FILL[w as 1 | 2 | 3 | 4 | 5] }}
+                      />
+                      <span className="font-mono text-[10px] text-ink-secondary">{w}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {selected && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    cyRef.current?.elements().removeClass('faded hl');
+                  }}
+                  className="pointer-events-auto absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-ink-secondary shadow-card hover:text-ink-primary"
+                >
+                  <X size={12} /> Clear focus
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-sunken px-3 py-2 font-mono text-[11px] text-ink-tertiary">
+              <span>
+                {focused
+                  ? <>Focused on <span className="font-semibold text-ink-primary">{focused.name}</span> · click background to clear · double-click to drill in</>
+                  : <>Drag to pan · scroll to zoom · click a routine to focus its path · double-click to drill in</>
+                }
+              </span>
             </div>
           </CardBody>
         </Card>
 
         <aside className="space-y-3">
-          <Card>
-            <CardBody>
-              <p className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-                Stats
-              </p>
-              <ul className="space-y-1 font-mono text-body-sm text-ink-secondary">
-                <li>nodes: {g.stats.nodeCount}</li>
-                <li>call edges: {g.stats.callEdgeCount}</li>
-                <li>shared-storage edges: {g.stats.sharedStorageEdgeCount}</li>
-                <li>SCCs (cycles): {g.stats.sccCount}</li>
-                <li>leaves: {g.stats.leafCount}</li>
-                <li>roots: {g.stats.rootCount}</li>
-                <li>external callees: {g.stats.externalCalleeCount}</li>
+          <div className="card p-4">
+            <p className="label mb-2">Stats</p>
+            <ul className="space-y-1 font-mono text-[12px] text-ink-secondary">
+              <li>nodes: {g.stats.nodeCount}</li>
+              <li>call edges: {g.stats.callEdgeCount}</li>
+              <li>shared-storage edges: {g.stats.sharedStorageEdgeCount}</li>
+              <li>SCCs (cycles): {g.stats.sccCount}</li>
+              <li>leaves: {g.stats.leafCount}</li>
+              <li>roots: {g.stats.rootCount}</li>
+              <li>external callees: {g.stats.externalCalleeCount}</li>
+            </ul>
+          </div>
+
+          <div className="card p-4">
+            <p className="label mb-2">Filters</p>
+            <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={hideSharedStorage}
+                onChange={(e) => setHideSharedStorage(e.target.checked)}
+                className="rounded border-border accent-brand-500"
+              />
+              Hide shared-storage edges
+            </label>
+          </div>
+
+          {focused && (
+            <div className="card p-4">
+              <p className="label mb-2">Focused routine</p>
+              <p className="font-mono text-[13px] font-semibold text-ink-primary">{focused.name}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <StateBadge state={focused.state} />
+                {selected && waveByRoutine.has(selected) && (
+                  <span className="pill bg-ace-50 text-ace-700 ring-1 ring-ace-100">
+                    wave {waveByRoutine.get(selected)}
+                  </span>
+                )}
+              </div>
+              <ul className="mt-2 space-y-1 font-mono text-[11px] text-ink-tertiary">
+                <li>callees: {focused.calleeCount}</li>
+                <li>callers: {focused.callerCount}</li>
               </ul>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody className="space-y-2">
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-                Filters
-              </p>
-              <label className="flex items-center gap-2 text-body-sm">
-                <input
-                  type="checkbox"
-                  checked={hideSharedStorage}
-                  onChange={(e) => setHideSharedStorage(e.target.checked)}
-                />
-                Hide shared-storage edges
-              </label>
-              <label className="flex items-center gap-2 text-body-sm text-ink-tertiary opacity-60">
-                <input type="checkbox" checked={hideExternal} onChange={(e) => setHideExternal(e.target.checked)} disabled />
-                Hide external callees (n/a — they don't render as nodes)
-              </label>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <p className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-                Legend
-              </p>
-              <ul className="space-y-1 text-body-sm">
-                <li><Badge tone="neutral">PARSED</Badge> default state</li>
-                <li><Badge tone="review">DRAFT</Badge> extracted, awaiting review</li>
-                <li><Badge tone="success">SIGNED</Badge> spec authoritative</li>
-                <li><Badge tone="scaffolded">SCAFFOLDED</Badge> target code generated</li>
-                <li><Badge tone="success">COMMITTED</Badge> on its way to prod</li>
-              </ul>
-            </CardBody>
-          </Card>
-
-          {g.externalCallees.length > 0 && (
-            <Card>
-              <CardBody>
-                <p className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-                  External callees ({g.externalCallees.length})
-                </p>
-                <p className="mb-2 text-body-sm text-ink-secondary">
-                  Names called by in-corpus routines but not resolved to any subroutine here.
-                  Typically system / OS / library calls or missing source.
-                </p>
-                <ul className="space-y-0.5 font-mono text-caption text-ink-secondary">
-                  {g.externalCallees.slice(0, 16).map((n) => <li key={n}>{n}</li>)}
-                  {g.externalCallees.length > 16 && <li className="opacity-60">…and {g.externalCallees.length - 16} more</li>}
-                </ul>
-              </CardBody>
-            </Card>
+              <Link
+                to={`/subroutines/${selected}`}
+                className="mt-2 inline-block text-[12px] font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+              >
+                Open routine →
+              </Link>
+            </div>
           )}
 
-          <Card>
-            <CardBody>
-              <Link to={`/corpora/${corpusId}`} className="text-body-sm text-accent hover:underline">
-                ← Back to corpus
-              </Link>
-            </CardBody>
-          </Card>
+          {g.externalCallees.length > 0 && (
+            <div className="card p-4">
+              <p className="label mb-2">External callees ({g.externalCallees.length})</p>
+              <p className="mb-2 text-[12px] text-ink-secondary">
+                Names called by in-corpus routines but not resolved here. Typically system / OS / library calls.
+              </p>
+              <ul className="space-y-0.5 font-mono text-[11px] text-ink-secondary">
+                {g.externalCallees.slice(0, 16).map((n) => <li key={n}>{n}</li>)}
+                {g.externalCallees.length > 16 && (
+                  <li className="opacity-60">…and {g.externalCallees.length - 16} more</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          <div className="card p-4">
+            <Link
+              to={`/corpora/${corpusId}`}
+              className="text-[12px] font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+            >
+              ← Back to corpus
+            </Link>
+          </div>
         </aside>
       </div>
     </div>
   );
 }
 
-// ───────────────────────────────────────────────────────────────────
-// Layout — simple topological depth-from-roots
-// ───────────────────────────────────────────────────────────────────
+// ── Wave-coloured palette (matches Tailwind wave-* tokens). ────────
+const WAVE_FILL: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: '#059669', // emerald
+  2: '#0d9488', // teal
+  3: '#4f46e5', // indigo
+  4: '#7c3aed', // violet
+  5: '#d97706', // amber
+};
 
-const COL_WIDTH = 220;
-const ROW_HEIGHT = 70;
-
-function layout(
-  data: DependencyGraphResponse | undefined,
-  opts: { hideSharedStorage: boolean },
-): { rfNodes: RfNode[]; rfEdges: RfEdge[] } {
-  if (!data) return { rfNodes: [], rfEdges: [] };
-
-  // 1. Compute depth from any root (BFS). Nodes unreachable from a root
-  //    (cycles disconnected from sources) get depth = max + 1 so they
-  //    still render.
-  const depth = new Map<string, number>();
-  const adjOut = new Map<string, string[]>();
-  for (const n of data.nodes) adjOut.set(n.id, []);
-  for (const e of data.edges) {
-    if (e.type !== 'call') continue;
-    adjOut.get(e.from)?.push(e.to);
-  }
-  const queue: string[] = [];
-  for (const n of data.nodes) {
-    if (n.isRoot) {
-      depth.set(n.id, 0);
-      queue.push(n.id);
-    }
-  }
-  while (queue.length > 0) {
-    const u = queue.shift()!;
-    const d = depth.get(u) ?? 0;
-    for (const v of adjOut.get(u) ?? []) {
-      if (!depth.has(v) || (depth.get(v) ?? 0) < d + 1) {
-        depth.set(v, d + 1);
-        queue.push(v);
-      }
-    }
-  }
-  let maxDepth = 0;
-  for (const d of depth.values()) if (d > maxDepth) maxDepth = d;
-  for (const n of data.nodes) {
-    if (!depth.has(n.id)) depth.set(n.id, maxDepth + 1);
-  }
-
-  // 2. Group by depth, sort alphabetically within depth.
-  const byDepth = new Map<number, DependencyGraphNode[]>();
-  for (const n of data.nodes) {
-    const d = depth.get(n.id)!;
-    if (!byDepth.has(d)) byDepth.set(d, []);
-    byDepth.get(d)!.push(n);
-  }
-  for (const list of byDepth.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-
-  // 3. Assign positions.
-  const rfNodes: RfNode[] = [];
-  for (const [d, list] of byDepth) {
-    list.forEach((n, i) => {
-      rfNodes.push({
-        id: n.id,
-        position: { x: d * COL_WIDTH, y: i * ROW_HEIGHT },
-        data: {
-          label: n.name,
-          state: n.state,
-          subroutineId: n.id,
-          calleeCount: n.calleeCount,
-          callerCount: n.callerCount,
-          isRoot: n.isRoot,
-          isLeaf: n.isLeaf,
-        },
-        type: 'routine',
-      });
-    });
-  }
-
-  // 4. Edges.
-  const rfEdges: RfEdge[] = [];
-  for (const e of data.edges) {
-    if (opts.hideSharedStorage && e.type === 'shared-storage') continue;
-    rfEdges.push({
-      id: `${e.from}-${e.to}-${e.type}`,
-      source: e.from,
-      target: e.to,
-      type: 'smoothstep',
-      animated: false,
-      style: e.type === 'shared-storage'
-        ? { stroke: '#94a3b8', strokeDasharray: '4 4' }
-        : { stroke: '#475569' },
-      markerEnd: { type: MarkerType.ArrowClosed, color: e.type === 'shared-storage' ? '#94a3b8' : '#475569' },
-      data: { type: e.type, viaBlock: e.viaBlock },
-    });
-  }
-
-  return { rfNodes, rfEdges };
-}
-
-// ───────────────────────────────────────────────────────────────────
-// Custom node component
-// ───────────────────────────────────────────────────────────────────
-
-function RoutineNode({ data }: NodeProps) {
-  const state = data.state as string;
-  const tone =
-    state === 'COMMITTED' ? 'success' :
-    state === 'SIGNED' ? 'success' :
-    state === 'SCAFFOLDED' ? 'scaffolded' :
-    state === 'DRAFT' || state === 'IN_REVIEW' ? 'review' :
-    'neutral';
-  return (
-    <div className="min-w-[180px] rounded border border-border-subtle bg-raised p-2 shadow-sm" data-testid={`graph-node-${data.subroutineId}`}>
-      <Handle type="target" position={Position.Left} style={{ background: '#475569' }} />
-      <div className="flex items-center gap-1">
-        <Badge tone={tone as 'success' | 'review' | 'neutral' | 'scaffolded'}>{state}</Badge>
-        {data.isRoot && <span className="font-mono text-[10px] uppercase text-ink-tertiary">root</span>}
-        {data.isLeaf && <span className="font-mono text-[10px] uppercase text-ink-tertiary">leaf</span>}
-      </div>
-      <p className="mt-1 truncate font-mono text-body-sm font-semibold text-ink-primary">{data.label}</p>
-      <p className="mt-0.5 font-mono text-[10px] text-ink-tertiary">
-        callees: {data.calleeCount} · callers: {data.callerCount}
-      </p>
-      <Handle type="source" position={Position.Right} style={{ background: '#475569' }} />
-    </div>
-  );
-}
-
-const NODE_TYPES = { routine: RoutineNode };
+// Migration-state colours for the corner dot — light-theme adjusted.
+const STATE_DOT: Record<string, string> = {
+  PARSED:     '#94a3b8',
+  DRAFT:      '#d97706',
+  IN_REVIEW:  '#d97706',
+  SIGNED:     '#4f46e5',
+  SCAFFOLDED: '#7c3aed',
+  COMMITTED:  '#059669',
+};

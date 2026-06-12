@@ -9,6 +9,18 @@
     color-scheme: light;
   }
 
+  /* Thin scrollbars — gives the app a more modern Linear/Stripe feel. */
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+
   html, body, #root {
     height: 100%;
   }
@@ -26,9 +38,10 @@
     }
   }
 
-  /* Focus ring — visible, never removed */
+  /* Focus ring — visible, never removed. Uses the brand orange so the
+     ring reads on both light content surfaces and the dark sidebar. */
   :focus-visible {
-    outline: 2px solid #101728;
+    outline: 2px solid #f26722;
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -43,6 +56,42 @@
   }
 }
 
+/* ── ACE-style reusable component classes ────────────────────────────
+ * Define ONCE here; reference everywhere with `<div className="card">`,
+ * `<button className="btn btn-primary">` etc. Every page that uses
+ * these stays consistent without per-page boilerplate.
+ * ──────────────────────────────────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply bg-raised rounded-xl border border-border-subtle shadow-card;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold
+      transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-ace-600 text-white hover:bg-ace-700;
+  }
+  .btn-brand {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600;
+  }
+  .btn-ghost {
+    @apply btn bg-white border border-border-subtle text-ink-secondary hover:bg-sunken;
+  }
+  .btn-danger {
+    @apply btn bg-rose text-white hover:bg-rose/90;
+  }
+
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary;
+  }
+}
+
 @layer utilities {
   /* Custom small motion primitives */
   @keyframes astra-fade-in {
@@ -52,6 +101,28 @@
 
   .animate-fade-in {
     animation: astra-fade-in 200ms ease-out both;
+  }
+
+  /* ACE-style page-transition fadeup. NOTE: use `backwards`, not `both` —
+     `both` retains the final `transform`, which turns every .fadeup
+     container into a containing block for position:fixed descendants
+     (mispositioning modals + overlays). `backwards` keeps the entry
+     animation without leaving a lingering transform. */
+  @keyframes astra-fadeup {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fadeup {
+    animation: astra-fadeup 300ms ease backwards;
+  }
+
+  /* Pulsing helper — used on streaming progress strips. */
+  @keyframes astra-pulsebar {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+  .pulsing {
+    animation: astra-pulsebar 1.1s ease-in-out infinite;
   }
 
   /* ── Monaco citation decorations ─────────────────────────────────────

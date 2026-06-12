@@ -7,10 +7,13 @@ export function Card({
   interactive,
   ...rest
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode; interactive?: boolean }) {
+  // Uses the shared `.card` utility (defined in index.css) so every
+  // card across the app shares one source of truth for surface, border,
+  // radius and shadow. `interactive` adds the lift-on-hover affordance.
   return (
     <div
       className={clsx(
-        'rounded-md border border-border-subtle bg-raised shadow-e1 transition-all duration-medium',
+        'card transition-all duration-medium',
         interactive && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-e2',
         className,
       )}

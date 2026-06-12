@@ -37,7 +37,12 @@ export default defineConfig({
     baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:35173',
     trace: recordDemo ? 'on' : 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: recordDemo ? 'on' : 'retain-on-failure',
+    // Record at native viewport resolution so the demo plays sharp at
+    // fullscreen. Defaults to 800x500 which looks pixelated when blown
+    // up on a projector or LinkedIn post.
+    video: recordDemo
+      ? { mode: 'on', size: { width: 1600, height: 1000 } }
+      : 'retain-on-failure',
     actionTimeout: recordDemo ? 30_000 : 8_000,
     navigationTimeout: 15_000,
     // RECORD_DEMO: slow every action by 600ms so a stakeholder can watch

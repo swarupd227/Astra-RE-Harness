@@ -14,6 +14,7 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardBody } from '@/components/Card';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
 
 /**
@@ -114,18 +115,13 @@ export function MigrationPlanPage() {
   const noPlanYet = plan.isError && plan.error instanceof ApiError && plan.error.status === 404;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10" data-testid="migration-plan-page">
-      <header className="space-y-1">
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-          Phase 8.0 · portfolio migration planning · {corpus.data?.name ?? corpusId}
-        </p>
-        <h1 className="text-display font-semibold text-ink-primary">Migration plan</h1>
-        <p className="max-w-3xl text-body-lg text-ink-secondary">
-          Dependency-aware wave assignment for the corpus's latest source version. Wave 1
-          starts with leaf routines (no in-corpus callees); each subsequent wave depends only
-          on routines in earlier waves.
-        </p>
-      </header>
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="migration-plan-page">
+      <PageHero
+        tone="indigo"
+        eyebrow={`Phase 8.0 · portfolio migration planning · ${corpus.data?.name ?? corpusId}`}
+        title="Migration plan"
+        lead="Dependency-aware wave assignment for the corpus's latest source version. Wave 1 starts with leaf routines (no in-corpus callees); each subsequent wave depends only on routines in earlier waves."
+      />
 
       {isAdmin && (
         <Card data-testid="strategy-picker-card">
@@ -389,12 +385,34 @@ function WaveCard({
   onOpenRoutine: (routineId: string) => void;
 }) {
   const lc = wave.liveCounts;
+  // Wave colour gradient — wave 1 (earliest, safest) → wave 5 (latest,
+  // top-level orchestration). Caps at 5; corpora with deeper plans
+  // cycle back to the final tone.
+  const waveBucket = Math.min(5, Math.max(1, wave.waveNumber)) as 1 | 2 | 3 | 4 | 5;
+  const stripe: Record<1 | 2 | 3 | 4 | 5, string> = {
+    1: 'bg-wave-1',
+    2: 'bg-wave-2',
+    3: 'bg-wave-3',
+    4: 'bg-wave-4',
+    5: 'bg-wave-5',
+  };
+  const eyebrow: Record<1 | 2 | 3 | 4 | 5, string> = {
+    1: 'text-emerald-ink',
+    2: 'text-teal-ink',
+    3: 'text-indigo-ink',
+    4: 'text-violet-ink',
+    5: 'text-amber-ink',
+  };
   return (
-    <Card data-testid={`migration-wave-${wave.waveNumber}`}>
-      <CardBody className="space-y-2">
+    <Card data-testid={`migration-wave-${wave.waveNumber}`} className="relative overflow-hidden">
+      <span
+        aria-hidden
+        className={clsx('absolute left-0 top-0 h-full w-1.5', stripe[waveBucket])}
+      />
+      <CardBody className="space-y-2 pl-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            <p className={clsx('font-mono text-caption font-semibold uppercase tracking-wider', eyebrow[waveBucket])}>
               wave {wave.waveNumber}
             </p>
             <h3 className="text-body-lg font-semibold text-ink-primary">{wave.name}</h3>

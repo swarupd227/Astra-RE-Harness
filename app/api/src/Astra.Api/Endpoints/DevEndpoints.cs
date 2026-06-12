@@ -17,6 +17,7 @@ public static class DevEndpoints
         app.MapPost("/api/v1/dev/reset", async (
             AppDbContext db,
             ConsumeRollSeed seed,
+            Astra.Api.Persistence.Seed.GoldenDatasetSeed goldenSeed,
             IConfiguration cfg,
             IServiceScopeFactory scopeFactory,
             ILogger<DevEndpointMarker> log,
@@ -36,7 +37,16 @@ public static class DevEndpoints
                 """, ct);
             var script = db.Database.GenerateCreateScript();
             await db.Database.ExecuteSqlRawAsync(script, ct);
-            await seed.SeedAsync(ct);
+
+            // CONSUME_ROLL synthetic seed is opt-in (Database:SeedDemo=true).
+            var seedDemo = cfg.GetValue("Database:SeedDemo", false);
+            if (seedDemo) await seed.SeedAsync(ct);
+
+            // Golden Dataset is ALWAYS reseeded after a reset — the calibration
+            // corpus is small, idempotent, and any demo path that exercises
+            // the Golden Dataset page would otherwise see an empty list.
+            try { await goldenSeed.SeedAsync(); }
+            catch (Exception ex) { log.LogWarning(ex, "Golden dataset re-seed after /dev/reset failed"); }
 
             // MINPACK demo seed runs in the background — it takes ~10s to
             // clone + parse and we don't want /dev/reset to block on it.
@@ -62,8 +72,29 @@ public static class DevEndpoints
                 });
             }
 
+            var seedLapackBlas = cfg.GetValue("Database:SeedLapackBlas", false);
+            if (seedLapackBlas)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var bgScope = scopeFactory.CreateScope();
+                        var seeder = bgScope.ServiceProvider.GetRequiredService<LapackBlasSeed>();
+                        await seeder.SeedAsync();
+                    }
+                    catch (Exception ex) { log.LogWarning(ex, "Background LAPACK BLAS reseed failed"); }
+                });
+            }
+
             log.LogWarning("Demo state reset via POST /api/v1/dev/reset");
-            return Results.Ok(new { reset = true, seeded = true, minpackSeeding = seedMinpack });
+            return Results.Ok(new
+            {
+                reset = true,
+                seeded = true,
+                minpackSeeding = seedMinpack,
+                lapackBlasSeeding = seedLapackBlas
+            });
         });
 
         return app;

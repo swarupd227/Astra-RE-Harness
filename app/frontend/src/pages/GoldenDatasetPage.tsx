@@ -15,6 +15,7 @@ import { Button } from '@/components/Button';
 import { Card, CardBody } from '@/components/Card';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
+import { PageHero } from '@/components/PageHero';
 
 /**
  * Phase 6.0 — Golden Dataset admin page.
@@ -100,49 +101,40 @@ export function GoldenDatasetPage() {
 
   return (
     <div
-      className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10"
+      className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup"
       data-testid="golden-dataset-page"
     >
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
-            Phase 6.0 · Calibration corpus
-          </p>
-          <h1 className="mt-1 text-display font-semibold text-ink-primary">Golden Dataset</h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-            Hand-curated legacy-code snippets, each annotated with the claims
-            the extract pipeline is expected to produce. Every prompt change
-            re-runs the corpus and surfaces any entry whose claim coverage
-            dropped — the regression measurement instrument that backs the
-            "we measure ourselves" story.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => scoreAll.mutate()}
-              disabled={scoreAll.isPending}
-              data-testid="golden-score-all"
-            >
-              <RefreshCw className={clsx('h-4 w-4', scoreAll.isPending && 'animate-spin')} />
-              {scoreAll.isPending ? 'Scoring…' : 'Run all'}
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setCreating(true)}
-              data-testid="golden-new"
-            >
-              <Plus className="h-4 w-4" />
-              New entry
-            </Button>
-          )}
-        </div>
-      </header>
+      <PageHero
+        tone="violet"
+        eyebrow="Phase 6.0 · Calibration corpus"
+        title="Golden Dataset"
+        lead={`Hand-curated legacy-code snippets, each annotated with the claims the extract pipeline is expected to produce. Every prompt change re-runs the corpus and surfaces any entry whose claim coverage dropped — the regression measurement instrument that backs the "we measure ourselves" story.`}
+        actions={
+          isAdmin ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => scoreAll.mutate()}
+                disabled={scoreAll.isPending}
+                data-testid="golden-score-all"
+              >
+                <RefreshCw className={clsx('h-4 w-4', scoreAll.isPending && 'animate-spin')} />
+                {scoreAll.isPending ? 'Scoring…' : 'Run all'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setCreating(true)}
+                data-testid="golden-new"
+              >
+                <Plus className="h-4 w-4" />
+                New entry
+              </Button>
+            </>
+          ) : null
+        }
+      />
 
       <Card data-testid="golden-aggregate-banner">
         <CardBody className="flex flex-wrap items-center justify-between gap-6">
