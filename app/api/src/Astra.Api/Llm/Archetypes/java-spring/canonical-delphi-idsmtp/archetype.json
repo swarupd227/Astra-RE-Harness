@@ -1,0 +1,28 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-delphi-idsmtp",
+  "targetStack": "java-spring",
+  "displayName": "Indy TIdSMTP wrapper (Java 17 + Spring Boot + JUnit 5)",
+  "description": "Reference Delphi→Java-17 scaffold for the Indy TIdSMTP family. Delphi's TComponent + ARC interfaces + property accessors + events translate to a plain Java class implementing AutoCloseable, with explicit getter/setter pairs and a Listener-interface for status events. Spring's @Component decorator is wired so the connection class can be auto-injected. Produces a buildable mvn-test-runnable package with the connection class, the host-interface contract, the auxiliary value types, and a JUnit 5 fixture set tied to the signed spec.",
+  "compatibleSchemas": ["delphi"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "TIdSMTP.Connect" },
+      { "subroutineName": "TIdSMTP.Disconnect" },
+      { "subroutineName": "TIdSMTP.SendMessage" },
+      { "subroutineName": "TIdSMTPMin.Create" },
+      { "subroutineName": "TIdSMTPMin.Connect" },
+      { "subroutineName": "TIdSMTPMin.SendCmd" }
+    ],
+    "fallback": "Used whenever the routine's enclosing_class matches a TIdSMTP* family member."
+  },
+  "owner": "Nous · Delphi migration accelerator",
+  "status": "preview",
+  "files": [
+    { "path": "pom.xml",                                                            "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/idsmtp/IdSMTPMin.java",                    "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","OL-1","II-1","SE-1","EC-1","EC-2"] },
+    { "path": "src/main/java/com/example/idsmtp/IdComponent.java",                  "language": "java", "derivedFromClaimIds": ["II-1"] },
+    { "path": "src/main/java/com/example/idsmtp/IdStatusListener.java",             "language": "java", "derivedFromClaimIds": ["EH-1"] },
+    { "path": "src/test/java/com/example/idsmtp/IdSMTPMinTests.java",               "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","OL-1","EC-1","EC-2"] }
+  ]
+}

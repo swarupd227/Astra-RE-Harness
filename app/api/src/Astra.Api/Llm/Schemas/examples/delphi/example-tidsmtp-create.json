@@ -1,0 +1,97 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "TIdSMTPMin.Create",
+  "enclosing_class": "TIdSMTPMin",
+  "source_path": "src/IdSMTPMin.pas",
+  "source_lines": "26-31",
+  "summary": "Constructor for the minimal SMTP wrapper. Stores the connection target (host + port) on the instance fields. No socket is opened — that happens in TIdSMTPMin.Connect on first use. The caller becomes the owner of the constructed instance; Delphi's manual memory management means an explicit Free is required (in .NET this maps to IDisposable / using; in Java to try-with-resources via AutoCloseable).",
+  "inputs": [
+    {
+      "id": "in.AHost",
+      "name": "AHost",
+      "type": "string",
+      "direction": "in",
+      "semantic": "DNS name or IP of the SMTP server. Stored verbatim; no validation or trim.",
+      "citations": [ { "lines": "26" } ]
+    },
+    {
+      "id": "in.APort",
+      "name": "APort",
+      "type": "Integer",
+      "direction": "in",
+      "semantic": "TCP port. Caller is responsible for using a standard port (25, 465, 587) or a custom one; no range check.",
+      "citations": [ { "lines": "26" } ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ret.Self",
+      "name": "Self",
+      "type": "TIdSMTPMin",
+      "direction": "return",
+      "semantic": "Newly-allocated, caller-owned instance.",
+      "citations": [ { "lines": "26" } ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "FHost is set to the AHost parameter; FPort is set to the APort parameter; no other instance state is mutated.",
+      "citations": [ { "lines": "28-31" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "The base-class constructor (inherited Create) is called before any field assignment, so TIdBaseComponent invariants hold on completion.",
+      "citations": [ { "lines": "29" } ],
+      "confidence": "high"
+    }
+  ],
+  "object_lifetimes": [
+    {
+      "id": "OL-1",
+      "subject": "Self (return value)",
+      "model": "Owned",
+      "policy": "Caller owns the returned instance and MUST call Free / Destroy. In .NET this maps to IDisposable + Dispose pattern; in Java to AutoCloseable + try-with-resources.",
+      "citations": [ { "lines": "26-31" } ],
+      "confidence": "high"
+    }
+  ],
+  "interface_implementations": [
+    {
+      "id": "II-1",
+      "interface_name": "IIdComponent (inherited via TIdBaseComponent)",
+      "obligation": "By virtue of inheriting from TIdBaseComponent the constructed instance participates in the Indy component lifecycle (Active / Inactive states, hooks for sub-component composition). The constructor itself does not enforce additional contracts beyond the base-class call.",
+      "citations": [ { "lines": "29" } ]
+    }
+  ],
+  "side_effects": [],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "AHost is empty string. No validation; FHost is set to '' and the failure surfaces later during Connect.",
+      "citations": [ { "lines": "30" } ],
+      "behavior": "Constructor completes normally; the bad-host symptom appears at Connect time as a socket resolution failure.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-2",
+      "description": "APort is non-positive or above 65535. No range check; the value flows into the eventual socket-connect call where the OS rejects it.",
+      "citations": [ { "lines": "31" } ],
+      "behavior": "Constructor completes normally; failure deferred to Connect.",
+      "confidence": "high"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Should AHost be trimmed of leading / trailing whitespace before storage, or is the caller responsible? The source does not normalise.",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "delphi-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "delphi"
+  }
+}

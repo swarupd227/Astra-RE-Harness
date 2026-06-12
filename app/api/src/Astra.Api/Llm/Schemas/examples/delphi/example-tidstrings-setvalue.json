@@ -1,0 +1,108 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "TIdStringsHelper.SetValue",
+  "enclosing_class": "TIdStringsHelper",
+  "source_path": "src/IdStringsHelper.pas",
+  "source_lines": "42-58",
+  "summary": "Property-setter that updates the Name=Value pair in a TStrings backing store. When the named entry already exists the existing line is rewritten; when absent a new line is appended. Setting a value to empty string deletes the entry entirely (this is a Delphi-VCL convention that does not map cleanly to .NET Dictionary or Java Map — explicit Open Question to the SME).",
+  "inputs": [
+    {
+      "id": "in.AName",
+      "name": "AName",
+      "type": "string",
+      "direction": "in",
+      "semantic": "Name portion of the Name=Value pair. Case-insensitive matching follows the underlying TStrings.CaseSensitive flag.",
+      "citations": [ { "lines": "42" } ]
+    },
+    {
+      "id": "in.AValue",
+      "name": "AValue",
+      "type": "string",
+      "direction": "in",
+      "semantic": "New value. Empty string triggers deletion semantics (see EC-1).",
+      "citations": [ { "lines": "42" } ]
+    }
+  ],
+  "outputs": [],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "After the setter returns, FList.Values[AName] equals AValue when AValue is non-empty.",
+      "citations": [ { "lines": "50-54" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "When AValue is empty string, the AName entry is removed from FList (matches Delphi VCL TStringList.Values setter contract).",
+      "citations": [ { "lines": "47-49" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-3",
+      "claim": "FList.Count strictly decreases by 1 when AValue is empty AND AName previously existed; strictly increases by 1 when AValue is non-empty AND AName did not previously exist; unchanged otherwise.",
+      "citations": [ { "lines": "50-58" } ],
+      "confidence": "high"
+    }
+  ],
+  "property_accessors": [
+    {
+      "id": "PA-1",
+      "property_name": "Value[AName]",
+      "direction": "write",
+      "backing_field": "FList (TStrings)",
+      "semantic": "Indexed-property setter; the published Value property delegates here.",
+      "has_side_effects": true,
+      "citations": [ { "lines": "42-58" } ]
+    }
+  ],
+  "side_effects": [
+    {
+      "id": "SE-1",
+      "description": "Mutates FList — the backing TStrings — via either Insert, Delete, or in-place line rewrite. Subscribers to FList.OnChange observe the mutation.",
+      "citations": [ { "lines": "47-58" } ]
+    }
+  ],
+  "event_handler_contracts": [
+    {
+      "id": "EH-1",
+      "event_name": "TStrings.OnChange",
+      "event_type": "TNotifyEvent",
+      "role": "fires",
+      "contract": "TStringList fires OnChange after every mutation (Insert / Delete / line rewrite). Translating to .NET: an INotifyPropertyChanged 'Item[]' event or an ObservableCollection.CollectionChanged. Translating to Java: a Listener on a custom ObservableNameValueStore.",
+      "citations": [ { "lines": "50-58" } ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "AValue is empty string. Delphi VCL convention: deletes the AName entry. Callers occasionally rely on this for 'clear without erase'.",
+      "citations": [ { "lines": "47-49" } ],
+      "behavior": "Setter deletes the line. INV-3 applies.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-2",
+      "description": "AName contains '=' character. TStrings.Values setter parses on the first '=' so an AName containing '=' silently truncates at the first occurrence.",
+      "citations": [ { "lines": "42" } ],
+      "behavior": "Resulting Name=Value pair will have the truncated AName; the rest becomes part of the value. SME confirms this is the desired (non-) behaviour or files an Open Question.",
+      "confidence": "medium"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Should the .NET / Java translation preserve the 'empty value deletes' convention? Most .NET / Java caller idioms expect an empty value to be stored verbatim. Recommend filing as a target-language idiom break and surfacing in the scaffold archetype as a TODO.",
+      "status": "unresolved"
+    },
+    {
+      "id": "Q-2",
+      "question": "Is the AName-contains-'=' truncation behaviour load-bearing for any caller in the corpus? If not, the .NET / Java translation can throw ArgumentException for cleanliness.",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "delphi-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "delphi"
+  }
+}

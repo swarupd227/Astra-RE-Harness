@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.IdSMTP</RootNamespace>
+    <AssemblyName>Demo.IdSMTP</AssemblyName>
+    <Description>
+      Reference .NET 8 scaffold for the Indy TIdSMTP family, generated from a signed
+      Delphi spec (spec/v1, schemaId=delphi). The connection class lives in
+      src/IdSMTPMin.cs; the I/O contract is split into IIdComponent.cs (interface) and
+      IdSMTPEvents.cs (event payloads). Every public surface carries a [SpecClaim(...)]
+      attribute citing the signed claim id so the scaffold ties back to the spec.
+    </Description>
+  </PropertyGroup>
+</Project>

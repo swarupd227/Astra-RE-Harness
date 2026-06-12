@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-variant-coercion",
+  "schemaId": "delphi",
+  "title": "Variant arithmetic silently coerces string-numerics with locale-dependent semantics",
+  "trapCategory": "type/coercion",
+  "difficulty": "hard",
+  "sourcePath": "delphi/snippets/variant_coerce.pas",
+  "sourceLines": "1-26",
+  "sourceContent": "unit VariantCoerceDemo;\n\ninterface\n\nuses Variants;\n\nfunction Total(const A, B : Variant) : Variant;\n\nimplementation\n\nfunction Total(const A, B : Variant) : Variant;\nbegin\n  // Looks like addition; behaves differently depending on whether\n  // A and B carry numeric tags or string tags. '12' + '34' yields\n  // the Variant string '1234', not 46. '12' + 34 yields the Variant\n  // integer 46 (string promoted to int via DecimalSeparator -- locale\n  // dependent!). Real-world bug pattern in legacy Indy payload code.\n  Result := A + B;\nend;\n\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "edge_case",
+      "id": "EC-VAR-1",
+      "pattern": "(?i)(Variant|coerc\\w+|locale|DecimalSeparator|tag|VarType)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-VAR-1",
+      "pattern": "(?i)(string concat\\w+|numeric add\\w*|both operand|tag-depen\\w+)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-VAR-1",
+      "pattern": "(?i)(object|dynamic|union|Either|target type|explicit cast)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Variant is one of the Delphi type-system features with no clean\nC# / Java equivalent (`dynamic` in C# comes closest but does not\npreserve the locale-coercion behaviour). The trap entry forces the\nextraction prompt's rule #9 (Variant arithmetic = edge case) to\nfire AND surfaces 'how should we translate this' as an open question."
+}

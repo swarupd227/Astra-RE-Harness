@@ -1,0 +1,200 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "delphi",
+  "displayName": "Delphi / Object Pascal → .NET 8 + Java Spring",
+  "description": "Delphi 7 / Object Pascal source: units with interface + implementation sections, classes with properties + events, IInterface ref-counting, Delphi RTL types (TStream, TStringList, TThread). Calibrated against Indy (TCP/IP/HTTP/SMTP) and JCL utilities. Per ADR-025, every Delphi extraction call ships with a curated RTL → .NET / Java mapping table as in-prompt context.",
+  "supportedSourceExtensions": [".pas", ".dpr", ".dpk", ".inc"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the routine must preserve across all valid inputs.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "objectLifetime",
+      "label": "Object lifetime",
+      "idPrefix": "OL",
+      "specJsonField": "object_lifetimes",
+      "textField": "policy",
+      "displayTone": "review",
+      "description": "Ownership and disposal policy for any object the routine creates, accepts, or returns. Distinguishes Owned (routine calls Free / .Destroy), Borrowed (caller owns), and RefCounted (IInterface — ARC). Critical for the .NET / Java translation: RefCounted maps to IDisposable / AutoCloseable; Owned + Borrowed inform whether the scaffolded code emits a using / try-with-resources block.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "subject", "kind": "string", "required": true, "doc": "The parameter, field, or local whose lifetime is being claimed." },
+        { "name": "model", "kind": "enum:Owned|Borrowed|RefCounted|Pinned", "required": true },
+        { "name": "policy", "kind": "string", "required": true, "doc": "Plain-English description of who frees it and when." },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "interfaceImplementation",
+      "label": "Interface implementation",
+      "idPrefix": "II",
+      "specJsonField": "interface_implementations",
+      "textField": "obligation",
+      "displayTone": "signed",
+      "description": "Which IInterface descendants (or named interface contracts) this routine's enclosing class implements, and what obligation each implementation carries. Maps to the target's interface / abstract-class hierarchy.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "interface_name", "kind": "string", "required": true },
+        { "name": "obligation", "kind": "string", "required": true, "doc": "What the implementation promises (e.g. 'IUnknown ref-count contract' or 'IIdComponent.SetActive must close and re-open the socket')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "propertyAccessor",
+      "label": "Property accessor",
+      "idPrefix": "PA",
+      "specJsonField": "property_accessors",
+      "textField": "semantic",
+      "displayTone": "review",
+      "description": "When the routine is a property getter or setter. Captures the access direction, the backing field, whether the setter has a meaningful side effect, and whether the getter is pure or computes on read.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "property_name", "kind": "string", "required": true },
+        { "name": "direction", "kind": "enum:read|write|read_write", "required": true },
+        { "name": "backing_field", "kind": "string", "required": false },
+        { "name": "semantic", "kind": "string", "required": true, "doc": "Plain-English description of what the accessor does." },
+        { "name": "has_side_effects", "kind": "boolean", "required": true, "doc": "True if the accessor mutates state beyond the backing field (e.g. invalidates a cache, raises an event)." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "eventHandlerContract",
+      "label": "Event handler contract",
+      "idPrefix": "EH",
+      "specJsonField": "event_handler_contracts",
+      "textField": "contract",
+      "displayTone": "scaffolded",
+      "description": "When the routine fires (or handles) a Delphi event. Captures the event type (e.g. TNotifyEvent, custom), the payload signature, and the firing condition. Maps to .NET event keyword or Java listener interfaces.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "event_name", "kind": "string", "required": true },
+        { "name": "event_type", "kind": "string", "required": true, "doc": "e.g. TNotifyEvent, TIdStatusEvent." },
+        { "name": "role", "kind": "enum:fires|handles", "required": true },
+        { "name": "contract", "kind": "string", "required": true, "doc": "When the event fires + what the payload represents." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "rttiUsage",
+      "label": "RTTI usage",
+      "idPrefix": "RT",
+      "specJsonField": "rtti_usages",
+      "textField": "reflection_pattern",
+      "displayTone": "draft",
+      "description": "Reflection-based dispatch the routine relies on: TPersistent property streaming, GetPropList walks, RegisterClass / FindClass, or PublishedFields introspection. These rarely have clean .NET / Java equivalents and almost always become Open Questions or specially-scaffolded code paths.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "pattern", "kind": "enum:PropertyStreaming|FindClass|GetPropList|PublishedFields|AsCast|Other", "required": true },
+        { "name": "reflection_pattern", "kind": "string", "required": true, "doc": "Plain-English description of how reflection is used and what the runtime decision is." },
+        { "name": "translation_hint", "kind": "string", "required": false, "doc": "Suggested mapping (e.g. 'Use System.Reflection in .NET; use a Map<String,Class> registry in Java')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: I/O writes, network calls, event emissions (cross-reference with eventHandlerContract for the formal contract), file-system operations, registry / config writes.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure-mode conditions the routine handles (or is silent about). Delphi-specific edges include Variant type coercion, nil interface refs, double-free via ARC + manual Free, ANSI vs Unicode string boundaries.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities the source does not resolve and the SME must answer before sign-off. Common Delphi cases: ownership of out-parameters, whether an interface aliasing is intentional, RTTI patterns that have no obvious target-language equivalent.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_class", "kind": "string", "required": false, "doc": "When the routine is a class method, the fully-qualified class name (e.g. 'TIdSMTP')." },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "var", "out", "const", "return"],
+    "directionDescription": "Delphi parameter mode. `in` = pass by value, `var` = pass by reference (read+write), `out` = output-only reference, `const` = read-only by reference (no copy), `return` = the function's return value."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "objectLifetime",
+      "interfaceImplementation",
+      "propertyAccessor",
+      "eventHandlerContract",
+      "rttiUsage",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "objectLifetime": 0,
+      "interfaceImplementation": 0,
+      "propertyAccessor": 0,
+      "eventHandlerContract": 0,
+      "rttiUsage": 0,
+      "sideEffect": 0,
+      "edgeCase": 0,
+      "openQuestion": 0
+    },
+    "emphasis": "Always claim object lifetime for parameters and locals that hold a TObject descendant — Owned / Borrowed / RefCounted. When the source uses an `IInterface` reference, prefer RefCounted. When a parameter is annotated `out` or `var` and a TObject is created inside the routine, that's Owned-by-caller. If the SME would have to read the source to know, file an Open Question instead of guessing. Cite line ranges aggressively; Delphi semantics depend on section (interface vs implementation), `with`-statement scope, and `class`-method qualifiers.",
+    "rtlMappingTableRef": "Llm/Prompts/delphi/rtl-mapping.json (per ADR-025)"
+  },
+  "owner": "Nous · Delphi migration accelerator",
+  "calibratedAgainst": ["Indy (IndySockets/Indy)", "JCL (project-jedi/jcl)", "synthesised mini-corpora for v0 scaffolding"]
+}

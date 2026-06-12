@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-with-statement-scope-confusion",
+  "schemaId": "delphi",
+  "title": "with-statement shadowing silently rebinds a local to a record field",
+  "trapCategory": "scope/shadowing",
+  "difficulty": "medium",
+  "sourcePath": "delphi/snippets/with_scope.pas",
+  "sourceLines": "1-30",
+  "sourceContent": "unit WithScopeDemo;\n\ninterface\n\ntype\n  TPoint = record\n    X, Y : Integer;\n  end;\n\n  TBounds = record\n    Min, Max : TPoint;\n  end;\n\nfunction RangeWidth(const B : TBounds; X : Integer) : Integer;\n\nimplementation\n\nfunction RangeWidth(const B : TBounds; X : Integer) : Integer;\nbegin\n  // The X passed by the caller is meant to be a default for\n  // Min.X. But inside the with-block, `X` resolves to Min.X\n  // (the record field) NOT the parameter -- because the with\n  // scope shadows it. Result: the function ignores its X\n  // argument and reads whatever Min.X happens to be.\n  with B.Min do\n  begin\n    Result := B.Max.X - X;\n  end;\nend;\n\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "edge_case",
+      "id": "EC-WITH-1",
+      "pattern": "(?i)(with[- ]statement|shadow\\w*|scope|silently|rebind|identifier resolution)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-WITH-1",
+      "pattern": "(?i)(record field|Min\\.X|parameter|argument)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-WITH-1",
+      "pattern": "(?i)(C# block|Java block|rename|explicit|disambiguat\\w+)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Delphi `with` is a syntactic-shorthand whose scope rules silently\nshadow outer identifiers when an inner field has the same name.\nThis is the #1 source of post-migration regressions in any Delphi\nport, because neither C# nor Java has a `with` equivalent — the\ntranslator MUST rename or qualify. The trap entry exists so the\nextraction prompt's rule #9 (`with` is an edge case) actually fires."
+}

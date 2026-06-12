@@ -1,0 +1,29 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-delphi-idsmtp",
+  "targetStack": "dotnet8",
+  "displayName": "Indy TIdSMTP wrapper (.NET 8 + xUnit)",
+  "description": "Reference Delphi→.NET-8 scaffold for the Indy TIdSMTP family: a connection-oriented SMTP client whose Delphi shape (TComponent + ARC interfaces + property accessors + events) translates to a plain C# class implementing IDisposable. Produces a buildable, dotnet-test-runnable package with the connection class, the host-interface contract, the auxiliary value types, and an xUnit fixture set tied to the signed spec.",
+  "compatibleSchemas": ["delphi"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "TIdSMTP.Connect" },
+      { "subroutineName": "TIdSMTP.Disconnect" },
+      { "subroutineName": "TIdSMTP.SendMessage" },
+      { "subroutineName": "TIdSMTPMin.Create" },
+      { "subroutineName": "TIdSMTPMin.Connect" },
+      { "subroutineName": "TIdSMTPMin.SendCmd" }
+    ],
+    "fallback": "Used whenever the routine's enclosing_class matches a TIdSMTP* family member."
+  },
+  "owner": "Nous · Delphi migration accelerator",
+  "status": "preview",
+  "files": [
+    { "path": "Demo.IdSMTP.csproj",                "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.IdSMTP.Tests.csproj",    "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/IdSMTPMin.cs",                  "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","OL-1","II-1","SE-1","EC-1","EC-2"] },
+    { "path": "src/IIdComponent.cs",               "language": "csharp", "derivedFromClaimIds": ["II-1"] },
+    { "path": "src/IdSMTPEvents.cs",               "language": "csharp", "derivedFromClaimIds": ["EH-1"] },
+    { "path": "tests/IdSMTPMinTests.cs",           "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","OL-1","EC-1","EC-2"] }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-rtti-dispatch",
+  "schemaId": "delphi",
+  "title": "RTTI-driven property streaming binds object graphs at runtime, not compile time",
+  "trapCategory": "metaprogramming/rtti",
+  "difficulty": "hard",
+  "sourcePath": "delphi/snippets/rtti_dispatch.pas",
+  "sourceLines": "1-30",
+  "sourceContent": "unit RttiDispatchDemo;\n\ninterface\n\nuses Classes, TypInfo;\n\ntype\n  TConfig = class(TPersistent)\n  published\n    property Host : string read FHost write FHost;\n    property Port : Integer read FPort write FPort;\n  private\n    FHost : string;\n    FPort : Integer;\n  end;\n\nprocedure ApplyOverride(Obj : TObject; const AProp, AValue : string);\n\nimplementation\n\nprocedure ApplyOverride(Obj : TObject; const AProp, AValue : string);\nvar\n  Info : PPropInfo;\nbegin\n  // Walks RTTI to bind by name -- no compile-time guarantee that\n  // AProp exists. Silently no-ops when the property is absent.\n  Info := GetPropInfo(Obj.ClassInfo, AProp);\n  if Info = nil then Exit;\n  SetStrProp(Obj, Info, AValue);\nend;\n\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "rtti_usage",
+      "id": "RT-DISP-1",
+      "pattern": "(?i)(GetPropInfo|SetStrProp|published|PropertyStreaming|reflection|RTTI)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-DISP-1",
+      "pattern": "(?i)(silently no-op|absent|missing property|nil|Exit)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-DISP-1",
+      "pattern": "(?i)(reflection|java.lang.reflect|PropertyDescriptor|registry pattern|static dispatch)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Forces the extraction prompt's rule #7 (RTTI usage = open question)\nto fire. The C# / Java translator must choose between (a) verbose\nreflection API, (b) a static-registry pattern, or (c) source-gen\n— none of which are obvious from reading the Delphi. The trap is\nthat the property-streaming case looks like a regular setter at\nfirst glance."
+}

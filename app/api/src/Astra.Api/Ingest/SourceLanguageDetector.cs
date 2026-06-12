@@ -9,9 +9,10 @@ namespace Astra.Api.Ingest;
 /// </summary>
 public static class SourceLanguageDetector
 {
-    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol").</summary>
+    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol", "delphi").</summary>
     public const string Fortran = "fortran-f77";
     public const string Cobol = "cobol";
+    public const string Delphi = "delphi";
 
     public static readonly string[] FortranExtensions =
     {
@@ -24,9 +25,14 @@ public static class SourceLanguageDetector
         ".cob", ".cbl", ".cpy",
     };
 
+    public static readonly string[] DelphiExtensions =
+    {
+        ".pas", ".dpr", ".dpk", ".inc",
+    };
+
     /// <summary>Every extension we accept at ingest time.</summary>
     public static IEnumerable<string> AllowedExtensions =>
-        FortranExtensions.Concat(CobolExtensions);
+        FortranExtensions.Concat(CobolExtensions).Concat(DelphiExtensions);
 
     /// <summary>
     /// Map a file extension (case-insensitive, with leading dot) to a
@@ -38,6 +44,7 @@ public static class SourceLanguageDetector
         var ext = extension?.ToLowerInvariant() ?? "";
         if (FortranExtensions.Contains(ext)) return Fortran;
         if (CobolExtensions.Contains(ext)) return Cobol;
+        if (DelphiExtensions.Contains(ext)) return Delphi;
         return null;
     }
 

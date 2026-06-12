@@ -1,0 +1,272 @@
+{
+  "$schema": "https://astra.nous.ai/rtl-mapping/v1",
+  "version": "0.1",
+  "owner": "Nous · Delphi migration accelerator",
+  "last_reviewed": "2026-05-26",
+  "description": "Per ADR-025. Curated Delphi RTL → .NET / Java type mappings. Shipped as in-prompt context for every Delphi extraction call. v0 is intentionally small (~20 entries) to prove the shape; the full ~50-entry table per the ADR fills in during 9.0.b finalisation and as Indy extractions surface missing mappings.",
+  "entries": [
+    {
+      "delphi_type": "string",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.String",
+      "java_equivalent": "java.lang.String",
+      "semantics_notes": [
+        "Delphi `string` is UnicodeString (UTF-16) in Delphi 2009+; AnsiString in 7-2007. Map to .NET string (UTF-16) and Java String (UTF-16) directly."
+      ],
+      "ownership_model": "Owned (value type)",
+      "thread_safety": "Immutable in all three runtimes."
+    },
+    {
+      "delphi_type": "AnsiString",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.String (caller transcodes from ANSI bytes if relevant)",
+      "java_equivalent": "java.lang.String (caller transcodes)",
+      "semantics_notes": [
+        "When the routine relies on the ANSI encoding (single-byte semantics), the translation MUST preserve that — typically by carrying a `byte[]` alongside the String. Flag as Open Question if the source isn't explicit."
+      ],
+      "ownership_model": "Owned (value type)",
+      "thread_safety": "Immutable."
+    },
+    {
+      "delphi_type": "Integer",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.Int32",
+      "java_equivalent": "int (or java.lang.Integer when boxed)",
+      "semantics_notes": [
+        "Delphi Integer is 32-bit on Win32 + Win64. Map straight across."
+      ],
+      "ownership_model": "Owned (value type)",
+      "thread_safety": "Not applicable (value)."
+    },
+    {
+      "delphi_type": "Int64",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.Int64",
+      "java_equivalent": "long",
+      "semantics_notes": [
+        "Direct map."
+      ],
+      "ownership_model": "Owned (value type)",
+      "thread_safety": "Not applicable."
+    },
+    {
+      "delphi_type": "Boolean",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.Boolean",
+      "java_equivalent": "boolean",
+      "semantics_notes": [
+        "Direct map. Note ByteBool / WordBool / LongBool are NOT equivalent (they're tri-state with non-zero = true); flag those separately."
+      ],
+      "ownership_model": "Owned (value type)",
+      "thread_safety": "Not applicable."
+    },
+    {
+      "delphi_type": "TBytes",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "byte[]",
+      "java_equivalent": "byte[]",
+      "semantics_notes": [
+        "Direct map. Caller is responsible for length tracking in both targets."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "Variant",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.Object (caller pattern-matches on the actual runtime type)",
+      "java_equivalent": "java.lang.Object (caller instanceof-checks)",
+      "semantics_notes": [
+        "Variant arithmetic coerces silently in Delphi (Variant + Variant returns the wider type). Java + .NET have no equivalent; a Variant-using routine almost always becomes an Open Question recommending explicit per-type handling."
+      ],
+      "ownership_model": "Owned (value type, semantically)",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TObject",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "System.Object",
+      "java_equivalent": "java.lang.Object",
+      "semantics_notes": [
+        "TObject's `Free` method is the Delphi cleanup contract; in .NET this maps to IDisposable.Dispose, in Java to AutoCloseable.close."
+      ],
+      "ownership_model": "Owned by default",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "Exception",
+      "rtl_unit": "SysUtils",
+      "dotnet_equivalent": "System.Exception",
+      "java_equivalent": "java.lang.RuntimeException (or java.lang.Exception if checked semantics matter)",
+      "semantics_notes": [
+        "Delphi exceptions are unchecked (all derive from Exception). The Java translation defaults to RuntimeException for parity; a Checked variant requires SME sign-off."
+      ],
+      "ownership_model": "RefCounted by the catch-block (the runtime owns the lifetime)",
+      "thread_safety": "Per-thread (raised + caught on the same thread)."
+    },
+    {
+      "delphi_type": "TStream",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.IO.Stream",
+      "java_equivalent": "java.io.InputStream / java.io.OutputStream (paired) OR java.nio.channels.ReadableByteChannel for random access",
+      "semantics_notes": [
+        "TStream is bidirectional read/write/seek. .NET Stream matches directly. Java's InputStream + OutputStream split the read and write sides — the spec must surface which directions the routine uses so the archetype can pick.",
+        "Position / Seek maps to Stream.Position / Stream.Seek in .NET; to java.nio.channels.SeekableByteChannel in Java."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TMemoryStream",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.IO.MemoryStream",
+      "java_equivalent": "java.io.ByteArrayInputStream + java.io.ByteArrayOutputStream OR java.nio.ByteBuffer",
+      "semantics_notes": [
+        "ByteBuffer is the closer match for random-access in-memory I/O; Byte{Input,Output}Stream for one-shot read or write."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TStringStream",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.IO.StringReader + System.IO.StringWriter",
+      "java_equivalent": "java.io.StringReader + java.io.StringWriter",
+      "semantics_notes": [
+        "Direct paired-readers/writers map."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TStringList",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.Collections.Specialized.NameValueCollection (for Names/Values use) OR System.Collections.Generic.List<string> (for plain ordered-string use)",
+      "java_equivalent": "java.util.LinkedHashMap<String, String> (for Names/Values use) OR java.util.ArrayList<String> (for plain ordered-string use)",
+      "semantics_notes": [
+        "Routine that calls .Names[] or .Values[] needs the NameValueCollection / LinkedHashMap variant — flag the choice in the spec.",
+        "TStringList.Values[Name] empty-string-deletes (see edge-case rule); the .NET / Java translations DO NOT replicate that by default. Surface as Open Question."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TStrings",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "(abstract — see TStringList)",
+      "java_equivalent": "(abstract — see TStringList)",
+      "semantics_notes": [
+        "Abstract base. Routines that accept `TStrings` (not `TStringList`) should be translated to take the interface, not the concrete class — `IList<string>` in .NET, `List<String>` in Java."
+      ],
+      "ownership_model": "Borrowed by default",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TThread",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.Threading.Thread + System.Threading.CancellationToken (for cooperative termination)",
+      "java_equivalent": "java.lang.Thread + java.util.concurrent.atomic.AtomicBoolean (for Terminated flag)",
+      "semantics_notes": [
+        "TThread.Execute → Thread.Start with a runnable. TThread.Terminated → CancellationToken / AtomicBoolean. TThread.Synchronize → SynchronizationContext.Post in .NET or SwingUtilities.invokeLater in Java. Note: .NET prefers Task/async; flag for SME decision."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "By definition cross-thread; flag for SME."
+    },
+    {
+      "delphi_type": "TComponent",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "System.ComponentModel.Component (legacy) OR a plain class (preferred for new code)",
+      "java_equivalent": "(no direct equivalent — translate to a POJO with an explicit owner ref)",
+      "semantics_notes": [
+        "Delphi TComponent owns its sub-components and frees them in its destructor. The .NET / Java translations need an explicit owner-of-children pattern; flag as Open Question."
+      ],
+      "ownership_model": "Owned (and owns children)",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TPersistent",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "(no direct equivalent — TPersistent supports streaming via RTTI which maps to System.Reflection patterns)",
+      "java_equivalent": "(no direct equivalent — translate to a POJO + a serialization library like Jackson)",
+      "semantics_notes": [
+        "TPersistent's main feature is the streaming / RTTI machinery. Flag as Open Question with the suggested target serializer."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "IInterface",
+      "rtl_unit": "System",
+      "dotnet_equivalent": "(no direct equivalent — implements pattern is similar but reference counting is manual)",
+      "java_equivalent": "(no direct equivalent — Java has no ref-count contract on interfaces)",
+      "semantics_notes": [
+        "IInterface gives ARC (automatic reference counting) on the object lifecycle. .NET and Java both rely on GC; explicit ARC wrappers are rare and usually unnecessary. The .NET translation typically uses IDisposable + a using-block at the consumption site; Java uses try-with-resources.",
+        "Reference cycles between IInterface refs cause leaks in Delphi. The GC-based targets don't leak (cycle collector handles them) but flag it as a side-effect for completeness."
+      ],
+      "ownership_model": "RefCounted",
+      "thread_safety": "Increment/decrement is thread-safe in Delphi; the contained object is not necessarily thread-safe."
+    },
+    {
+      "delphi_type": "TInterfacedObject",
+      "rtl_unit": "Classes",
+      "dotnet_equivalent": "(plain class implementing IDisposable)",
+      "java_equivalent": "(plain class implementing AutoCloseable)",
+      "semantics_notes": [
+        "Base implementation of IInterface ref-counting. The .NET / Java translation drops the ref-count machinery — GC handles it — but keeps the Disposable / Closeable contract for explicit-cleanup sites."
+      ],
+      "ownership_model": "RefCounted",
+      "thread_safety": "Ref-count is thread-safe; object is not."
+    },
+    {
+      "delphi_type": "TCriticalSection",
+      "rtl_unit": "SyncObjs",
+      "dotnet_equivalent": "System.Threading.Lock (System.Threading.Mutex for cross-process; lock keyword for in-process)",
+      "java_equivalent": "java.util.concurrent.locks.ReentrantLock OR synchronized block",
+      "semantics_notes": [
+        "TCriticalSection is in-process only. Map to `lock (obj) { ... }` in .NET; `synchronized (obj) { ... }` or ReentrantLock in Java. Acquire / Release map to lock.lock() / lock.unlock()."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "By design — used to provide thread safety to other objects."
+    },
+    {
+      "delphi_type": "TList<T>",
+      "rtl_unit": "Generics.Collections",
+      "dotnet_equivalent": "System.Collections.Generic.List<T>",
+      "java_equivalent": "java.util.ArrayList<T>",
+      "semantics_notes": [
+        "Direct generic map."
+      ],
+      "ownership_model": "Owned (caller responsible for items unless using TObjectList<T>)",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TObjectList<T>",
+      "rtl_unit": "Generics.Collections",
+      "dotnet_equivalent": "System.Collections.Generic.List<T> (caller responsible for disposing items)",
+      "java_equivalent": "java.util.ArrayList<T> (GC handles items)",
+      "semantics_notes": [
+        "TObjectList<T>.OwnsObjects is the distinguishing semantic. When OwnsObjects=true, the list frees children on Clear/Delete/destroy — the .NET target needs explicit Dispose() of items, Java relies on GC.",
+        "Flag OwnsObjects=true as a side-effect on the routine that adds items, so the SME sees the lifetime transfer."
+      ],
+      "ownership_model": "Owned (and owns items when OwnsObjects=true)",
+      "thread_safety": "Not thread-safe."
+    },
+    {
+      "delphi_type": "TDictionary<K,V>",
+      "rtl_unit": "Generics.Collections",
+      "dotnet_equivalent": "System.Collections.Generic.Dictionary<K,V>",
+      "java_equivalent": "java.util.HashMap<K,V> (or LinkedHashMap if insertion-order matters)",
+      "semantics_notes": [
+        "Direct generic map. Note Delphi TDictionary doesn't preserve insertion order by default; if the source relies on order, the spec must call it out and the Java target should use LinkedHashMap."
+      ],
+      "ownership_model": "Owned",
+      "thread_safety": "Not thread-safe."
+    }
+  ],
+  "deferred": [
+    "TFileStream", "TGUID", "TFormatSettings", "TArray<T>", "TQueue<T>",
+    "TStack<T>", "IComparer<T>", "IEqualityComparer<T>", "TEvent",
+    "TMutex", "TVarType", "TIdBytes", "TIdBuffer", "TIdSocketHandle",
+    "TIdComponent"
+  ]
+}

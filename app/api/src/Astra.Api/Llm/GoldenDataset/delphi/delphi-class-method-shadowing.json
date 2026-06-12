@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-class-method-shadowing",
+  "schemaId": "delphi",
+  "title": "static-bound method silently shadows an ancestor's virtual when reintroduce is missing",
+  "trapCategory": "polymorphism/dispatch",
+  "difficulty": "medium",
+  "sourcePath": "delphi/snippets/shadowing.pas",
+  "sourceLines": "1-30",
+  "sourceContent": "unit ShadowDemo;\n\ninterface\n\ntype\n  TAncestor = class\n    procedure Greet; virtual;\n  end;\n\n  TDescendant = class(TAncestor)\n    procedure Greet;  // missing `override` AND missing `reintroduce`\n  end;\n\nimplementation\n\nuses SysUtils;\n\nprocedure TAncestor.Greet;\nbegin\n  Writeln('ancestor');\nend;\n\nprocedure TDescendant.Greet;\nbegin\n  Writeln('descendant');\nend;\n\nvar\n  Obj : TAncestor;\nbegin\n  Obj := TDescendant.Create;\n  Obj.Greet;       // prints 'ancestor', not 'descendant'.\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-SHD-1",
+      "pattern": "(?i)(static[- ]bound|virtual|override|reintroduce|shadow\\w*)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-SHD-1",
+      "pattern": "(?i)(ancestor.*descend\\w+|wrong (dispatch|method)|missing override)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-SHD-1",
+      "pattern": "(?i)(C# new keyword|Java override|@Override|polymorphic|dispatch table)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "C# requires `new` to shadow; Java requires `@Override` to override\nand will warn / fail otherwise. Delphi accepts shadowing SILENTLY\nunless the developer wrote `reintroduce`. Migration: an automatic\ntranslator that picks `override` will change behaviour; picking\n`new` / no-annotation matches. The SME confirms which the original\nDelphi author intended. Calibrated against Indy's TIdComponent.Notification chain."
+}

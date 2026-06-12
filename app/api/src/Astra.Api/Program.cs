@@ -71,6 +71,8 @@ builder.Services.AddScoped<DevPersonaContext>();
 // ─── Seed pipeline ────────────────────────────────────────────────────
 builder.Services.AddScoped<ConsumeRollSeed>();
 builder.Services.AddScoped<MinpackDemoSeed>();
+builder.Services.AddScoped<LapackBlasSeed>();
+builder.Services.AddScoped<IndyDemoSeed>();
 builder.Services.AddScoped<GoldenDatasetSeed>();
 
 // ─── LLM provider + extraction pipeline ──────────────────────────────
@@ -248,8 +250,13 @@ using (var scope = app.Services.CreateScope())
     Log.Information("Postgres connectivity: {CanConnect}", canConnect);
 
     var recreate = builder.Configuration.GetValue("Database:RecreateOnStartup", false);
-    var seedDemo = builder.Configuration.GetValue("Database:SeedDemo", true);
+    // CONSUME_ROLL synthetic seed defaults OFF — the Projects dashboard
+    // now opens on MINPACK + LAPACK BLAS. Tests that still need
+    // CONSUME_ROLL invariants opt in via Database:SeedDemo=true.
+    var seedDemo = builder.Configuration.GetValue("Database:SeedDemo", false);
     var seedMinpack = builder.Configuration.GetValue("Database:SeedMinpack", false);
+    var seedLapackBlas = builder.Configuration.GetValue("Database:SeedLapackBlas", false);
+    var seedIndyDemo = builder.Configuration.GetValue("Database:SeedIndyDemo", false);
 
     if (canConnect && recreate)
     {
@@ -462,6 +469,42 @@ using (var scope = app.Services.CreateScope())
                 await seeder.SeedAsync();
             }
             catch (Exception ex) { Log.Warning(ex, "Background MINPACK seed failed"); }
+        });
+    }
+    if (canConnect && seedLapackBlas)
+    {
+        // Same fire-and-forget pattern as MINPACK — LAPACK is a larger
+        // clone (~50 MB) so this typically takes 30–90s end-to-end; the
+        // API stays responsive throughout and the corpus appears once
+        // the background task finishes.
+        var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var bgScope = scopeFactory.CreateScope();
+                var seeder = bgScope.ServiceProvider.GetRequiredService<LapackBlasSeed>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Background LAPACK BLAS seed failed"); }
+        });
+    }
+    if (canConnect && seedIndyDemo)
+    {
+        // Phase 9.0.h: seed a curated subset of IndySockets/Indy as the
+        // headline Delphi corpus. Clone is small (~5MB after whitelist)
+        // but parse goes through the delphi-parser-sidecar so end-to-end
+        // is similar to MINPACK timing. Background fire-and-forget.
+        var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var bgScope = scopeFactory.CreateScope();
+                var seeder = bgScope.ServiceProvider.GetRequiredService<IndyDemoSeed>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Background Indy demo seed failed"); }
         });
     }
 }

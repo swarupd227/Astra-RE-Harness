@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-refcounted-interface-aliasing",
+  "schemaId": "delphi",
+  "title": "Mixing TObject and IInterface references on the same instance double-frees it",
+  "trapCategory": "memory/lifetime",
+  "difficulty": "hard",
+  "sourcePath": "delphi/snippets/refcounted_alias.pas",
+  "sourceLines": "1-26",
+  "sourceContent": "unit RefAliasDemo;\n\ninterface\n\nuses Classes;\n\ntype\n  IThing = interface\n    ['{8E5C2C1A-FBB7-4DD0-9B7A-CFBE5F58D7B0}']\n    procedure DoStuff;\n  end;\n\n  TThing = class(TInterfacedObject, IThing)\n    procedure DoStuff;\n  end;\n\nprocedure LeakOrCrash;\n\nimplementation\n\nprocedure TThing.DoStuff; begin end;\n\nprocedure LeakOrCrash;\nvar\n  Obj : TThing;\n  Itf : IThing;\nbegin\n  Obj := TThing.Create;     // refcount = 0\n  Itf := Obj;                // refcount = 1\n  Obj.DoStuff;               // legal -- TObject reference\n  Obj.Free;                   // refcount still 1 -> dangling Itf\n  Itf := nil;                 // refcount 1 -> 0 -> double-free.\nend;\n\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "object_lifetime",
+      "id": "OL-ALIAS-1",
+      "pattern": "(?i)(refcount|reference[- ]count|RefCounted|double[- ]free|dangling|TInterfacedObject)"
+    },
+    {
+      "kind": "side_effect",
+      "id": "SE-ALIAS-1",
+      "pattern": "(?i)(Free|nil|destroy|releas\\w*).*(refcount|alias|interface)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-ALIAS-1",
+      "pattern": "(?i)(IDisposable|AutoCloseable|RAII|ownership|safe|guideline)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Classic Delphi ARC trap: an instance referenced by BOTH a raw\nTObject pointer and an IInterface gets its refcount confused. When\nthe TObject reference calls Free directly, the still-live interface\nreference will release a freed instance on scope exit. Migration\ntargets (C# / Java) do not have this footgun, so the spec MUST flag\nit AND surface the migration policy (always-use-IDisposable, never-\nmix-references) as an open question. Calibrated against the\ndecade-old Indy bug http://bugs.indyproject.org/ticket/130 (the\noriginal reference was 'mixing IInterface and TObject in TIdSocketHandle')."
+}

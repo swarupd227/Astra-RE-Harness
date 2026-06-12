@@ -178,11 +178,23 @@ public sealed class GoldenDatasetScorer
     private static Dictionary<string, List<string>> BucketClaimsByKind(JsonElement root)
     {
         var buckets = new Dictionary<string, List<string>>();
+        // Fortran-f77 + cobol kinds (Phase 6.0).
         TryAddKind(buckets, root, "invariants", "invariant");
         TryAddKind(buckets, root, "section_contracts", "section_contract");
         TryAddKind(buckets, root, "io_side_effects", "io_side_effect");
         TryAddKind(buckets, root, "edge_cases", "edge_case");
         TryAddKind(buckets, root, "open_questions", "open_question");
+        // Delphi-specific kinds (Phase 9.0). The bucket dictionary is keyed by
+        // kindKey, so the additional registrations below don't collide with
+        // the kinds above — an extract that has both `side_effects` (delphi)
+        // and `io_side_effects` (fortran) is legal even though it'll never
+        // happen in practice.
+        TryAddKind(buckets, root, "object_lifetimes", "object_lifetime");
+        TryAddKind(buckets, root, "interface_implementations", "interface_implementation");
+        TryAddKind(buckets, root, "property_accessors", "property_accessor");
+        TryAddKind(buckets, root, "event_handler_contracts", "event_handler_contract");
+        TryAddKind(buckets, root, "rtti_usages", "rtti_usage");
+        TryAddKind(buckets, root, "side_effects", "side_effect");
         return buckets;
     }
 

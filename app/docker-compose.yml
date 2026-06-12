@@ -136,6 +136,46 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── fpc sidecar (Phase 9.0.f — Delphi cross-runtime equivalence) ─────
+  # Compiles Delphi / Object-Pascal source via Free Pascal Compiler in
+  # -Mdelphi mode and runs the resulting binary against a stdin-encoded
+  # input vector. REST contract mirrors gfortran / maven / gnucobol so
+  # the API's CrossRuntimeValidator stays symmetric — see ADR-024.
+  fpc-sidecar:
+    build:
+      context: ./fpc-sidecar
+    ports:
+      - "${FPC_PORT:-51055}:51055"
+    environment:
+      FPC_PORT: 51055
+      FPC_WORKDIR: /var/tmp/fpc-runs
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51055/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
+  # ─── property-test sidecar (Phase 9.0.g — Hypothesis-driven 4th gate) ──
+  # Reads a signed spec + caller-supplied equivalence callback URL and
+  # exercises the 4th gate (falsifying-input search) per ADR-029. Budget
+  # is 100 inputs / 30s / claim, 10min / spec. Language-agnostic; the
+  # actual reference / candidate execution is driven by the API via the
+  # callback so the sidecar stays stateless.
+  property-test-sidecar:
+    build:
+      context: ./property-test-sidecar
+    ports:
+      - "${PROPERTY_TEST_PORT:-51056}:51056"
+    environment:
+      PROPERTY_TEST_PORT: 51056
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51056/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── API (.NET 8) ─────────────────────────────────────────────────────
   api:
     build:
@@ -154,6 +194,10 @@ services:
         condition: service_started
       gnucobol-sidecar:
         condition: service_started
+      fpc-sidecar:
+        condition: service_started
+      property-test-sidecar:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
@@ -164,6 +208,8 @@ services:
       Validation__GfortranEndpoint: "http://gfortran-sidecar:51052"
       Validation__MavenEndpoint: "http://maven-sidecar:51053"
       Validation__GnucobolEndpoint: "http://gnucobol-sidecar:51054"
+      Validation__FpcEndpoint: "http://fpc-sidecar:51055"
+      Validation__PropertyTestEndpoint: "http://property-test-sidecar:51056"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
       Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
@@ -184,12 +230,24 @@ services:
       # demo corpus is already present). Flip RECREATE_ON_STARTUP=true to wipe.
       # Phase D switches to EF Core migrations.
       Database__RecreateOnStartup: "${DATABASE_RECREATE_ON_STARTUP:-false}"
-      Database__SeedDemo: "${DATABASE_SEED_DEMO:-true}"
+      # CONSUME_ROLL synthetic seed defaults OFF — it was a 66-LOC demo
+      # corpus that cluttered the Projects dashboard with a toy. Existing
+      # CI/e2e suites that need it can flip DATABASE_SEED_DEMO=true.
+      Database__SeedDemo: "${DATABASE_SEED_DEMO:-false}"
       # Phase C UX polish: seed MINPACK from GitHub on boot + on every
       # /dev/reset so the demo always opens against a real corpus instead
       # of the synthetic 66-LOC seed. Background task; the API serves
       # requests immediately and the corpus appears within ~10s.
       Database__SeedMinpack: "${DATABASE_SEED_MINPACK:-true}"
+      # Phase post-8.0: seed LAPACK Reference BLAS from GitHub as the
+      # second real Fortran corpus (~140 routines, ~25k LOC). Same
+      # background-task pattern as MINPACK; lives next to it in the
+      # Projects dashboard.
+      Database__SeedLapackBlas: "${DATABASE_SEED_LAPACK_BLAS:-true}"
+      # Phase 9.0.h: seed curated IndySockets/Indy subset as the headline
+      # Delphi corpus. Same background-task pattern as MINPACK; depends on
+      # delphi-parser-sidecar being up (compose wiring handles that).
+      Database__SeedIndyDemo: "${DATABASE_SEED_INDY_DEMO:-true}"
       # Dev-only reset endpoint at POST /api/v1/dev/reset. ALWAYS off in any
       # deployed environment.
       Dev__ResetEnabled: "${DEV_RESET_ENABLED:-true}"

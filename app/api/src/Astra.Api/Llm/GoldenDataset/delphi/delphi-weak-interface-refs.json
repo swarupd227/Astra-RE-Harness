@@ -1,0 +1,29 @@
+{
+  "entryId": "delphi-weak-interface-refs",
+  "schemaId": "delphi",
+  "title": "Pascal interface references form cycles unless one side is declared [weak]",
+  "trapCategory": "memory/cycle",
+  "difficulty": "hard",
+  "sourcePath": "delphi/snippets/weak_cycle.pas",
+  "sourceLines": "1-32",
+  "sourceContent": "unit WeakCycleDemo;\n\ninterface\n\ntype\n  IParent = interface;\n  IChild  = interface;\n\n  IParent = interface\n    ['{A4F6C3F8-0E6B-44C8-9B83-6F4D8E4A11DC}']\n    function GetChild : IChild;\n    procedure SetChild(const Value : IChild);\n  end;\n\n  IChild = interface\n    ['{B5B2D49B-22D9-4D45-B3DD-2FF3A9F9F1A7}']\n    function GetParent : IParent;\n    procedure SetParent(const Value : IParent);\n  end;\n\nimplementation\n\n// No [weak] keyword on either side -> circular refcount.\n// Parent.SetChild(Child); Child.SetParent(Parent);\n// Both refcounts go to 1, both stay at 1 forever. Classic leak.\n\nend.\n",
+  "expectedClaims": [
+    {
+      "kind": "object_lifetime",
+      "id": "OL-WEAK-1",
+      "pattern": "(?i)(cycle|circular|RefCounted|leak|weak)"
+    },
+    {
+      "kind": "interface_implementation",
+      "id": "II-WEAK-1",
+      "pattern": "(?i)(IParent|IChild|interface)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-WEAK-1",
+      "pattern": "(?i)(WeakReference|java.lang.ref.WeakReference|WeakRefCounted|GC|cycle collector)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Mobile-Delphi added [weak] / [unsafe] precisely to handle this\ncase. Pre-XE5 code does NOT use them and leaks silently. The\nmigration target chooses: rely on .NET / Java GC (no problem),\nor preserve the explicit-ownership model with WeakReference. The\nopen question captures which choice the SME wants. Calibrated\nagainst real Delphi/Indy listener-registration patterns where\nthe handler holds a back-reference to the component."
+}

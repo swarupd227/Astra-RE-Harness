@@ -27,6 +27,7 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from parser_sidecar import parser_pb2, parser_pb2_grpc, __version__
 from parser_sidecar.fortran_parser import parse_source as _fortran_parse
 from parser_sidecar.cobol_parser import parse_source as _cobol_parse
+from parser_sidecar.delphi_parser import parse_source as _delphi_parse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,27 +63,42 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
 
     def Parse(self, request, context):
         filename = request.filename or "<inline>.f90"
-        # Phase 5.1: route by extension. COBOL extensions (.cob, .cbl, .cpy
-        # — case-insensitive) hit the focused COBOL-85 parser; everything
-        # else falls through to fparser2 for Fortran.
+        # Phase 5.1 + 9.0.a: route by extension. COBOL, Delphi, and
+        # Fortran each have their own parser; the contract is identical
+        # so the API sees one unified `ParseResult` shape regardless of
+        # source language.
         is_cobol = _looks_like_cobol(filename)
-        with _PARSE_LOCK:
-            if is_cobol:
-                cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
-                outcome_line_count = cobol_outcome.line_count
-                outcome_subroutines = cobol_outcome.subroutines
-                outcome_warnings = cobol_outcome.warnings
-                outcome_filename = filename
-            else:
+        is_delphi = (not is_cobol) and _looks_like_delphi(filename)
+        # fparser2 is the only parser that needs the process-wide lock
+        # (global SymbolTable singleton); the COBOL and Delphi paths are
+        # purely local. We acquire the lock only for the Fortran path.
+        if is_cobol:
+            cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
+            outcome_line_count = cobol_outcome.line_count
+            outcome_subroutines = cobol_outcome.subroutines
+            outcome_warnings = cobol_outcome.warnings
+            outcome_filename = filename
+            language = "cobol"
+        elif is_delphi:
+            delphi_outcome = _delphi_parse(filename=filename, content=request.content or "")
+            outcome_line_count = delphi_outcome.line_count
+            outcome_subroutines = delphi_outcome.subroutines
+            outcome_warnings = delphi_outcome.warnings
+            outcome_filename = delphi_outcome.filename
+            language = "delphi"
+        else:
+            with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
                     content=request.content or "",
                     filename=filename,
                     form=request.form or "",
                 )
-                outcome_line_count = fortran_outcome.line_count
-                outcome_subroutines = fortran_outcome.subroutines
-                outcome_warnings = fortran_outcome.warnings
-                outcome_filename = fortran_outcome.filename
+            outcome_line_count = fortran_outcome.line_count
+            outcome_subroutines = fortran_outcome.subroutines
+            outcome_warnings = fortran_outcome.warnings
+            outcome_filename = fortran_outcome.filename
+            language = "fortran"
+
         result = parser_pb2.ParseResult(
             filename=outcome_filename,
             line_count=outcome_line_count,
@@ -99,7 +115,7 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             )
         log.info(
             "parsed lang=%s file=%s lines=%d subroutines=%d warnings=%d",
-            "cobol" if is_cobol else "fortran",
+            language,
             filename,
             outcome_line_count,
             len(outcome_subroutines),
@@ -119,6 +135,20 @@ def _looks_like_cobol(filename: str) -> bool:
         return False
     lower = filename.lower()
     return lower.endswith((".cob", ".cbl", ".cpy"))
+
+
+def _looks_like_delphi(filename: str) -> bool:
+    """Return True when the file path's extension marks it as Delphi /
+    Object Pascal source.
+
+    Phase 9.0.a: .pas (units), .dpr (program), .dpk (package),
+    .inc (include file). Strict by-extension routing; the v0 parser
+    handles all four uniformly.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".pas", ".dpr", ".dpk", ".inc"))
 
 
 def serve() -> None:
