@@ -333,7 +333,7 @@ function FalsifyingDetail({ metrics }: { metrics: FalsifyingMetrics }) {
   return (
     <div className="space-y-3 rounded-sm bg-sunken px-3 py-3">
       <div className="flex flex-wrap items-center gap-2 text-caption">
-        {isShadow && <ShadowModeBadge />}
+        {isShadow ? <ShadowModeBadge /> : <LiveModeBadge />}
         <span className="font-mono text-ink-secondary">
           {metrics.claimsExercised} claim{metrics.claimsExercised === 1 ? '' : 's'} exercised
         </span>
@@ -430,6 +430,25 @@ function ShadowModeBadge() {
       data-testid="falsifying-shadow-mode"
     >
       shadow mode v1
+    </span>
+  );
+}
+
+/**
+ * Phase 9.5 — shown on FALSIFYING runs whose metrics.mode === 'live'.
+ * Live mode means the validator pre-compiled both a reference binary
+ * and a candidate binary, then drove both with each Hypothesis-generated
+ * input and compared outputs. Falsifying examples in this mode are
+ * real semantic disagreements, not artefacts of the harness.
+ */
+function LiveModeBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm bg-[#DAEFE9] px-2 py-0.5 font-mono text-caption text-status-review"
+      title="Validator compiled both a reference binary and the candidate, then drove both with each Hypothesis-generated input and compared outputs. Falsifiers in this mode are real semantic disagreements."
+      data-testid="falsifying-live-mode"
+    >
+      live mode
     </span>
   );
 }

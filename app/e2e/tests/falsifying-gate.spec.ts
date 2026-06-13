@@ -82,8 +82,10 @@ test.describe('Phase 9.3 · 4th validation gate (falsifying-input search)', () =
     expect(run.metrics).toBeTruthy();
 
     const metrics = run.metrics as FalsifyingMetrics;
-    // v1 ships in shadow mode — the candidate path isn't yet wired.
-    expect(metrics.mode).toBe('shadow');
+    // v1 ships in shadow mode by default; Phase 9.5 adds opt-in live
+    // mode behind `LIVE_MODE_4TH_GATE_ENABLED`. Accept either — the
+    // harness asserts the mode is valid, not which one fired.
+    expect(['shadow', 'live']).toContain(metrics.mode);
     // Shape contract: arrays exist even when empty.
     expect(Array.isArray(metrics.perClaim)).toBeTruthy();
     expect(Array.isArray(metrics.falsifyingClaimIds)).toBeTruthy();
@@ -152,10 +154,13 @@ test.describe('Phase 9.3 · 4th validation gate (falsifying-input search)', () =
     await expect(falsifyingCard.getByText(/^Passed$/))
       .toBeVisible({ timeout: 30_000 });
 
-    // Expand the metrics drilldown — the shadow-mode badge is unconditional
-    // in v1 (every FALSIFYING run carries `mode: "shadow"`), so we assert it
-    // is visible regardless of whether the spec carries hints.
+    // Expand the metrics drilldown — exactly one of the mode badges must
+    // be present (shadow-mode in v1, live-mode after Phase 9.5 when the
+    // candidate is wired). We don't pin which; the harness asserts the
+    // badge is there at all.
     await falsifyingCard.getByRole('button', { name: /Show metrics/ }).click();
-    await expect(falsifyingCard.getByTestId('falsifying-shadow-mode')).toBeVisible();
+    const shadowBadge = falsifyingCard.getByTestId('falsifying-shadow-mode');
+    const liveBadge = falsifyingCard.getByTestId('falsifying-live-mode');
+    await expect(shadowBadge.or(liveBadge)).toBeVisible();
   });
 });

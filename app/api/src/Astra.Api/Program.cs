@@ -211,6 +211,10 @@ builder.Services.AddScoped<Astra.Api.Validation.GnuCobolClient>();
 builder.Services.AddHttpClient("property-test");
 builder.Services.AddScoped<Astra.Api.Validation.PropertyTestClient>();
 builder.Services.AddScoped<Astra.Api.Validation.PropertyTestValidator>();
+// Phase 9.5.a — per-validation-run binary cache (singleton; survives
+// across requests so the validator's /validate/falsifying POST and the
+// sidecar's /internal/equivalence-callback share the same in-memory map).
+builder.Services.AddSingleton<Astra.Api.Validation.PropertyTestRunCache>();
 
 // ─── Software HSM signer (Phase B.3; Azure Key Vault Managed HSM in Phase D) ─
 builder.Services.AddSingleton<IHsmSigner, SoftwareHsmSigner>();

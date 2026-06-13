@@ -72,6 +72,27 @@ public sealed class GfortranClient
         }
     }
 
+    /// <summary>
+    /// Phase 9.5.a — run a previously-compiled binary with stdin, return
+    /// its stdout / stderr / exit-code. Used by the 4th-gate equivalence
+    /// callback to drive the cached reference binary per generated input.
+    /// </summary>
+    public async Task<RunSummary> RunAsync(
+        string artifactId,
+        string stdin,
+        int timeoutMs = 5_000,
+        CancellationToken ct = default)
+    {
+        var body = new { artifactId, stdin, timeoutMs };
+        using var resp = await _http.PostAsJsonAsync("/run", body, JsonOpts, ct);
+        var raw = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                $"gfortran sidecar /run returned {(int)resp.StatusCode}: {raw}");
+        return JsonSerializer.Deserialize<RunSummary>(raw, JsonOpts)
+            ?? throw new InvalidOperationException("Empty gfortran /run response.");
+    }
+
     public async Task<CompileAndRunResponse> CompileAndRunAsync(
         CompileAndRunRequest request, CancellationToken ct = default)
     {

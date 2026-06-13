@@ -241,6 +241,18 @@ services:
       # our own sidecar.
       Validation__InternalCallbackBaseUrl: "http://api:8080"
       Validation__PropertyTestCallbackSecret: "${PROPERTY_TEST_CALLBACK_SECRET:-dev-shared-secret-rotate-me}"
+      # Phase 9.5.a — gate 4th-gate live mode behind an explicit
+      # config flag so the existing demo flow stays in shadow mode by
+      # default. When true (and the spec is fortran-f77 + dotnet8 per
+      # ADR-032's v1.1 scope), the validator pre-compiles a reference
+      # binary and the callback drives it per generated input.
+      Validation__LiveMode4thGate__Enabled: "${LIVE_MODE_4TH_GATE_ENABLED:-false}"
+      # Phase 9.5.b — pick the candidate-source variant. "echo"
+      # (default) matches the Fortran ref shim so green-path runs stay
+      # PASSED. "broken" returns x + 1 instead — used by the Δ-9.5
+      # hard-gate criterion that the 4th gate must report FAILED with
+      # a minimal counterexample when ref and cand disagree.
+      Validation__LiveMode4thGate__CandidateVariant: "${LIVE_MODE_4TH_GATE_CANDIDATE_VARIANT:-echo}"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
       Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}

@@ -36,6 +36,8 @@ public sealed class PropertyTestValidator
     private readonly AppDbContext _db;
     private readonly IAuditLogger _audit;
     private readonly PropertyTestClient _client;
+    private readonly PropertyTestRunCache _runCache;
+    private readonly GfortranClient _gfortran;
     private readonly IConfiguration _cfg;
     private readonly ILogger<PropertyTestValidator> _log;
 
@@ -43,12 +45,16 @@ public sealed class PropertyTestValidator
         AppDbContext db,
         IAuditLogger audit,
         PropertyTestClient client,
+        PropertyTestRunCache runCache,
+        GfortranClient gfortran,
         IConfiguration cfg,
         ILogger<PropertyTestValidator> log)
     {
         _db = db;
         _audit = audit;
         _client = client;
+        _runCache = runCache;
+        _gfortran = gfortran;
         _cfg = cfg;
         _log = log;
     }
@@ -114,13 +120,60 @@ public sealed class PropertyTestValidator
 
             var callbackUrl = BuildCallbackUrl(run.Id);
             var language = ResolveLanguage(spec.SpecJson.RootElement);
+
+            // Phase 9.5.a — decide whether this (schemaId, target) pair
+            // qualifies for live mode. v1.1 enables live mode only for
+            // fortran-f77 + dotnet8, gated behind a config flag so the
+            // existing demo flow stays in shadow mode by default. v1.2
+            // adds Delphi / C++ / COBOL paths behind the same predicate.
+            var liveModeEnabled = _cfg.GetValue("Validation:LiveMode4thGate:Enabled", false);
+            string mode = "shadow";
+            if (liveModeEnabled && SupportsLiveMode(language, scaffold.TargetPlatform))
+            {
+                try
+                {
+                    var entry = await PrepareLiveModeAsync(claims, ct);
+                    _runCache.Put(run.Id, entry);
+                    mode = "live";
+                    _log.LogInformation(
+                        "4th-gate run {Run}: live mode armed — refSidecar={Sidecar} refArtifactId={Artifact}",
+                        run.Id, entry.RefSidecar, entry.RefArtifactId);
+                }
+                catch (Exception liveEx)
+                {
+                    _log.LogWarning(liveEx,
+                        "4th-gate run {Run}: live-mode preparation failed; falling back to shadow",
+                        run.Id);
+                    mode = "shadow";
+                }
+            }
+
             var request = new PropertyTestClient.FalsifyRequest(
                 SpecId: spec.Id.ToString(),
                 Language: language,
                 CallbackUrl: callbackUrl,
                 Claims: claims);
 
-            var response = await _client.FalsifyAsync(request, ct);
+            PropertyTestClient.FalsifyResponse response;
+            try
+            {
+                response = await _client.FalsifyAsync(request, ct);
+            }
+            finally
+            {
+                // Evict regardless of success / failure / exception — the
+                // cache row is a "current run" indicator, not a result
+                // cache. We also delete the candidate tempdir here so a
+                // crashed validator leaves only one orphan tempdir per
+                // crashed run (the startup sweep handles the rest).
+                var entry = _runCache.TryGet(run.Id);
+                _runCache.Remove(run.Id);
+                if (entry?.CandidateTempDir is not null && Directory.Exists(entry.CandidateTempDir))
+                {
+                    try { Directory.Delete(entry.CandidateTempDir, recursive: true); }
+                    catch (Exception cleanupEx) { _log.LogWarning(cleanupEx, "Candidate tempdir cleanup failed for run {Run}", run.Id); }
+                }
+            }
 
             var falsifyingIds = response.ClaimResults
                 .Where(c => c.Falsifying.HasValue)
@@ -129,7 +182,7 @@ public sealed class PropertyTestValidator
 
             run.MetricsJson = JsonSerializer.Serialize(new
             {
-                mode = "shadow",
+                mode,
                 claimsExercised = response.ClaimResults.Count,
                 falsifyingClaimIds = falsifyingIds,
                 totalExamplesTried = response.ClaimResults.Sum(c => c.ExamplesTried),
@@ -163,8 +216,8 @@ public sealed class PropertyTestValidator
                 run.Status = "PASSED";
                 var timedOutClaims = response.ClaimResults.Count(c => c.TimedOut);
                 run.Summary = timedOutClaims > 0
-                    ? $"{response.ClaimResults.Count} claims exercised · {timedOutClaims} hit budget (shadow mode)"
-                    : $"{response.ClaimResults.Count} claims exercised · {response.ClaimResults.Sum(c => c.ExamplesTried)} examples (shadow mode)";
+                    ? $"{response.ClaimResults.Count} claims exercised · {timedOutClaims} hit budget ({mode} mode)"
+                    : $"{response.ClaimResults.Count} claims exercised · {response.ClaimResults.Sum(c => c.ExamplesTried)} examples ({mode} mode)";
             }
 
             await _db.SaveChangesAsync(ct);
@@ -270,6 +323,133 @@ public sealed class PropertyTestValidator
         var secret = _cfg["Validation:PropertyTestCallbackSecret"]
             ?? "dev-shared-secret-rotate-me";
         return $"{baseUrl.TrimEnd('/')}/internal/equivalence-callback?runId={runId}&secret={Uri.EscapeDataString(secret)}";
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 9.5.a — live-mode opt-in + reference-binary pre-compile
+    // ──────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Does this (schemaId, target) pair support live-mode 4th-gate
+    /// execution? v1.1 limits live mode to fortran-f77 + dotnet8 —
+    /// the only pair with a HarnessDriver shim shipped in this phase.
+    /// v1.2 expands to delphi / cpp / cobol behind the same predicate.
+    /// </summary>
+    private static bool SupportsLiveMode(string language, string targetPlatform)
+        => string.Equals(language, "fortran-f77", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(targetPlatform, "dotnet8", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Compile both the reference binary (via gfortran-sidecar) and the
+    /// candidate binary (via in-process `dotnet publish`) using the
+    /// canonical echo HarnessDriver shims. Return a cache entry the
+    /// callback uses for real ref-vs-cand comparison per generated
+    /// input. The candidate's tempdir is owned by the entry and
+    /// cleaned up on cache eviction.
+    /// </summary>
+    private async Task<PropertyTestRunCache.Entry> PrepareLiveModeAsync(
+        IReadOnlyList<PropertyTestClient.ClaimSpec> claims,
+        CancellationToken ct)
+    {
+        // 1. Reference binary — gfortran sidecar produces an artifactId.
+        var compile = await _gfortran.CompileAndRunAsync(
+            new GfortranClient.CompileAndRunRequest(
+                Sources: new[]
+                {
+                    new GfortranClient.Source(
+                        HarnessDriverShims.FortranSumShimPath,
+                        HarnessDriverShims.FortranSumShimSource),
+                },
+                Stdin: "42\n",           // warm-up input to verify compile-and-run round-trip
+                TimeoutMs: 30_000),
+            ct);
+
+        if (compile.Compile.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Ref-binary compile failed: {compile.Compile.Log}");
+        }
+
+        // 2. Candidate binary — `dotnet publish` of a tiny project in
+        //    a per-run tempdir. The candidate-source-variant flag picks
+        //    between the green-path echo and the intentional-break (the
+        //    latter only used by the Δ-9.5 hard-gate criterion).
+        var variant = _cfg.GetValue("Validation:LiveMode4thGate:CandidateVariant", "echo");
+        var candidateSource = variant switch
+        {
+            "broken" => HarnessDriverShims.DotnetBrokenCandidateSource,
+            _        => HarnessDriverShims.DotnetEchoCandidateSource,
+        };
+        var (candidateExe, candidateTempDir) =
+            await PublishCandidateAsync(candidateSource, ct);
+
+        // 3. Aggregate the input-field names; callback uses this to
+        //    rename JSON keys into the shims' stdin line format.
+        var inputNames = claims
+            .SelectMany(c => c.GeneratorHints.Inputs.Select(i => i.Name))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return new PropertyTestRunCache.Entry(
+            Mode: "live",
+            RefSidecar: "gfortran",
+            RefArtifactId: compile.Compile.ArtifactId,
+            CandidateExePath: candidateExe,
+            CandidateRunner: "dotnet",
+            CandidateTempDir: candidateTempDir,
+            InputNames: inputNames);
+    }
+
+    /// <summary>
+    /// Write a tiny C# project to a per-run tempdir and run `dotnet
+    /// publish` against it. Returns the absolute path to the produced
+    /// assembly (`HarnessDriver.dll`) and the tempdir the entry should
+    /// remember for eviction.
+    /// </summary>
+    private async Task<(string ExePath, string TempDir)> PublishCandidateAsync(
+        string sourceText,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(
+            Path.GetTempPath(),
+            "astra-4th-gate-cand-" + Guid.NewGuid().ToString("N")[..16]);
+        Directory.CreateDirectory(tempDir);
+
+        var csprojPath = Path.Combine(tempDir, "HarnessDriver.csproj");
+        var sourcePath = Path.Combine(tempDir, "Program.cs");
+        var publishDir = Path.Combine(tempDir, "publish");
+        await File.WriteAllTextAsync(csprojPath, HarnessDriverShims.DotnetCandidateProjectFile, ct);
+        await File.WriteAllTextAsync(sourcePath, sourceText, ct);
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"publish \"{csprojPath}\" -c Release -o \"{publishDir}\" -v quiet --nologo",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = tempDir,
+        };
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException("Could not start `dotnet publish`.");
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = proc.StandardError.ReadToEndAsync(ct);
+        await proc.WaitForExitAsync(ct);
+        if (proc.ExitCode != 0)
+        {
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            throw new InvalidOperationException(
+                $"Candidate `dotnet publish` failed (exit {proc.ExitCode}):\n{stdout}\n{stderr}");
+        }
+
+        var exePath = Path.Combine(publishDir, "HarnessDriver.dll");
+        if (!File.Exists(exePath))
+        {
+            throw new InvalidOperationException(
+                $"Candidate publish completed but {exePath} is missing.");
+        }
+        return (exePath, tempDir);
     }
 
     /// <summary>

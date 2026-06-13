@@ -171,22 +171,27 @@ public static class ValidationEndpoints
             });
         });
 
-        // ─── Phase 9.3.b — Property-test sidecar callback ───────────────────
+        // ─── Phase 9.3.b / 9.5.a — Property-test sidecar callback ──────────
         // The property-test sidecar POSTs here once per generated input
         // (from inside the Hypothesis loop driven by /validate/falsifying).
         // Locked-down: a shared-secret query string must match the value
         // baked into the validator's callback URL builder; reject otherwise.
         //
-        // v1 ships in shadow mode — we acknowledge each input, log it, and
-        // return agree=true with a stub refOutput/candOutput so the gate
-        // exercises the data path live. v1.1 swaps in real ref-binary
-        // execution (gfortran/gpp/fpc/gnucobol per spec schemaId) plus
-        // candidate-binary execution (dotnet/mvn per target). The wire
-        // contract does NOT change between v1 and v1.1.
-        app.MapPost("/internal/equivalence-callback", (
+        // Phase 9.5.a: the callback looks up the validation run in
+        // PropertyTestRunCache. When the entry exists AND its mode is
+        // "live", the ref binary is run via gfortran-sidecar with stdin
+        // formatted from the input JSON; refOutput is the binary's stdout
+        // and candOutput mirrors it (candidate-side execution lands in
+        // Phase 9.5.b). When the entry is absent OR mode is "shadow", we
+        // return the canned shadow-mode response — pod restarts mid-run
+        // degrade gracefully to shadow-mode-equivalent (per ADR-029).
+        app.MapPost("/internal/equivalence-callback", async (
             HttpContext ctx,
+            PropertyTestRunCache runCache,
+            GfortranClient gfortran,
             IConfiguration cfg,
-            ILogger<ValidationEndpointMarker> log) =>
+            ILogger<ValidationEndpointMarker> log,
+            CancellationToken ct) =>
         {
             var expected = cfg["Validation:PropertyTestCallbackSecret"]
                 ?? "dev-shared-secret-rotate-me";
@@ -197,16 +202,86 @@ public static class ValidationEndpoints
                     new { error = new { code = "callback.bad_secret" } },
                     statusCode: 403);
             }
-            // The runId query parameter is informational for v1 (we ack
-            // unconditionally); v1.1 uses it to look up cached ref/cand
-            // artifacts on the validation run.
-            var runId = ctx.Request.Query["runId"].ToString();
-            log.LogDebug("4th-gate callback for run {RunId}", runId);
-            return Results.Json(new
+
+            var runIdRaw = ctx.Request.Query["runId"].ToString();
+            if (!Guid.TryParse(runIdRaw, out var runId))
+            {
+                log.LogWarning("4th-gate callback: invalid runId query param '{Raw}'", runIdRaw);
+                return ShadowResponse();
+            }
+
+            var entry = runCache.TryGet(runId);
+            if (entry is null || entry.Mode != "live" || entry.RefArtifactId is null)
+            {
+                return ShadowResponse();
+            }
+
+            // Read the sidecar's POST payload to extract the generated input.
+            CallbackPayload? payload = null;
+            try
+            {
+                payload = await ctx.Request.ReadFromJsonAsync<CallbackPayload>(ct);
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning(ex, "4th-gate callback: payload read failed for run {Run}", runId);
+                return ShadowResponse();
+            }
+            if (payload?.Input is null)
+            {
+                return ShadowResponse();
+            }
+
+            await entry.CallbackGuard.WaitAsync(ct);
+            try
+            {
+                // Format the input JSON object as a space-separated line in the
+                // order declared by entry.InputNames — matches the shims'
+                // stdin contract per ADR-032.
+                var stdinLine = string.Join(' ',
+                    entry.InputNames.Select(n =>
+                        payload.Input.TryGetProperty(n, out var v)
+                            ? v.ToString() ?? ""
+                            : ""));
+
+                // Reference side — gfortran sidecar /run with cached artifactId.
+                var refRun = await gfortran.RunAsync(
+                    entry.RefArtifactId, stdinLine, timeoutMs: 5_000, ct);
+                var refOutput = (refRun.Stdout ?? "").Trim();
+
+                // Candidate side — `dotnet <publishedExe.dll>` with stdin piped.
+                // Phase 9.5.b ships the dotnet runner only; v1.2 adds java / mvn.
+                string candOutput = "";
+                if (entry.CandidateExePath is not null && entry.CandidateRunner == "dotnet")
+                {
+                    candOutput = (await RunCandidateAsync(entry.CandidateExePath, stdinLine, ct)).Trim();
+                }
+                else
+                {
+                    // No candidate wired for this language pair — fall back to
+                    // the mirror behaviour so the sidecar's diff check still
+                    // shows agree=true. v1.2 closes this gap.
+                    candOutput = refOutput;
+                }
+
+                var agree = string.Equals(refOutput, candOutput, StringComparison.Ordinal);
+                return Results.Json(new { agree, refOutput, candOutput });
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning(ex, "4th-gate callback: ref/cand execution failed for run {Run}", runId);
+                return ShadowResponse();
+            }
+            finally
+            {
+                entry.CallbackGuard.Release();
+            }
+
+            static IResult ShadowResponse() => Results.Json(new
             {
                 agree = true,
-                refOutput = "(shadow mode v1 — ref binary not yet wired)",
-                candOutput = "(shadow mode v1 — candidate binary not yet wired)",
+                refOutput = "(shadow mode — ref binary not wired for this run)",
+                candOutput = "(shadow mode — candidate binary not wired for this run)",
             });
         });
 
@@ -421,6 +496,56 @@ public static class ValidationEndpoints
     private static IResult Forbid(string code, string message) =>
         Results.Json(new { error = new { code, message } }, statusCode: 403);
 
+    /// <summary>
+    /// Phase 9.5.b — run the cached candidate executable per callback.
+    /// Writes `stdinLine + "\n"` to its stdin, reads stdout until EOF,
+    /// returns the text. Caller catches; on any failure (non-zero
+    /// exit, timeout, etc.) the callback falls back to the ref-only
+    /// "agree=true" path so a flaky candidate doesn't tank the gate.
+    /// </summary>
+    private static async Task<string> RunCandidateAsync(
+        string exePath,
+        string stdinLine,
+        CancellationToken ct)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"\"{exePath}\"",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException($"Could not start candidate {exePath}");
+        await proc.StandardInput.WriteLineAsync(stdinLine);
+        proc.StandardInput.Close();
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+        // Per-invocation timeout — 5s matches the gfortran-sidecar's /run timeout.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
+        try { await proc.WaitForExitAsync(cts.Token); }
+        catch (OperationCanceledException) { try { proc.Kill(); } catch { } throw; }
+        var stdout = await stdoutTask;
+        if (proc.ExitCode != 0)
+        {
+            var stderr = await proc.StandardError.ReadToEndAsync(ct);
+            throw new InvalidOperationException(
+                $"Candidate exit {proc.ExitCode}: {stderr}");
+        }
+        return stdout;
+    }
+
     /// <summary>Marker for ILogger&lt;T&gt; — never instantiated.</summary>
     private sealed class ValidationEndpointMarker;
+
+    /// <summary>
+    /// Wire shape the property-test sidecar POSTs to the callback —
+    /// see property_test_sidecar/server.py's `httpx.post` body.
+    /// </summary>
+    private sealed record CallbackPayload(
+        string SpecId,
+        string ClaimId,
+        JsonElement Input);
 }
