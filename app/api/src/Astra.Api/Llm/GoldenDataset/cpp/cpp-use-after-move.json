@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-use-after-move",
+  "schemaId": "cpp",
+  "title": "Accesses an object's value after std::move — valid-but-unspecified state",
+  "trapCategory": "ub/use-after-move",
+  "difficulty": "medium",
+  "sourcePath": "cpp/snippets/use_after_move.cpp",
+  "sourceLines": "1-22",
+  "sourceContent": "#include <string>\n#include <utility>\n#include <vector>\n\n// After std::move(s), s is in a 'valid but unspecified' state. Reading\n// its value isn't UB per se, but the value is implementation-defined and\n// real code occasionally relies on a specific value (typically empty).\nvoid consume_and_log(std::string& s, std::vector<std::string>& sink) {\n    sink.push_back(std::move(s));\n    // Bug? The author expected `s` to be empty here, but the standard\n    // doesn't guarantee it. libstdc++ leaves it empty; libc++ might too,\n    // but msvc's stdlib is silent on the matter.\n    if (s.size() > 0) {\n        // This branch is observable but its frequency is implementation-defined.\n        sink.back().append(\":carry-over:\");\n        sink.back().append(s);\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "undefined_behavior",
+      "id": "UB-UAM-1",
+      "pattern": "(?i)(UseAfterMove|moved[- ]from|unspecified|implementation[- ]defined)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-UAM-1",
+      "pattern": "(?i)(s\\.size|empty|libstdc|libc\\+\\+|msvc|standard library)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-UAM-1",
+      "pattern": "(?i)(.NET.*move|Java.*reset|return value|clear\\(\\)|explicit)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Java and C# have no move semantics; references stay valid until\nGC. The trap is that translating naively (Java: pass by reference,\nappend continues to work) silently CHANGES BEHAVIOUR — the C++\nsource was implementation-defined; the translation makes the\ncarry-over branch always fire. SME has to decide whether that's\nintended."
+}

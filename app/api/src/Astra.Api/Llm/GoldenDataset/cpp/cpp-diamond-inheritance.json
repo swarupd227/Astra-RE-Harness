@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-diamond-inheritance",
+  "schemaId": "cpp",
+  "title": "Diamond inheritance forces explicit virtual-base resolution",
+  "trapCategory": "polymorphism/diamond",
+  "difficulty": "hard",
+  "sourcePath": "cpp/snippets/diamond.cpp",
+  "sourceLines": "1-32",
+  "sourceContent": "// Diamond hierarchy: Stream <- BufferedStream <- BiDiBufferedStream\n//                            <- LoggingStream   <-\n// Without `virtual` on the base, both BufferedStream and LoggingStream\n// carry their own Stream sub-object — flush() in the derived class is\n// ambiguous and the compiler rejects the call.\n#include <iostream>\n\nstruct Stream {\n    virtual void flush() = 0;\n    virtual ~Stream() = default;\n};\n\nstruct BufferedStream : public Stream {\n    void flush() override { std::cout << \"buffered\\n\"; }\n};\n\nstruct LoggingStream : public Stream {\n    void flush() override { std::cout << \"logging\\n\"; }\n};\n\n// Bug: should inherit virtually from Stream to avoid the diamond.\nstruct BiDiBufferedStream : public BufferedStream, public LoggingStream {\n    // Caller has to disambiguate: BufferedStream::flush() vs LoggingStream::flush().\n    void flush() override { BufferedStream::flush(); LoggingStream::flush(); }\n};\n",
+  "expectedClaims": [
+    {
+      "kind": "rtti_usage",
+      "id": "RT-DI-1",
+      "pattern": "(?i)(VirtualDispatch|diamond|virtual.*base|disambiguat|multiple.*inheritance)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-DI-1",
+      "pattern": "(?i)(both.*flush|each.*sub[- ]object|once per base)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-DI-1",
+      "pattern": "(?i)(C# interface|Java interface|sealed|composition|no diamond)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Neither C# nor Java supports multiple class inheritance. The\nC# translation typically becomes interface + composition; Java\nidem. The trap is that the diamond's *behaviour* (calling both\nflush() variants in some sequence) must be preserved by the\ntarget's composition pattern. Forces an Open Question per rule #7\n(RTTI / virtual dispatch)."
+}

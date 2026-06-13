@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-vector-bool-proxy",
+  "schemaId": "cpp",
+  "title": "std::vector<bool>'s operator[] returns a proxy — generic code surprises",
+  "trapCategory": "stl/proxy-reference",
+  "difficulty": "medium",
+  "sourcePath": "cpp/snippets/vector_bool.cpp",
+  "sourceLines": "1-22",
+  "sourceContent": "#include <vector>\n\n// Generic helper that expects T& from operator[]. For std::vector<int>\n// it's fine; for std::vector<bool> the [] returns a PROXY (vector<bool>::reference)\n// not a bool& — so `auto& flag = v[3];` deduces to the proxy type, not bool&.\n// Modifying `flag` modifies the bit, but a copy of `flag` does NOT, so generic\n// code that takes `T&` ends up writing to a temporary.\ntemplate<typename T>\nvoid set_third(std::vector<T>& v, T value) {\n    auto& slot = v[3];  // for bool: proxy reference, NOT bool&.\n    slot = value;\n    // For bool, the next line is the trap:\n    T copy_of_slot = slot;\n    // `copy_of_slot` is now a *value*, not a reference into v's bit array.\n    // If the caller relied on later modifications through slot, they're lost.\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "edge_case",
+      "id": "EC-VB-1",
+      "pattern": "(?i)(vector<bool>|proxy|bit[- ]packed|operator\\[\\]|reference type)"
+    },
+    {
+      "kind": "template_instantiation",
+      "id": "TI-VB-1",
+      "pattern": "(?i)(specialisation|specialization|bool|vector<T>|primary template)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-VB-1",
+      "pattern": "(?i)(BitArray|BitSet|List<bool>|ArrayList<Boolean>|target.*proxy)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Per the STL mapping table, std::vector<bool> maps to BitArray\n(.NET) / BitSet (Java) — NOT List<bool> / ArrayList<Boolean>.\nMissing this distinction silently changes the API contract (the\nproxy-reference dance disappears in the target). Forces the\nedge_case + template_instantiation kinds to fire together,\nverifying the schema's cross-claim coordination."
+}

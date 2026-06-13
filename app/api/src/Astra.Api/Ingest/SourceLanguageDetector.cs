@@ -9,10 +9,11 @@ namespace Astra.Api.Ingest;
 /// </summary>
 public static class SourceLanguageDetector
 {
-    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol", "delphi").</summary>
+    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol", "delphi", "cpp").</summary>
     public const string Fortran = "fortran-f77";
     public const string Cobol = "cobol";
     public const string Delphi = "delphi";
+    public const string Cpp = "cpp";
 
     public static readonly string[] FortranExtensions =
     {
@@ -30,9 +31,19 @@ public static class SourceLanguageDetector
         ".pas", ".dpr", ".dpk", ".inc",
     };
 
+    public static readonly string[] CppExtensions =
+    {
+        ".cpp", ".cc", ".cxx", ".c++",
+        ".hpp", ".hxx", ".h++", ".ipp",
+        // ".h" is C/C++ ambiguous; we treat it as C++ because all seeded
+        // corpora are C++. If a pure-C corpus arrives later, add a `.c`
+        // branch and re-route .h based on the surrounding tree.
+        ".h",
+    };
+
     /// <summary>Every extension we accept at ingest time.</summary>
     public static IEnumerable<string> AllowedExtensions =>
-        FortranExtensions.Concat(CobolExtensions).Concat(DelphiExtensions);
+        FortranExtensions.Concat(CobolExtensions).Concat(DelphiExtensions).Concat(CppExtensions);
 
     /// <summary>
     /// Map a file extension (case-insensitive, with leading dot) to a
@@ -45,6 +56,7 @@ public static class SourceLanguageDetector
         if (FortranExtensions.Contains(ext)) return Fortran;
         if (CobolExtensions.Contains(ext)) return Cobol;
         if (DelphiExtensions.Contains(ext)) return Delphi;
+        if (CppExtensions.Contains(ext)) return Cpp;
         return null;
     }
 

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-cpp-fmt",
+  "targetStack": "dotnet8",
+  "displayName": "fmt::format C++ → .NET 8 + xUnit",
+  "description": "Reference C++→.NET-8 scaffold for fmt-style format APIs: a primary template that takes a compile-time-checked format string plus a variadic pack of typed arguments. The .NET projection lowers `template<typename ...Args>` to a `params object?[]` overload alongside a strongly-typed `Format<T>` for the common integral / floating-point cases. Every public surface carries `[SpecClaim(...)]` attributes citing the signed spec's INV / OL / TI / UB / EX claim ids, so reviewers can trace each contract back to the spec without leaving the IDE.",
+  "compatibleSchemas": ["cpp"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "format" },
+      { "subroutineName": "fmt::format" },
+      { "subroutineName": "fmt::detail::format_int" },
+      { "subroutineName": "fmt::vformat" },
+      { "subroutineName": "fmt::detail::vformat_to" }
+    ],
+    "fallback": "Used when the routine sits inside fmt::* and exposes a format-string-plus-args API surface."
+  },
+  "owner": "Nous · C++ migration accelerator",
+  "status": "preview",
+  "files": [
+    { "path": "Demo.Fmt.csproj",                "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.Fmt.Tests.csproj",    "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/Formatter.cs",               "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","TI-1","OL-1","EX-1","UB-1","EC-1"] },
+    { "path": "src/FormatString.cs",            "language": "csharp", "derivedFromClaimIds": ["INV-3","EC-2"] },
+    { "path": "src/FormatException.cs",         "language": "csharp", "derivedFromClaimIds": ["EX-1"] },
+    { "path": "tests/FormatterTests.cs",        "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","EC-2","UB-1"] }
+  ]
+}

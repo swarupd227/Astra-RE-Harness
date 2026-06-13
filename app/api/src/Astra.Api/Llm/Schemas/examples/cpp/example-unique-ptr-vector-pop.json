@@ -1,0 +1,73 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "Stack::pop",
+  "enclosing_class": "Stack",
+  "namespace": "",
+  "source_path": "src/Stack.h",
+  "source_lines": "32-58",
+  "summary": "Returns the top element of a stack of std::unique_ptr<T> while transferring ownership to the caller via move semantics. The moved-from internal slot is then popped from the underlying vector. Strong exception guarantee — if the move-construction of the return value throws, the stack remains unchanged.",
+  "inputs": [],
+  "outputs": [
+    { "id": "out.return", "name": "result", "type": "std::unique_ptr<T>", "direction": "return",
+      "semantic": "Sole owner of the element formerly on top of the stack. The caller is responsible for keeping it alive or letting it auto-destroy at scope exit.",
+      "citations": [ { "lines": "55" } ] }
+  ],
+  "invariants": [
+    { "id": "INV-1", "claim": "After return, the stack's size is decreased by exactly 1 — or pop is a precondition violation (empty stack; see UB-1).",
+      "citations": [ { "lines": "40-55" } ], "confidence": "high" },
+    { "id": "INV-2", "claim": "The returned unique_ptr's stored pointer equals the pointer that was on top of the stack at entry; no copy of the pointee occurs.",
+      "citations": [ { "lines": "48-50" } ], "confidence": "high" },
+    { "id": "INV-3", "claim": "If T's destructor throws (which violates the standard's noexcept assumption for destructors), behaviour is implementation-defined; the stack is left in an unspecified state. The routine itself does not invoke ~T directly.",
+      "citations": [ { "lines": "32-58" } ], "confidence": "medium" }
+  ],
+  "object_lifetimes": [
+    { "id": "OL-1", "subject": "return value (std::unique_ptr<T>)",
+      "model": "Unique",
+      "policy": "Caller becomes sole owner. The stack relinquishes its claim; the moved-from slot is then popped. Java translation: AutoCloseable + try-with-resources. .NET translation: IDisposable + using.",
+      "citations": [ { "lines": "48-55" } ], "confidence": "high" },
+    { "id": "OL-2", "subject": "internal storage (std::vector<std::unique_ptr<T>>)",
+      "model": "Borrowed",
+      "policy": "The vector is a member; pop mutates it in-place. No allocation; no deallocation beyond the pop_back.",
+      "citations": [ { "lines": "32" } ], "confidence": "high" }
+  ],
+  "exception_contracts": [
+    { "id": "EX-1", "guarantee": "Strong",
+      "exception_types": ["std::out_of_range (debug build precondition check)"],
+      "contract": "If the move-construction of the return value throws (it shouldn't for unique_ptr — move is noexcept), the stack is unchanged. If pop_back throws (it doesn't for std::vector), the stack invariant is preserved. C# translation: try/return-by-value; Java translation: same; both targets benefit from this guarantee verbatim.",
+      "citations": [ { "lines": "48-55" } ] }
+  ],
+  "undefined_behaviors": [
+    { "id": "UB-1", "category": "Other",
+      "trigger": "Calling pop on an empty stack. The implementation does not check size; back() on an empty vector is undefined behavior.",
+      "standard_reference": "[sequence.reqmts] / [vector.access]",
+      "routine_assumption": "assumes_caller_avoids",
+      "citations": [ { "lines": "42-48" } ] },
+    { "id": "UB-2", "category": "UseAfterMove",
+      "trigger": "The popped slot is `std::move`d into the return value, then immediately popped from the vector. If the caller's flow somehow re-references that slot through aliased iterators, the moved-from unique_ptr is in a valid-but-unspecified state.",
+      "standard_reference": "[lib.types.movedfrom]",
+      "routine_assumption": "defensively_guards",
+      "citations": [ { "lines": "48-52" } ] }
+  ],
+  "side_effects": [
+    { "id": "SE-1", "description": "Mutates the stack's internal vector — size decreases by 1; the popped slot is destroyed by pop_back (but its unique_ptr was already moved out, so no double-destroy).",
+      "citations": [ { "lines": "48-55" } ] }
+  ],
+  "edge_cases": [
+    { "id": "EC-1", "description": "Stack contains exactly one element. After pop, size is 0; subsequent pop is UB-1.",
+      "citations": [ { "lines": "40-55" } ],
+      "behavior": "Functions correctly; the size becomes 0 cleanly.",
+      "confidence": "high" },
+    { "id": "EC-2", "description": "T is a non-movable type (e.g. const-qualified). Compile fails because unique_ptr<T> requires T to be destructible AND the return type implies a move.",
+      "citations": [ { "lines": "32" } ],
+      "behavior": "Compile error; SFINAE not applied — the user gets a templated error message.",
+      "confidence": "high" }
+  ],
+  "open_questions": [
+    { "id": "Q-1", "question": "Should the translation make 'pop on empty' explicit (.NET: throw InvalidOperationException; Java: throw NoSuchElementException) or preserve the precondition semantics? The Borrowed-vs-Unique ownership story translates cleanly; only this defensive guard is at the SME's discretion.", "status": "unresolved" }
+  ],
+  "metadata": {
+    "prompt_template": "cpp-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "cpp"
+  }
+}

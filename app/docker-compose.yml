@@ -156,6 +156,26 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── g++ sidecar (Phase 9.1.f — C++ cross-runtime equivalence) ────────
+  # Compiles C++ source via GNU g++ -std=c++20 -O0 and runs the resulting
+  # binary against a stdin-encoded input vector. REST contract mirrors
+  # fpc / gfortran / gnucobol / maven so CrossRuntimeValidator stays
+  # symmetric across all source-language pairs.
+  gpp-sidecar:
+    build:
+      context: ./gpp-sidecar
+    ports:
+      - "${GPP_PORT:-51057}:51057"
+    environment:
+      GPP_PORT: 51057
+      GPP_WORKDIR: /var/tmp/gpp-runs
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51057/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── property-test sidecar (Phase 9.0.g — Hypothesis-driven 4th gate) ──
   # Reads a signed spec + caller-supplied equivalence callback URL and
   # exercises the 4th gate (falsifying-input search) per ADR-029. Budget
@@ -196,6 +216,8 @@ services:
         condition: service_started
       fpc-sidecar:
         condition: service_started
+      gpp-sidecar:
+        condition: service_started
       property-test-sidecar:
         condition: service_started
     environment:
@@ -209,6 +231,7 @@ services:
       Validation__MavenEndpoint: "http://maven-sidecar:51053"
       Validation__GnucobolEndpoint: "http://gnucobol-sidecar:51054"
       Validation__FpcEndpoint: "http://fpc-sidecar:51055"
+      Validation__GppEndpoint: "http://gpp-sidecar:51057"
       Validation__PropertyTestEndpoint: "http://property-test-sidecar:51056"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
@@ -248,6 +271,10 @@ services:
       # Delphi corpus. Same background-task pattern as MINPACK; depends on
       # delphi-parser-sidecar being up (compose wiring handles that).
       Database__SeedIndyDemo: "${DATABASE_SEED_INDY_DEMO:-true}"
+      # Phase 9.1.g: seed curated fmtlib/fmt subset as the headline C++
+      # corpus. Same background-task pattern as Indy; depends on the
+      # cpp-parser-sidecar branch being active (compose wiring handles that).
+      Database__SeedFmtDemo: "${DATABASE_SEED_FMT_DEMO:-true}"
       # Dev-only reset endpoint at POST /api/v1/dev/reset. ALWAYS off in any
       # deployed environment.
       Dev__ResetEnabled: "${DEV_RESET_ENABLED:-true}"

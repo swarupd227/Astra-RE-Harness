@@ -73,6 +73,7 @@ builder.Services.AddScoped<ConsumeRollSeed>();
 builder.Services.AddScoped<MinpackDemoSeed>();
 builder.Services.AddScoped<LapackBlasSeed>();
 builder.Services.AddScoped<IndyDemoSeed>();
+builder.Services.AddScoped<FmtDemoSeed>();
 builder.Services.AddScoped<GoldenDatasetSeed>();
 
 // ─── LLM provider + extraction pipeline ──────────────────────────────
@@ -257,6 +258,7 @@ using (var scope = app.Services.CreateScope())
     var seedMinpack = builder.Configuration.GetValue("Database:SeedMinpack", false);
     var seedLapackBlas = builder.Configuration.GetValue("Database:SeedLapackBlas", false);
     var seedIndyDemo = builder.Configuration.GetValue("Database:SeedIndyDemo", false);
+    var seedFmtDemo = builder.Configuration.GetValue("Database:SeedFmtDemo", false);
 
     if (canConnect && recreate)
     {
@@ -505,6 +507,22 @@ using (var scope = app.Services.CreateScope())
                 await seeder.SeedAsync();
             }
             catch (Exception ex) { Log.Warning(ex, "Background Indy demo seed failed"); }
+        });
+    }
+    if (canConnect && seedFmtDemo)
+    {
+        // Phase 9.1.g: seed a curated subset of fmtlib/fmt as the headline
+        // C++ corpus. Background fire-and-forget mirroring Indy.
+        var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var bgScope = scopeFactory.CreateScope();
+                var seeder = bgScope.ServiceProvider.GetRequiredService<FmtDemoSeed>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Background fmt demo seed failed"); }
         });
     }
 }

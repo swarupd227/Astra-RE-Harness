@@ -195,6 +195,13 @@ public sealed class GoldenDatasetScorer
         TryAddKind(buckets, root, "event_handler_contracts", "event_handler_contract");
         TryAddKind(buckets, root, "rtti_usages", "rtti_usage");
         TryAddKind(buckets, root, "side_effects", "side_effect");
+        // C++-specific kinds (Phase 9.1). object_lifetime / rtti_usage /
+        // side_effect / edge_case / open_question / invariant are shared
+        // with the Delphi taxonomy and already registered above; only the
+        // three net-new properties need a new bucket entry.
+        TryAddKind(buckets, root, "template_instantiations", "template_instantiation");
+        TryAddKind(buckets, root, "undefined_behaviors", "undefined_behavior");
+        TryAddKind(buckets, root, "exception_contracts", "exception_contract");
         return buckets;
     }
 

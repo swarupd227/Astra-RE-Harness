@@ -28,6 +28,7 @@ from parser_sidecar import parser_pb2, parser_pb2_grpc, __version__
 from parser_sidecar.fortran_parser import parse_source as _fortran_parse
 from parser_sidecar.cobol_parser import parse_source as _cobol_parse
 from parser_sidecar.delphi_parser import parse_source as _delphi_parse
+from parser_sidecar.cpp_parser import parse_source as _cpp_parse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,9 +70,10 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         # source language.
         is_cobol = _looks_like_cobol(filename)
         is_delphi = (not is_cobol) and _looks_like_delphi(filename)
+        is_cpp = (not is_cobol) and (not is_delphi) and _looks_like_cpp(filename)
         # fparser2 is the only parser that needs the process-wide lock
-        # (global SymbolTable singleton); the COBOL and Delphi paths are
-        # purely local. We acquire the lock only for the Fortran path.
+        # (global SymbolTable singleton); the COBOL / Delphi / C++ paths
+        # are purely local. We acquire the lock only for the Fortran path.
         if is_cobol:
             cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
             outcome_line_count = cobol_outcome.line_count
@@ -86,6 +88,13 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             outcome_warnings = delphi_outcome.warnings
             outcome_filename = delphi_outcome.filename
             language = "delphi"
+        elif is_cpp:
+            cpp_outcome = _cpp_parse(filename=filename, content=request.content or "")
+            outcome_line_count = cpp_outcome.line_count
+            outcome_subroutines = cpp_outcome.subroutines
+            outcome_warnings = cpp_outcome.warnings
+            outcome_filename = cpp_outcome.filename
+            language = "cpp"
         else:
             with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
@@ -149,6 +158,29 @@ def _looks_like_delphi(filename: str) -> bool:
         return False
     lower = filename.lower()
     return lower.endswith((".pas", ".dpr", ".dpk", ".inc"))
+
+
+def _looks_like_cpp(filename: str) -> bool:
+    """Return True when the file path's extension marks it as C++ source.
+
+    Phase 9.1.a: .cpp / .cc / .cxx / .c++ for translation units, and
+    .h / .hpp / .hxx / .h++ / .ipp for headers (which the v0 parser
+    treats uniformly — header-only libraries like fmt have their
+    "definitions" in the .h files). Strict by-extension routing; the
+    production libclang path consumes a `compile_commands.json`
+    populated per ADR-028.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((
+        ".cpp", ".cc", ".cxx", ".c++",
+        ".hpp", ".hxx", ".h++", ".ipp",
+        # `.h` is ambiguous (could be C or C++); v0 routes it to C++
+        # because all our seeded corpora are C++. If a pure-C corpus
+        # arrives later we'll add a `.c` → C-mode branch.
+        ".h",
+    ))
 
 
 def serve() -> None:

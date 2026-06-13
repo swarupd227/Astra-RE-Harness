@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-sfinae-edge",
+  "schemaId": "cpp",
+  "title": "Function template compiles for some T and not others — SFINAE constraint",
+  "trapCategory": "template/sfinae",
+  "difficulty": "hard",
+  "sourcePath": "cpp/snippets/sfinae.cpp",
+  "sourceLines": "1-26",
+  "sourceContent": "#include <type_traits>\n#include <string>\n\n// Function template that only compiles for T with operator+= that returns T&.\n// For std::string this works; for an int it works; for a custom no-op type\n// without += it's a hard error (no fallback specialisation provided).\ntemplate<typename T,\n         typename = std::enable_if_t<std::is_default_constructible_v<T>>>\nT concat_three(const T& a, const T& b, const T& c) {\n    T result{};\n    result += a;\n    result += b;\n    result += c;\n    return result;\n}\n\n// Usage that exposes the SFINAE constraint:\nvoid use_three() {\n    auto s = concat_three<std::string>(\"a\", \"b\", \"c\");  // OK\n    auto i = concat_three<int>(1, 2, 3);                  // OK\n    // auto v = concat_three<void>();                     // hard error\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "template_instantiation",
+      "id": "TI-SF-1",
+      "pattern": "(?i)(template_parameter|SFINAE|enable_if|is_default_constructible|operator\\+=|requires|constraint)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-SF-1",
+      "pattern": "(?i)(for all T satisfying|quantifier|behavior_on_violation|compile error)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-SF-1",
+      "pattern": "(?i)(Java generic|sealed|interface|where T:|wildcards|JNA)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Forces the extraction prompt's rule #2 (one spec per primary\ntemplate, quantified invariants) AND rule #3 (quantifier +\nbehavior_on_violation honest about what fails). The Java target\nhas to either restrict T (`<T extends ConcatableT<T>>`) — verbose —\nor file an Open Question suggesting JNA per ADR-027."
+}

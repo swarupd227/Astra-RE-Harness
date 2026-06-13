@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.Fmt</RootNamespace>
+    <AssemblyName>Demo.Fmt</AssemblyName>
+    <Description>
+      Reference .NET 8 scaffold for the fmt::format family, generated from a signed
+      C++ spec (spec/v1, schemaId=cpp). The Formatter class lives in src/Formatter.cs
+      and implements the type-erased visitor pattern that the primary template uses;
+      FormatString.cs holds the compile-time format-string parser, and
+      FormatException.cs holds the strong-exception-guarantee payload.
+    </Description>
+  </PropertyGroup>
+</Project>

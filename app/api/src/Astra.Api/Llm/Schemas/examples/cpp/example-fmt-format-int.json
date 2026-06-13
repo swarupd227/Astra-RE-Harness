@@ -1,0 +1,77 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "fmt::detail::format_int",
+  "enclosing_class": "fmt::detail::format_int",
+  "namespace": "fmt::detail",
+  "source_path": "include/fmt/format.h",
+  "source_lines": "1024-1075",
+  "summary": "Function template that converts an integral value to a decimal string using the type-erased visitor pattern. Specialised per-T via SFINAE on std::is_integral_v<T>; emits ASCII digits into a fixed-size buffer member, then returns a string_view bounded by the high-water mark. Exception-safe in the strong sense — failure modes are documented by the noexcept signature.",
+  "inputs": [
+    { "id": "in.value", "name": "value", "type": "T", "direction": "in",
+      "semantic": "Integer to format. For all T satisfying std::is_integral_v<T>; INT64_MIN is handled defensively (see EC-1).",
+      "citations": [ { "lines": "1024" } ] }
+  ],
+  "outputs": [
+    { "id": "out.return", "name": "result", "type": "string_view", "direction": "return",
+      "semantic": "View into the internal buffer; valid for the lifetime of the format_int instance (Borrowed; see OL-1).",
+      "citations": [ { "lines": "1075" } ] }
+  ],
+  "invariants": [
+    { "id": "INV-1", "claim": "For all integral T, the produced digit sequence equals the decimal expansion of value, with a leading '-' iff value < 0.",
+      "quantifier": "for all T satisfying std::is_integral_v<T>",
+      "behavior_on_violation": "compile error",
+      "citations": [ { "lines": "1030-1070" } ], "confidence": "high" },
+    { "id": "INV-2", "claim": "The returned string_view's data() always points into the format_int instance's internal buffer — never to a temporary or stack-local.",
+      "citations": [ { "lines": "1072-1075" } ], "confidence": "high" },
+    { "id": "INV-3", "claim": "Output digit count equals floor(log10(|value|)) + 1 for value != 0; 1 for value == 0.",
+      "citations": [ { "lines": "1030-1050" } ], "confidence": "high" }
+  ],
+  "template_instantiations": [
+    { "id": "TI-1",
+      "template_parameters": "typename T",
+      "constraint": "requires std::is_integral_v<T> (SFINAE via std::enable_if_t in pre-C++20 fmt)",
+      "instantiations_observed": ["int", "long", "long long", "unsigned", "unsigned long long", "int8_t", "int64_t"],
+      "citations": [ { "lines": "1024" } ] }
+  ],
+  "object_lifetimes": [
+    { "id": "OL-1", "subject": "return value (string_view)",
+      "model": "Borrowed",
+      "policy": "Caller must not outlive the format_int instance — the string_view aliases the buffer member. The translation target should either copy the data into an owned String at the call site, or keep the format_int alive for the view's duration.",
+      "citations": [ { "lines": "1072-1075" } ], "confidence": "high" }
+  ],
+  "exception_contracts": [
+    { "id": "EX-1", "guarantee": "NoThrow",
+      "exception_types": [],
+      "contract": "Marked noexcept. The implementation cannot throw — buffer is fixed-size, no allocations occur on the hot path. C# translation: keep nothrowable. Java translation: declare no `throws` clause.",
+      "citations": [ { "lines": "1024" } ] }
+  ],
+  "undefined_behaviors": [
+    { "id": "UB-1", "category": "SignedOverflow",
+      "trigger": "value == std::numeric_limits<int_type>::min() AND the implementation negates value to compute its absolute value.",
+      "standard_reference": "[expr.unary.op]/p7 (signed unary minus)",
+      "routine_assumption": "defensively_guards",
+      "citations": [ { "lines": "1042-1048" } ] }
+  ],
+  "side_effects": [
+    { "id": "SE-1", "description": "Writes ASCII digits into format_int::buffer_ — a member array. No I/O; no allocations.",
+      "citations": [ { "lines": "1030-1070" } ] }
+  ],
+  "edge_cases": [
+    { "id": "EC-1", "description": "INT_MIN (and INT64_MIN for 64-bit T). Naive |value| overflows; the implementation special-cases via unsigned arithmetic.",
+      "citations": [ { "lines": "1042-1048" } ],
+      "behavior": "Treats |value| as unsigned with the sign bit set; emits the correct decimal expansion.",
+      "confidence": "high" },
+    { "id": "EC-2", "description": "value == 0. Output is single character '0' (not empty).",
+      "citations": [ { "lines": "1030" } ],
+      "behavior": "INV-3 covers this; explicit branch in the implementation.",
+      "confidence": "high" }
+  ],
+  "open_questions": [
+    { "id": "Q-1", "question": "For Java target: should the equivalent return a primitive char[] view (no equivalent of string_view) or a defensive String copy? The Borrowed lifetime model doesn't translate cleanly to Java; either choice changes the allocation profile of callers.", "status": "unresolved" }
+  ],
+  "metadata": {
+    "prompt_template": "cpp-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "cpp"
+  }
+}

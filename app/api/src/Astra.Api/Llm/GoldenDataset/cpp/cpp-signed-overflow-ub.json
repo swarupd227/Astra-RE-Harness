@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-signed-overflow-ub",
+  "schemaId": "cpp",
+  "title": "Routine relies on signed-integer overflow wraparound — undefined behavior",
+  "trapCategory": "ub/signed-overflow",
+  "difficulty": "hard",
+  "sourcePath": "cpp/snippets/signed_overflow.cpp",
+  "sourceLines": "1-18",
+  "sourceContent": "// Hash function that intentionally lets int multiplication overflow,\n// relying on 'modular' wraparound. This is UB per C++17/20 standards —\n// the compiler may optimize the entire function away.\n#include <cstdint>\n\nint hash_djb2_signed(const char* s) {\n    int h = 5381;\n    if (!s) return 0;\n    while (*s) {\n        // h * 33 + *s — overflows for long strings.\n        // GCC/Clang historically wrap; UBSan flags this; -fwrapv saves it.\n        h = h * 33 + *s;\n        ++s;\n    }\n    return h;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "undefined_behavior",
+      "id": "UB-OF-1",
+      "pattern": "(?i)(SignedOverflow|signed.*overflow|wraparound|UBSan|fwrapv|exploits_UB)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-OF-1",
+      "pattern": "(?i)(djb2|hash|deterministic|same input.*same output)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-OF-1",
+      "pattern": "(?i)(unsigned|uint32_t|portable|target.*int|defined behaviour)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Classic UB trap. C++ standard [expr.ass]/p1 says signed-integer\noverflow is UB; the compiler may delete the entire loop body if it\ncan prove overflow. .NET / Java translations need either unsigned\nint (.NET: uint; Java: explicit & 0xFFFFFFFFL) or a documented choice\nto preserve the wraparound semantics. The extraction prompt's rule #5\n(UB must be surfaced) is what makes this trap detectable."
+}

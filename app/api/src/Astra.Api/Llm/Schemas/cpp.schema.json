@@ -1,0 +1,202 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "cpp",
+  "displayName": "C++ → .NET 8 + Java Spring",
+  "description": "C++17 / C++20 source: function templates, classes with ownership models, STL containers, RAII via destructors, exceptions with noexcept contracts, dynamic_cast / typeid RTTI. Calibrated against fmtlib/fmt (header-only format library) plus hand-authored UB-trap samples. Per ADR-026, one spec per primary template (not per instantiation); the spec's invariants are quantified over the template type parameters. Per ADR-028, the parser sidecar receives a compile_commands.json bootstrapped by CMake when the corpus is CMake-based.",
+  "supportedSourceExtensions": [".cpp", ".cc", ".cxx", ".c++", ".hpp", ".hxx", ".h++", ".ipp", ".h"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the routine must preserve across all valid inputs. When the routine is a function template, invariants may be quantified over the template type parameters (per ADR-026) — use the `quantifier` field to make the universe explicit, e.g. 'for all T satisfying std::is_arithmetic_v<T>'.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "quantifier", "kind": "string", "required": false, "doc": "When the invariant holds only for a subset of T (or for any quantified parameter), describe the subset in plain English. Omit for non-template routines." },
+        { "name": "behavior_on_violation", "kind": "string", "required": false, "doc": "When the quantifier excludes a T, what happens for that T? compile error | undefined behavior | soft fallback | not_applicable." },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "objectLifetime",
+      "label": "Object lifetime",
+      "idPrefix": "OL",
+      "specJsonField": "object_lifetimes",
+      "textField": "policy",
+      "displayTone": "review",
+      "description": "Ownership model for any object the routine creates, accepts, or returns. C++ encodes this through smart-pointer types, references, and lifetime tags. Distinguishes Unique (std::unique_ptr / owning by-value), Shared (std::shared_ptr / shared_ptr-like), Borrowed (reference or non-owning raw pointer), Pinned (must not move — std::pin / address-stable), Automatic (stack-bound). Critical for the .NET / Java translation: Unique maps to IDisposable / AutoCloseable; Shared maps to a reference-count wrapper; Borrowed maps to a method parameter; Pinned typically becomes an Open Question.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "subject", "kind": "string", "required": true, "doc": "The parameter, member, or local whose lifetime is being claimed." },
+        { "name": "model", "kind": "enum:Unique|Shared|Borrowed|Pinned|Automatic", "required": true },
+        { "name": "policy", "kind": "string", "required": true, "doc": "Plain-English description of who owns the object, when it is destroyed, and any aliasing constraints." },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "templateInstantiation",
+      "label": "Template instantiation",
+      "idPrefix": "TI",
+      "specJsonField": "template_instantiations",
+      "textField": "constraint",
+      "displayTone": "scaffolded",
+      "description": "When the routine is a function template (per ADR-026, the spec describes the primary template, not each instantiation). This claim records the SFINAE / Concepts constraint(s) that gate which Ts are legal, plus a curated list of Ts the corpus actually instantiates. The Migration Planner reads `instantiations_observed` to prioritise which Ts the test pack must exercise; it is informational, not signed.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "template_parameters", "kind": "string", "required": true, "doc": "Verbatim parameter list, e.g. 'typename T' or 'typename T, std::size_t N'." },
+        { "name": "constraint", "kind": "string", "required": true, "doc": "SFINAE / Concepts requirement on the parameters; 'none' when the template accepts any T. e.g. 'requires std::is_arithmetic_v<T>'." },
+        { "name": "instantiations_observed", "kind": "string[]", "required": false, "doc": "Curated list of Ts the corpus instantiates this template with (informational; not signed)." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "undefinedBehavior",
+      "label": "Undefined behavior",
+      "idPrefix": "UB",
+      "specJsonField": "undefined_behaviors",
+      "textField": "trigger",
+      "displayTone": "draft",
+      "description": "Inputs or states that cause the C++ standard's undefined behavior. Surfacing these explicitly is critical for migration: a routine that *relies on* UB (e.g., wraparound on signed overflow) breaks when translated naively. Each UB claim should record the trigger, the standard reference (when known), and whether the routine handles or assumes-no-UB.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "category", "kind": "enum:SignedOverflow|StrictAliasing|UseAfterMove|UseAfterFree|DanglingReference|DataRace|InvalidPtrDeref|UninitRead|DivByZero|ShiftOOR|ODRViolation|Other", "required": true },
+        { "name": "trigger", "kind": "string", "required": true, "doc": "Plain-English description of the input or state that causes UB." },
+        { "name": "standard_reference", "kind": "string", "required": false, "doc": "C++ standard reference (e.g. '[expr.ass]/p1' or '[basic.life]/p7'). Optional." },
+        { "name": "routine_assumption", "kind": "enum:assumes_caller_avoids|defensively_guards|exploits_UB", "required": true, "doc": "Does the routine assume the caller never triggers this, defensively guard against it, or actively exploit the UB (e.g. wraparound)?" },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "exceptionContract",
+      "label": "Exception contract",
+      "idPrefix": "EX",
+      "specJsonField": "exception_contracts",
+      "textField": "contract",
+      "displayTone": "scaffolded",
+      "description": "The routine's exception-safety guarantee and which exception types it can throw. Maps to .NET (C# exceptions) and Java (checked / unchecked) — `noexcept` typically maps to non-throwing signatures, basic / strong guarantees inform the scaffold's try-catch structure.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "guarantee", "kind": "enum:NoThrow|Basic|Strong|NoneStated", "required": true, "doc": "NoThrow = noexcept or proven non-throwing; Basic = invariants preserved on throw, leaks possible; Strong = transactional rollback on throw; NoneStated = the routine does not document its guarantee." },
+        { "name": "exception_types", "kind": "string[]", "required": false, "doc": "Exception types the routine can throw (e.g. ['std::format_error', 'std::bad_alloc'])." },
+        { "name": "contract", "kind": "string", "required": true, "doc": "Plain-English description of when each exception is thrown and what state it leaves behind." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "rttiUsage",
+      "label": "RTTI usage",
+      "idPrefix": "RT",
+      "specJsonField": "rtti_usages",
+      "textField": "reflection_pattern",
+      "displayTone": "draft",
+      "description": "Run-time type dispatch the routine relies on: `dynamic_cast`, `typeid`, virtual-dispatch through a base reference, std::any / std::variant visitor unwrap. These have target-language analogues (C# `is` / `as`, Java `instanceof`) but the semantics often differ — particularly for std::variant which has no clean Java equivalent.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "pattern", "kind": "enum:DynamicCast|TypeId|VirtualDispatch|VariantVisit|AnyCast|Other", "required": true },
+        { "name": "reflection_pattern", "kind": "string", "required": true, "doc": "Plain-English description of how the RTTI is used and what runtime decision it makes." },
+        { "name": "translation_hint", "kind": "string", "required": false, "doc": "Suggested mapping (e.g. 'C# 12 pattern matching with sealed hierarchy' or 'Java 17 sealed interface + switch')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: I/O writes, allocations from caller-supplied allocators, std::cout / iostream output, file-system operations, thread-local / global mutations.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure-mode conditions the routine handles (or is silent about). C++-specific edges include: empty std::vector / std::string_view, std::vector<bool>'s proxy reference, NaN propagation in floating-point, integer-promotion surprises (bool + bool = int), iterator invalidation across container mutations, and the std::move semantics around the moved-from object.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities the source does not resolve and the SME must answer before sign-off. Common C++ cases: ownership intent of raw pointer parameters, whether a moved-from object is re-used, template parameter constraints that don't map to Java generics (force a JNA fallback per ADR-027), and platform-specific UB the corpus relies on.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_class", "kind": "string", "required": false, "doc": "When the routine is a class method, the fully-qualified class name (e.g. 'fmt::detail::format_context')." },
+    { "name": "namespace", "kind": "string", "required": false, "doc": "The enclosing namespace path (e.g. 'fmt::detail'). Empty for the global namespace." },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "in_out", "out", "return"],
+    "directionDescription": "C++ parameter mode. `in` = pass-by-value or const-ref (read-only); `in_out` = non-const reference (read+write); `out` = non-const reference whose initial value is ignored; `return` = the function's return value."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "objectLifetime",
+      "templateInstantiation",
+      "undefinedBehavior",
+      "exceptionContract",
+      "rttiUsage",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "objectLifetime": 0,
+      "templateInstantiation": 0,
+      "undefinedBehavior": 0,
+      "exceptionContract": 0,
+      "rttiUsage": 0,
+      "sideEffect": 0,
+      "edgeCase": 0,
+      "openQuestion": 0
+    },
+    "emphasis": "When the routine is a function template, emit exactly ONE templateInstantiation claim describing the primary template's parameters and constraint (per ADR-026). Quantify invariants over the type parameters; if an invariant holds only for a subset of T, name the subset in the `quantifier` field. Always emit an exceptionContract claim — `noexcept` and 'no guarantee stated' are both signal. When the routine relies on undefined behavior (signed wraparound, type-punning via union, use-after-move with intent), file an undefinedBehavior claim with category set. For ownership: prefer `Unique` for std::unique_ptr / owning by-value, `Shared` for std::shared_ptr, `Borrowed` for references / non-owning raw pointers. When ownership of a raw pointer parameter is ambiguous, file an openQuestion — do NOT guess.",
+    "stlMappingTableRef": "Llm/Prompts/cpp/stl-mapping.json"
+  },
+  "owner": "Nous · C++ migration accelerator",
+  "calibratedAgainst": ["fmtlib/fmt (header-only format library)", "hand-authored UB-trap samples", "synthesised mini-corpora for v0 scaffolding"]
+}

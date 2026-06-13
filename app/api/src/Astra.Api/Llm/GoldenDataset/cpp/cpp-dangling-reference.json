@@ -1,0 +1,29 @@
+{
+  "entryId": "cpp-dangling-reference",
+  "schemaId": "cpp",
+  "title": "Returns a reference to a stack-local — dangling on the very next access",
+  "trapCategory": "ub/dangling-reference",
+  "difficulty": "medium",
+  "sourcePath": "cpp/snippets/dangling_ref.cpp",
+  "sourceLines": "1-15",
+  "sourceContent": "#include <string>\n\n// Returns a reference to a string that lives in the caller's stack frame\n// only until the function returns. EVERY caller hits UB on the next access.\nconst std::string& sniff_filename(int fd) {\n    std::string buf;\n    if (fd >= 0) buf = \"/proc/self/fd/\" + std::to_string(fd);\n    else         buf = \"<bad fd>\";\n    return buf;  // <-- UB: buf goes out of scope when we return.\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "undefined_behavior",
+      "id": "UB-DR-1",
+      "pattern": "(?i)(DanglingReference|dangling|stack[- ]local|lifetime|return.*reference)"
+    },
+    {
+      "kind": "object_lifetime",
+      "id": "OL-DR-1",
+      "pattern": "(?i)(Borrowed|caller must|outliv|buf|local)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-DR-1",
+      "pattern": "(?i)(return.*value|copy|by[- ]value|owned|fix.*signature)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Even though the v0 parser doesn't compute lifetimes, the prompt\nshould detect the obvious UB (returning a reference to a local).\nThe migration target gets the safer signature (.NET / Java both\nreturn String by value), and the SME must approve the change.\nForces rule #4 (ownership claims for non-trivial types) and rule\n#5 (UB must be surfaced) to fire together."
+}

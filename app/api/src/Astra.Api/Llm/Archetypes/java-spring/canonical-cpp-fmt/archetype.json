@@ -1,0 +1,27 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-cpp-fmt",
+  "targetStack": "java-spring",
+  "displayName": "fmt::format C++ → Java 17 + Spring Boot + JUnit 5",
+  "description": "Reference C++→Java-17 scaffold for fmt-style format APIs. Per ADR-027 this is the pure-Java rewrite (no native dependency); a JNA-fallback variant ships under archetype/jna-variant/ for cases the rewrite cannot handle (heavy template meta-programming, intrinsics). Per ADR-026 one spec per primary template — the Java projection collapses `template<typename... Args>` to a varargs `Object... args` overload. Every public surface carries @SpecClaim(...) annotations citing the signed spec's INV / OL / TI / UB / EX claim ids.",
+  "compatibleSchemas": ["cpp"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "format" },
+      { "subroutineName": "fmt::format" },
+      { "subroutineName": "fmt::detail::format_int" },
+      { "subroutineName": "fmt::vformat" },
+      { "subroutineName": "fmt::detail::vformat_to" }
+    ],
+    "fallback": "Used when the routine sits inside fmt::* and exposes a format-string-plus-args API surface."
+  },
+  "owner": "Nous · C++ migration accelerator",
+  "status": "preview",
+  "files": [
+    { "path": "pom.xml",                                                                "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/fmt/Formatter.java",                           "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","TI-1","OL-1","EX-1","UB-1","EC-1"] },
+    { "path": "src/main/java/com/example/fmt/FormatString.java",                        "language": "java", "derivedFromClaimIds": ["INV-3","EC-2"] },
+    { "path": "src/main/java/com/example/fmt/FmtFormatException.java",                  "language": "java", "derivedFromClaimIds": ["EX-1"] },
+    { "path": "src/test/java/com/example/fmt/FormatterTests.java",                      "language": "java", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","EC-2","UB-1"] }
+  ]
+}

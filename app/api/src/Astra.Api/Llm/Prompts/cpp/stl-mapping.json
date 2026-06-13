@@ -1,0 +1,194 @@
+{
+  "$schema": "https://astra.nous.ai/stl-mapping/v1",
+  "version": "v0.1",
+  "owner": "Nous · C++ migration accelerator",
+  "last_reviewed": "2026-06-12",
+  "scope": "Curated subset of the C++ STL that recurs in the fmt corpus + canonical samples. ~30 entries in v0; ~50 deferred entries fill in as fmt extractions surface unmapped types.",
+  "notes": "Per ADR-026, this table is shipped as in-prompt context with every C++ extraction call. The cpp-extract prompts treat the `dotnet_equivalent` / `java_equivalent` columns as authoritative; missing types should be raised as OpenQuestion. The `lifetime_default` column hints which object_lifetimes model the LLM should assume when the source doesn't make ownership explicit.",
+  "entries": [
+    {
+      "cpp_type": "std::string",
+      "stl_header": "<string>",
+      "dotnet_equivalent": "string",
+      "java_equivalent": "java.lang.String",
+      "semantics_notes": "C++ string is mutable + value-typed; .NET / Java strings are immutable + reference-typed. Mutation patterns (s += '...') in C++ need to translate to StringBuilder in Java / .NET when in a hot path; otherwise the immutable string is the right default.",
+      "lifetime_default": "Automatic",
+      "thread_safety": "Not thread-safe; concurrent mutation is UB. Both targets' immutable string types are inherently thread-safe."
+    },
+    {
+      "cpp_type": "std::string_view",
+      "stl_header": "<string_view>",
+      "dotnet_equivalent": "ReadOnlySpan<char>",
+      "java_equivalent": "java.lang.CharSequence (or copy-to-String for ownership clarity)",
+      "semantics_notes": "Non-owning view. Borrowed lifetime — caller must outlive the view. Translation typically copies into an owned String at the call site UNLESS the lifetime is obviously bounded.",
+      "lifetime_default": "Borrowed",
+      "thread_safety": "Safe for concurrent read (view is immutable); the underlying buffer's mutation is the caller's concern."
+    },
+    {
+      "cpp_type": "std::vector<T>",
+      "stl_header": "<vector>",
+      "dotnet_equivalent": "List<T>",
+      "java_equivalent": "java.util.ArrayList<T>",
+      "semantics_notes": "Dynamic array. Iterator invalidation on resize is a recurrent edge_case — both targets' List don't expose iterators in the same way so the translation usually elides this concern.",
+      "lifetime_default": "Automatic",
+      "thread_safety": "Not thread-safe in C++; .NET List and Java ArrayList match (use ConcurrentBag / CopyOnWriteArrayList for concurrent variants)."
+    },
+    {
+      "cpp_type": "std::vector<bool>",
+      "stl_header": "<vector>",
+      "dotnet_equivalent": "BitArray (NOT List<bool>)",
+      "java_equivalent": "java.util.BitSet (NOT ArrayList<Boolean>)",
+      "semantics_notes": "Famous proxy-reference gotcha — operator[] returns a proxy, not a bool&. Idiomatic translations use the bit-set types instead; misuses become edge_case claims."
+    },
+    {
+      "cpp_type": "std::array<T, N>",
+      "stl_header": "<array>",
+      "dotnet_equivalent": "T[] (fixed-size; or T[N] when usable)",
+      "java_equivalent": "T[]",
+      "semantics_notes": "Compile-time size. The N parameter doesn't translate to a runtime constraint in either target; if N matters for correctness, raise an Open Question."
+    },
+    {
+      "cpp_type": "std::map<K, V>",
+      "stl_header": "<map>",
+      "dotnet_equivalent": "SortedDictionary<K, V>",
+      "java_equivalent": "java.util.TreeMap<K, V>",
+      "semantics_notes": "Ordered map (red-black tree). Iteration order is sorted — preserve this in translations or callers will silently get wrong-order output."
+    },
+    {
+      "cpp_type": "std::unordered_map<K, V>",
+      "stl_header": "<unordered_map>",
+      "dotnet_equivalent": "Dictionary<K, V>",
+      "java_equivalent": "java.util.HashMap<K, V>",
+      "semantics_notes": "Hash table. Iteration order is unspecified in C++ but reproducible in both targets within a single run."
+    },
+    {
+      "cpp_type": "std::unique_ptr<T>",
+      "stl_header": "<memory>",
+      "dotnet_equivalent": "T (owned by value, type must implement IDisposable)",
+      "java_equivalent": "T (owned; type should implement AutoCloseable)",
+      "semantics_notes": "Sole ownership; destroyed on scope exit. The canonical RAII type. Maps to using-blocks in .NET and try-with-resources in Java.",
+      "lifetime_default": "Unique"
+    },
+    {
+      "cpp_type": "std::shared_ptr<T>",
+      "stl_header": "<memory>",
+      "dotnet_equivalent": "T (shared; .NET GC handles it) + manual ref-count when explicit",
+      "java_equivalent": "T (shared; JVM GC handles it) + manual ref-count when explicit",
+      "semantics_notes": "Shared ownership. Both targets' garbage collectors make explicit ref-counting unnecessary UNLESS the source uses the ref count semantically (weak_ptr cycle breaking, atomic ops on the count).",
+      "lifetime_default": "Shared"
+    },
+    {
+      "cpp_type": "std::weak_ptr<T>",
+      "stl_header": "<memory>",
+      "dotnet_equivalent": "WeakReference<T>",
+      "java_equivalent": "java.lang.ref.WeakReference<T>",
+      "semantics_notes": "Non-owning observer of a shared_ptr. Both targets' WeakReference is the canonical equivalent."
+    },
+    {
+      "cpp_type": "std::optional<T>",
+      "stl_header": "<optional>",
+      "dotnet_equivalent": "T? (Nullable<T> for value types; reference types are nullable by default)",
+      "java_equivalent": "java.util.Optional<T>",
+      "semantics_notes": "Either a T or no value. Both targets' equivalents differ from std::optional in subtle ways — Java's Optional is not meant to be a field type; .NET's nullable is. Note in the spec if the source uses Optional as a member field."
+    },
+    {
+      "cpp_type": "std::variant<Ts...>",
+      "stl_header": "<variant>",
+      "dotnet_equivalent": "sealed type hierarchy + C# 12 pattern matching",
+      "java_equivalent": "sealed interface (Java 17+) + switch pattern OR Object fallback",
+      "semantics_notes": "Tagged union. Neither target has a built-in equivalent for arity > 2 — for fmt's purposes (~5 visitor arms), sealed hierarchies work but lose the constexpr-visit optimisation. Larger arms = Open Question."
+    },
+    {
+      "cpp_type": "std::tuple<Ts...>",
+      "stl_header": "<tuple>",
+      "dotnet_equivalent": "ValueTuple<...> or record",
+      "java_equivalent": "java.util.AbstractMap.SimpleEntry (for pairs) or a record (Java 16+)",
+      "semantics_notes": "Heterogeneous record. .NET tuples are clean; Java records (16+) are the modern equivalent."
+    },
+    {
+      "cpp_type": "std::pair<T1, T2>",
+      "stl_header": "<utility>",
+      "dotnet_equivalent": "(T1, T2) value-tuple",
+      "java_equivalent": "java.util.AbstractMap.SimpleEntry<T1, T2> or a record",
+      "semantics_notes": "Two-element heterogeneous record. Often used as map node type; preserve when translating map iteration."
+    },
+    {
+      "cpp_type": "std::function<R(Args...)>",
+      "stl_header": "<functional>",
+      "dotnet_equivalent": "Func<...> or Action<...> (when R = void)",
+      "java_equivalent": "java.util.function.Function<T,R> / BiFunction / Consumer / Supplier",
+      "semantics_notes": "Type-erased callable. Both targets have functional-interface analogues; the arity determines which one (Function for 1 input, BiFunction for 2, etc.)."
+    },
+    {
+      "cpp_type": "std::any",
+      "stl_header": "<any>",
+      "dotnet_equivalent": "object",
+      "java_equivalent": "java.lang.Object",
+      "semantics_notes": "Type-erased opaque holder. Both targets' Object is the obvious mapping; any_cast<T>() becomes pattern matching."
+    },
+    {
+      "cpp_type": "std::span<T>",
+      "stl_header": "<span>",
+      "dotnet_equivalent": "Span<T> / ReadOnlySpan<T>",
+      "java_equivalent": "T[] + length OR java.nio.ByteBuffer for byte spans",
+      "semantics_notes": "Non-owning contiguous view. Borrowed lifetime; same caveat as string_view about caller-outlives-view."
+    },
+    {
+      "cpp_type": "std::byte",
+      "stl_header": "<cstddef>",
+      "dotnet_equivalent": "byte",
+      "java_equivalent": "byte (signed in Java; explicit & 0xFF when needed)",
+      "semantics_notes": "Strongly-typed byte (since C++17). Java's byte is signed which catches translations relying on unsigned semantics."
+    },
+    {
+      "cpp_type": "std::ostream / std::ostringstream",
+      "stl_header": "<sstream>",
+      "dotnet_equivalent": "StringWriter / StringBuilder",
+      "java_equivalent": "java.io.StringWriter / java.lang.StringBuilder",
+      "semantics_notes": "Stream-based string assembly. Translations usually swap to direct StringBuilder; the iostream operator chaining doesn't translate."
+    },
+    {
+      "cpp_type": "std::filesystem::path",
+      "stl_header": "<filesystem>",
+      "dotnet_equivalent": "System.IO.Path (static methods) + string",
+      "java_equivalent": "java.nio.file.Path",
+      "semantics_notes": "Cross-platform path manipulation. Both targets have clean equivalents; preserve the separator-agnostic semantics."
+    },
+    {
+      "cpp_type": "std::chrono::duration",
+      "stl_header": "<chrono>",
+      "dotnet_equivalent": "TimeSpan",
+      "java_equivalent": "java.time.Duration",
+      "semantics_notes": "Time interval. All three have equivalent fixed-precision representations; convert at boundaries."
+    },
+    {
+      "cpp_type": "std::thread",
+      "stl_header": "<thread>",
+      "dotnet_equivalent": "Thread or Task",
+      "java_equivalent": "java.lang.Thread or java.util.concurrent.CompletableFuture",
+      "semantics_notes": "OS thread. Modern translations usually pick the Task / CompletableFuture analogues for managed cancellation."
+    },
+    {
+      "cpp_type": "std::mutex",
+      "stl_header": "<mutex>",
+      "dotnet_equivalent": "object + lock {} OR Mutex",
+      "java_equivalent": "java.util.concurrent.locks.ReentrantLock OR synchronized()",
+      "semantics_notes": "Mutual exclusion. .NET's `lock` keyword is the idiomatic translation; Java's `synchronized` is the keyword-level equivalent."
+    },
+    {
+      "cpp_type": "std::format / fmt::format",
+      "stl_header": "<format> / <fmt/core.h>",
+      "dotnet_equivalent": "string.Format / interpolated strings ($\"...\")",
+      "java_equivalent": "String.format / MessageFormat",
+      "semantics_notes": "Format string + variadic args. The fmt corpus's own format spec differs from .NET / Java in placeholder syntax — preserve the public API's spec exactly; the implementation can use the target's native formatter."
+    }
+  ],
+  "deferred_entries": [
+    "std::deque<T>", "std::list<T>", "std::forward_list<T>", "std::stack<T>", "std::queue<T>", "std::priority_queue<T>",
+    "std::set<T>", "std::unordered_set<T>", "std::multiset<T>", "std::multimap<K,V>",
+    "std::initializer_list<T>", "std::reference_wrapper<T>", "std::tuple_element_t",
+    "std::is_arithmetic_v<T>", "std::is_integral_v<T>", "std::is_floating_point_v<T>",
+    "std::numeric_limits<T>", "std::bit_cast<T>", "std::launder",
+    "std::regex", "std::random_device + std::mt19937"
+  ]
+}
