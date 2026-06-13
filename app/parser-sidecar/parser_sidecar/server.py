@@ -27,8 +27,64 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from parser_sidecar import parser_pb2, parser_pb2_grpc, __version__
 from parser_sidecar.fortran_parser import parse_source as _fortran_parse
 from parser_sidecar.cobol_parser import parse_source as _cobol_parse
-from parser_sidecar.delphi_parser import parse_source as _delphi_parse
-from parser_sidecar.cpp_parser import parse_source as _cpp_parse
+from parser_sidecar.delphi_parser import parse_source as _delphi_parse_v0
+from parser_sidecar.cpp_parser import parse_source as _cpp_parse_v0
+
+# Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
+# Imported lazily so a missing/broken grammar binding doesn't take the
+# sidecar down at startup; v0 stays as the fallback. The module loads on
+# first parse request inside `_delphi_parse`.
+_delphi_parse_ts: "any | None" = None
+# Phase 9.4.b — production C++ parser (libclang per ADR-028). Same
+# lazy-import + v0-fallback shape.
+_cpp_parse_libclang: "any | None" = None
+
+
+def _delphi_parse(filename: str, content: str):
+    """Dispatch: prefer the tree-sitter-pascal parser; fall through to the
+    v0 tokenizer on import error or grammar panic. The dispatcher records
+    the fallback in the returned `warnings` list so the Migration Planner
+    can surface it."""
+    global _delphi_parse_ts
+    if _delphi_parse_ts is None:
+        try:
+            from parser_sidecar.delphi_parser_tree_sitter import parse_source as _ts
+            _delphi_parse_ts = _ts
+        except Exception as e:  # noqa: BLE001 — tree-sitter import surface is broad
+            log.warning("tree-sitter-pascal unavailable (%s); using v0 tokenizer", e)
+            _delphi_parse_ts = False
+    if _delphi_parse_ts:
+        try:
+            return _delphi_parse_ts(filename=filename, content=content)
+        except Exception as e:  # noqa: BLE001 — grammar panics surface broadly
+            log.info("tree-sitter-pascal panic on %s (%s); v0 fallback", filename, e)
+            outcome = _delphi_parse_v0(filename=filename, content=content)
+            outcome.warnings.append(f"tree-sitter-pascal panic: {e}; v0 fallback")
+            return outcome
+    return _delphi_parse_v0(filename=filename, content=content)
+
+
+def _cpp_parse(filename: str, content: str):
+    """Dispatch: prefer the libclang production parser; fall through to
+    the v0 tokenizer on libclang import error or LibclangError. Same
+    fallback-on-warnings shape as the Delphi dispatcher."""
+    global _cpp_parse_libclang
+    if _cpp_parse_libclang is None:
+        try:
+            from parser_sidecar.cpp_parser_libclang import parse_source as _lc
+            _cpp_parse_libclang = _lc
+        except Exception as e:  # noqa: BLE001 — libclang import surface is broad
+            log.warning("libclang unavailable (%s); using v0 C++ tokenizer", e)
+            _cpp_parse_libclang = False
+    if _cpp_parse_libclang:
+        try:
+            return _cpp_parse_libclang(filename=filename, content=content)
+        except Exception as e:  # noqa: BLE001 — libclang panics surface broadly
+            log.info("libclang panic on %s (%s); v0 fallback", filename, e)
+            outcome = _cpp_parse_v0(filename=filename, content=content)
+            outcome.warnings.append(f"libclang panic: {e}; v0 fallback")
+            return outcome
+    return _cpp_parse_v0(filename=filename, content=content)
 
 logging.basicConfig(
     level=logging.INFO,

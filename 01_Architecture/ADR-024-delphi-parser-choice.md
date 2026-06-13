@@ -1,8 +1,20 @@
 # ADR-024 — Delphi parser choice
 
-**Status:** Draft (proposed)
+**Status:** Superseded by ADR-031 (2026-06-13) · ~~Draft (proposed)~~
 **Phase:** 9.0.a (pre-kickoff)
-**Companion:** `phase-9.0-multi-source-language.md`, ADR-025 (Delphi RTL mapping)
+**Companion:** `phase-9.0-multi-source-language.md`, ADR-025 (Delphi RTL mapping), ADR-031 (Delphi parser strategy revision)
+
+> **Why superseded:** Six months after this ADR was written, the actual
+> Phase-9.0 experience showed that (a) fpc's "parse-only" surface is
+> more complicated than the ADR claimed (no `-dPARSE_ONLY` flag exists;
+> the real path is `-s -Cn -al` + assembly walker), and (b) the v0
+> tokenizer's accuracy turned out to be production-acceptable. With
+> tree-sitter-pascal landing as a maintained grammar in the interim,
+> the cost-benefit shifted toward tree-sitter for production accuracy
+> at a fraction of the dependency footprint. See **ADR-031** for the
+> revised decision. This ADR is kept in history because the
+> alternatives-considered section remains the canonical
+> "why-not-X" reference for future Delphi parser revisits.
 
 ---
 
