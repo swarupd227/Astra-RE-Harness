@@ -2,13 +2,17 @@ namespace Astra.Api.Persistence.Entities;
 
 /// <summary>
 /// Post-migration validation pass against a generated scaffold.
-/// Each row records one stage's outcome — COMPILE, TEST_PACK, or
-/// EQUIVALENCE — so the report card can show three independent badges
-/// and so re-runs are an append, not a mutation.
+/// Each row records one stage's outcome — COMPILE, TEST_PACK,
+/// EQUIVALENCE, or FALSIFYING — so the report card can show four
+/// independent badges and so re-runs are an append, not a mutation.
 ///
 /// State machine:
-///     RUNNING → PASSED        (build/tests/equivalence all green)
-///     RUNNING → FAILED        (any failure; ErrorSummary explains)
+///     RUNNING → PASSED        (build/tests/equivalence all green;
+///                              or the 4th gate ran without finding a
+///                              falsifying counterexample within budget)
+///     RUNNING → FAILED        (any failure; ErrorSummary explains.
+///                              For FALSIFYING: a counterexample was
+///                              found and lives in MetricsJson.perClaim)
 ///     RUNNING → ERRORED       (infra problem; pass is inconclusive)
 /// </summary>
 public sealed class ValidationRun
@@ -17,7 +21,12 @@ public sealed class ValidationRun
     public Guid ScaffoldId { get; set; }
     public Guid SpecId { get; set; }
 
-    /// <summary>"COMPILE" | "TEST_PACK" | "EQUIVALENCE".</summary>
+    /// <summary>
+    /// One of: "COMPILE", "TEST_PACK", "EQUIVALENCE", "FALSIFYING".
+    /// FALSIFYING (Phase 9.3) is the property-based 4th gate that drives
+    /// Hypothesis-generated inputs through both reference and candidate
+    /// binaries and reports any disagreement.
+    /// </summary>
     public string Stage { get; set; } = "COMPILE";
 
     /// <summary>"RUNNING" | "PASSED" | "FAILED" | "ERRORED".</summary>

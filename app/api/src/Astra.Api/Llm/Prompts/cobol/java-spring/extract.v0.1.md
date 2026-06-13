@@ -57,6 +57,24 @@ Rules:
    markdown fences, and no trailing commentary.** It must conform
    exactly to the schema below.
 
+**Property-test 4th gate — `generatorHints` (per ADR-030):**
+
+For every `invariant` and `edge_case` claim, decide whether to emit a `generatorHints` field. **Emit** when the claim's truth depends on values flowing through input parameters (LINKAGE SECTION items, ACCEPT inputs, host-variable bindings) that you can describe as a generator (numeric with PIC bounds, string with PIC-length max, etc.). **Omit** when the claim is purely structural (section contract, paragraph-fall-through, file-status discipline), or when the routine touches non-deterministic state (system date, sequential-file position). The `inputs[*].name` MUST match the spec's top-level `inputs[*].name`. When in doubt, omit — the 4th gate will skip the claim with `skipReason: no_hints`, which is the honest signal.
+
+Shape:
+
+```json
+"generatorHints": {
+  "inputs": [
+    { "name": "<input_name>", "type": "int|float|bool|string|bytes",
+      "min": <number-or-omit>, "max": <number-or-omit>,
+      "maxLen": <number-or-omit>, "alphabet": "<chars-or-omit>" }
+  ],
+  "constraint": "<plain-English filter on inputs, or omit>",
+  "examples": [ { "<input_name>": <value> } ]
+}
+```
+
 Output schema (spec/v1, COBOL flavour):
 ```json
 {

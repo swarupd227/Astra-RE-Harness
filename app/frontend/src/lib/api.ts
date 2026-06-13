@@ -1232,6 +1232,11 @@ export const api = {
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/test-pack`, { method: 'POST' }),
   validateEquivalence: (scaffoldId: string) =>
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/equivalence`, { method: 'POST' }),
+  // Phase 9.3.b — 4th gate (property-based testing / falsifying-input search).
+  // v1 runs in "shadow mode" — sidecar exercises the spec end-to-end but the
+  // callback returns agree=true without ref-vs-candidate comparison.
+  validateFalsifying: (scaffoldId: string) =>
+    apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/falsifying`, { method: 'POST' }),
   getValidationRunLog: async (runId: string): Promise<string> => {
     const headers = new Headers();
     headers.set('X-Dev-Persona', getPersona());
@@ -1243,8 +1248,32 @@ export const api = {
 
 // ─── Validation types ─────────────────────────────────────────────────
 
-export type ValidationStage = 'COMPILE' | 'TEST_PACK' | 'EQUIVALENCE';
+export type ValidationStage = 'COMPILE' | 'TEST_PACK' | 'EQUIVALENCE' | 'FALSIFYING';
 export type ValidationStatus = 'RUNNING' | 'PASSED' | 'FAILED' | 'ERRORED';
+
+// Phase 9.3.b/c — per-claim metrics shape on a FALSIFYING ValidationRun.
+// The drilldown panel reads this when run.metrics.perClaim is present.
+export type FalsifyingPerClaim = {
+  claimId: string;
+  examplesTried: number;
+  falsifying: Record<string, unknown> | null;
+  refOutput: string | null;
+  candOutput: string | null;
+  elapsedMs: number;
+  timedOut: boolean;
+  callbackErrors: number;
+  skipReason: string | null;
+};
+
+export type FalsifyingMetrics = {
+  mode?: 'shadow' | 'live';  // v1 always "shadow"; v1.1 introduces "live"
+  claimsExercised: number;
+  falsifyingClaimIds: string[];
+  totalExamplesTried: number;
+  perClaim: FalsifyingPerClaim[];
+  overallFalsified: boolean;
+  totalElapsedMs?: number;
+};
 
 export type ValidationRun = {
   id: string;

@@ -19,7 +19,8 @@
         { "name": "id", "kind": "string", "required": true },
         { "name": "claim", "kind": "string", "required": true },
         { "name": "citations", "kind": "citation[]", "required": true },
-        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Shape: { inputs:[{name,type,min?,max?,maxLen?,alphabet?}], constraint?:string, examples?:[{...}] }. When present, the 4th validation gate (FALSIFYING) exercises the claim against generated inputs; when absent, the gate skips the claim with skipReason: no_hints." }
       ]
     },
     {
@@ -49,7 +50,8 @@
         { "name": "description", "kind": "string", "required": true },
         { "name": "citations", "kind": "citation[]", "required": true },
         { "name": "behavior", "kind": "string", "required": true },
-        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Same shape as on invariant. When present, the 4th gate exercises this edge case against generated inputs that satisfy the hint constraint; when absent, the gate skips the claim with skipReason: no_hints." }
       ]
     },
     {

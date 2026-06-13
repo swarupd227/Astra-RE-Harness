@@ -202,6 +202,16 @@ builder.Services.AddScoped<Astra.Api.Validation.MavenClient>();
 builder.Services.AddHttpClient("gnucobol");
 builder.Services.AddScoped<Astra.Api.Validation.GnuCobolClient>();
 
+// ─── Property-test sidecar (Phase 9.3.b — 4th validation gate) ───────
+// Drives Hypothesis-driven falsifying-input search per ADR-029, per-claim
+// generator hints embedded on the signed spec per ADR-030. v1 ships in
+// "shadow mode" — the callback acknowledges each generated input without
+// running ref vs candidate binary comparison; v1.1 wires the real
+// comparison behind the same callback contract.
+builder.Services.AddHttpClient("property-test");
+builder.Services.AddScoped<Astra.Api.Validation.PropertyTestClient>();
+builder.Services.AddScoped<Astra.Api.Validation.PropertyTestValidator>();
+
 // ─── Software HSM signer (Phase B.3; Azure Key Vault Managed HSM in Phase D) ─
 builder.Services.AddSingleton<IHsmSigner, SoftwareHsmSigner>();
 

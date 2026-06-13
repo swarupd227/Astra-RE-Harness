@@ -20,7 +20,14 @@
     { "id": "INV-1", "claim": "For all integral T, the produced digit sequence equals the decimal expansion of value, with a leading '-' iff value < 0.",
       "quantifier": "for all T satisfying std::is_integral_v<T>",
       "behavior_on_violation": "compile error",
-      "citations": [ { "lines": "1030-1070" } ], "confidence": "high" },
+      "citations": [ { "lines": "1030-1070" } ], "confidence": "high",
+      "generatorHints": {
+        "inputs": [
+          { "name": "value", "type": "int", "min": -9007199254740992, "max": 9007199254740992 }
+        ],
+        "constraint": null,
+        "examples": [ { "value": 0 }, { "value": 1 }, { "value": -1 }, { "value": 9223372036854775807 } ]
+      } },
     { "id": "INV-2", "claim": "The returned string_view's data() always points into the format_int instance's internal buffer — never to a temporary or stack-local.",
       "citations": [ { "lines": "1072-1075" } ], "confidence": "high" },
     { "id": "INV-3", "claim": "Output digit count equals floor(log10(|value|)) + 1 for value != 0; 1 for value == 0.",

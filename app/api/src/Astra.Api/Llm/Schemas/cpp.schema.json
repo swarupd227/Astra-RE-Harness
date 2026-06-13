@@ -21,7 +21,8 @@
         { "name": "quantifier", "kind": "string", "required": false, "doc": "When the invariant holds only for a subset of T (or for any quantified parameter), describe the subset in plain English. Omit for non-template routines." },
         { "name": "behavior_on_violation", "kind": "string", "required": false, "doc": "When the quantifier excludes a T, what happens for that T? compile error | undefined behavior | soft fallback | not_applicable." },
         { "name": "citations", "kind": "citation[]", "required": true },
-        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Shape: { inputs:[{name,type,min?,max?,maxLen?,alphabet?}], constraint?:string, examples?:[{...}] }. When present, the 4th validation gate (FALSIFYING) exercises the claim against generated inputs; when absent, the gate skips the claim with skipReason: no_hints." }
       ]
     },
     {
@@ -133,7 +134,8 @@
         { "name": "description", "kind": "string", "required": true },
         { "name": "citations", "kind": "citation[]", "required": true },
         { "name": "behavior", "kind": "string", "required": true },
-        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Same shape as on invariant. When present, the 4th gate exercises this edge case against generated inputs that satisfy the hint constraint; when absent, the gate skips the claim with skipReason: no_hints." }
       ]
     },
     {

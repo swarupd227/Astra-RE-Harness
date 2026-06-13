@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleAlert,
   CircleDashed,
+  FlaskConical,
   Hammer,
   Loader2,
   RefreshCw,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import {
   api,
+  type FalsifyingMetrics,
   type ValidationRun,
   type ValidationStage,
   type ValidationStatus,
@@ -73,12 +75,18 @@ export function ValidationReportPage() {
     mutationFn: () => api.validateEquivalence(id),
     onSuccess: refetchRuns,
   });
+  // Phase 9.3.b — 4th gate.
+  const falsifying = useMutation({
+    mutationFn: () => api.validateFalsifying(id),
+    onSuccess: refetchRuns,
+  });
 
   if (scaffold.isPending || runs.isPending) {
     return (
       <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
         <Skeleton className="h-10 w-72" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-48" />
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
@@ -106,8 +114,9 @@ export function ValidationReportPage() {
   const compileRun = latestByStage('COMPILE');
   const testPackRun = latestByStage('TEST_PACK');
   const equivalenceRun = latestByStage('EQUIVALENCE');
+  const falsifyingRun = latestByStage('FALSIFYING');
 
-  const overall = computeOverall([compileRun, testPackRun, equivalenceRun]);
+  const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun]);
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
@@ -126,10 +135,11 @@ export function ValidationReportPage() {
             Validation report
           </h1>
           <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-            Three independent gates run against the generated scaffold:
-            buildability, claim-mapped test coverage, and cross-runtime
-            equivalence to the original Fortran. All three must be green
-            before the scaffold can be committed.
+            Four independent gates run against the generated scaffold:
+            buildability, claim-mapped test coverage, cross-runtime
+            equivalence to the original source, and a property-based
+            search for falsifying inputs against the signed spec. All
+            four must be green before the scaffold can be committed.
           </p>
         </div>
         <OverallBadge verdict={overall} />
@@ -137,7 +147,7 @@ export function ValidationReportPage() {
 
       <ProviderSettingsCard />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StageCard
           title="Compile"
           subtitle="dotnet build against the generated package"
@@ -160,13 +170,23 @@ export function ValidationReportPage() {
         />
         <StageCard
           title="Equivalence"
-          subtitle="gfortran reference run vs. C# scaffold output"
+          subtitle="reference compile + run vs. scaffold output, byte-compared"
           icon={<CheckCircle2 className="h-5 w-5" aria-hidden="true" />}
           run={equivalenceRun}
           onRun={() => equivalence.mutate()}
           isRunning={equivalence.isPending}
           errorMessage={equivalence.error?.message}
           runLabel="Run equivalence"
+        />
+        <StageCard
+          title="Falsifying"
+          subtitle="Hypothesis-driven counterexample search per signed-spec invariant"
+          icon={<FlaskConical className="h-5 w-5" aria-hidden="true" />}
+          run={falsifyingRun}
+          onRun={() => falsifying.mutate()}
+          isRunning={falsifying.isPending}
+          errorMessage={falsifying.error?.message}
+          runLabel="Run 4th gate"
         />
       </div>
 
@@ -259,9 +279,13 @@ function StageCard({
           </button>
         )}
         {expanded && run?.metrics && (
-          <pre className="overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-caption text-ink-secondary">
-            {JSON.stringify(run.metrics, null, 2)}
-          </pre>
+          run.stage === 'FALSIFYING'
+            ? <FalsifyingDetail metrics={run.metrics as unknown as FalsifyingMetrics} />
+            : (
+              <pre className="overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-caption text-ink-secondary">
+                {JSON.stringify(run.metrics, null, 2)}
+              </pre>
+            )
         )}
 
         {errorMessage && (
@@ -284,6 +308,129 @@ function StageCard({
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 9.3.d — Falsifying-gate drilldown
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-claim breakdown of a FALSIFYING ValidationRun's metrics. The 4th
+ * gate's verdict means little without seeing which claims were exercised
+ * and which (if any) were falsified — this panel substitutes for the
+ * generic JSON.stringify dump that the other 3 gates fall back to.
+ *
+ * Shadow-mode runs (v1) carry `mode: "shadow"` in their metrics; we
+ * surface this as a small inline badge so engineers know the gate
+ * exercised Hypothesis end-to-end but did NOT yet compare ref vs
+ * candidate binaries. v1.1 will swap in real comparison and drop the
+ * shadow indicator.
+ */
+function FalsifyingDetail({ metrics }: { metrics: FalsifyingMetrics }) {
+  const perClaim = metrics.perClaim ?? [];
+  const isShadow = metrics.mode === 'shadow';
+  return (
+    <div className="space-y-3 rounded-sm bg-sunken px-3 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-caption">
+        {isShadow && <ShadowModeBadge />}
+        <span className="font-mono text-ink-secondary">
+          {metrics.claimsExercised} claim{metrics.claimsExercised === 1 ? '' : 's'} exercised
+        </span>
+        <span className="text-ink-tertiary">·</span>
+        <span className="font-mono text-ink-secondary">
+          {metrics.totalExamplesTried} total examples
+        </span>
+        {typeof metrics.totalElapsedMs === 'number' && (
+          <>
+            <span className="text-ink-tertiary">·</span>
+            <span className="font-mono text-ink-secondary">
+              {Math.round(metrics.totalElapsedMs / 100) / 10}s
+            </span>
+          </>
+        )}
+      </div>
+
+      {perClaim.length === 0 ? (
+        <p className="text-caption text-ink-tertiary">
+          No claims carry generatorHints on this signed spec. Re-extract with a
+          property-test-aware prompt to populate the 4th gate.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {perClaim.map((c) => <FalsifyingClaimRow key={c.claimId} claim={c} />)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FalsifyingClaimRow({ claim }: { claim: FalsifyingMetrics['perClaim'][number] }) {
+  const isFalsified = claim.falsifying !== null;
+  const isSkipped = claim.skipReason !== null;
+  const tone: 'success' | 'failed' | 'neutral' | 'draft' =
+    isFalsified ? 'failed' :
+    isSkipped ? 'neutral' :
+    claim.timedOut ? 'draft' :
+    'success';
+  const verdict =
+    isFalsified ? 'Falsifying example found' :
+    isSkipped ? `Skipped · ${claim.skipReason}` :
+    claim.timedOut ? `Timed out at ${claim.examplesTried} examples` :
+    `${claim.examplesTried} examples · no counterexample`;
+
+  return (
+    <li
+      className="rounded-sm border border-border-subtle bg-raised px-3 py-2"
+      data-testid={`falsifying-claim-${claim.claimId}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={tone}>{claim.claimId}</Badge>
+        <span className="font-mono text-caption text-ink-secondary">{verdict}</span>
+        {claim.elapsedMs > 0 && (
+          <span className="ml-auto font-mono text-caption text-ink-tertiary">
+            {Math.round(claim.elapsedMs)}ms
+            {claim.callbackErrors > 0 && ` · ${claim.callbackErrors} callback errors`}
+          </span>
+        )}
+      </div>
+      {isFalsified && (
+        <div className="mt-2 space-y-1">
+          <p className="text-caption text-ink-tertiary">Minimal counterexample:</p>
+          <pre className="overflow-x-auto rounded-sm bg-sunken px-2 py-1 font-mono text-caption text-ink-primary">
+            {JSON.stringify(claim.falsifying, null, 2)}
+          </pre>
+          {(claim.refOutput || claim.candOutput) && (
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-caption text-ink-tertiary">Reference output</p>
+                <pre className="overflow-x-auto rounded-sm bg-sunken px-2 py-1 font-mono text-caption text-ink-primary">
+                  {claim.refOutput ?? '(none)'}
+                </pre>
+              </div>
+              <div>
+                <p className="text-caption text-ink-tertiary">Candidate output</p>
+                <pre className="overflow-x-auto rounded-sm bg-sunken px-2 py-1 font-mono text-caption text-status-failed">
+                  {claim.candOutput ?? '(none)'}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ShadowModeBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm bg-accent-muted px-2 py-0.5 font-mono text-caption text-status-draft"
+      title="Sidecar exercised Hypothesis end-to-end, but candidate-binary comparison is not yet wired. Verdicts are based on the reference path only."
+      data-testid="falsifying-shadow-mode"
+    >
+      shadow mode v1
+    </span>
   );
 }
 
@@ -407,7 +554,7 @@ function OverallBadge({
   if (verdict === 'all-green')
     return (
       <span className="inline-flex items-center gap-2 rounded-md bg-[#DAEFE9] px-4 py-2 text-h-sm font-semibold text-status-review">
-        <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> All gates green — commit-ready
+        <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> All 4 gates green — commit-ready
       </span>
     );
   if (verdict === 'red')

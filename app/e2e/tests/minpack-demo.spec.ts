@@ -238,8 +238,13 @@ test.describe('MINPACK · real-GitHub demo', () => {
         await runGate('validation-card-compile', /Run compile/, '/validate/compile', 'Validation · dotnet build');
         await runGate('validation-card-test-pack', /Regenerate \+ run/, '/validate/test-pack', 'Validation · dotnet test');
         await runGate('validation-card-equivalence', /Run equivalence/, '/validate/equivalence', 'Validation · cross-runtime');
+        // Phase 9.3 — 4th gate (property-based falsifying-input search).
+        // v1 runs in shadow mode (100 inputs × ~170ms callback ≈ 17s total
+        // round-trip); bump the gate's POST timeout if a real ref+candidate
+        // wiring (v1.1) makes this longer.
+        await runGate('validation-card-falsifying', /Run 4th gate/, '/validate/falsifying', 'Validation · 4th gate (property test)');
 
-        await expect(page.getByText(/All gates green/)).toBeVisible();
+        await expect(page.getByText(/All 4 gates green/)).toBeVisible();
         if (beat) await page.waitForTimeout(beat);
 
         // Hop back to the scaffold artifact so the commit-button is in view

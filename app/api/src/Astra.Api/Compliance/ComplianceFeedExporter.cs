@@ -308,19 +308,27 @@ public sealed class ComplianceFeedExporter
 
     private static string MapSeverity(string eventType) => eventType switch
     {
-        "spec.signed"        => "critical",
-        "scaffold.committed" => "critical",
-        "spec.superseded"    => "high",
-        "claim.reject"       => "high",
-        "validation.completed" => "medium",
-        "spec.extracted"     => "medium",
-        "claim.accept"       => "medium",
-        "spec.routed"        => "low",
-        "scaffold.generated" => "low",
-        "test_pack.generated"=> "low",
-        "corpus.ingested"    => "info",
-        "source.parsed"      => "info",
-        _                    => "info",
+        "spec.signed"                    => "critical",
+        "scaffold.committed"             => "critical",
+        // Phase 9.3.b — the 4th-gate "failed" verdict means the property-test
+        // sidecar found a real falsifying counterexample. That's a genuine bug
+        // discovered against a signed contract; rank it next to spec.superseded.
+        "validation.falsifying.failed"   => "high",
+        "spec.superseded"                => "high",
+        "claim.reject"                   => "high",
+        "validation.completed"           => "medium",
+        "spec.extracted"                 => "medium",
+        "claim.accept"                   => "medium",
+        "spec.routed"                    => "low",
+        "scaffold.generated"             => "low",
+        "test_pack.generated"            => "low",
+        // 4th-gate clean pass + start are informational — they show the gate
+        // ran but don't represent a policy-relevant outcome on their own.
+        "validation.falsifying.passed"   => "low",
+        "validation.falsifying.started"  => "info",
+        "corpus.ingested"                => "info",
+        "source.parsed"                  => "info",
+        _                                => "info",
     };
 
     private static string MapAction(string eventType)
@@ -345,7 +353,14 @@ public sealed class ComplianceFeedExporter
     }
 
     private static string MapResult(string eventType) =>
-        eventType.EndsWith("_failed", StringComparison.OrdinalIgnoreCase) ? "failure" : "success";
+        // Both naming conventions exist in the codebase: snake-style
+        // `_failed` (corpus.ingest_failed, compile.build_failed) and
+        // dotted-style `.failed` (harmonisation.failed,
+        // validation.falsifying.failed). Both are honest failure signals
+        // and must be reported as such in the compliance feed.
+        eventType.EndsWith("_failed", StringComparison.OrdinalIgnoreCase) ||
+        eventType.EndsWith(".failed", StringComparison.OrdinalIgnoreCase)
+            ? "failure" : "success";
 
     private static (string ValidationBypassed, string PayloadExcerpt) ExtractPayloadHighlights(AuditEvent e)
     {

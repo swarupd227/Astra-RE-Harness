@@ -117,6 +117,34 @@ public static class ValidationEndpoints
             }
         });
 
+        // ─── Phase 9.3.b — Trigger the 4th-gate (property-test / falsifying) ──
+        // Walks the signed spec for invariant + edge_case claims that carry
+        // generatorHints (per ADR-030), dispatches them to the property-test
+        // sidecar's /falsify endpoint, persists a ValidationRun with
+        // Stage="FALSIFYING". v1 implementation runs in "shadow mode" — the
+        // callback returns agree=true without comparing against a candidate
+        // binary, so the gate exercises the entire data path and the metrics
+        // show examplesTried per claim. v1.1 swaps in real ref+candidate
+        // execution behind the same callback contract.
+        app.MapPost("/api/v1/scaffolds/{id:guid}/validate/falsifying", async (
+            Guid id,
+            PropertyTestValidator validator,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Engineer)
+                return Forbid("auth.engineer_required", "Only engineers can trigger validation.");
+            try
+            {
+                var run = await validator.RunAsync(id, persona, ct);
+                return Results.Ok(ToResponse(run));
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+            {
+                return NotFound("scaffold.not_found");
+            }
+        });
+
         // ─── List validation runs for a scaffold ────────────────────────────
         // Returns all runs ordered newest-first. Callers typically pick the
         // latest row per stage to render the report card.
@@ -140,6 +168,45 @@ public static class ValidationEndpoints
                 scaffoldId = id,
                 specId = scaffold.SpecId,
                 runs,
+            });
+        });
+
+        // ─── Phase 9.3.b — Property-test sidecar callback ───────────────────
+        // The property-test sidecar POSTs here once per generated input
+        // (from inside the Hypothesis loop driven by /validate/falsifying).
+        // Locked-down: a shared-secret query string must match the value
+        // baked into the validator's callback URL builder; reject otherwise.
+        //
+        // v1 ships in shadow mode — we acknowledge each input, log it, and
+        // return agree=true with a stub refOutput/candOutput so the gate
+        // exercises the data path live. v1.1 swaps in real ref-binary
+        // execution (gfortran/gpp/fpc/gnucobol per spec schemaId) plus
+        // candidate-binary execution (dotnet/mvn per target). The wire
+        // contract does NOT change between v1 and v1.1.
+        app.MapPost("/internal/equivalence-callback", (
+            HttpContext ctx,
+            IConfiguration cfg,
+            ILogger<ValidationEndpointMarker> log) =>
+        {
+            var expected = cfg["Validation:PropertyTestCallbackSecret"]
+                ?? "dev-shared-secret-rotate-me";
+            var actual = ctx.Request.Query["secret"].ToString();
+            if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            {
+                return Results.Json(
+                    new { error = new { code = "callback.bad_secret" } },
+                    statusCode: 403);
+            }
+            // The runId query parameter is informational for v1 (we ack
+            // unconditionally); v1.1 uses it to look up cached ref/cand
+            // artifacts on the validation run.
+            var runId = ctx.Request.Query["runId"].ToString();
+            log.LogDebug("4th-gate callback for run {RunId}", runId);
+            return Results.Json(new
+            {
+                agree = true,
+                refOutput = "(shadow mode v1 — ref binary not yet wired)",
+                candOutput = "(shadow mode v1 — candidate binary not yet wired)",
             });
         });
 
@@ -353,4 +420,7 @@ public static class ValidationEndpoints
         Results.BadRequest(new { error = new { code, message } });
     private static IResult Forbid(string code, string message) =>
         Results.Json(new { error = new { code, message } }, statusCode: 403);
+
+    /// <summary>Marker for ILogger&lt;T&gt; — never instantiated.</summary>
+    private sealed class ValidationEndpointMarker;
 }

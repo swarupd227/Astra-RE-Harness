@@ -35,7 +35,15 @@
       "id": "INV-2",
       "claim": "When AValue is empty string, the AName entry is removed from FList (matches Delphi VCL TStringList.Values setter contract).",
       "citations": [ { "lines": "47-49" } ],
-      "confidence": "high"
+      "confidence": "high",
+      "generatorHints": {
+        "inputs": [
+          { "name": "AName",  "type": "string", "maxLen": 32, "alphabet": "abcdefghijklmnopqrstuvwxyz0123456789_" },
+          { "name": "AValue", "type": "string", "maxLen": 32 }
+        ],
+        "constraint": "AValue is empty string",
+        "examples": [ { "AName": "host", "AValue": "" }, { "AName": "port", "AValue": "" } ]
+      }
     },
     {
       "id": "INV-3",

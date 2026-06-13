@@ -40,6 +40,24 @@ Rules:
    no markdown fences, and no trailing commentary.** It must conform
    exactly to the schema below.
 
+**Property-test 4th gate — `generatorHints` (per ADR-030):**
+
+For every `invariant` and `edge_case` claim, decide whether to emit a `generatorHints` field. **Emit** when the claim's truth depends on values flowing through input parameters that you can describe as a generator (int with bounds, string with max length, etc.). **Omit** when the claim is purely structural (object identity, lifetime, field presence), or when the routine touches non-deterministic state (clock, random, env). The `inputs[*].name` MUST match the spec's top-level `inputs[*].name` so the property-test sidecar can wire generated values to the routine. When in doubt, omit — the 4th gate will skip the claim with `skipReason: no_hints`, which is the honest signal.
+
+Shape:
+
+```json
+"generatorHints": {
+  "inputs": [
+    { "name": "<input_name>", "type": "int|float|bool|string|bytes",
+      "min": <number-or-omit>, "max": <number-or-omit>,
+      "maxLen": <number-or-omit>, "alphabet": "<chars-or-omit>" }
+  ],
+  "constraint": "<plain-English filter on inputs, or omit>",
+  "examples": [ { "<input_name>": <value> } ]
+}
+```
+
 Output schema (spec/v1):
 ```json
 {

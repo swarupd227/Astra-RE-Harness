@@ -233,6 +233,14 @@ services:
       Validation__FpcEndpoint: "http://fpc-sidecar:51055"
       Validation__GppEndpoint: "http://gpp-sidecar:51057"
       Validation__PropertyTestEndpoint: "http://property-test-sidecar:51056"
+      # Phase 9.3.b: the property-test sidecar drives Hypothesis and posts
+      # each generated input back to the API at the callback URL below.
+      # The base URL must be reachable from inside the sidecar container —
+      # `api:8080` is the compose-network hostname. The secret guards the
+      # /internal/equivalence-callback endpoint from anything other than
+      # our own sidecar.
+      Validation__InternalCallbackBaseUrl: "http://api:8080"
+      Validation__PropertyTestCallbackSecret: "${PROPERTY_TEST_CALLBACK_SECRET:-dev-shared-secret-rotate-me}"
       Storage__Buckets__Sources: ${MINIO_BUCKET_SOURCES:-sources}
       Storage__Buckets__SignedSpecs: ${MINIO_BUCKET_SIGNED_SPECS:-signed-specs}
       Storage__Buckets__Scaffolds: ${MINIO_BUCKET_SCAFFOLDS:-scaffolds}
