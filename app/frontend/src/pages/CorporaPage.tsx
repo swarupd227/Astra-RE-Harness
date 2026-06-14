@@ -73,9 +73,57 @@ export function CorporaPage() {
   );
 }
 
+// Phase 9.2.b — per-language colour accent. The corpus list endpoint
+// doesn't yet expose `sourceLanguage` directly, so we derive it from the
+// corpus name for the known demo seeds. Real production corpora pick up
+// the accent once the backend adds `sourceLanguage` to CorpusListItem
+// (small follow-up).
+type LanguageAccent = {
+  id: string;
+  label: string;
+  /** Tailwind colour token used for the language pill background. */
+  pillBg: string;
+  pillText: string;
+  /** Left-edge stripe colour for the card. */
+  stripe: string;
+};
+
+const LANG_FORTRAN: LanguageAccent = {
+  id: 'fortran-f77', label: 'Fortran',
+  pillBg: 'bg-[#E0E7FF]', pillText: 'text-[#3730A3]',  // indigo
+  stripe: 'border-l-[#6366F1]',
+};
+const LANG_COBOL: LanguageAccent = {
+  id: 'cobol', label: 'COBOL',
+  pillBg: 'bg-[#CCFBF1]', pillText: 'text-[#0F766E]',  // teal
+  stripe: 'border-l-[#14B8A6]',
+};
+const LANG_DELPHI: LanguageAccent = {
+  id: 'delphi', label: 'Delphi',
+  pillBg: 'bg-[#D1FAE5]', pillText: 'text-[#065F46]',  // emerald
+  stripe: 'border-l-[#10B981]',
+};
+const LANG_CPP: LanguageAccent = {
+  id: 'cpp', label: 'C++',
+  pillBg: 'bg-[#FEF3C7]', pillText: 'text-[#92400E]',  // amber
+  stripe: 'border-l-[#F59E0B]',
+};
+
+function inferLanguage(corpusName: string): LanguageAccent | null {
+  const n = corpusName.toLowerCase();
+  if (/fortran|minpack|lapack|f77|blas/.test(n)) return LANG_FORTRAN;
+  if (/cobol|deptpay|cics/.test(n))             return LANG_COBOL;
+  if (/delphi|indy|pascal/.test(n))             return LANG_DELPHI;
+  if (/c\+\+|cpp|fmt|gpp/.test(n))              return LANG_CPP;
+  return null;
+}
+
 function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
   // Each card gets a status-colored left accent + a tinted icon background
   // so a single glance at the corpora grid tells you what's healthy vs failed.
+  // Phase 9.2.b adds a language pill so the per-language story is visible
+  // alongside the per-state story.
+  const language = inferLanguage(corpus.name);
   const accent = (() => {
     switch (corpus.state) {
       case 'PARSED':    return { edge: 'border-l-status-review', iconBg: 'bg-[#DAEFE9]', iconFg: 'text-status-review' };
@@ -99,8 +147,17 @@ function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
               </span>
               <div>
                 <h2 className="text-h-md font-semibold text-ink-primary">{corpus.name}</h2>
-                <p className="mt-0.5 font-mono text-caption text-ink-tertiary">
-                  {corpus.sourceType.toUpperCase()}
+                <p className="mt-0.5 flex items-center gap-2 font-mono text-caption text-ink-tertiary">
+                  <span>{corpus.sourceType.toUpperCase()}</span>
+                  {language && (
+                    <span
+                      className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${language.pillBg} ${language.pillText}`}
+                      data-testid={`corpus-language-${language.id}`}
+                      title={`Source language: ${language.label}`}
+                    >
+                      {language.label}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

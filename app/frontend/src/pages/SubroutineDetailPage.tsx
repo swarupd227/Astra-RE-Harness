@@ -44,6 +44,11 @@ export function SubroutineDetailPage() {
   }
 
   const s = sub.data;
+  // Phase 9.2.c — language-aware help text. Derive from the corpus
+  // name (same heuristic as the per-language colour accent on the
+  // Projects page). Once the backend adds `sourceLanguage` on
+  // CorpusListItem we'll swap to the authoritative value.
+  const help = inferExtractionHelp(s.corpus.name);
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
@@ -81,6 +86,21 @@ export function SubroutineDetailPage() {
           </Button>
         </div>
       </header>
+
+      {help && (
+        <div
+          className={`rounded-md border-l-4 ${help.borderClass} bg-raised px-4 py-3`}
+          data-testid={`extraction-help-${help.id}`}
+        >
+          <p className="flex flex-wrap items-baseline gap-2 text-body text-ink-secondary">
+            <span className={`font-mono text-caption uppercase tracking-wider ${help.labelTextClass}`}>
+              {help.label}
+            </span>
+            <span className="text-ink-tertiary">·</span>
+            <span>{help.body}</span>
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <Card className="overflow-hidden">
@@ -358,4 +378,60 @@ function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnTy
       </CardBody>
     </Card>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase 9.2.c — language-aware extraction help text. Brief blurbs per
+// language, calibrated to what reviewers can expect from the extractor
+// on that schema. Shorter for Delphi (cleaner mapping vs .NET / Java);
+// longer + cautionary for C++ (more open questions expected because of
+// templates, ownership and UB).
+// ──────────────────────────────────────────────────────────────────────
+
+type ExtractionHelp = {
+  id: string;
+  label: string;
+  /** Plain-English copy describing what the extractor will look for. */
+  body: string;
+  /** Tailwind classes for the bordered banner. */
+  borderClass: string;
+  labelTextClass: string;
+};
+
+const HELP_FORTRAN: ExtractionHelp = {
+  id: 'fortran-f77',
+  label: 'Fortran extraction',
+  body: 'The extractor will look for invariants, section contracts, I/O side effects, and edge cases. COMMON-block reads, IMPLICIT typing surprises, and BLOCK DATA initialisers are first-class concerns; expect 3–6 invariants and 1–3 open questions on a typical routine.',
+  borderClass: 'border-l-[#6366F1]',
+  labelTextClass: 'text-[#3730A3]',
+};
+const HELP_COBOL: ExtractionHelp = {
+  id: 'cobol',
+  label: 'COBOL extraction',
+  body: 'The extractor will look for invariants, section contracts, and I/O side effects with focus on VSAM keys, CICS interactions, and PIC field truncation. EVALUATE WHEN OTHER fall-through and copybook redefines are common open questions.',
+  borderClass: 'border-l-[#14B8A6]',
+  labelTextClass: 'text-[#0F766E]',
+};
+const HELP_DELPHI: ExtractionHelp = {
+  id: 'delphi',
+  label: 'Delphi extraction',
+  body: 'Cleanest mapping of the four — the curated RTL table (per ADR-025) means object lifetimes, properties, and events translate to .NET / Java with few open questions. Expect a tight extraction surface; SME review is usually short.',
+  borderClass: 'border-l-[#10B981]',
+  labelTextClass: 'text-[#065F46]',
+};
+const HELP_CPP: ExtractionHelp = {
+  id: 'cpp',
+  label: 'C++ extraction — expect more open questions',
+  body: 'Templates, ownership models, undefined behaviour, and noexcept contracts each get their own claim kind. Many routines surface 2–3 open questions per extraction because the source under-specifies ownership or relies on UB that does not map cleanly. Per ADR-027, the Java target may suggest a JNA fallback when template constraints exceed what generics can express.',
+  borderClass: 'border-l-[#F59E0B]',
+  labelTextClass: 'text-[#92400E]',
+};
+
+function inferExtractionHelp(corpusName: string): ExtractionHelp | null {
+  const n = corpusName.toLowerCase();
+  if (/fortran|minpack|lapack|f77|blas/.test(n)) return HELP_FORTRAN;
+  if (/cobol|deptpay|cics/.test(n))             return HELP_COBOL;
+  if (/delphi|indy|pascal/.test(n))             return HELP_DELPHI;
+  if (/c\+\+|cpp|fmt|gpp/.test(n))              return HELP_CPP;
+  return null;
 }

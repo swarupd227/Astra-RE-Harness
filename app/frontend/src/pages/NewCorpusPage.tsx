@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, FileCode, GitBranch, Loader2, Upload, X } from 'lucide-react';
-import { ApiError, api, type IngestResult } from '@/lib/api';
+import { ApiError, api, type IngestResult, type SpecSchemaSummary } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -10,15 +10,18 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 
 type Mode = 'upload' | 'git';
 
-const FORTRAN_EXTS = [
-  '.f', '.f77', '.for', '.fpp', '.ftn',
-  '.f90', '.f95', '.f03', '.f08', '.f15', '.f18',
-  '.zip',
-];
+// .zip stays whitelisted for every language because the API unpacks
+// archives server-side before per-file extension detection.
+const ARCHIVE_EXTS = ['.zip'];
 
-function isFortranLike(name: string): boolean {
+function extensionsForSchema(schema: SpecSchemaSummary | undefined): string[] {
+  const exts = schema?.supportedSourceExtensions ?? [];
+  return [...exts, ...ARCHIVE_EXTS];
+}
+
+function isAcceptable(name: string, exts: string[]): boolean {
   const lower = name.toLowerCase();
-  return FORTRAN_EXTS.some((e) => lower.endsWith(e));
+  return exts.some((e) => lower.endsWith(e));
 }
 
 export function NewCorpusPage() {
@@ -35,6 +38,28 @@ export function NewCorpusPage() {
   const [gitUrl, setGitUrl] = useState('');
   const [branch, setBranch] = useState('');
   const [sourceRoot, setSourceRoot] = useState('');
+
+  // Phase 9.2.a — language picker. The picked schema drives the file-
+  // extension filter on the dropzone. Default `''` means "auto-detect"
+  // (accept any registered language's extensions).
+  const [schemaId, setSchemaId] = useState<string>('');
+  const schemasQuery = useQuery({
+    queryKey: ['spec-schemas'],
+    queryFn: () => api.listSpecSchemas(),
+  });
+  const schemas = schemasQuery.data?.data ?? [];
+  const selectedSchema = useMemo(
+    () => schemas.find((s) => s.id === schemaId),
+    [schemas, schemaId],
+  );
+  // When auto-detect is active, accept any of the registered schemas'
+  // extensions; otherwise filter strictly to the picked schema.
+  const acceptedExts = useMemo(() => {
+    if (selectedSchema) return extensionsForSchema(selectedSchema);
+    const all = new Set<string>(ARCHIVE_EXTS);
+    for (const s of schemas) for (const e of s.supportedSourceExtensions) all.add(e);
+    return Array.from(all);
+  }, [selectedSchema, schemas]);
 
   const ingest = useMutation<IngestResult, ApiError>({
     mutationFn: async () => {
@@ -65,7 +90,7 @@ export function NewCorpusPage() {
     if (!picked) return;
     const accepted: File[] = [];
     for (const f of picked) {
-      if (isFortranLike(f.name)) accepted.push(f);
+      if (isAcceptable(f.name, acceptedExts)) accepted.push(f);
     }
     if (accepted.length === 0) return;
     setFiles((prev) => {
@@ -91,9 +116,11 @@ export function NewCorpusPage() {
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Connect a new project</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Upload Fortran source files (or a <span className="font-mono">.zip</span> archive) or
-          point at a Git repository. The parser sidecar runs <span className="font-mono">fparser2</span>{' '}
-          against every file to extract the subroutine inventory.
+          Upload source files (or a <span className="font-mono">.zip</span> archive) or
+          point at a Git repository. The parser sidecar runs the appropriate
+          per-language parser against every file to extract the subroutine
+          inventory. Pick a source language to tighten the file filter, or leave
+          on <em>auto-detect</em> to accept any of the registered languages.
         </p>
       </header>
 
@@ -136,8 +163,44 @@ export function NewCorpusPage() {
             />
           </FieldRow>
 
+          {/* Phase 9.2.a — language picker. Default 'Auto-detect' keeps
+              the existing extension-based heuristic; picking a specific
+              language tightens the file filter to that schema's
+              extensions only. */}
+          <FieldRow
+            label="Source language"
+            htmlFor="corpus-schema"
+            hint={
+              selectedSchema
+                ? `Accepts ${selectedSchema.supportedSourceExtensions.join(', ')} (+ .zip)`
+                : 'Auto-detect from file extensions — accepts any registered language.'
+            }
+          >
+            <select
+              id="corpus-schema"
+              value={schemaId}
+              onChange={(e) => setSchemaId(e.target.value)}
+              className={inputClass}
+              data-testid="corpus-schema"
+              disabled={ingest.isPending || ingest.isSuccess || schemasQuery.isPending}
+            >
+              <option value="">Auto-detect from file extensions</option>
+              {schemas.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+
           {mode === 'upload' ? (
-            <FieldRow label="Files" htmlFor="corpus-files" hint=".f, .f77, .for, .f90, .f95 — or a single .zip">
+            <FieldRow label="Files" htmlFor="corpus-files" hint={
+              selectedSchema
+                ? `${selectedSchema.supportedSourceExtensions.slice(0, 5).join(', ')}${
+                    selectedSchema.supportedSourceExtensions.length > 5 ? '…' : ''
+                  } — or a single .zip`
+                : 'Source files matching any registered language — or a single .zip'
+            }>
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
@@ -170,7 +233,7 @@ export function NewCorpusPage() {
                     id="corpus-files"
                     type="file"
                     multiple
-                    accept={FORTRAN_EXTS.join(',')}
+                    accept={acceptedExts.join(',')}
                     className="hidden"
                     onChange={(e) => handleFiles(e.target.files)}
                     data-testid="file-input"
@@ -207,7 +270,7 @@ export function NewCorpusPage() {
                   type="url"
                   value={gitUrl}
                   onChange={(e) => setGitUrl(e.target.value)}
-                  placeholder="https://github.com/your-org/legacy-fortran.git"
+                  placeholder="https://github.com/your-org/legacy-source.git"
                   className={inputClass}
                   data-testid="git-url"
                   disabled={ingest.isPending || ingest.isSuccess}
@@ -225,7 +288,7 @@ export function NewCorpusPage() {
                     disabled={ingest.isPending || ingest.isSuccess}
                   />
                 </FieldRow>
-                <FieldRow label="Source root (optional)" htmlFor="git-root" hint="Sub-directory containing Fortran sources.">
+                <FieldRow label="Source root (optional)" htmlFor="git-root" hint="Sub-directory containing the source tree.">
                   <input
                     id="git-root"
                     type="text"
