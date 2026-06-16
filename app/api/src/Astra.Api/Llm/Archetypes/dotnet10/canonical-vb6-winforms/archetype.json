@@ -1,0 +1,29 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-vb6-winforms",
+  "targetStack": "dotnet10",
+  "displayName": "VB6 form + COM interop → .NET 10 / WinForms + xUnit",
+  "description": "Reference VB6→.NET-10 scaffold for thick-client VB6 line-of-business apps that stay thick-client. A representative form (frmOrderEntry.frm) becomes a WinForms class with typed event handlers ('btn.Click += BtnSubmit_Click'); DAO/ADO recordset use becomes an EF Core 10 repository; late-bound 'CreateObject(\"Excel.Application\")' becomes a managed ClosedXML invoice exporter; 'On Error Goto' becomes typed try/catch with explicit error-label semantics. Produces a buildable, dotnet-test-runnable package targeting net10.0-windows. Every public surface carries a [SpecClaim(...)] attribute tying it back to the signed spec. Per ADR-036 this is the closest paradigm match to original VB6 — picked during Discovery for codebases that retain a desktop deployment.",
+  "compatibleSchemas": ["vb6"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "frmOrderEntry.Form_Load" },
+      { "subroutineName": "frmOrderEntry.btnSubmit_Click" },
+      { "subroutineName": "frmOrderEntry.btnCancel_Click" },
+      { "subroutineName": "modOrders.UpdateOrderTotal" },
+      { "subroutineName": "modReports.ExportInvoiceToExcel" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'WinForms', regardless of routine name. Engineering teams can supplement this archetype with corpus-specific variants during Discovery."
+  },
+  "owner": "Nous · VB6 migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.OrderEntry.csproj",           "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.OrderEntry.Tests.csproj","language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",        "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/OrderEntryForm.cs",            "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","OE-1","EH-1","DP-1","SE-1","EC-1","EC-2"] },
+    { "path": "src/OrderRepository.cs",           "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1"] },
+    { "path": "src/InvoiceExporter.cs",           "language": "csharp", "derivedFromClaimIds": ["INV-2","CI-1","LB-1","SE-2"] },
+    { "path": "tests/OrderEntryFormTests.cs",     "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","EC-2"] }
+  ]
+}
