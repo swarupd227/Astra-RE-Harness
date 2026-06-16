@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.OrderEntry.Web</RootNamespace>
+    <AssemblyName>Demo.OrderEntry.Web</AssemblyName>
+    <Description>
+      Reference .NET 10 / Blazor Server scaffold for VB6 thick-client form apps
+      that the customer wants to web-modernise, generated from a signed VB6 spec
+      (spec/v1, schemaId=vb6, target_archetype_hint=BlazorServer). The form
+      lives in src/Components/OrderEntryComponent.razor with code-behind in
+      OrderEntryComponent.razor.cs; form-level state lives in a Scoped
+      service (src/Services/OrderEntryState.cs). Every public surface carries
+      a [SpecClaim(...)] attribute citing the signed claim id.
+
+      Targets pure net10.0 (no -windows) — server-rendered Blazor; deployable
+      as Linux containers.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+  </ItemGroup>
+</Project>

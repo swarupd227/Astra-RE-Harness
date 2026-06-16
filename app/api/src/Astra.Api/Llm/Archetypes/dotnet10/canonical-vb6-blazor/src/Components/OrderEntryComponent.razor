@@ -1,0 +1,43 @@
+@*
+    SPDX-Spec: vb6/frmOrderEntry (signed)
+    SPDX-Archetype: canonical-vb6-blazor
+
+    Blazor Server projection of VB6 frmOrderEntry. Controls split between
+    this markup and the code-behind partial class (OrderEntryComponent.razor.cs).
+
+    EH-1: Form_Load maps to OnInitializedAsync (in the code-behind) —
+          but the DOM does NOT exist yet at that point. Reads that depend
+          on rendered control state must move to OnAfterRenderAsync.
+    DP-1: VB6 implicit txtCustomer.Text becomes an explicit @bind-Value
+          two-way binding against State.CustomerName.
+*@
+@page "/orders/new"
+@inject OrderEntryState State
+@inject OrderRepository Orders
+@inject InvoiceExporter Exporter
+
+<h1>New Order</h1>
+
+<EditForm Model="State" OnValidSubmit="OnSubmitAsync">
+    <DataAnnotationsValidator />
+
+    <div class="form-row">
+        <label for="customer">Customer</label>
+        @* DP-1: bind directly to the scoped service field. *@
+        <InputText id="customer"
+                   @bind-Value="State.CustomerName"
+                   @bind-Value:event="oninput" />
+    </div>
+
+    <div class="form-row">
+        <label for="orderId">Order id</label>
+        <InputNumber id="orderId" @bind-Value="State.OrderId" />
+    </div>
+
+    <button type="submit" disabled="@State.IsSubmitting">Submit</button>
+
+    @if (!string.IsNullOrEmpty(State.Status))
+    {
+        <p role="status" data-testid="status">@State.Status</p>
+    }
+</EditForm>

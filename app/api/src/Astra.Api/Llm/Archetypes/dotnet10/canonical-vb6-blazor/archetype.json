@@ -1,0 +1,31 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-vb6-blazor",
+  "targetStack": "dotnet10",
+  "displayName": "VB6 form + COM interop → .NET 10 / Blazor Server + bUnit",
+  "description": "Reference VB6→.NET-10 scaffold for VB6 thick-client apps that the customer wants to web-modernise. A representative form (frmOrderEntry.frm) becomes a Blazor Server component (OrderEntryComponent.razor + .razor.cs code-behind). VB6 events translate with sharper paradigm gaps: Form_Load → OnInitializedAsync (no DOM yet), control events → @onclick handlers, Timer events → PeriodicTimer in scoped services. Form-level state lives in a Scoped service, not on the component class. DAO/ADO maps to EF Core 10. Late-bound COM is flagged as Open Question because Blazor Server runs multi-threaded and most VBA-era COM is STA-bound. Picked during Discovery for codebases moving off desktop. Per ADR-036 this is the most complex of the three archetypes and ships last in 10.0.d's sequencing — engagement teams should expect MORE Open Questions on Blazor specs than WinForms or minimal-API.",
+  "compatibleSchemas": ["vb6"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "frmOrderEntry.Form_Load" },
+      { "subroutineName": "frmOrderEntry.btnSubmit_Click" },
+      { "subroutineName": "frmOrderEntry.btnCancel_Click" },
+      { "subroutineName": "frmCustomerLookup.Form_Load" },
+      { "subroutineName": "modOrders.UpdateOrderTotal" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'BlazorServer', regardless of routine name."
+  },
+  "owner": "Nous · VB6 migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.OrderEntry.Web.csproj",            "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.OrderEntry.Web.Tests.csproj","language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",             "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                        "language": "csharp", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/Components/OrderEntryComponent.razor","language": "razor",  "derivedFromClaimIds": ["INV-1","EH-1","DP-1"] },
+    { "path": "src/Components/OrderEntryComponent.razor.cs","language": "csharp","derivedFromClaimIds": ["INV-1","INV-2","OE-1","EH-1","DP-1","SE-1","EC-1","EC-2"] },
+    { "path": "src/Services/OrderEntryState.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/Services/OrderRepository.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1"] },
+    { "path": "tests/OrderEntryComponentTests.cs",     "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","EC-2"] }
+  ]
+}
