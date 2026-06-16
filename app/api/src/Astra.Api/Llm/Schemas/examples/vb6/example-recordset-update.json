@@ -1,0 +1,96 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "modOrders.UpdateOrderTotal",
+  "enclosing_module": "modOrders",
+  "source_path": "modOrders.bas",
+  "source_lines": "8-31",
+  "target_archetype_hint": "MinimalApi",
+  "summary": "Walks the OrderLines DAO recordset for a given order, sums line totals, and writes the running total back to the parent Orders row. Heavy use of default-property access (bang notation) and late-bound recordset navigation typical of mid-1990s VB6 DAO code.",
+  "inputs": [
+    {
+      "id": "in.orderId",
+      "name": "orderId",
+      "type": "Long",
+      "direction": "byval",
+      "semantic": "Primary key of the Orders row to update.",
+      "citations": [ { "lines": "8" } ]
+    }
+  ],
+  "outputs": [],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "The Orders.Total field is updated to the exact sum of OrderLines.Total for rows where OrderLines.OrderId = orderId.",
+      "citations": [ { "lines": "12-28" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "Currency precision is preserved end-to-end; no Double conversion happens at any point.",
+      "citations": [ { "lines": "20-22" } ],
+      "confidence": "high"
+    }
+  ],
+  "default_property_usages": [
+    {
+      "id": "DP-1",
+      "expression": "rsLines!Total",
+      "implied_member": "rsLines.Fields(\"Total\").Value",
+      "expansion": "Bang notation on a DAO Recordset retrieves the .Value of the named Field. In the EF Core port this becomes typed property access on a strongly-typed OrderLine entity.",
+      "translation_hint": "EF Core 10: `var total = line.Total;` after `var lines = await ctx.OrderLines.Where(l => l.OrderId == orderId).ToListAsync();`",
+      "citations": [ { "lines": "21" } ]
+    },
+    {
+      "id": "DP-2",
+      "expression": "rsOrder(\"Total\")",
+      "implied_member": "rsOrder.Fields(\"Total\").Value",
+      "expansion": "Parenthesised access is also a default-property reach. Same semantics as bang-notation but slightly different syntax — the LLM extraction must surface both forms.",
+      "translation_hint": "EF Core 10: `order.Total = sum;` then `await ctx.SaveChangesAsync();`",
+      "citations": [ { "lines": "26" } ]
+    }
+  ],
+  "late_binding_calls": [
+    {
+      "id": "LB-1",
+      "subject": "rsLines",
+      "member_called": "MoveNext",
+      "argument_shape": "No arguments.",
+      "contract": "Advances the DAO Recordset cursor by one row. Combined with EOF check, drives the summation loop. The SME confirmed rsLines is a typed DAO.Recordset, not a Variant — but the compiler doesn't see that statically because DAO is late-bound by convention in this codebase.",
+      "related_com_id": "CI-1",
+      "citations": [ { "lines": "23" } ]
+    }
+  ],
+  "com_interop_contracts": [
+    {
+      "id": "CI-1",
+      "prog_id": "DAO.Recordset",
+      "binding": "LateBound",
+      "methods_called": ["MoveFirst", "MoveNext", "EOF", "Edit", "Update", "Close"],
+      "contract": "Standard DAO 3.x recordset surface. The customer's installation has DAO 3.6 registered via Tools → References at the project level, but the code reads as if it were late-bound — `Dim rsLines As Recordset` (untyped to the compiler because the type alias isn't qualified).",
+      "replacement_hint": "EF Core 10 with `DbContext` + `DbSet<OrderLine>`. Direct DAO retained only if the customer still has .mdb files in production with no migration path.",
+      "citations": [ { "lines": "12-14" } ]
+    }
+  ],
+  "side_effects": [
+    {
+      "id": "SE-1",
+      "description": "Writes to the Orders.Total field (rsOrder.Edit / rsOrder.Update sequence).",
+      "citations": [ { "lines": "25-27" } ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "Order has no lines (rsLines.EOF on first read). The routine writes 0 to Orders.Total without iterating.",
+      "citations": [ { "lines": "18-19" } ],
+      "behavior": "Orders.Total = 0; no exception.",
+      "confidence": "high"
+    }
+  ],
+  "open_questions": [],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "modPricing.FormatLineLabel",
+  "enclosing_module": "modPricing",
+  "source_path": "modPricing.bas",
+  "source_lines": "33-45",
+  "target_archetype_hint": "MinimalApi",
+  "summary": "Builds a per-line invoice label combining a numeric quantity, a string SKU, and a discount-percent Variant. Demonstrates the classic VB6 Variant-coercion trap: `\"5\" + 3` evaluates to `8` (numeric add) while `\"5\" & 3` evaluates to `\"53\"` (concatenate). The source uses `+` in one place and `&` in another, which the C# port must preserve exactly.",
+  "inputs": [
+    {
+      "id": "in.qty",
+      "name": "qty",
+      "type": "Long",
+      "direction": "byval",
+      "semantic": "Line quantity (1..N).",
+      "citations": [ { "lines": "33" } ]
+    },
+    {
+      "id": "in.sku",
+      "name": "sku",
+      "type": "String",
+      "direction": "byval",
+      "semantic": "Product SKU code (e.g. 'BLT-12').",
+      "citations": [ { "lines": "33" } ]
+    },
+    {
+      "id": "in.discount",
+      "name": "discount",
+      "type": "Variant",
+      "direction": "byval",
+      "semantic": "Discount value. May arrive as Long, Double, String, or Empty depending on caller. Empty is treated as 'no discount'.",
+      "citations": [ { "lines": "33" } ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ret.label",
+      "name": "label",
+      "type": "String",
+      "direction": "return",
+      "semantic": "Formatted line label, e.g. '3x BLT-12 -15%'.",
+      "citations": [ { "lines": "43-44" } ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "The discount segment is appended only when IsNumeric(discount) is True; when discount is Empty, Null, or a non-numeric String, the segment is omitted.",
+      "citations": [ { "lines": "38-42" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "The quantity prefix uses string concatenation (`&`), not numeric addition (`+`). Output for qty=3 is '3x ', NEVER 3+ASCII('x').",
+      "citations": [ { "lines": "43" } ],
+      "confidence": "high"
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "Variant arithmetic trap: `Dim x: x = \"5\" + 3` produces numeric 8 because the + operator on String + Long coerces the String to a Long. `\"5\" & 3` produces the String '53' (concatenation). The routine uses & throughout — naïve C# port that uses + would silently produce different output.",
+      "citations": [ { "lines": "43-44" } ],
+      "behavior": "Output stays string-concatenated (e.g. '3x BLT-12 -15%'); C# port must use string.Concat or interpolation, never + with mixed types.",
+      "confidence": "high",
+      "generatorHints": {
+        "inputs": [
+          { "name": "qty", "type": "long", "min": 1, "max": 100 },
+          { "name": "sku", "type": "string", "alphabet": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-", "maxLen": 8 },
+          { "name": "discount", "type": "variant" }
+        ],
+        "constraint": "qty is a number that, when string-concatenated with sku, must produce '<qty>x <sku>' not a numeric coercion"
+      }
+    },
+    {
+      "id": "EC-2",
+      "description": "discount arrives as String '15' (caller bug). IsNumeric('15') is True, so the discount segment is appended — but the bare `discount` interpolation triggers default coercion to Double then back to String. Output: '3x BLT-12 -15%'. Looks correct; subtle bug if discount is the String '15.5' on a locale that uses comma as decimal separator.",
+      "citations": [ { "lines": "38-42" } ],
+      "behavior": "Output is locale-dependent on non-en-US systems; this is a real cross-locale defect in the source.",
+      "confidence": "medium"
+    },
+    {
+      "id": "EC-3",
+      "description": "discount is Null. IsNumeric(Null) is False; the discount segment is omitted.",
+      "citations": [ { "lines": "38-39" } ],
+      "behavior": "Output: '3x BLT-12'. No exception.",
+      "confidence": "high"
+    }
+  ],
+  "default_property_usages": [
+    {
+      "id": "DP-1",
+      "expression": "discount",
+      "implied_member": "CStr(discount.Value)",
+      "expansion": "When a Variant is interpolated into a String context via &, VB6 implicitly calls the Variant's Value with a String coercion. C# does not have this implicit coercion; the port must call ToString() (or a culture-aware FormatProvider) explicitly.",
+      "translation_hint": "C# 10: `$\"-{discount?.ToString(CultureInfo.InvariantCulture) ?? \"0\"}%\"`",
+      "citations": [ { "lines": "41" } ]
+    }
+  ],
+  "side_effects": [],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "EC-2 surfaces a locale-dependent string parse. Should the .NET 10 port pin to InvariantCulture for the discount segment, or preserve the locale-dependent legacy behaviour?",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

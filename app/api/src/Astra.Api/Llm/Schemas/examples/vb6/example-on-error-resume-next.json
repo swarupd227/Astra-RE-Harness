@@ -1,0 +1,99 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "modPricing.ApplyDiscount",
+  "enclosing_module": "modPricing",
+  "source_path": "modPricing.bas",
+  "source_lines": "5-22",
+  "target_archetype_hint": "MinimalApi",
+  "summary": "Computes a discounted unit price given a base price and a discount-percent string. Uses On Error Resume Next around the parse so a malformed discount string silently falls through to zero discount. This is exactly the kind of routine where the SME must decide explicitly which error swallows are intentional.",
+  "inputs": [
+    {
+      "id": "in.basePrice",
+      "name": "basePrice",
+      "type": "Currency",
+      "direction": "byval",
+      "semantic": "Pre-discount unit price.",
+      "citations": [ { "lines": "5" } ]
+    },
+    {
+      "id": "in.discountText",
+      "name": "discountText",
+      "type": "String",
+      "direction": "byval",
+      "semantic": "Discount percent as a free-text string (e.g. '15', '7.5', or '' for none).",
+      "citations": [ { "lines": "5" } ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ret.discountedPrice",
+      "name": "discountedPrice",
+      "type": "Currency",
+      "direction": "return",
+      "semantic": "basePrice * (1 - discount/100). On parse failure, returns basePrice unchanged.",
+      "citations": [ { "lines": "18-20" } ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "The return value is never greater than basePrice when discount >= 0.",
+      "citations": [ { "lines": "18-20" } ],
+      "confidence": "high"
+    }
+  ],
+  "on_error_handlers": [
+    {
+      "id": "OE-1",
+      "mode": "ResumeNext",
+      "expected_err_numbers": ["13"],
+      "policy": "Wraps `discount = CDbl(discountText)` so a non-numeric discountText (Err.Number 13 = Type Mismatch) does NOT abort the routine — instead, `discount` keeps its initial value (0) and the unchanged basePrice is returned. SME confirmed this is intentional: legacy callers pass '' or 'N/A' for 'no discount' and the routine must tolerate it. Other Err.Number values (e.g. overflow on CDbl of a huge string) ALSO silently fall through — this is the trap the migration must explicitly decide about.",
+      "translation_hint": "C# 10: `if (!double.TryParse(discountText, out var discount)) discount = 0;` — replaces Resume Next with an explicit tolerant parse. Catches the parse failure WITHOUT swallowing arithmetic exceptions on the multiply step.",
+      "citations": [ { "lines": "12-15" } ],
+      "confidence": "high"
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "discountText is empty string. CDbl('') raises Err 13; Resume Next leaves discount = 0; basePrice is returned unchanged.",
+      "citations": [ { "lines": "12-14" } ],
+      "behavior": "Return basePrice; no error visible to caller.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-2",
+      "description": "discountText is 'fifteen' (alphabetic). Same outcome as EC-1 — CDbl fails, Resume Next swallows, basePrice returned.",
+      "citations": [ { "lines": "12-14" } ],
+      "behavior": "Return basePrice; no error visible to caller.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-3",
+      "description": "discountText overflows a Double (e.g. '1e1000'). Err 6 (Overflow); Resume Next swallows; the discount stays at 0. Probably NOT intentional — flagged as Open Question.",
+      "citations": [ { "lines": "12-14" } ],
+      "behavior": "Return basePrice; failure silently masked.",
+      "confidence": "medium",
+      "generatorHints": {
+        "inputs": [
+          { "name": "discountText", "type": "string", "alphabet": "1234567890e.", "maxLen": 12 },
+          { "name": "basePrice", "type": "currency", "min": 0.01, "max": 99999.99 }
+        ],
+        "constraint": "discountText decodes to a value > 1e9 OR contains non-numeric characters"
+      }
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Should overflow on the discount parse (Err.Number 6) be tolerated like type-mismatch is, or should it propagate? The current Resume Next swallows both.",
+      "status": "unresolved"
+    }
+  ],
+  "side_effects": [],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

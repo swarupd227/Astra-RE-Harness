@@ -1,0 +1,142 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "modReports.ExportInvoiceToExcel",
+  "enclosing_module": "modReports",
+  "source_path": "modReports.bas",
+  "source_lines": "14-58",
+  "target_archetype_hint": "MinimalApi",
+  "summary": "Builds an Excel-format invoice from an OrderId, writing it to the path the caller provides. Uses late-bound CreateObject because the customer's deployment doesn't have Excel registered consistently and the harness must tolerate runs where Excel is absent.",
+  "inputs": [
+    {
+      "id": "in.orderId",
+      "name": "orderId",
+      "type": "Long",
+      "direction": "byval",
+      "semantic": "Primary key into the Orders table.",
+      "citations": [ { "lines": "14" } ]
+    },
+    {
+      "id": "in.targetPath",
+      "name": "targetPath",
+      "type": "String",
+      "direction": "byval",
+      "semantic": "Absolute file path where the .xls workbook is to be saved.",
+      "citations": [ { "lines": "14" } ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ret.success",
+      "name": "success",
+      "type": "Boolean",
+      "direction": "return",
+      "semantic": "True iff the workbook was created AND written to targetPath. False on Excel-absent or any I/O failure.",
+      "citations": [ { "lines": "54-57" } ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "On the success path the workbook contains exactly one sheet, named 'Invoice', with the order header on rows 1-4 and order lines starting at row 6.",
+      "citations": [ { "lines": "27-46" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "Excel is quit and the COM reference is released before the routine returns — no orphan EXCEL.EXE processes.",
+      "citations": [ { "lines": "48-52" } ],
+      "confidence": "high"
+    }
+  ],
+  "com_interop_contracts": [
+    {
+      "id": "CI-1",
+      "prog_id": "Excel.Application",
+      "binding": "LateBound",
+      "methods_called": [
+        "Visible",
+        "Workbooks.Add",
+        "Worksheets(1).Name",
+        "Worksheets(1).Cells",
+        "ActiveWorkbook.SaveAs",
+        "ActiveWorkbook.Close",
+        "Quit"
+      ],
+      "contract": "Acquires a hidden Excel.Application instance, adds a single workbook, populates cells from DAO data, SaveAs targetPath with format xlExcel8 (.xls), closes, and quits. Visible is explicitly set False so the user never sees the Excel UI.",
+      "replacement_hint": "ClosedXML 0.105+ for .NET 10. Zero external runtime; produces identical .xlsx output. Excel Interop is unnecessary because the routine doesn't require an active Excel UI.",
+      "citations": [ { "lines": "20-26" } ]
+    }
+  ],
+  "late_binding_calls": [
+    {
+      "id": "LB-1",
+      "subject": "xlApp",
+      "member_called": "Workbooks.Add",
+      "argument_shape": "No arguments.",
+      "contract": "Dispatches against the Excel.Application instance to create a new empty workbook. Returns a Workbook reference held in xlBook.",
+      "related_com_id": "CI-1",
+      "citations": [ { "lines": "23" } ]
+    },
+    {
+      "id": "LB-2",
+      "subject": "xlSheet",
+      "member_called": "Cells",
+      "argument_shape": "Two Long arguments (row, col).",
+      "contract": "Default-property access on the Worksheet — Cells(row, col).Value reads/writes a single cell. Used in the order-line loop.",
+      "related_com_id": "CI-1",
+      "citations": [ { "lines": "37-43" } ]
+    }
+  ],
+  "on_error_handlers": [
+    {
+      "id": "OE-1",
+      "mode": "Goto",
+      "handler_label": "ExcelMissing",
+      "expected_err_numbers": ["429"],
+      "policy": "Err 429 (ActiveX component can't create object) means Excel isn't installed. The handler sets success = False and returns gracefully. Any other error escapes — the routine doesn't try to swallow general failures.",
+      "translation_hint": "C# 10: try { excelApp = CreateExcel(); } catch (COMException ex) when ((uint)ex.HResult == 0x80040154) { return false; }. Or use ClosedXML and skip the try entirely.",
+      "citations": [ { "lines": "19, 54-56" } ],
+      "confidence": "high"
+    }
+  ],
+  "side_effects": [
+    {
+      "id": "SE-1",
+      "description": "Writes a .xls workbook to targetPath via SaveAs.",
+      "citations": [ { "lines": "47" } ]
+    },
+    {
+      "id": "SE-2",
+      "description": "Spawns and terminates an EXCEL.EXE process; visible only via Task Manager during the run.",
+      "citations": [ { "lines": "20-52" } ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "Excel is not installed on the host. CreateObject('Excel.Application') raises Err 429; the handler returns False without producing a file.",
+      "citations": [ { "lines": "19-20, 54-56" } ],
+      "behavior": "Return False; no file written; no Excel process spawned.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-2",
+      "description": "targetPath is a read-only location. SaveAs raises Err 1004 (Method 'SaveAs' of object failed). The On Error Goto branch returns False without leaving an EXCEL.EXE process — the Quit call is in the cleanup section that always runs.",
+      "citations": [ { "lines": "47-52" } ],
+      "behavior": "Return False; no file written; Excel quit cleanly.",
+      "confidence": "medium"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Should the .NET 10 port keep .xls output for backward compatibility, or switch to .xlsx (Open XML)? ClosedXML supports both but defaults to .xlsx.",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

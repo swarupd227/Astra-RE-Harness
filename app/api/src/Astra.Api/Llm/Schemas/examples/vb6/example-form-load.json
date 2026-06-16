@@ -1,0 +1,86 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "frmOrderEntry.Form_Load",
+  "enclosing_module": "frmOrderEntry",
+  "source_path": "frmOrderEntry.frm",
+  "source_lines": "12-44",
+  "target_archetype_hint": "WinForms",
+  "summary": "Form_Load handler that initialises the DAO database connection (dbsOrders), populates the product cmbProducts list, and seeds txtOrderId with the next sequential id from a DAO query. Controls have already been instantiated by the VB6 runtime before this fires — relying on that ordering is a portability trap because the C# WinForms Load event has different lifecycle semantics.",
+  "inputs": [],
+  "outputs": [],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "dbsOrders is opened and stored as a form-level field by the end of this handler. Subsequent button handlers assume it is non-null.",
+      "citations": [ { "lines": "16-19" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "cmbProducts has at least one row after this handler returns; the first product is selected (ListIndex = 0).",
+      "citations": [ { "lines": "27-36" } ],
+      "confidence": "high"
+    }
+  ],
+  "on_error_handlers": [
+    {
+      "id": "OE-1",
+      "mode": "Goto",
+      "handler_label": "LoadFailed",
+      "expected_err_numbers": ["3024"],
+      "policy": "Catches DAO 3024 (database file not found). The handler shows a fatal-error MsgBox and unloads the form. Other Err.Number values escape — VB6 default error dialog.",
+      "translation_hint": "C# 10: try { ... } catch (FileNotFoundException) { ShowFatal(); Close(); }. Other exceptions propagate.",
+      "citations": [ { "lines": "40-43" } ],
+      "confidence": "high"
+    }
+  ],
+  "event_handler_contracts": [
+    {
+      "id": "EH-1",
+      "event_name": "Form_Load",
+      "source": "Form",
+      "fires_when": "The VB6 runtime invokes Form_Load AFTER the form's window handle is created and AFTER every control's CreateInstance has run — but BEFORE the form becomes visible.",
+      "contract": "Controls (cmbProducts, txtOrderId, lblStatus) are guaranteed to be addressable; their .Text / .List values may already carry designer-set defaults. Promises: dbsOrders open, cmbProducts populated, txtOrderId pre-filled. Does NOT promise the form is visible yet.",
+      "target_paradigm_hint": "WinForms: override OnLoad(EventArgs) — runs after handle creation, before Shown. Blazor: OnInitializedAsync — different semantics; controls don't yet have DOM, so cmbProducts population should happen there but layout-dependent reads should move to OnAfterRenderAsync.",
+      "citations": [ { "lines": "12-15" } ]
+    }
+  ],
+  "default_property_usages": [
+    {
+      "id": "DP-1",
+      "expression": "rsProducts!ProductName",
+      "implied_member": "rsProducts.Fields(\"ProductName\").Value",
+      "expansion": "DAO Recordset bang-notation reads the .Value of the named Field. In C# DAO/Jet stays as `rs.Fields[\"ProductName\"].Value` or migrates to EF Core property access.",
+      "translation_hint": "EF Core 10: `var name = product.ProductName;` after mapping the recordset to a typed entity. Direct DAO retained only if the customer requires JET MDB compatibility.",
+      "citations": [ { "lines": "32" } ]
+    }
+  ],
+  "side_effects": [
+    {
+      "id": "SE-1",
+      "description": "Opens a DAO Database against the application-local .mdb file (path is hard-coded relative to App.Path).",
+      "citations": [ { "lines": "17-18" } ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "The DAO query for the next order id returns Null (no rows yet). The handler defaults txtOrderId to '1001'.",
+      "citations": [ { "lines": "37-39" } ],
+      "behavior": "txtOrderId.Text = '1001'; no error surfaced.",
+      "confidence": "high"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Should the database connection move to a singleton service in the .NET 10 port instead of being held on the form, or is per-form lifetime acceptable?",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

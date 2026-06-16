@@ -1,0 +1,129 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/spec/v1.json",
+  "routine": "frmOrderEntry.btnSubmit_Click",
+  "enclosing_module": "frmOrderEntry",
+  "source_path": "frmOrderEntry.frm",
+  "source_lines": "47-92",
+  "target_archetype_hint": "WinForms",
+  "summary": "Handler for the Submit button on the Order Entry form. Validates the customer field, inserts a new Orders row via DAO, calls into Excel via a late-bound CreateObject for the invoice export, and surfaces any failure via a typed error label on the form. Uses On Error Goto with named labels for the I/O paths; Resume Next is NOT used so failures are visible to the user.",
+  "inputs": [],
+  "outputs": [
+    {
+      "id": "ret.formState",
+      "name": "form state",
+      "type": "<form>",
+      "direction": "return",
+      "semantic": "On success: lblStatus reads 'Submitted'; form is reset. On failure: lblStatus carries the Err.Description text from the matching handler label.",
+      "citations": [ { "lines": "87-90" } ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "claim": "When txtCustomer is empty the routine returns without touching any external state (no DAO write, no Excel call). lblStatus shows 'Customer required'.",
+      "citations": [ { "lines": "49-52" } ],
+      "confidence": "high"
+    },
+    {
+      "id": "INV-2",
+      "claim": "An Orders row is inserted via dbsOrders.Execute exactly once per successful submit. RecordsAffected = 1 is asserted before the Excel call is attempted.",
+      "citations": [ { "lines": "60-66" } ],
+      "confidence": "high"
+    }
+  ],
+  "on_error_handlers": [
+    {
+      "id": "OE-1",
+      "mode": "Goto",
+      "handler_label": "DBErrHandler",
+      "expected_err_numbers": ["3022", "3134"],
+      "policy": "Catches DAO-specific failures (3022 = duplicate primary key, 3134 = SQL syntax) on the Orders insert. The handler logs to AuditLog, displays the Err.Description on lblStatus, and exits the routine without attempting the Excel export. Other Err.Number values propagate as unhandled — VB6 default dialog.",
+      "translation_hint": "C# 10: try { ... } catch (OleDbException ex) when (ex.ErrorCode == 3022 || ex.ErrorCode == 3134) { ... }. Other DB exceptions rethrow as the original; non-DB exceptions bubble.",
+      "citations": [ { "lines": "82-86" } ],
+      "confidence": "high"
+    }
+  ],
+  "com_interop_contracts": [
+    {
+      "id": "CI-1",
+      "prog_id": "Excel.Application",
+      "binding": "LateBound",
+      "methods_called": ["Workbooks.Open", "Worksheets(1).Range(\"A2\").Value", "Save", "Quit"],
+      "contract": "Opens the invoice template (template path is hard-coded), writes the customer name into A2 and the order id into A3, saves to the orders folder named by order id, and quits. Excel is NOT visible during this run — it's a headless export.",
+      "replacement_hint": "ClosedXML 0.105+ for .NET 10. Idempotent: re-opening the same template + writing to A2/A3 produces the same workbook. Excel Interop is only needed if the customer requires the active Excel UI to update during the run, which this routine does not.",
+      "citations": [ { "lines": "70-78" } ]
+    }
+  ],
+  "event_handler_contracts": [
+    {
+      "id": "EH-1",
+      "event_name": "btnSubmit_Click",
+      "source": "Control",
+      "fires_when": "The user clicks the Submit button on frmOrderEntry.",
+      "contract": "Assumes txtCustomer, txtOrderId, and dbsOrders (the form-level DAO Database) are initialised by Form_Load. Does NOT assume Excel is already running. Promises to leave lblStatus with a user-facing message and the form ready for another submit OR cleared.",
+      "target_paradigm_hint": "WinForms: btnSubmit.Click += BtnSubmit_Click in the Form constructor; preserves the imperative shape. Blazor target: @onclick=SubmitAsync on a <button>, async Task method.",
+      "citations": [ { "lines": "47-48" } ]
+    }
+  ],
+  "default_property_usages": [
+    {
+      "id": "DP-1",
+      "expression": "txtCustomer",
+      "implied_member": "txtCustomer.Text",
+      "expansion": "In VB6, a TextBox control used in a String-typed context implicitly reads the .Text property. The C# port must make this explicit or behaviour drifts (in C# a TextBox reference returns its TextBox object identity, not its Text).",
+      "translation_hint": "WinForms: txtCustomer.Text. Blazor: @bind-Value:event=\"oninput\" maps the value to a backing field.",
+      "citations": [ { "lines": "49-51" } ]
+    }
+  ],
+  "late_binding_calls": [
+    {
+      "id": "LB-1",
+      "subject": "objExcel",
+      "member_called": "Workbooks.Open",
+      "argument_shape": "Single string path; no read-only or password flags.",
+      "contract": "Dispatches against the Excel.Application instance returned by CreateObject. SME confirmed the call lowers to Excel.Workbooks.Open(string Filename) and returns a Workbook reference.",
+      "related_com_id": "CI-1",
+      "citations": [ { "lines": "71-72" } ]
+    }
+  ],
+  "side_effects": [
+    {
+      "id": "SE-1",
+      "description": "Writes a row to the Orders table via the form-level DAO Database (`dbsOrders.Execute`).",
+      "citations": [ { "lines": "65" } ]
+    },
+    {
+      "id": "SE-2",
+      "description": "Creates an Excel workbook on disk under the orders folder named by order id.",
+      "citations": [ { "lines": "70-78" } ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "EC-1",
+      "description": "txtCustomer trimmed to empty after Len(Trim$(...)). The routine returns early without DAO or Excel side effects.",
+      "citations": [ { "lines": "49-52" } ],
+      "behavior": "lblStatus = 'Customer required'; form remains editable.",
+      "confidence": "high"
+    },
+    {
+      "id": "EC-2",
+      "description": "Duplicate order id collides with an existing row (Err.Number = 3022).",
+      "citations": [ { "lines": "82-83" } ],
+      "behavior": "Caught by DBErrHandler; lblStatus carries the DAO error text; Excel call is NOT attempted.",
+      "confidence": "high"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-1",
+      "question": "Is the hard-coded invoice template path acceptable to keep, or should it become a configuration setting in the .NET 10 port?",
+      "status": "unresolved"
+    }
+  ],
+  "metadata": {
+    "prompt_template": "vb6-extract@v1.0",
+    "provider": "hand-authored-example",
+    "schema_id": "vb6"
+  }
+}

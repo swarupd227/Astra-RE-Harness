@@ -9,11 +9,12 @@ namespace Astra.Api.Ingest;
 /// </summary>
 public static class SourceLanguageDetector
 {
-    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol", "delphi", "cpp").</summary>
+    /// <summary>Spec-schema id (e.g. "fortran-f77", "cobol", "delphi", "cpp", "vb6").</summary>
     public const string Fortran = "fortran-f77";
     public const string Cobol = "cobol";
     public const string Delphi = "delphi";
     public const string Cpp = "cpp";
+    public const string Vb6 = "vb6";
 
     public static readonly string[] FortranExtensions =
     {
@@ -41,9 +42,21 @@ public static class SourceLanguageDetector
         ".h",
     };
 
+    public static readonly string[] Vb6Extensions =
+    {
+        // Phase 10.0.a + 10.0.b — VB6 source extensions per ADR-035.
+        // .bas standard module, .cls class module, .frm form (property
+        // bag + code-behind), .ctl user control (same shape as .frm).
+        ".bas", ".cls", ".frm", ".ctl",
+    };
+
     /// <summary>Every extension we accept at ingest time.</summary>
     public static IEnumerable<string> AllowedExtensions =>
-        FortranExtensions.Concat(CobolExtensions).Concat(DelphiExtensions).Concat(CppExtensions);
+        FortranExtensions
+            .Concat(CobolExtensions)
+            .Concat(DelphiExtensions)
+            .Concat(CppExtensions)
+            .Concat(Vb6Extensions);
 
     /// <summary>
     /// Map a file extension (case-insensitive, with leading dot) to a
@@ -57,6 +70,7 @@ public static class SourceLanguageDetector
         if (CobolExtensions.Contains(ext)) return Cobol;
         if (DelphiExtensions.Contains(ext)) return Delphi;
         if (CppExtensions.Contains(ext)) return Cpp;
+        if (Vb6Extensions.Contains(ext)) return Vb6;
         return null;
     }
 

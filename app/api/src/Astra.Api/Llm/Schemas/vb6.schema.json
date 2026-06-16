@@ -1,0 +1,210 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "vb6",
+  "displayName": "Visual Basic 6 → .NET 10",
+  "description": "VB6 source: .bas standard modules, .cls class modules, and .frm forms (property-bag header + code-behind). Calibrated against the Nous-authored 'VB6 Inventory Sample' seed corpus and on the long-tail quirks Rubberduck VBA's grammar enumerates: Variant arithmetic, On Error Resume Next swallow semantics, default-property access (rs!Field, rs(\"col\")), late-bound Set obj = CreateObject(...), implicit DAO/ADO record navigation. Per ADR-035 the production parser loads Rubberduck's ANTLR4 grammar via the antlr4-python3 runtime; until that lands, the v0 tokenizer in vb6_parser.py provides the structural surface.",
+  "supportedSourceExtensions": [".bas", ".cls", ".frm", ".ctl"],
+  "compatibleTargetStacks": ["dotnet10"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the routine must preserve across all valid inputs.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Same shape as on other languages. When present, the 4th validation gate exercises the claim against generated inputs; when absent, the gate skips with skipReason: no_hints." }
+      ]
+    },
+    {
+      "id": "onErrorHandler",
+      "label": "On Error handler",
+      "idPrefix": "OE",
+      "specJsonField": "on_error_handlers",
+      "textField": "policy",
+      "displayTone": "review",
+      "description": "VB6 error-handling idiom. Captures whether the routine uses `On Error Goto <label>`, `On Error Resume Next`, or no handler at all — and what swallow-vs-rethrow semantics the SME expects. Critical for translation: `Resume Next` silently masks division-by-zero, file-not-found, and overflow. The C# port has no direct equivalent; it must lower to a typed try/catch with explicit suppression decisions per Err.Number.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "mode", "kind": "enum:Goto|ResumeNext|GotoMinusOne|None", "required": true },
+        { "name": "handler_label", "kind": "string", "required": false, "doc": "When mode = Goto, the label name (e.g. 'ErrHandler')." },
+        { "name": "expected_err_numbers", "kind": "string[]", "required": false, "doc": "Err.Number values the handler specifically branches on (e.g. ['9', '53'] for SubscriptOutOfRange / FileNotFound). Empty when the handler treats all errors uniformly." },
+        { "name": "policy", "kind": "string", "required": true, "doc": "Plain-English description of what the handler does and what failures the SME considers acceptable to swallow." },
+        { "name": "translation_hint", "kind": "string", "required": false, "doc": "Suggested .NET 10 pattern (e.g. 'try/catch (IOException)' or 'try/catch + log + rethrow')." },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "comInteropContract",
+      "label": "COM interop contract",
+      "idPrefix": "CI",
+      "specJsonField": "com_interop_contracts",
+      "textField": "contract",
+      "displayTone": "draft",
+      "description": "Outbound calls to COM objects via `CreateObject(\"...\")`, `GetObject(...)`, or typed bindings from `Tools → References` (e.g. `Excel.Application`, `Scripting.FileSystemObject`). These are external dependencies — the customer must source modern equivalents (managed library, REST API, replaced component) during Discovery. The harness surfaces the boundary; the SME decides per call site. Highest-leverage class of claim for VB6 modernisation.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "prog_id", "kind": "string", "required": true, "doc": "The COM ProgID or typed name (e.g. 'Excel.Application', 'ADODB.Connection', 'Scripting.FileSystemObject')." },
+        { "name": "binding", "kind": "enum:EarlyBound|LateBound", "required": true, "doc": "EarlyBound = `Dim x As Excel.Application` (typed); LateBound = `Dim x As Object` + `CreateObject(...)`. Late-bound calls cannot be statically resolved." },
+        { "name": "methods_called", "kind": "string[]", "required": true, "doc": "Specific methods/properties invoked on this COM object inside the routine (e.g. ['Workbooks.Open', 'Range.Value', 'Quit'])." },
+        { "name": "contract", "kind": "string", "required": true, "doc": "Plain-English description of what the routine asks of the COM object." },
+        { "name": "replacement_hint", "kind": "string", "required": false, "doc": "Suggested modern equivalent (e.g. 'ClosedXML for .NET 10 read/write; Office Interop only for active-document scenarios'). SME confirms during sign-off." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "eventHandlerContract",
+      "label": "Event handler contract",
+      "idPrefix": "EH",
+      "specJsonField": "event_handler_contracts",
+      "textField": "contract",
+      "displayTone": "scaffolded",
+      "description": "VB6 event handlers — both form/control events (`Form_Load`, `btnSubmit_Click`, `Timer1_Timer`) and class-module events (`Class_Initialize`, `Class_Terminate`, user-declared `RaiseEvent` consumers). Captures when the handler fires, what state it assumes is initialised, and what it promises to do. Maps to .NET event keyword + `+= EventHandler` (WinForms target) or to lifecycle methods / scoped services (Blazor target).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "event_name", "kind": "string", "required": true, "doc": "e.g. 'Form_Load', 'btnSubmit_Click', 'Class_Initialize'." },
+        { "name": "source", "kind": "enum:Form|Control|Class|Module", "required": true },
+        { "name": "fires_when", "kind": "string", "required": true, "doc": "When the VB6 runtime invokes this handler (e.g. 'when the form's window is created', 'when the user clicks the Submit button')." },
+        { "name": "contract", "kind": "string", "required": true, "doc": "What state the handler assumes is ready + what it promises to do." },
+        { "name": "target_paradigm_hint", "kind": "string", "required": false, "doc": "Suggested target shape per ADR-036's archetype (WinForms: '+= EventHandler'; Blazor: 'OnInitializedAsync'; minimal-API: 'often inappropriate — surface as Open Question if no UI target')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "defaultPropertyUsage",
+      "label": "Default property usage",
+      "idPrefix": "DP",
+      "specJsonField": "default_property_usages",
+      "textField": "expansion",
+      "displayTone": "review",
+      "description": "Implicit access to a COM object's default property — VB6 syntax like `rs!FieldName` (bang notation), `rs(\"col\")` (parenthesised access), or bare `obj` in a place where its `.Value` is implied. Hidden in source; explicit in the C# port. Common with DAO/ADO Recordsets and Collection objects. Mis-translating these is a top source of silent behaviour drift.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "expression", "kind": "string", "required": true, "doc": "Source expression as written (e.g. 'rs!CustomerName', 'orders(i)', 'txtName')." },
+        { "name": "implied_member", "kind": "string", "required": true, "doc": "The COM default-property member being accessed (e.g. 'Fields(\"CustomerName\").Value', 'Item(i)', 'Text')." },
+        { "name": "expansion", "kind": "string", "required": true, "doc": "Plain-English description of what the implicit access does and why a naive translation would miss it." },
+        { "name": "translation_hint", "kind": "string", "required": false, "doc": "Suggested explicit C# form (e.g. 'rs.Fields[\"CustomerName\"].Value' or 'orders[i].ToString()')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "lateBindingCall",
+      "label": "Late binding call",
+      "idPrefix": "LB",
+      "specJsonField": "late_binding_calls",
+      "textField": "contract",
+      "displayTone": "draft",
+      "description": "Method calls or property accesses against a `Variant` or `Object` reference — `Set obj = CreateObject(...)` followed by `obj.SomeMethod(...)` or `obj.SomeProp`. The compiler doesn't see the call shape; the VB6 runtime dispatches via IDispatch::Invoke. Highest-risk class of claim — SME attention recommended. Maps to typed C# only after the COM type is identified (often co-located with a comInteropContract claim).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "subject", "kind": "string", "required": true, "doc": "The Variant/Object identifier the call dispatches against (e.g. 'objExcel', 'rsCustomers')." },
+        { "name": "member_called", "kind": "string", "required": true, "doc": "The unresolved member name (e.g. 'Workbooks.Open', 'MoveNext', 'Value')." },
+        { "name": "argument_shape", "kind": "string", "required": false, "doc": "Plain-English summary of the args passed (e.g. 'a file path string and a read-only flag')." },
+        { "name": "contract", "kind": "string", "required": true, "doc": "What the SME expects this call to do at runtime — including the assumed COM type." },
+        { "name": "related_com_id", "kind": "string", "required": false, "doc": "Reference to the comInteropContract claim id (e.g. 'CI-2') that identifies the COM type the SME thinks this dispatch hits. Empty when no comInteropContract has been raised yet — surface as Open Question." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: file I/O (`Open ... For Output`), DAO/ADO writes (`rs.Update`, `cnn.Execute`), registry writes (`SaveSetting`), Windows API calls (`Declare Sub` invocations), event emissions (`RaiseEvent`), UI mutations.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure-mode conditions the routine handles (or is silent about). VB6-specific edges: Variant type coercion (`\"5\" + 3` = 8 vs `\"5\" & 3` = '53'), Empty vs Null vs Missing semantics, recordset EOF/BOF positioning, `Dim x` initial-state assumptions, ANSI vs Unicode at the COM boundary, integer overflow at 32767 / 2147483647 with implicit Long promotion.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim Hypothesis-style generator hints (per ADR-030). Same shape as on other schemas. The Variant generator (Phase 10.0.g) targets the coercion boundary specifically." }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities the source does not resolve and the SME must answer before sign-off. Common VB6 cases: late-bound dispatch with no Tools → References hint, default-property access where the implied member is contextual, Variant of unclear runtime type, On Error Resume Next blocks where the SME may or may not have intended to swallow specific Err.Number values, COM ProgIDs the customer must verify exist in the target environment.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_module", "kind": "string", "required": false, "doc": "VB6 module / class / form name from `Attribute VB_Name = \"Foo\"` (e.g. 'frmOrderEntry', 'modOrders', 'clsCustomer')." },
+    { "name": "target_archetype_hint", "kind": "enum:WinForms|BlazorServer|MinimalApi", "required": false, "doc": "Per ADR-036, the target paradigm the spec was extracted for. Affects how event_handler_contract claims translate. Picked at the corpus level during Discovery." },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "byref", "byval", "out", "optional", "paramarray", "return"],
+    "directionDescription": "VB6 parameter mode. `byval` = pass by value (explicit `ByVal`), `byref` = pass by reference (default in VB6, explicit `ByRef`), `optional` = `Optional` keyword with optional default value, `paramarray` = `ParamArray xs() As Variant` variadic tail, `return` = the Function's return value. `in` and `out` are not first-class VB6 modes but are accepted as semantic aliases for byval / byref+out parameters."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "onErrorHandler",
+      "comInteropContract",
+      "eventHandlerContract",
+      "defaultPropertyUsage",
+      "lateBindingCall",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "onErrorHandler": 0,
+      "comInteropContract": 0,
+      "eventHandlerContract": 0,
+      "defaultPropertyUsage": 0,
+      "lateBindingCall": 0,
+      "sideEffect": 0,
+      "edgeCase": 0,
+      "openQuestion": 0
+    },
+    "emphasis": "Surface every CreateObject / GetObject call site as a comInteropContract claim — naming the ProgID and the exact methods called. Pair each late-bound dispatch (Variant or Object subject) with a lateBindingCall claim that references the comInteropContract id when one exists, or an Open Question when it doesn't. Flag every On Error Resume Next block; default to assuming the SME did NOT intend to silently swallow Err.Number 6 (overflow) or 11 (div-by-zero) and raise an Open Question. For `rs!FieldName` and `rs(\"col\")` patterns, raise a defaultPropertyUsage claim that names the implied COM member. Cite line ranges aggressively — VB6 line continuations (`_` at end of line) are handled by the production parser, not the v0 tokenizer, so cite the physical line ranges as written.",
+    "comProgIdRegistryRef": "Llm/Prompts/vb6/com-progid-registry.json (per ADR-036; ships with 10.0.c)"
+  },
+  "owner": "Nous · VB6 migration accelerator",
+  "calibratedAgainst": ["VB6 Inventory Sample (Nous-authored seed)", "Rubberduck VBA grammar test corpus (github.com/rubberduck-vba)"]
+}
