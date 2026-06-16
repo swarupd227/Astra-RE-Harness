@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.OrderTotals</RootNamespace>
+    <AssemblyName>Demo.OrderTotals</AssemblyName>
+    <Description>
+      Reference .NET 10 / minimal API scaffold for code-only VB6 sub-corpora, generated
+      from a signed VB6 spec (spec/v1, schemaId=vb6, target_archetype_hint=MinimalApi).
+      Routines become typed minimal API endpoints registered in Program.cs; DAO/ADO
+      use becomes EF Core 10 queries (Dapper for high-throughput batches). Targets
+      pure net10.0 — deployable as Linux containers, no Windows-specific bundle.
+      Every public surface carries a [SpecClaim(...)] attribute citing the signed
+      claim id so the scaffold ties back to the spec.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+  </ItemGroup>
+</Project>

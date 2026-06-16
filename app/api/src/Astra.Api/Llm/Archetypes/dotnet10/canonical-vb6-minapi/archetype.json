@@ -1,0 +1,29 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-vb6-minapi",
+  "targetStack": "dotnet10",
+  "displayName": "VB6 code-only modules → .NET 10 / minimal API + xUnit",
+  "description": "Reference VB6→.NET-10 scaffold for headless VB6 sub-corpora: .bas standard modules, .cls service classes, scheduled batch jobs, COM components consumed by other code. Routines become minimal API endpoints (MapPost), IHostedService background workers, or library methods. DAO/ADO recordset walks become EF Core 10 queries (or Dapper for high-throughput batches); late-bound COM calls become explicit managed dependencies. Targets pure net10.0 — no Windows-specific bundle, deployable as Linux containers. Per ADR-036 this is the simplest of the three archetypes (no UI, no forms, no COM threading concerns) and ships second in 10.0.d's sequencing. Picked during Discovery for code-only sub-corpora the customer flagged as headless.",
+  "compatibleSchemas": ["vb6"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "modOrders.UpdateOrderTotal" },
+      { "subroutineName": "modPricing.ApplyDiscount" },
+      { "subroutineName": "modPricing.FormatLineLabel" },
+      { "subroutineName": "modReports.ExportInvoiceToExcel" },
+      { "subroutineName": "modAudit.LogEvent" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'MinimalApi', regardless of routine name. Code-only sub-corpora flagged during Discovery as headless route here."
+  },
+  "owner": "Nous · VB6 migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.OrderTotals.csproj",            "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.OrderTotals.Tests.csproj","language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",          "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                     "language": "csharp", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/OrderTotalsService.cs",          "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","DP-1","DP-2","LB-1","SE-1","EC-1"] },
+    { "path": "src/OrderRepository.cs",             "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1"] },
+    { "path": "tests/OrderTotalsServiceTests.cs",   "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1"] }
+  ]
+}
