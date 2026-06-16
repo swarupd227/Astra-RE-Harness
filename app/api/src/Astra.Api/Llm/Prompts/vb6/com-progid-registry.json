@@ -1,0 +1,106 @@
+{
+  "$schema": "https://nous.dev/schemas/re-harness/com-progid-registry/v1.json",
+  "schemaId": "vb6",
+  "version": "1.0",
+  "description": "Curated mapping of common VB6-era COM ProgIDs to modern .NET 10 replacements. Shipped as in-prompt context for the vb6 extraction prompts (vb6/dotnet10-winforms, -blazor, -minapi). The replacement_hint for each entry varies by target paradigm — the prompts pick the matching line at extraction time.",
+  "owner": "Nous · VB6 migration accelerator",
+  "entries": [
+    {
+      "progIds": ["Excel.Application", "Excel.Application.16"],
+      "category": "office",
+      "winforms": "Microsoft.Office.Interop.Excel (legacy interop) for active Excel UI scenarios; ClosedXML 0.105+ for headless workbook authoring.",
+      "blazor": "ClosedXML 0.105+ exclusively. Excel Interop requires user-interactive STA threads; not viable in Blazor Server.",
+      "minapi": "ClosedXML 0.105+. Excel Interop is not viable in a headless service.",
+      "notes": "ClosedXML produces .xlsx (Open XML); legacy .xls output is possible but rare. Confirm target file format during Discovery."
+    },
+    {
+      "progIds": ["Word.Application", "Word.Application.16"],
+      "category": "office",
+      "winforms": "DocX (xceedsoftware/DocX) for headless docx authoring; Microsoft.Office.Interop.Word for active Word UI.",
+      "blazor": "DocX or Open XML SDK exclusively.",
+      "minapi": "DocX or Open XML SDK exclusively.",
+      "notes": "DocX has the smaller API surface; Open XML SDK is the closer-to-the-metal option."
+    },
+    {
+      "progIds": ["Outlook.Application", "Outlook.Application.16", "MAPI.Session"],
+      "category": "office",
+      "winforms": "Microsoft.Graph (REST) for cloud-mailbox scenarios; MailKit for SMTP/IMAP if on-prem.",
+      "blazor": "Microsoft.Graph (REST). MailKit for SMTP/IMAP if on-prem.",
+      "minapi": "Microsoft.Graph (REST) or MailKit. Outlook Interop is not viable headless.",
+      "notes": "Microsoft.Graph is the modern path for hosted Exchange / Microsoft 365. MailKit covers raw SMTP/IMAP."
+    },
+    {
+      "progIds": ["ADODB.Connection", "ADODB.Recordset", "ADODB.Command"],
+      "category": "data",
+      "winforms": "EF Core 10 with the appropriate provider (Microsoft.EntityFrameworkCore.SqlServer, .Sqlite, .Jet, etc.).",
+      "blazor": "EF Core 10 with DbContext per scope. Scoped DbContext registration via AddDbContextFactory.",
+      "minapi": "EF Core 10 for typed access; Dapper for high-throughput batch routines.",
+      "notes": "EF Core 10 includes a Jet/.mdb provider via Microsoft.EntityFrameworkCore.Jet for legacy MDB compatibility."
+    },
+    {
+      "progIds": ["DAO.DBEngine.36", "DAO.DBEngine.120"],
+      "category": "data",
+      "winforms": "EF Core 10 with Microsoft.EntityFrameworkCore.Jet provider for .mdb compatibility.",
+      "blazor": "Same as WinForms.",
+      "minapi": "Same as WinForms.",
+      "notes": "DAO 3.6 is the most common; DAO 12.0 ships with Access 2007+. Both target .mdb / .accdb."
+    },
+    {
+      "progIds": ["Scripting.FileSystemObject", "Scripting.Dictionary"],
+      "category": "system",
+      "winforms": "FileSystemObject → System.IO (File, Directory, Path); Dictionary → System.Collections.Generic.Dictionary<string, object>.",
+      "blazor": "Same as WinForms.",
+      "minapi": "Same as WinForms.",
+      "notes": "Direct 1:1 mapping; no licensing or behavioural risk."
+    },
+    {
+      "progIds": ["WScript.Shell", "Shell.Application"],
+      "category": "system",
+      "winforms": "Process.Start for command execution; SHGetSpecialFolderPath equivalents in System.Environment.GetFolderPath.",
+      "blazor": "Process.Start in an IHostedService context; flag any UI-spawning calls as Open Question (no user session on the server).",
+      "minapi": "Process.Start in an IHostedService. SendKeys-style automation is out of scope.",
+      "notes": "WScript.Shell's RegRead / RegWrite map to Microsoft.Win32.Registry (Windows only)."
+    },
+    {
+      "progIds": ["MSXML2.XMLHTTP", "MSXML2.ServerXMLHTTP", "WinHttp.WinHttpRequest.5.1"],
+      "category": "network",
+      "winforms": "HttpClient (System.Net.Http) with IHttpClientFactory dependency injection.",
+      "blazor": "HttpClient with IHttpClientFactory.",
+      "minapi": "HttpClient with IHttpClientFactory.",
+      "notes": "Strong move toward async/await; legacy synchronous calls become await client.GetAsync(...)."
+    },
+    {
+      "progIds": ["MSXML2.DOMDocument", "MSXML2.DOMDocument.6.0"],
+      "category": "format",
+      "winforms": "System.Xml.Linq (XDocument) for LINQ-friendly access; System.Xml.XmlDocument for closer-to-DOM porting.",
+      "blazor": "Same as WinForms.",
+      "minapi": "Same as WinForms.",
+      "notes": "XDocument is the modern choice. XmlDocument is closer to the legacy DOM shape."
+    },
+    {
+      "progIds": ["ADODB.Stream"],
+      "category": "data",
+      "winforms": "System.IO.MemoryStream for in-memory; System.IO.FileStream for file.",
+      "blazor": "Same as WinForms.",
+      "minapi": "Same as WinForms.",
+      "notes": "ADODB.Stream's text-vs-binary mode maps to encoding choice on StreamReader/StreamWriter."
+    },
+    {
+      "progIds": ["CDO.Message", "CDO.Configuration"],
+      "category": "office",
+      "winforms": "MailKit (SMTP).",
+      "blazor": "MailKit.",
+      "minapi": "MailKit.",
+      "notes": "CDO is the legacy Collaboration Data Objects API; MailKit is the modern SMTP client. System.Net.Mail.SmtpClient is now obsolete."
+    },
+    {
+      "progIds": ["Internet Explorer.Application", "InternetExplorer.Application"],
+      "category": "browser",
+      "winforms": "Playwright for .NET (PlaywrightSharp) for headless browser scenarios; WebView2 for embedded.",
+      "blazor": "Playwright for .NET headless. WebView2 is not viable server-side.",
+      "minapi": "Playwright for .NET headless.",
+      "notes": "Internet Explorer is end-of-life. Any IE-COM use is a flag for an architectural rethink — Open Question with the SME."
+    }
+  ],
+  "fallback_guidance": "When a ProgID does not appear in this registry, the LLM must emit an open_questions entry naming the ProgID and asking the SME to provide a modern equivalent during Discovery. Do NOT guess — fabricated replacement_hints have caused real production drift on prior engagements."
+}
