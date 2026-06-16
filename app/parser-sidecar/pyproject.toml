@@ -9,6 +9,11 @@ dependencies = [
     "protobuf>=5.27.0",
     # Phase C: real Fortran parsing
     "fparser>=0.1.4",
+    # Phase 10.0.a — VB6 production parser per ADR-035. Runtime for the
+    # ANTLR4-generated lexer/parser modules; grammar is vendored at
+    # container build time, generated stubs land in
+    # parser_sidecar/vb6_antlr_gen/.
+    "antlr4-python3-runtime>=4.13.0",
 ]
 
 [project.optional-dependencies]

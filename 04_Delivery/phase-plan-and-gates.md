@@ -170,6 +170,40 @@ This document is the operational schedule. Each phase has a target date, a hard 
 
 ---
 
+## Phase 10.0 · VB6 source language · weeks 1–10 (post-Phase-9 expansion)
+
+**Status:** Plan kicked off 2026-06-14. See `phase-10.0-vb6-source-language.md` for the full sub-phase breakdown and ADR-035 / 036 / 037 for the architecture decisions.
+
+**Hard gate (Δ-10.0):**
+
+- [ ] `vb6-parser-sidecar` returns AST + call-graph for all 12 forms of the seed corpus in < 5s.
+- [ ] `.frm` parser correctly extracts both code-block + property-bag for every form.
+- [ ] `vb6.schema.json` validates against ≥ 6 hand-authored example specs covering each new claim kind.
+- [ ] Mock provider extracts a spec for `OrderEntry_Submit` matching the canonical reference.
+- [ ] Real Anthropic provider achieves ≥ 80% claim coverage on the Golden Dataset.
+- [ ] All three .NET 10 scaffold archetypes (WinForms / Blazor / minimal API) build and run `dotnet test` green.
+- [ ] `vb6-sidecar` compiles + runs the seed corpus's `OrderEntry_Submit` against the .NET 10 candidate; outputs match byte-for-byte on a fixed input set.
+- [ ] Property-based test generates ≥ 100 inputs per invariant; ≥ 95% pass.
+- [ ] VB6 Inventory Sample seeded in DEV; `/projects` shows it alongside MINPACK / LAPACK / Indy / fmt.
+- [ ] Language picker on the New Corpus page lists VB6 as a fifth schema choice.
+
+**Soft gate:**
+
+- [ ] ADR-035 / 036 / 037 merged.
+- [ ] Demo video (~2 min) recorded for the OrderEntry walkthrough.
+- [ ] Phase 9.2.c help-banner copy added for VB6 (one block per target paradigm).
+
+**Fallback if hard gate slips:**
+
+- Demoable MVP path: skip 10.0.f (equivalence sidecar) and 10.0.g (property generators). Rely on Gates 1, 2, and shadow-mode Gate 4 only. Cuts ~5 weeks. Equivalence sidecar lands in follow-on 10.0.j.
+- If Windows container infrastructure slips: Wine-based dev-tier sidecar covers most non-COM routines. Document the production-confirmed badge on every signed spec validated against Wine only.
+
+**Sequencing:** 10.0.a (parser) → 10.0.b (schema) → 10.0.c (prompts) → 10.0.d (archetypes, sub-staged WinForms → minimal API → Blazor) → 10.0.e (Golden Dataset) → 10.0.f (equivalence sidecar) → 10.0.g (property generators) → 10.0.h (seed corpus) → 10.0.i (E2E demo).
+
+**Owner:** Platform team. **Sign-off:** Eng lead + PM + first customer engagement lead.
+
+---
+
 ## Cadence rituals
 
 | Ritual | Cadence | Format |

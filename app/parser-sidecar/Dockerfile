@@ -44,7 +44,25 @@ RUN pip install --no-cache-dir \
         # Phase 9.4.b — C++ production parser per ADR-028. The PyPI libclang
         # package bundles its own native libclang.so so we don't need apt's
         # libclang-15-dev (which would add ~120 MB to the image).
-        "libclang==18.1.1"
+        "libclang==18.1.1" \
+        # Phase 10.0.a — VB6 production parser per ADR-035. Runtime for the
+        # ANTLR4-generated lexer + parser modules. The 4.13.x runtime
+        # matches the version used to generate the grammar stubs.
+        "antlr4-python3-runtime==4.13.2"
+
+# Phase 10.0.a.2 — vendor Rubberduck VBA's VisualBasic6.g4 grammar and
+# generate Python lexer + parser stubs. Until this step runs (10.0.a.2),
+# parser_sidecar/vb6_parser_antlr.py raises ImportError on first call and
+# the dispatcher falls back to vb6_parser.py (v0). This stays commented
+# out in v0 so the image builds without the antlr4 JAR; uncomment when
+# the grammar lands.
+#
+# RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+#  && curl -fsSL https://www.antlr.org/download/antlr-4.13.2-complete.jar -o /opt/antlr4.jar \
+#  && curl -fsSL https://raw.githubusercontent.com/rubberduck-vba/Rubberduck/next/Rubberduck.Parsing/Grammar/VisualBasic6.g4 \
+#       -o /tmp/VisualBasic6.g4 \
+#  && java -jar /opt/antlr4.jar -Dlanguage=Python3 -o parser_sidecar/vb6_antlr_gen /tmp/VisualBasic6.g4 \
+#  && apt-get purge -y openjdk-17-jre-headless && rm -rf /var/lib/apt/lists/* /opt/antlr4.jar
 
 # Fetch + install Isopod/tree-sitter-pascal v0.10.2. It builds a small native
 # extension (~100 KB after strip) that exposes a single `language()` callable.

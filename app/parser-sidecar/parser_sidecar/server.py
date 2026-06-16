@@ -29,6 +29,7 @@ from parser_sidecar.fortran_parser import parse_source as _fortran_parse
 from parser_sidecar.cobol_parser import parse_source as _cobol_parse
 from parser_sidecar.delphi_parser import parse_source as _delphi_parse_v0
 from parser_sidecar.cpp_parser import parse_source as _cpp_parse_v0
+from parser_sidecar.vb6_parser import parse_source as _vb6_parse_v0
 
 # Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
 # Imported lazily so a missing/broken grammar binding doesn't take the
@@ -38,6 +39,9 @@ _delphi_parse_ts: "any | None" = None
 # Phase 9.4.b — production C++ parser (libclang per ADR-028). Same
 # lazy-import + v0-fallback shape.
 _cpp_parse_libclang: "any | None" = None
+# Phase 10.0.a — production VB6 parser (ANTLR4 per ADR-035). Same
+# lazy-import + v0-fallback shape; the ANTLR4 grammar lands in 10.0.a.2.
+_vb6_parse_antlr: "any | None" = None
 
 
 def _delphi_parse(filename: str, content: str):
@@ -62,6 +66,29 @@ def _delphi_parse(filename: str, content: str):
             outcome.warnings.append(f"tree-sitter-pascal panic: {e}; v0 fallback")
             return outcome
     return _delphi_parse_v0(filename=filename, content=content)
+
+
+def _vb6_parse(filename: str, content: str):
+    """Dispatch: prefer the ANTLR4 production parser; fall through to the
+    v0 tokenizer on grammar absence or panic. Same fallback-on-warnings
+    shape as the Delphi and C++ dispatchers."""
+    global _vb6_parse_antlr
+    if _vb6_parse_antlr is None:
+        try:
+            from parser_sidecar.vb6_parser_antlr import parse_source as _a
+            _vb6_parse_antlr = _a
+        except Exception as e:  # noqa: BLE001 — ANTLR4 import surface is broad
+            log.info("vb6 ANTLR4 grammar unavailable (%s); using v0 tokenizer", e)
+            _vb6_parse_antlr = False
+    if _vb6_parse_antlr:
+        try:
+            return _vb6_parse_antlr(filename=filename, content=content)
+        except Exception as e:  # noqa: BLE001 — grammar panics surface broadly
+            log.info("vb6 ANTLR4 panic on %s (%s); v0 fallback", filename, e)
+            outcome = _vb6_parse_v0(filename=filename, content=content)
+            outcome.warnings.append(f"vb6 ANTLR4 panic: {e}; v0 fallback")
+            return outcome
+    return _vb6_parse_v0(filename=filename, content=content)
 
 
 def _cpp_parse(filename: str, content: str):
@@ -127,8 +154,9 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         is_cobol = _looks_like_cobol(filename)
         is_delphi = (not is_cobol) and _looks_like_delphi(filename)
         is_cpp = (not is_cobol) and (not is_delphi) and _looks_like_cpp(filename)
+        is_vb6 = (not is_cobol) and (not is_delphi) and (not is_cpp) and _looks_like_vb6(filename)
         # fparser2 is the only parser that needs the process-wide lock
-        # (global SymbolTable singleton); the COBOL / Delphi / C++ paths
+        # (global SymbolTable singleton); the COBOL / Delphi / C++ / VB6 paths
         # are purely local. We acquire the lock only for the Fortran path.
         if is_cobol:
             cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
@@ -151,6 +179,13 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             outcome_warnings = cpp_outcome.warnings
             outcome_filename = cpp_outcome.filename
             language = "cpp"
+        elif is_vb6:
+            vb6_outcome = _vb6_parse(filename=filename, content=request.content or "")
+            outcome_line_count = vb6_outcome.line_count
+            outcome_subroutines = vb6_outcome.subroutines
+            outcome_warnings = vb6_outcome.warnings
+            outcome_filename = vb6_outcome.filename
+            language = "vb6"
         else:
             with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
@@ -214,6 +249,21 @@ def _looks_like_delphi(filename: str) -> bool:
         return False
     lower = filename.lower()
     return lower.endswith((".pas", ".dpr", ".dpk", ".inc"))
+
+
+def _looks_like_vb6(filename: str) -> bool:
+    """Return True when the file path's extension marks it as VB6 source.
+
+    Phase 10.0.a: .bas (modules), .cls (class modules), .frm (forms +
+    code-behind). `.vbp` (project file) and `.vbg` (group file) are
+    metadata, not source — they're consumed by the IngestPipeline, not
+    the parser. `.ctl` (user controls) is treated like `.frm` (same
+    property-bag + code shape).
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".bas", ".cls", ".frm", ".ctl"))
 
 
 def _looks_like_cpp(filename: str) -> bool:
