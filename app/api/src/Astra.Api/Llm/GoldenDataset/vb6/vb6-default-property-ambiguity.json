@@ -1,0 +1,44 @@
+{
+  "entryId": "vb6-default-property-ambiguity",
+  "schemaId": "vb6",
+  "title": "Set x = rs(\"Name\") binds x to the Field object; x = rs(\"Name\") reads the default-property Value. Two characters of source change the semantic",
+  "trapCategory": "syntax/default-property",
+  "difficulty": "hard",
+  "sourcePath": "vb6/snippets/default_property_set.bas",
+  "sourceLines": "1-25",
+  "sourceContent": "Attribute VB_Name = \"modCustomers\"\nOption Explicit\n\n' Two read paths that look almost identical but have different semantics.\n' DefaultRead returns the Variant value (string contents of the Name field).\n' SetRead returns a Field object reference whose downstream behaviour is\n' UPDATE-tracked: assigning to fld.Value changes the row.\n'\n' Migration tools that translate both to `var x = rs.Fields[\"Name\"];` lose\n' the SET vs implicit distinction silently — the customer's bug surfaces\n' only when the SetRead path is updated and re-saved.\n\nPublic Function DefaultRead(rs As DAO.Recordset) As String\n    Dim x As Variant\n    x = rs(\"Name\")              ' x is the .Value (a String here)\n    DefaultRead = CStr(x)\nEnd Function\n\nPublic Function SetRead(rs As DAO.Recordset) As DAO.Field\n    Dim fld As DAO.Field\n    Set fld = rs(\"Name\")        ' fld is the Field object reference\n    Set SetRead = fld\nEnd Function\n",
+  "expectedClaims": [
+    {
+      "kind": "default_property_usage",
+      "id": "DP-DEFPROP-1",
+      "pattern": "(?i)(rs\\(.Name.\\)|Fields\\(.Name.\\)\\.Value|default.*property|implicit.*Value)"
+    },
+    {
+      "kind": "default_property_usage",
+      "id": "DP-DEFPROP-2",
+      "pattern": "(?i)(Set.*=.*rs\\(|Field object|.Fields\\(.Name.\\)|reference.*field|live.*recordset)"
+    },
+    {
+      "kind": "late_binding_call",
+      "id": "LB-DEFPROP-1",
+      "pattern": "(?i)(rs\\(.*\\)|DAO\\.Field|IDispatch|late[- ]bound|Variant.*dispatch)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-DEFPROP-1",
+      "pattern": "(?i)(intended|distinguish|update.*track|live.*ref|.Fields\\[.+\\]\\.Value|both.*paths)"
+    },
+    {
+      "kind": "com_interop_contract",
+      "id": "CI-DEFPROP-1",
+      "pattern": "(?i)(DAO\\.Recordset|DAO\\.Field|EF Core|EntityFramework|JET|Microsoft\\.Office\\.Access|Dapper)"
+    }
+  ],
+  "canonicalInputs": [
+    { "fn": "DefaultRead", "rs.Fields.Name.Value": "ACME", "expected": "ACME",
+      "rationale": "Implicit access reads Value; returns the String contents." },
+    { "fn": "SetRead",     "rs.Fields.Name.Value": "ACME", "expected": "<DAO.Field>",
+      "rationale": "Set binds x to the Field object; downstream code can mutate Value (and the recordset stays update-aware until rs.Update or rs.Edit/Update boundary)." }
+  ],
+  "notes": "Set vs assignment is the most-missed VB6 distinction in any LLM-only port. Bang notation (rs!Name) also dispatches to the default property AND is interchangeable with rs(\"Name\") on the read path — but SET against bang notation is rarely valid syntax. The extraction MUST emit two distinct default_property_usage claims (one per read path) and an open_question asking the SME whether the customer's downstream code relies on the Field-reference path being update-aware. Collapsing both paths into a single 'reads the Name field' claim is a calibration miss."
+}

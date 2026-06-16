@@ -1,0 +1,44 @@
+{
+  "entryId": "vb6-form-load-control-ordering",
+  "schemaId": "vb6",
+  "title": "Form_Load reads a control's designer-set Text BEFORE running its custom initialisation. The VB6 runtime guarantees this; WinForms OnLoad has the same shape but Blazor OnInitializedAsync does NOT",
+  "trapCategory": "lifecycle/ordering",
+  "difficulty": "medium",
+  "sourcePath": "vb6/snippets/form_load_ordering.frm",
+  "sourceLines": "1-32",
+  "sourceContent": "VERSION 5.00\nBegin VB.Form frmGreet\n   Caption         =   \"Greeting\"\n   ClientHeight    =   3015\n   Begin VB.TextBox txtName\n      Text            =   \"Anon\"\n      Height          =   375\n   End\n   Begin VB.Label lblHello\n      Caption         =   \"\"\n      Height          =   375\n   End\nEnd\nAttribute VB_Name = \"frmGreet\"\nAttribute VB_GlobalNameSpace = False\n\nPrivate Sub Form_Load()\n    ' VB6 GUARANTEE: controls are instantiated and their designer-set\n    ' properties (e.g. txtName.Text = \"Anon\") are applied BEFORE this\n    ' handler runs. The reads on the next two lines are safe.\n    Dim defaultName As String\n    defaultName = txtName.Text          ' Reads \"Anon\" — the designer default\n    lblHello.Caption = \"Hello, \" & defaultName\nEnd Sub\n\nPrivate Sub txtName_Change()\n    lblHello.Caption = \"Hello, \" & txtName.Text\nEnd Sub\n",
+  "expectedClaims": [
+    {
+      "kind": "event_handler_contract",
+      "id": "EH-LOAD-1",
+      "pattern": "(?i)(Form_Load|after.*controls.*initial|designer.*property|before.*visible|OnLoad|OnInitialized)"
+    },
+    {
+      "kind": "event_handler_contract",
+      "id": "EH-LOAD-2",
+      "pattern": "(?i)(txtName_Change|Change.*event|every.*keystroke|InputChanged|@bind.*event)"
+    },
+    {
+      "kind": "default_property_usage",
+      "id": "DP-LOAD-1",
+      "pattern": "(?i)(txtName\\.Text|implicit.*Text|InputText|@bind-Value)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-LOAD-1",
+      "pattern": "(?i)(Blazor|OnInitialized|DOM.*not.*ready|after.*render|paradigm.*gap|control.*lifecycle)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-LOAD-1",
+      "pattern": "(?i)(designer.*default|initial.*state|control.*populated|first.*render)"
+    }
+  ],
+  "canonicalInputs": [
+    { "scenario": "form opens with no user input",
+      "expected": "lblHello.Caption = 'Hello, Anon' (designer default propagates via Form_Load read)." },
+    { "scenario": "user types 'World' in txtName",
+      "expected": "txtName_Change fires per keystroke; lblHello.Caption updates to 'Hello, World' on the final stroke." }
+  ],
+  "notes": "Classic VB6 lifecycle assumption. WinForms preserves the semantics (OnLoad runs after handle creation, before Shown) and the WinForms archetype's translation is a 1:1 port. Blazor Server's OnInitializedAsync, however, runs BEFORE the DOM exists — reading control state there is undefined. The extraction MUST emit (a) two event_handler_contract claims (Form_Load + txtName_Change), (b) a default_property_usage claim for the implicit txtName.Text access, and (c) an open_question naming the Blazor paradigm gap. A spec that flags only Form_Load and skips the Blazor caveat is a calibration miss for the Blazor target archetype specifically."
+}

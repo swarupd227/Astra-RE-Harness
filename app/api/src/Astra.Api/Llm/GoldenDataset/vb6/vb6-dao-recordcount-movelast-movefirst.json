@@ -1,0 +1,56 @@
+{
+  "entryId": "vb6-dao-recordcount-movelast-movefirst",
+  "schemaId": "vb6",
+  "title": "DAO Recordset.RecordCount returns only the number of rows visited until a MoveLast forces a full table walk. Legacy code uses MoveLast / MoveFirst as a sentinel; modern providers don't need it",
+  "trapCategory": "data/recordset-position",
+  "difficulty": "medium",
+  "sourcePath": "vb6/snippets/dao_recordcount.bas",
+  "sourceLines": "1-22",
+  "sourceContent": "Attribute VB_Name = \"modOrderStats\"\nOption Explicit\n\n' DAO Recordset.RecordCount returns only the number of rows the cursor\n' has actually touched. To get the true count, code from the 1990s\n' issues MoveLast (to force a full walk) THEN MoveFirst (to reset).\n' On Jet / MDB this works; on ADO and EF Core this idiom is a no-op\n' AND a performance trap on large tables.\n\nPublic Function CountOrders(db As DAO.Database, customerId As Long) As Long\n    Dim rs As DAO.Recordset\n    Set rs = db.OpenRecordset(\"SELECT * FROM Orders WHERE CustomerId = \" & customerId)\n    If rs.EOF Then\n        CountOrders = 0\n    Else\n        rs.MoveLast      ' Force the cursor through every row\n        rs.MoveFirst     ' Reset for any downstream walk\n        CountOrders = rs.RecordCount\n    End If\n    rs.Close\nEnd Function\n",
+  "expectedClaims": [
+    {
+      "kind": "com_interop_contract",
+      "id": "CI-RECCOUNT-1",
+      "pattern": "(?i)(DAO\\.Database|DAO\\.Recordset|OpenRecordset|EF Core|Dapper|SELECT COUNT|managed.*provider)"
+    },
+    {
+      "kind": "late_binding_call",
+      "id": "LB-RECCOUNT-1",
+      "pattern": "(?i)(rs\\.MoveLast|rs\\.MoveFirst|rs\\.RecordCount|IDispatch|DAO.*Recordset.*member)"
+    },
+    {
+      "kind": "default_property_usage",
+      "id": "DP-RECCOUNT-1",
+      "pattern": "(?i)(RecordCount|cursor.*position|.Count.*property|rs\\..*default)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-RECCOUNT-1",
+      "pattern": "(?i)(no.*rows|EOF|empty.*recordset|zero.*count|early.*return)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-RECCOUNT-2",
+      "pattern": "(?i)(MoveLast.*walks|full.*table.*walk|performance|large.*table|cursor.*forced)"
+    },
+    {
+      "kind": "side_effect",
+      "id": "SE-RECCOUNT-1",
+      "pattern": "(?i)(OpenRecordset|.Close|DAO.*open|database.*connection)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-RECCOUNT-1",
+      "pattern": "(?i)(EF Core|COUNT\\(\\*\\)|SELECT COUNT|Dapper|managed.*equivalent|drop.*MoveLast)"
+    }
+  ],
+  "canonicalInputs": [
+    { "customerId": 1, "rows_for_customer": 0,  "expected": 0,
+      "rationale": "EOF on open; MoveLast/MoveFirst NOT executed; returns 0 directly." },
+    { "customerId": 2, "rows_for_customer": 5,  "expected": 5,
+      "rationale": "MoveLast forces a 5-row walk; RecordCount returns 5; MoveFirst resets the cursor for any caller." },
+    { "customerId": 3, "rows_for_customer": 200000, "expected": 200000,
+      "rationale": "Same logic; on a 200k-row table MoveLast walks all of them — measurable latency the modern port should NOT inherit." }
+  ],
+  "notes": "Idiom-driven trap. EF Core's CountAsync() or a SELECT COUNT(*) query is the correct .NET 10 equivalent — there's no cursor to walk and no MoveLast/MoveFirst dance to preserve. The extraction MUST emit (a) the com_interop_contract identifying DAO, (b) at least one late_binding_call covering rs.MoveLast / rs.MoveFirst, (c) a default_property_usage for RecordCount (it's a default property on the recordset surface), (d) two edge_cases (empty set + large-table perf), and (e) an open_question naming SELECT COUNT / EF Core CountAsync as the modern replacement. A spec that translates MoveLast / MoveFirst literally to EF Core is the worst calibration miss for this trap."
+}

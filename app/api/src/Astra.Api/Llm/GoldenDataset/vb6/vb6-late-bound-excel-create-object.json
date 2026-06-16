@@ -1,0 +1,46 @@
+{
+  "entryId": "vb6-late-bound-excel-create-object",
+  "schemaId": "vb6",
+  "title": "Late-bound CreateObject(\"Excel.Application\") with subsequent IDispatch calls; no Tools→References binding, no type info, no compile-time member check",
+  "trapCategory": "com/late-binding",
+  "difficulty": "medium",
+  "sourcePath": "vb6/snippets/excel_late_bound.bas",
+  "sourceLines": "1-23",
+  "sourceContent": "Attribute VB_Name = \"modExportXls\"\nOption Explicit\n\n' Late-bound CreateObject — works without Tools → References to the\n' Excel type library. Every method call dispatches via IDispatch::Invoke.\n' If Excel isn't installed the CreateObject line raises Err 429.\n' If the method name is misspelled the failure surfaces only at runtime.\n\nPublic Function WriteSingleCell(targetPath As String, val As Variant) As Boolean\n    On Error Goto NoExcel\n    Dim app As Object       ' Variant/Object — late bound\n    Dim book As Object\n    Set app = CreateObject(\"Excel.Application\")\n    app.Visible = False\n    Set book = app.Workbooks.Add\n    book.Worksheets(1).Cells(1, 1).Value = val\n    book.SaveAs targetPath\n    book.Close\n    app.Quit\n    WriteSingleCell = True\n    Exit Function\nNoExcel:\n    WriteSingleCell = False\nEnd Function\n",
+  "expectedClaims": [
+    {
+      "kind": "com_interop_contract",
+      "id": "CI-EXCEL-1",
+      "pattern": "(?i)(Excel\\.Application|CreateObject|LateBound|Workbooks|Cells|SaveAs|Quit|ClosedXML|managed.*alternative)"
+    },
+    {
+      "kind": "late_binding_call",
+      "id": "LB-EXCEL-1",
+      "pattern": "(?i)(app\\.|book\\.|Workbooks\\.Add|Cells\\(.*\\)\\.Value|IDispatch|late.*bound|Variant.*dispatch|Object.*method)"
+    },
+    {
+      "kind": "on_error_handler",
+      "id": "OE-EXCEL-1",
+      "pattern": "(?i)(Goto NoExcel|429|ActiveX.*component|component.*not.*found|missing.*excel)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-EXCEL-1",
+      "pattern": "(?i)(installed|server|threading|STA|managed.*equivalent|ClosedXML|customer.*environment)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-EXCEL-1",
+      "pattern": "(?i)(429|ActiveX.*can.{0,5}t.*create|Excel.*not.*installed|missing|False.*return)"
+    }
+  ],
+  "canonicalInputs": [
+    { "targetPath": "C:\\Temp\\Out.xls", "val": "hello",
+      "expected": "True (Excel installed) — workbook written with A1='hello'." },
+    { "targetPath": "C:\\Temp\\Out.xls", "val": 42,
+      "expected": "True — A1=42 as a number." },
+    { "targetPath": "C:\\Temp\\Out.xls", "val": "<no-excel>",
+      "expected": "False — Err 429 caught by NoExcel handler; no file written." }
+  ],
+  "notes": "Canonical late-bound COM scenario. The extraction MUST emit (a) a com_interop_contract claim naming the Excel.Application ProgID and listing every method called (Visible, Workbooks.Add, Cells, SaveAs, Close, Quit), (b) at least one late_binding_call claim explicitly noting that the calls dispatch via IDispatch (no compile-time type-check), (c) the OE-1 claim for the 429 handler, and (d) an open_question asking whether the target environment will have Excel installed at all and what the managed replacement should be (ClosedXML on the suggested-managed-alternative line). Treating the routine as a plain function call without flagging the COM dependency is the worst calibration miss in the whole dataset."
+}

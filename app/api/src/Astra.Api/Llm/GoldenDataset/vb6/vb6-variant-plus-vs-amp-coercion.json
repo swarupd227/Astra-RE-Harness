@@ -1,0 +1,48 @@
+{
+  "entryId": "vb6-variant-plus-vs-amp-coercion",
+  "schemaId": "vb6",
+  "title": "Variant + treats a numeric string as a number; & treats it as a string. Same expression returns 8 or '53' depending on the operator",
+  "trapCategory": "type/coercion",
+  "difficulty": "hard",
+  "sourcePath": "vb6/snippets/variant_coerce.bas",
+  "sourceLines": "1-19",
+  "sourceContent": "Attribute VB_Name = \"modPricing\"\nOption Explicit\n\n' Demonstrates the classic VB6 Variant-operator trap.\n' AddV(\"5\", 3) returns the Variant 8  (numeric add — + coerces String→Long).\n' CatV(\"5\", 3) returns the String  \"53\" (string concat — & coerces Long→String).\n' The C# port that uses + with mixed types will silently produce different output.\n\nPublic Function AddV(ByVal a As Variant, ByVal b As Variant) As Variant\n    AddV = a + b\nEnd Function\n\nPublic Function CatV(ByVal a As Variant, ByVal b As Variant) As Variant\n    CatV = a & b\nEnd Function\n",
+  "expectedClaims": [
+    {
+      "kind": "invariant",
+      "id": "INV-COERCE-1",
+      "pattern": "(?i)(\\+ .*(numeric|add|coerc.*Long)|.* \\+ .*number|adv.*adds)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-COERCE-2",
+      "pattern": "(?i)(\\& .*(string|concat|coerc.*String)|cat.*concat|.*\\&.*string)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-COERCE-1",
+      "pattern": "(?i)(\"5\".*\\+.*3.*8|coerc.*number|implicit.*conversion|silent.*drift|naive.*port)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-COERCE-2",
+      "pattern": "(?i)(\"5\".*\\&.*3.*53|concat.*string|\\& .*type|csharp.*\\+.*differ)"
+    },
+    {
+      "kind": "default_property_usage",
+      "id": "DP-COERCE-1",
+      "pattern": "(?i)(Variant.*Value|implicit.*CStr|ToString|culture|format.*provider)"
+    }
+  ],
+  "canonicalInputs": [
+    { "fn": "AddV", "a": "5", "b": 3, "expected": 8,
+      "rationale": "+ on String 5 + Long 3 coerces String→Long via Variant arithmetic." },
+    { "fn": "CatV", "a": "5", "b": 3, "expected": "53",
+      "rationale": "& on String 5 + Long 3 coerces Long→String via concatenation." },
+    { "fn": "AddV", "a": 5, "b": "3", "expected": 8,
+      "rationale": "+ commutative under the same coercion rule." },
+    { "fn": "AddV", "a": "abc", "b": 3, "expected": "Err 13 (type mismatch)",
+      "rationale": "+ fails to coerce 'abc' to Long; behaviour is documented but rarely tested." }
+  ],
+  "notes": "Top-of-list silent-drift trap for any LLM-only port. The C# `+` operator on `object + int` will not produce 8 for the String '5' — it will throw or concatenate via `ToString`, depending on operand order. The extraction MUST emit (a) both INV claims naming the operator behaviour, (b) edge_case claims pinning the canonical examples '5'+3=8 and '5'&3='53', and (c) a default_property_usage claim explaining the implicit Variant.Value coercion on the & path. Missing the operator-vs-operand distinction is a calibration miss."
+}

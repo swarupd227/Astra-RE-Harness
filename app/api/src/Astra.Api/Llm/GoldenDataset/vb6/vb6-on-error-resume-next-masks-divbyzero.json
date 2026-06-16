@@ -1,0 +1,34 @@
+{
+  "entryId": "vb6-on-error-resume-next-masks-divbyzero",
+  "schemaId": "vb6",
+  "title": "On Error Resume Next silently swallows a div-by-zero and propagates an unchanged accumulator",
+  "trapCategory": "error/swallow",
+  "difficulty": "medium",
+  "sourcePath": "vb6/snippets/avg_resume_next.bas",
+  "sourceLines": "1-15",
+  "sourceContent": "Attribute VB_Name = \"modStats\"\nOption Explicit\n\n' Computes the average of values where the denominator is divisor.\n' On Error Resume Next intentionally swallows division-by-zero —\n' but ALSO silently swallows overflow, type-mismatch, and every\n' other Err.Number. That is the trap.\nPublic Function SafeAverage(total As Currency, divisor As Long) As Currency\n    Dim result As Currency\n    On Error Resume Next\n    result = total / divisor    ' Err 11 (Division by zero) when divisor = 0\n    SafeAverage = result        ' result stays 0 on err; caller cannot tell\nEnd Function\n",
+  "expectedClaims": [
+    {
+      "kind": "on_error_handler",
+      "id": "OE-RESUME-1",
+      "pattern": "(?i)(Resume Next|swallow|silently|11|division[- ]by[- ]zero|err[\\.\\s]?number)"
+    },
+    {
+      "kind": "edge_case",
+      "id": "EC-RESUME-1",
+      "pattern": "(?i)(divisor.*0|divide.*0|zero.*denominator|overflow.*also.*swallow|other.*err)"
+    },
+    {
+      "kind": "open_question",
+      "id": "Q-RESUME-1",
+      "pattern": "(?i)(intend|narrow|specific.*Err|propagat|tryparse|explicit.*catch)"
+    }
+  ],
+  "canonicalInputs": [
+    { "total": 100.0, "divisor": 5,  "expected": 20.0,
+      "rationale": "Happy path; no error fires; SafeAverage = 20." },
+    { "total": 100.0, "divisor": 0,  "expected": 0.0,
+      "rationale": "Err 11 fires; Resume Next leaves `result` at its initial 0; SafeAverage returns 0 — caller cannot distinguish 'average is zero' from 'denominator was zero'." }
+  ],
+  "notes": "Canonical Resume Next masking trap. The spec extractor MUST surface (a) the OE-1 claim with mode=ResumeNext and expected_err_numbers including 11, (b) the EC-1 edge case naming the silent return of 0, and (c) the Q-1 open question asking whether NON-divbyzero errors should also be swallowed. A bare 'invariants only' extraction is a calibration miss — the trap is precisely that the source LOOKS correct but hides a behaviour decision the SME must own."
+}
