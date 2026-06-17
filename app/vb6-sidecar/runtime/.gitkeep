@@ -1,0 +1,7 @@
+# Placeholder. Per ADR-037 the customer drops vb6.exe + msvbvm60.dll +
+# oleaut32.dll + stdole2.tlb (and any per-corpus OCXs) into THIS dir at
+# deploy time. We do NOT redistribute Microsoft's VB6 runtime — see
+# the README in the parent dir for legitimate acquisition paths.
+#
+# Until populated, the vb6-sidecar /health endpoint reports
+# runtimeReady=false and /compile + /compile-and-run return HTTP 503.

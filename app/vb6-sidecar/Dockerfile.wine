@@ -1,0 +1,79 @@
+# Phase 10.0.f — vb6-sidecar dev tier per ADR-037.
+#
+# Debian + Wine fallback. Lets the Linux-first dev team work on
+# 10.0.a / 10.0.b / 10.0.c / 10.0.d / 10.0.g / 10.0.h without
+# standing up a Windows host. Covers non-COM routines reliably;
+# COM-heavy code surfaces structured "tier=wine" warnings on /run
+# results so the validator can mark Gate 3 as "skipped (dev-tier)".
+#
+# Customer still drops vb6.exe + msvbvm60.dll + oleaut32.dll +
+# stdole2.tlb into the /runtime volume at deploy time. Wine's
+# regsvr32 registers msvbvm60 at container start.
+
+FROM debian:bookworm-slim AS base
+
+WORKDIR /app
+
+# Wine 9-stable plus the 32-bit support library (vb6.exe is x86).
+RUN dpkg --add-architecture i386 \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gnupg \
+        wget \
+        python3 \
+        python3-pip \
+        python3-venv \
+        wine \
+        wine32 \
+        winbind \
+ && rm -rf /var/lib/apt/lists/*
+
+# FastAPI server deps in a venv.
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir \
+        "fastapi==0.115.5" \
+        "uvicorn[standard]==0.32.1"
+
+# Wine prefix: configured at first invocation. We seed it now so the
+# first /compile call doesn't pay the wineprefix-init latency.
+ENV WINEPREFIX=/root/.wine \
+    WINEARCH=win32 \
+    WINEDEBUG=-all
+
+RUN winecfg /v win7 || true   # initialise the prefix; the err exit is benign
+
+COPY vb6_sidecar/ vb6_sidecar/
+
+# Entrypoint script registers msvbvm60.dll (if present in /runtime) then
+# launches the server. Registration is idempotent across restarts.
+COPY <<'EOF' /app/entrypoint.sh
+#!/bin/sh
+set -e
+if [ -f /runtime/msvbvm60.dll ]; then
+    cp -f /runtime/msvbvm60.dll "$WINEPREFIX/drive_c/windows/system32/msvbvm60.dll" || true
+    wine regsvr32 /s "C:\\windows\\system32\\msvbvm60.dll" || true
+fi
+if [ -f /runtime/oleaut32.dll ]; then
+    cp -f /runtime/oleaut32.dll "$WINEPREFIX/drive_c/windows/system32/oleaut32.dll" || true
+fi
+if [ -f /runtime/stdole2.tlb ]; then
+    cp -f /runtime/stdole2.tlb "$WINEPREFIX/drive_c/windows/system32/stdole2.tlb" || true
+fi
+exec python3 -m vb6_sidecar.server
+EOF
+RUN chmod +x /app/entrypoint.sh
+
+ENV PYTHONUNBUFFERED=1 \
+    VB6_PORT=51058 \
+    VB6_WORKDIR=/var/tmp/vb6-runs \
+    VB6_RUNTIME_DIR=/runtime \
+    VB6_TIER=wine
+
+EXPOSE 51058
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+    CMD python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51058/health', timeout=2).status==200 else 1)"
+
+CMD ["/app/entrypoint.sh"]

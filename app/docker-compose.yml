@@ -176,6 +176,35 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── vb6 sidecar (Phase 10.0.f — VB6 cross-runtime equivalence) ────────
+  # Per ADR-037 the production deployment uses Dockerfile (Windows Server
+  # Core 2022 + native vb6.exe). The dev compose file ships the Wine-based
+  # fallback (Dockerfile.wine) because Linux is the dev OS. Customer drops
+  # vb6.exe + msvbvm60.dll + oleaut32.dll + stdole2.tlb into the runtime
+  # bind-mount at deploy time — we do NOT redistribute (licence).
+  vb6-sidecar:
+    build:
+      context: ./vb6-sidecar
+      dockerfile: ${VB6_DOCKERFILE:-Dockerfile.wine}
+    ports:
+      - "${VB6_PORT:-51058}:51058"
+    environment:
+      VB6_PORT: 51058
+      VB6_WORKDIR: /var/tmp/vb6-runs
+      VB6_RUNTIME_DIR: /runtime
+      VB6_TIER: ${VB6_TIER:-wine}
+    volumes:
+      # Customer-managed runtime DLL drop-point. Empty by default; the
+      # /health endpoint reports runtimeReady=false until the customer's
+      # setup script populates it.
+      - ${VB6_RUNTIME_HOST_DIR:-./vb6-sidecar/runtime}:/runtime
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51058/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── property-test sidecar (Phase 9.0.g — Hypothesis-driven 4th gate) ──
   # Reads a signed spec + caller-supplied equivalence callback URL and
   # exercises the 4th gate (falsifying-input search) per ADR-029. Budget
@@ -218,6 +247,8 @@ services:
         condition: service_started
       gpp-sidecar:
         condition: service_started
+      vb6-sidecar:
+        condition: service_started
       property-test-sidecar:
         condition: service_started
     environment:
@@ -232,6 +263,7 @@ services:
       Validation__GnucobolEndpoint: "http://gnucobol-sidecar:51054"
       Validation__FpcEndpoint: "http://fpc-sidecar:51055"
       Validation__GppEndpoint: "http://gpp-sidecar:51057"
+      Validation__Vb6Endpoint: "http://vb6-sidecar:51058"
       Validation__PropertyTestEndpoint: "http://property-test-sidecar:51056"
       # Phase 9.3.b: the property-test sidecar drives Hypothesis and posts
       # each generated input back to the API at the callback URL below.
