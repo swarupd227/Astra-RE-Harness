@@ -62,6 +62,31 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
+    // Phase 10.1.a.3 — clear any prior target-stack pick so the
+    // schema-aware auto-correct effect on SpecReviewPage is exercised.
+    // Without this the test inherits whatever the previous spec left in
+    // localStorage and silently passes even if the default is broken.
+    await page.evaluate(() => window.localStorage.removeItem('astra.targetStack'));
+  });
+
+  // Phase 10.1.a.3 — the New Corpus page's language picker must list
+  // VB6. This is the surface a real user uses to ingest a VB6 codebase;
+  // the demo proper hits the seed corpus and never goes through the
+  // picker, so we'd silently regress without this check.
+  test('VB6 appears in the language picker on /projects/new', async ({ page }) => {
+    await page.goto('/projects/new');
+    const select = page.getByTestId('corpus-schema');
+    await expect(select).toBeVisible();
+    // Wait for the schema list to populate (initial render shows only
+    // the "Auto-detect" option until the API responds).
+    await expect.poll(
+      async () => (await select.locator('option').count()) > 1,
+      { timeout: 15_000 },
+    ).toBe(true);
+    const values = await select.locator('option').evaluateAll(
+      (opts) => opts.map((o) => (o as HTMLOptionElement).value),
+    );
+    expect(values).toContain('vb6');
   });
 
   test('btnSubmit_Click extract → SME signs → engineer scaffolds → audit complete', async ({ page }) => {
@@ -159,8 +184,27 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
       await expect(page.getByTestId('evidence-block-signature')).toBeVisible({ timeout: 15_000 });
     });
 
-    await test.step('engineer generates scaffold from canonical-vb6-winforms', async () => {
+    await test.step('engineer sees auto-corrected dotnet10 default + variant indicator', async () => {
       await switchPersona(page, 'engineer');
+      // Phase 10.1.a.3 — TargetSelector should show .NET 10 as the
+      // selected card (auto-corrected from the dotnet8 fallback because
+      // VB6 has no dotnet8 archetypes). The pretty label and the
+      // variant indicator from 10.1.a.2 both live on this card.
+      await page.goto(`/subroutines/${subId}/review`);
+      const dotnet10Card = page.getByTestId('target-card-dotnet10');
+      await expect(dotnet10Card).toBeVisible({ timeout: 15_000 });
+      await expect(dotnet10Card).toContainText('.NET 10');
+      await expect(dotnet10Card).toHaveAttribute('aria-pressed', 'true');
+      // VB6 ships three production archetypes on dotnet10 so the
+      // variant indicator must render with both other paradigms named.
+      const variants = page.getByTestId('target-variants-dotnet10');
+      await expect(variants).toBeVisible();
+      await expect(variants).toContainText('WinForms');
+      await expect(variants).toContainText('Blazor');
+      await expect(variants).toContainText('Min API');
+    });
+
+    await test.step('engineer generates scaffold from canonical-vb6-winforms', async () => {
       const generate = page.getByRole('link', { name: /Generate scaffold/ });
       const openExisting = page.getByRole('link', { name: /Open scaffold/ });
       if (await generate.count()) {

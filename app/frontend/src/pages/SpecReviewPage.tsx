@@ -39,6 +39,16 @@ export function SpecReviewPage() {
   // across reloads so the demo can switch once and keep the choice; the
   // server-side guard still rejects gated stacks (e.g. java-spring) so
   // self-service .NET 8 is the only thing that actually generates today.
+  //
+  // Phase 10.1.a.3 — `dotnet8` is the wrong fallback for specs whose
+  // schema (vb6, future cobol-only stacks…) has no dotnet8 archetypes.
+  // We still init from localStorage so the user's last explicit choice
+  // wins, but track whether the value was stored so we can auto-correct
+  // when the corpus's inferred schema has no archetypes on the default.
+  const initialHadStored = useMemo(() => {
+    try { return !!localStorage.getItem('astra.targetStack'); }
+    catch { return false; }
+  }, []);
   const [targetStack, setTargetStack] = useState<string>(() => {
     try {
       return localStorage.getItem('astra.targetStack') ?? 'dotnet8';
@@ -54,6 +64,40 @@ export function SpecReviewPage() {
       /* ignore — private mode etc. */
     }
   };
+
+  // Phase 10.1.a.3 — auto-correct the default when the current stack
+  // has no archetype compatible with the spec's source schema. Only
+  // fires when the user has NOT previously made an explicit choice
+  // (initialHadStored guard) — otherwise we'd override their pick.
+  // Schema is inferred from the corpus name because SpecResponse
+  // doesn't yet carry schemaId — same heuristic as CorporaPage's
+  // language pill so the two stay in sync without a backend change.
+  const archetypes = useQuery({
+    queryKey: ['archetypes'],
+    queryFn: api.listArchetypes,
+    staleTime: 5 * 60_000,
+  });
+  useEffect(() => {
+    if (initialHadStored) return;
+    const arches = archetypes.data?.data ?? [];
+    if (arches.length === 0) return;
+    const schemaGuess = inferSchemaIdFromCorpusName(sub.data?.corpus?.name ?? '');
+    const currentHasMatch = arches.some(
+      (a) =>
+        a.targetStack === targetStack &&
+        a.status.toLowerCase().startsWith('production') &&
+        (!schemaGuess || a.compatibleSchemas.includes(schemaGuess)),
+    );
+    if (currentHasMatch) return;
+    const candidate = arches.find(
+      (a) =>
+        a.status.toLowerCase().startsWith('production') &&
+        (schemaGuess ? a.compatibleSchemas.includes(schemaGuess) : true),
+    );
+    if (candidate && candidate.targetStack !== targetStack) {
+      setTargetStack(candidate.targetStack);
+    }
+  }, [archetypes.data, sub.data, initialHadStored, targetStack]);
 
   const sections: Section[] = useMemo(() => {
     const s = spec.data?.spec;
@@ -369,5 +413,22 @@ function parseRange(s: string): [number, number] | null {
   if (m) return [Number(m[1]), Number(m[2])];
   const single = /^(\d+)/.exec(s.trim());
   if (single) return [Number(single[1]), Number(single[1])];
+  return null;
+}
+
+/**
+ * Heuristic source-schema id from a corpus name. Phase 10.1.a.3 — used
+ * by the auto-correct default-target-stack effect. Mirrors the pill
+ * regex on CorporaPage so the two surfaces stay in sync without a
+ * backend change (SpecResponse / SubroutineDetail don't yet carry
+ * `schemaId`). Returns null when no language can be inferred.
+ */
+export function inferSchemaIdFromCorpusName(name: string): string | null {
+  const n = name.toLowerCase();
+  if (/fortran|minpack|lapack|f77|blas/.test(n))         return 'fortran-f77';
+  if (/cobol|deptpay|cics/.test(n))                      return 'cobol';
+  if (/delphi|indy|pascal/.test(n))                      return 'delphi';
+  if (/c\+\+|cpp|fmt|gpp/.test(n))                       return 'cpp';
+  if (/vb6|visual basic|inventory|vbinventory/.test(n))  return 'vb6';
   return null;
 }
