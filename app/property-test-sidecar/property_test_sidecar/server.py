@@ -88,11 +88,24 @@ app = FastAPI(title="Astra property-test sidecar", version=__version__)
 
 class InputHint(BaseModel):
     name: str
-    type: str = Field(..., description="One of: int | float | string | bool | bytes.")
+    type: str = Field(
+        ...,
+        description=(
+            "Base type token. Universal: int | float | string | bool | bytes. "
+            "VB6 extensions (per Phase 10.0.g): variant | currency | date | "
+            "recordset | dispatch | null."
+        ),
+    )
     min: Optional[float] = None
     max: Optional[float] = None
     max_len: Optional[int] = Field(None, alias="maxLen")
     alphabet: Optional[str] = None
+    # Phase 10.0.g — VB6-specific hint extensions.
+    variant_of: Optional[list[str]] = Field(None, alias="variantOf")
+    columns: Optional[list[dict]] = None
+    min_rows: Optional[int] = Field(None, alias="minRows")
+    max_rows: Optional[int] = Field(None, alias="maxRows")
+    members: Optional[dict[str, str]] = None
 
     class Config:
         populate_by_name = True
@@ -308,7 +321,34 @@ def _build_strategy(hints: GeneratorHints) -> Optional[st.SearchStrategy]:
 
 def _strategy_for(inp: InputHint) -> st.SearchStrategy:
     t = inp.type.lower()
-    if t in ("int", "integer", "i32", "i64"):
+    # ─── Phase 10.0.g — VB6 extensions ──────────────────────────────────
+    if t in ("variant", "currency", "date", "recordset", "dispatch", "null"):
+        from property_test_sidecar.vb6_strategies import (
+            variant_strategy, currency_strategy, date_strategy,
+            recordset_strategy, dispatch_strategy,
+        )
+        if t == "variant":
+            return variant_strategy(
+                min_value=inp.min, max_value=inp.max,
+                max_len=inp.max_len, alphabet=inp.alphabet,
+                variant_of=inp.variant_of,
+            )
+        if t == "currency":
+            return currency_strategy(min_value=inp.min, max_value=inp.max)
+        if t == "date":
+            return date_strategy()
+        if t == "recordset":
+            return recordset_strategy(
+                columns=inp.columns or [],
+                min_rows=inp.min_rows if inp.min_rows is not None else 0,
+                max_rows=inp.max_rows if inp.max_rows is not None else 10,
+            )
+        if t == "dispatch":
+            return dispatch_strategy(members=inp.members or {})
+        if t == "null":
+            return st.just(None)
+    # ─── Universal types ────────────────────────────────────────────────
+    if t in ("int", "integer", "i32", "i64", "long"):
         lo = int(inp.min) if inp.min is not None else -(2**31)
         hi = int(inp.max) if inp.max is not None else  (2**31) - 1
         return st.integers(min_value=lo, max_value=hi)
