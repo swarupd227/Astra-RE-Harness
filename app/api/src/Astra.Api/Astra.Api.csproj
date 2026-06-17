@@ -98,4 +98,13 @@
     <Content Update="Llm/GoldenDataset/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Phase 10.0.h — VB6 Inventory Sample seed corpus.
+         The Nous-authored .bas / .cls / .frm sources ship next to the
+         API binary so Vb6DemoSeed.SeedAsync() can read them at startup.
+         No EmbeddedResource — we want them on-disk so the IngestPipeline
+         sees the same byte layout the real ingest path does. -->
+    <Content Include="SeedData/vb6-inventory-sample/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

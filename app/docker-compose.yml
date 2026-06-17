@@ -327,6 +327,10 @@ services:
       # corpus. Same background-task pattern as Indy; depends on the
       # cpp-parser-sidecar branch being active (compose wiring handles that).
       Database__SeedFmtDemo: "${DATABASE_SEED_FMT_DEMO:-true}"
+      # Phase 10.0.h: seed the Nous-authored "VB6 Inventory Sample" as
+      # the headline VB6 corpus. Local-only (no network); source files
+      # ship with the API image under SeedData/vb6-inventory-sample/.
+      Database__SeedVb6Demo: "${DATABASE_SEED_VB6_DEMO:-true}"
       # Dev-only reset endpoint at POST /api/v1/dev/reset. ALWAYS off in any
       # deployed environment.
       Dev__ResetEnabled: "${DEV_RESET_ENABLED:-true}"

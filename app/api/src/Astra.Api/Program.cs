@@ -74,6 +74,7 @@ builder.Services.AddScoped<MinpackDemoSeed>();
 builder.Services.AddScoped<LapackBlasSeed>();
 builder.Services.AddScoped<IndyDemoSeed>();
 builder.Services.AddScoped<FmtDemoSeed>();
+builder.Services.AddScoped<Vb6DemoSeed>();
 builder.Services.AddScoped<GoldenDatasetSeed>();
 
 // ─── LLM provider + extraction pipeline ──────────────────────────────
@@ -273,6 +274,7 @@ using (var scope = app.Services.CreateScope())
     var seedLapackBlas = builder.Configuration.GetValue("Database:SeedLapackBlas", false);
     var seedIndyDemo = builder.Configuration.GetValue("Database:SeedIndyDemo", false);
     var seedFmtDemo = builder.Configuration.GetValue("Database:SeedFmtDemo", false);
+    var seedVb6Demo = builder.Configuration.GetValue("Database:SeedVb6Demo", false);
 
     if (canConnect && recreate)
     {
@@ -537,6 +539,23 @@ using (var scope = app.Services.CreateScope())
                 await seeder.SeedAsync();
             }
             catch (Exception ex) { Log.Warning(ex, "Background fmt demo seed failed"); }
+        });
+    }
+    if (canConnect && seedVb6Demo)
+    {
+        // Phase 10.0.h: seed the Nous-authored "VB6 Inventory Sample" as
+        // the headline VB6 corpus. Local-only — no network access; the
+        // source files ship with the API image under SeedData/.
+        var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var bgScope = scopeFactory.CreateScope();
+                var seeder = bgScope.ServiceProvider.GetRequiredService<Vb6DemoSeed>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Background VB6 demo seed failed"); }
         });
     }
 }
