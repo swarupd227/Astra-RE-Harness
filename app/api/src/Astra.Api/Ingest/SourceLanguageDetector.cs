@@ -80,4 +80,18 @@ public static class SourceLanguageDetector
         var ext = Path.GetExtension(filename ?? "");
         return string.IsNullOrEmpty(ext) ? null : FromExtension(ext);
     }
+
+    /// <summary>
+    /// Human-readable enumeration of every supported language with its top
+    /// 2–3 extensions. Single source of truth for ingest error messages —
+    /// adding a new language updates every "unsupported file type" string
+    /// at once instead of going stale across IngestEndpoints / re-ingest.
+    /// </summary>
+    public static string SupportedLanguagesDescription() =>
+        "Fortran (.f/.for/.f90), COBOL (.cob/.cbl/.cpy), Delphi (.pas/.dpr/.inc), " +
+        "C++ (.cpp/.h/.hpp), or VB6 (.bas/.cls/.frm)";
+
+    /// <summary>Just the language names — for "no source files found" copy.</summary>
+    public static string SupportedLanguageNames() =>
+        "Fortran, COBOL, Delphi, C++, or VB6";
 }

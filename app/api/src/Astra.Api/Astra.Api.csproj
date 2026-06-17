@@ -7,6 +7,14 @@
     <RootNamespace>Astra.Api</RootNamespace>
     <AssemblyName>Astra.Api</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The API project is a minimal-API host — it has zero production
+         Razor surface. The only .razor files in the tree are archetype
+         TEMPLATES under Llm/Archetypes/ that the scaffold engine reads
+         at runtime; they must not be compiled. Opting out of the Web
+         SDK's implicit `<RazorComponent Include="**/*.razor" />` is
+         the canonical kill switch (the Content Remove rules below
+         keep the templates copied to the output as plain files). -->
+    <EnableDefaultRazorComponentItems>false</EnableDefaultRazorComponentItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -85,7 +93,9 @@
     <EmbeddedResource Remove="Llm/Archetypes/**" />
     <None Remove="Llm/Archetypes/**" />
     <!-- Remove SDK-auto-included Content (e.g. archetype.json) so we own
-         the include set; otherwise the Include below double-adds them. -->
+         the include set; otherwise the Include below double-adds them.
+         The PropertyGroup above already disables the implicit Razor
+         globber, so we don't need a separate RazorComponent Remove. -->
     <Content Remove="Llm/Archetypes/**" />
     <Content Include="Llm/Archetypes/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

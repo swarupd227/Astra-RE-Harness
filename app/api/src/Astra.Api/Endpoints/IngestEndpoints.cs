@@ -86,13 +86,13 @@ public static class IngestEndpoints
                 else
                 {
                     return BadRequest("ingest.unsupported_extension",
-                        $"Unsupported file type: {file.FileName}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) source, or a .zip archive.");
+                        $"Unsupported file type: {file.FileName}. Use {Ingest.SourceLanguageDetector.SupportedLanguagesDescription()}, or a .zip archive.");
                 }
             }
 
             if (collected.Count == 0)
                 return BadRequest("ingest.no_supported_files",
-                    "Archive contained no Fortran or COBOL source files.");
+                    $"Archive contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
             try
             {
@@ -149,8 +149,8 @@ public static class IngestEndpoints
                 var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, out var error);
                 if (error is not null) return BadRequest("ingest.scan_failed", error);
                 if (files.Count == 0)
-                    return BadRequest("ingest.no_fortran_files",
-                        "No Fortran source files (.f, .for, .f90, etc.) found in the clone.");
+                    return BadRequest("ingest.no_supported_files",
+                        $"No source files found in the clone. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
                 string? commitHash = null;
                 try
@@ -227,7 +227,7 @@ public static class IngestEndpoints
                 {
                     return BadRequest(
                         "ingest.unsupported_extension",
-                        $"Unsupported file type: {f.Path}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) source.");
+                        $"Unsupported file type: {f.Path}. Use {Ingest.SourceLanguageDetector.SupportedLanguagesDescription()}.");
                 }
             }
 
@@ -276,8 +276,8 @@ public static class IngestEndpoints
             var collected = await ReadFortranFilesFromForm(form);
             if (collected.Error is not null) return BadRequest(collected.ErrorCode!, collected.Error);
             if (collected.Files.Count == 0)
-                return BadRequest("ingest.no_fortran_files",
-                    "Upload contained no Fortran source files (.f, .for, .f90, etc.).");
+                return BadRequest("ingest.no_supported_files",
+                    $"Upload contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
             return await RunReingest(pipeline, new IngestPipeline.ReingestRequest(
                 CorpusId: corpusId,
@@ -307,8 +307,8 @@ public static class IngestEndpoints
                 var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, out var error);
                 if (error is not null) return BadRequest("ingest.scan_failed", error);
                 if (files.Count == 0)
-                    return BadRequest("ingest.no_fortran_files",
-                        "No Fortran source files (.f, .for, .f90, etc.) found in the clone.");
+                    return BadRequest("ingest.no_supported_files",
+                        $"No source files found in the clone. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
                 string? commitHash = null;
                 try
@@ -438,7 +438,7 @@ public static class IngestEndpoints
             else
             {
                 return new(collected, "ingest.unsupported_extension",
-                    $"Unsupported file type: {file.FileName}. Use Fortran (.f/.for/.f90/.f95/...) or COBOL (.cob/.cbl/.cpy) or a .zip archive.");
+                    $"Unsupported file type: {file.FileName}. Use {Ingest.SourceLanguageDetector.SupportedLanguagesDescription()}, or a .zip archive.");
             }
         }
         return new(collected, null, null);
