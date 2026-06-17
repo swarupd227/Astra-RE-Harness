@@ -426,6 +426,13 @@ const HELP_CPP: ExtractionHelp = {
   borderClass: 'border-l-[#F59E0B]',
   labelTextClass: 'text-[#92400E]',
 };
+const HELP_VB6: ExtractionHelp = {
+  id: 'vb6',
+  label: 'VB6 extraction — flag the swallows + the COM',
+  body: 'On Error Resume Next blocks become on_error_handler claims; the extractor surfaces narrow Err.Number filters as Open Questions because most "intentional" swallows turn out to mask real errors at scale. Every CreateObject / GetObject site becomes a com_interop_contract claim — the customer must source modern equivalents during Discovery, not the harness. Default-property access (rs!Field, txtCustomer in a String context) explodes into typed reads in the .NET 10 port.',
+  borderClass: 'border-l-[#0EA5E9]',
+  labelTextClass: 'text-[#075985]',
+};
 
 function inferExtractionHelp(corpusName: string): ExtractionHelp | null {
   const n = corpusName.toLowerCase();
@@ -433,5 +440,6 @@ function inferExtractionHelp(corpusName: string): ExtractionHelp | null {
   if (/cobol|deptpay|cics/.test(n))             return HELP_COBOL;
   if (/delphi|indy|pascal/.test(n))             return HELP_DELPHI;
   if (/c\+\+|cpp|fmt|gpp/.test(n))              return HELP_CPP;
+  if (/vb6|visual basic|inventory|vbinventory/.test(n)) return HELP_VB6;
   return null;
 }

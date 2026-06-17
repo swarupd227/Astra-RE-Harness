@@ -108,6 +108,15 @@ const LANG_CPP: LanguageAccent = {
   pillBg: 'bg-[#FEF3C7]', pillText: 'text-[#92400E]',  // amber
   stripe: 'border-l-[#F59E0B]',
 };
+// Phase 10.0.i — VB6 accent. Sky blue is the most natural fit (the
+// other languages took indigo / teal / emerald / amber); echoes the
+// classic VB6 form-designer header colour without colliding with any
+// of the other four pills.
+const LANG_VB6: LanguageAccent = {
+  id: 'vb6', label: 'VB6',
+  pillBg: 'bg-[#E0F2FE]', pillText: 'text-[#075985]',  // sky
+  stripe: 'border-l-[#0EA5E9]',
+};
 
 function inferLanguage(corpusName: string): LanguageAccent | null {
   const n = corpusName.toLowerCase();
@@ -115,6 +124,7 @@ function inferLanguage(corpusName: string): LanguageAccent | null {
   if (/cobol|deptpay|cics/.test(n))             return LANG_COBOL;
   if (/delphi|indy|pascal/.test(n))             return LANG_DELPHI;
   if (/c\+\+|cpp|fmt|gpp/.test(n))              return LANG_CPP;
+  if (/vb6|visual basic|inventory|vbinventory/.test(n)) return LANG_VB6;
   return null;
 }
 
