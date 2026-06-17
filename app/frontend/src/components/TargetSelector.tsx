@@ -14,8 +14,11 @@ import { Badge } from '@/components/Badge';
  * shown but disabled with a status badge so the buyer sees "we ship Java
  * Spring too — it's just gated behind a Nous engagement."
  *
- * One archetype per target stack is picked (the first one) — when we
- * ship multiple per stack the selector grows a sub-dropdown.
+ * One card per **target stack** — the actual archetype within that
+ * stack is chosen at scaffold time by `ArchetypeRegistry.PickForSubroutine`
+ * using the spec's `target_archetype_hint` field (per ADR-036). When a
+ * stack has N>1 archetypes we surface the variant count + names on the
+ * card so the user knows what paradigms are reachable.
  */
 export function TargetSelector({
   value,
@@ -40,9 +43,15 @@ export function TargetSelector({
   }
   if (q.isError || !q.data) return null;
 
-  // One card per target stack — pick the first archetype if multiple exist.
-  const byStack = new Map<string, ArchetypeManifest>();
-  for (const a of q.data.data) if (!byStack.has(a.targetStack)) byStack.set(a.targetStack, a);
+  // Group archetypes by stack. Headline archetype on each card is the
+  // first production-status entry (so demo seeds light up nicely); if no
+  // production archetype exists for a stack, we just take the first.
+  const byStack = new Map<string, ArchetypeManifest[]>();
+  for (const a of q.data.data) {
+    const arr = byStack.get(a.targetStack) ?? [];
+    arr.push(a);
+    byStack.set(a.targetStack, arr);
+  }
 
   return (
     <div data-testid="target-selector" className="space-y-2">
@@ -53,14 +62,20 @@ export function TargetSelector({
         </span>
       </div>
       <div className="flex flex-wrap gap-3">
-        {[...byStack.values()].map((a) => (
-          <TargetCard
-            key={a.targetStack}
-            archetype={a}
-            selected={a.targetStack === value}
-            onSelect={() => onChange(a.targetStack)}
-          />
-        ))}
+        {[...byStack.entries()].map(([stack, archetypes]) => {
+          const headline =
+            archetypes.find((a) => a.status?.toLowerCase().startsWith('production')) ??
+            archetypes[0];
+          return (
+            <TargetCard
+              key={stack}
+              archetype={headline}
+              variants={archetypes}
+              selected={stack === value}
+              onSelect={() => onChange(stack)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -68,15 +83,18 @@ export function TargetSelector({
 
 function TargetCard({
   archetype,
+  variants,
   selected,
   onSelect,
 }: {
   archetype: ArchetypeManifest;
+  variants: ArchetypeManifest[];
   selected: boolean;
   onSelect: () => void;
 }) {
   const isProduction = archetype.status.toLowerCase().startsWith('production');
   const isGated = !isProduction;
+  const otherVariants = variants.filter((a) => a.id !== archetype.id);
 
   return (
     <button
@@ -105,6 +123,18 @@ function TargetCard({
         )}
       </div>
       <span className="text-body text-ink-secondary">{archetype.displayName}</span>
+      {otherVariants.length > 0 && (
+        <span
+          className="text-caption text-ink-tertiary"
+          data-testid={`target-variants-${archetype.targetStack}`}
+          title={variants.map((v) => paradigmFromId(v.id)).join(', ')}
+        >
+          +{otherVariants.length} more{' '}
+          {otherVariants.length === 1 ? 'variant' : 'variants'} (
+          {variants.map((v) => paradigmFromId(v.id)).join(' / ')}
+          ) — picked from spec hint
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {isProduction ? (
           <Badge tone="success">
@@ -125,10 +155,32 @@ function TargetCard({
   );
 }
 
-function prettyStack(s: string): string {
+/**
+ * Convert a `canonical-<sourceLang>-<paradigm>` archetype id into a
+ * short paradigm token suitable for the variant list. Falls back to
+ * the trailing path segment so unknown archetypes still print
+ * something readable.
+ */
+export function paradigmFromId(archetypeId: string): string {
+  const tail = archetypeId.split('-').pop() ?? archetypeId;
+  switch (tail.toLowerCase()) {
+    case 'winforms':  return 'WinForms';
+    case 'blazor':    return 'Blazor';
+    case 'minapi':    return 'Min API';
+    case 'fmt':       return 'fmt';
+    case 'idsmtp':    return 'Indy SMTP';
+    case 'spring':    return 'Spring';
+    case 'net8':      return 'net8';
+    default:          return tail;
+  }
+}
+
+export function prettyStack(s: string): string {
   switch (s) {
     case 'dotnet8':
       return '.NET 8';
+    case 'dotnet10':
+      return '.NET 10';
     case 'java-spring':
       return 'Java Spring';
     default:
