@@ -75,10 +75,23 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         var schemaId = string.IsNullOrEmpty(request.SourceLanguage) ? "fortran-f77" : request.SourceLanguage;
         var targetStack = string.IsNullOrEmpty(request.TargetStack) ? "dotnet8" : request.TargetStack;
         const string kind = "extract";
-        var loaded = _prompts.GetLatest(schemaId, targetStack, kind)
+        // Phase 10.1.c — fall back to the first registered target stack for
+        // this (schema, kind) when the exact tuple is missing. VB6 (and any
+        // future language whose prompts skip the legacy `dotnet8` default)
+        // ships only under newer stacks; without the fallback the extract
+        // call throws and the engineer never sees a working extraction
+        // until they detour through SpecReviewPage to flip the picker.
+        var loaded = _prompts.GetLatestWithFallback(schemaId, targetStack, kind, out var fallbackTarget)
             ?? throw new InvalidOperationException(
-                $"No prompt registered for ({schemaId}, {targetStack}, {kind}). " +
-                $"Check Llm/Prompts/{schemaId}/{targetStack}/{kind}.v*.md.");
+                $"No prompt registered for ({schemaId}, *, {kind}). " +
+                $"Check Llm/Prompts/{schemaId}/*/{kind}.v*.md.");
+        if (fallbackTarget is not null)
+        {
+            _logger.LogInformation(
+                "Prompt fallback: ({Schema}, {Requested}, {Kind}) not registered; using ({Schema}, {Fallback}, {Kind})",
+                schemaId, targetStack, kind, schemaId, fallbackTarget, kind);
+            targetStack = fallbackTarget;
+        }
         var prompt = AnthropicPromptTemplate.Build(_prompts, loaded, request);
 
         // Phase 7.0 — prompt caching.

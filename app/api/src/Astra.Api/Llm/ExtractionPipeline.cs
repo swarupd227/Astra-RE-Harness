@@ -53,15 +53,16 @@ public sealed class ExtractionPipeline
     }
 
     /// <summary>Resolve the active prompt's id+version for the audit trail.</summary>
-    /// <param name="sourceLanguage">Subroutine.SourceLanguage — "fortran-f77" or "cobol".</param>
-    /// <param name="targetStack">Project's target stack (default "dotnet8"; "java-spring" once Phase 5.4 lands).</param>
+    /// <param name="sourceLanguage">Subroutine.SourceLanguage — "fortran-f77", "cobol", "delphi", "cpp", "vb6".</param>
+    /// <param name="targetStack">Project's target stack (default "dotnet8"; "java-spring" / "dotnet10" once those land).</param>
     private (string Id, string Version) ResolvePromptMeta(string sourceLanguage, string targetStack)
     {
-        // Phase 5.2 — route by sourceLanguage. The prompt-library lookup
-        // returns null when no matching prompt ships for the
-        // (schema × target × kind) tuple; fall back to the Fortran
-        // defaults so audit trails stay informative even on misroute.
-        var loaded = _prompts.GetLatest(sourceLanguage, targetStack, "extract");
+        // Phase 5.2 — route by sourceLanguage.
+        // Phase 10.1.c — use the target-stack fallback chain so the audit
+        // trail records the prompt that AnthropicLlmProvider actually
+        // resolved, not the legacy Fortran-default. The fallback target
+        // is logged at the provider; here we just need the metadata.
+        var loaded = _prompts.GetLatestWithFallback(sourceLanguage, targetStack, "extract", out _);
         return loaded is not null
             ? (loaded.PromptId, loaded.Version)
             : (DefaultPromptTemplateId, DefaultPromptTemplateVersion);

@@ -106,6 +106,41 @@ public sealed class PromptLibrary
     public LoadedPrompt? GetLatest(string sourceSchema, string targetStack, string kind) =>
         _latestByTriple.TryGetValue((sourceSchema, targetStack, kind), out var p) ? p : null;
 
+    /// <summary>
+    /// Phase 10.1.c — like <see cref="GetLatest"/> but with a target-stack
+    /// fallback chain: if the requested (source, target, kind) is missing,
+    /// picks the first registered target stack for the same (source, kind)
+    /// in deterministic alphabetical order. Returns null only when no
+    /// prompt exists at all for the (source, kind) pair.
+    ///
+    /// Use this from places where the caller hardcodes a default target
+    /// stack (`"dotnet8"`) that may not have a prompt for every source
+    /// schema — e.g. VB6 ships only under <c>dotnet10-*</c>, so the
+    /// extract path needs a fallback when targetStack defaults to
+    /// <c>dotnet8</c>. The actual paradigm choice still happens at
+    /// scaffold time via <c>ArchetypeRegistry.PickForSubroutine</c>.
+    ///
+    /// Sets <paramref name="fallbackTarget"/> to the chosen stack when
+    /// the exact tuple didn't match, so callers can log the fallback.
+    /// </summary>
+    public LoadedPrompt? GetLatestWithFallback(
+        string sourceSchema, string targetStack, string kind, out string? fallbackTarget)
+    {
+        fallbackTarget = null;
+        var exact = GetLatest(sourceSchema, targetStack, kind);
+        if (exact is not null) return exact;
+
+        var candidate = _latestByTriple
+            .Where(kv =>
+                string.Equals(kv.Key.Source, sourceSchema, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(kv.Key.Kind, kind, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(kv => kv.Key.Target, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => kv.Value)
+            .FirstOrDefault();
+        if (candidate is not null) fallbackTarget = candidate.TargetStack;
+        return candidate;
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Admin CRUD — Phase #4.3
     // ────────────────────────────────────────────────────────────────────
