@@ -44,11 +44,11 @@ export function SubroutineDetailPage() {
   }
 
   const s = sub.data;
-  // Phase 9.2.c — language-aware help text. Derive from the corpus
-  // name (same heuristic as the per-language colour accent on the
-  // Projects page). Once the backend adds `sourceLanguage` on
-  // CorpusListItem we'll swap to the authoritative value.
-  const help = inferExtractionHelp(s.corpus.name);
+  // Phase 10.1.b.1 — language-aware help text now reads the schema
+  // straight off the subroutine row (Phase 9.2.c originally inferred
+  // it from the corpus name regex; SubroutineEndpoints has projected
+  // `sourceLanguage` since ingest, the frontend type just omitted it).
+  const help = helpForSchemaId(s.sourceLanguage);
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
@@ -434,12 +434,13 @@ const HELP_VB6: ExtractionHelp = {
   labelTextClass: 'text-[#075985]',
 };
 
-function inferExtractionHelp(corpusName: string): ExtractionHelp | null {
-  const n = corpusName.toLowerCase();
-  if (/fortran|minpack|lapack|f77|blas/.test(n)) return HELP_FORTRAN;
-  if (/cobol|deptpay|cics/.test(n))             return HELP_COBOL;
-  if (/delphi|indy|pascal/.test(n))             return HELP_DELPHI;
-  if (/c\+\+|cpp|fmt|gpp/.test(n))              return HELP_CPP;
-  if (/vb6|visual basic|inventory|vbinventory/.test(n)) return HELP_VB6;
-  return null;
+function helpForSchemaId(schemaId: string | null): ExtractionHelp | null {
+  switch (schemaId) {
+    case 'fortran-f77': return HELP_FORTRAN;
+    case 'cobol':       return HELP_COBOL;
+    case 'delphi':      return HELP_DELPHI;
+    case 'cpp':         return HELP_CPP;
+    case 'vb6':         return HELP_VB6;
+    default:            return null;
+  }
 }

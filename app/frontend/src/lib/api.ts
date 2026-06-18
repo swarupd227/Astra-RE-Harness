@@ -737,6 +737,15 @@ export type SubroutineDetail = {
   lineStart: number;
   lineEnd: number;
   state: string;
+  /**
+   * Phase 10.1.b.1 — spec-schema id detected at ingest (one of the
+   * SourceLanguageDetector constants: 'fortran-f77', 'cobol', 'delphi',
+   * 'cpp', 'vb6'). Already projected by SubroutineEndpoints.cs:123;
+   * the previous frontend type just omitted it, forcing surrounding
+   * pages to guess from `corpus.name` regex. Nullable for forward-
+   * compat with subroutines parsed before this column was populated.
+   */
+  sourceLanguage: string | null;
   commonBlockRefs: string[] | null;
   calledSubroutines: string[] | null;
   ioPatterns: { isam_reads?: string[]; isam_writes?: string[]; notifications?: string[] } | null;

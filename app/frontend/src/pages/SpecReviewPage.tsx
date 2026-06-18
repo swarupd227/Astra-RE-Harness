@@ -81,18 +81,23 @@ export function SpecReviewPage() {
     if (initialHadStored) return;
     const arches = archetypes.data?.data ?? [];
     if (arches.length === 0) return;
-    const schemaGuess = inferSchemaIdFromCorpusName(sub.data?.corpus?.name ?? '');
+    // Phase 10.1.b.1 — read schema directly from the subroutine row.
+    // SubroutineEndpoints already projects `sourceLanguage`; we no
+    // longer guess from the corpus name. Null means "subroutine
+    // parsed before sourceLanguage was populated" — fall through
+    // to the unfiltered candidate search.
+    const schema = sub.data?.sourceLanguage ?? null;
     const currentHasMatch = arches.some(
       (a) =>
         a.targetStack === targetStack &&
         a.status.toLowerCase().startsWith('production') &&
-        (!schemaGuess || a.compatibleSchemas.includes(schemaGuess)),
+        (!schema || a.compatibleSchemas.includes(schema)),
     );
     if (currentHasMatch) return;
     const candidate = arches.find(
       (a) =>
         a.status.toLowerCase().startsWith('production') &&
-        (schemaGuess ? a.compatibleSchemas.includes(schemaGuess) : true),
+        (schema ? a.compatibleSchemas.includes(schema) : true),
     );
     if (candidate && candidate.targetStack !== targetStack) {
       setTargetStack(candidate.targetStack);
@@ -416,19 +421,3 @@ function parseRange(s: string): [number, number] | null {
   return null;
 }
 
-/**
- * Heuristic source-schema id from a corpus name. Phase 10.1.a.3 — used
- * by the auto-correct default-target-stack effect. Mirrors the pill
- * regex on CorporaPage so the two surfaces stay in sync without a
- * backend change (SpecResponse / SubroutineDetail don't yet carry
- * `schemaId`). Returns null when no language can be inferred.
- */
-export function inferSchemaIdFromCorpusName(name: string): string | null {
-  const n = name.toLowerCase();
-  if (/fortran|minpack|lapack|f77|blas/.test(n))         return 'fortran-f77';
-  if (/cobol|deptpay|cics/.test(n))                      return 'cobol';
-  if (/delphi|indy|pascal/.test(n))                      return 'delphi';
-  if (/c\+\+|cpp|fmt|gpp/.test(n))                       return 'cpp';
-  if (/vb6|visual basic|inventory|vbinventory/.test(n))  return 'vb6';
-  return null;
-}
