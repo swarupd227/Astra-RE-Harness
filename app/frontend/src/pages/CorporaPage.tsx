@@ -73,11 +73,10 @@ export function CorporaPage() {
   );
 }
 
-// Phase 9.2.b — per-language colour accent. The corpus list endpoint
-// doesn't yet expose `sourceLanguage` directly, so we derive it from the
-// corpus name for the known demo seeds. Real production corpora pick up
-// the accent once the backend adds `sourceLanguage` to CorpusListItem
-// (small follow-up).
+// Phase 9.2.b — per-language colour accent.
+// Phase 10.1.b.2 — `sourceLanguage` is now on CorpusListItem (computed
+// over the latest version's subroutines, most-common-wins with null on
+// ties). The corpus-name regex is gone; this is a pure lookup.
 type LanguageAccent = {
   id: string;
   label: string;
@@ -118,14 +117,15 @@ const LANG_VB6: LanguageAccent = {
   stripe: 'border-l-[#0EA5E9]',
 };
 
-function inferLanguage(corpusName: string): LanguageAccent | null {
-  const n = corpusName.toLowerCase();
-  if (/fortran|minpack|lapack|f77|blas/.test(n)) return LANG_FORTRAN;
-  if (/cobol|deptpay|cics/.test(n))             return LANG_COBOL;
-  if (/delphi|indy|pascal/.test(n))             return LANG_DELPHI;
-  if (/c\+\+|cpp|fmt|gpp/.test(n))              return LANG_CPP;
-  if (/vb6|visual basic|inventory|vbinventory/.test(n)) return LANG_VB6;
-  return null;
+function accentForLanguage(schemaId: string | null): LanguageAccent | null {
+  switch (schemaId) {
+    case 'fortran-f77': return LANG_FORTRAN;
+    case 'cobol':       return LANG_COBOL;
+    case 'delphi':      return LANG_DELPHI;
+    case 'cpp':         return LANG_CPP;
+    case 'vb6':         return LANG_VB6;
+    default:            return null;
+  }
 }
 
 function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
@@ -133,7 +133,7 @@ function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
   // so a single glance at the corpora grid tells you what's healthy vs failed.
   // Phase 9.2.b adds a language pill so the per-language story is visible
   // alongside the per-state story.
-  const language = inferLanguage(corpus.name);
+  const language = accentForLanguage(corpus.sourceLanguage);
   const accent = (() => {
     switch (corpus.state) {
       case 'PARSED':    return { edge: 'border-l-status-review', iconBg: 'bg-[#DAEFE9]', iconFg: 'text-status-review' };

@@ -110,6 +110,15 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
       await expect(page.getByRole('heading', { name: VB6_NAME, level: 1 })).toBeVisible();
     });
 
+    await test.step('Projects list shows VB6 pill from CorpusListItem.sourceLanguage', async () => {
+      // Phase 10.1.b.2 — accentForLanguage now reads the wire field
+      // (most-common-language aggregate) instead of a corpus-name regex.
+      // The Inventory Sample is 100% .bas/.cls/.frm so the aggregate must
+      // return 'vb6' and the corpus card must render the sky-blue pill.
+      await page.goto('/projects');
+      await expect(page.getByTestId('corpus-language-vb6').first()).toBeVisible();
+    });
+
     await test.step(`open ${subName}`, async () => {
       await page.goto(`/subroutines/${subId}`);
       // The page heading uses the routine's bare last segment, so we

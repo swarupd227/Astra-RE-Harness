@@ -699,6 +699,13 @@ export type CorpusListItem = {
   state: string;
   fileCount: number;
   totalLoc: number;
+  /**
+   * Phase 10.1.b.2 — dominant source language across the corpus's
+   * LATEST SourceVersion. Returns a SourceLanguageDetector constant
+   * ('fortran-f77' / 'cobol' / 'delphi' / 'cpp' / 'vb6'); null on
+   * ties or empty corpora.
+   */
+  sourceLanguage: string | null;
   updatedAt: string;
 };
 export type CorpusDetail = {

@@ -11,17 +11,77 @@ public static class CorpusEndpoints
 
         grp.MapGet("", async (AppDbContext db, CancellationToken ct) =>
         {
-            var rows = await db.Corpora
+            // Phase 10.1.b.2 — surface the corpus's dominant source
+            // language so the Projects list can colour-code without
+            // regex-matching the corpus name. Aggregate is computed
+            // over the LATEST SourceVersion only (a re-ingest that
+            // dropped legacy Fortran files shouldn't keep the corpus
+            // tagged Fortran). Most-common-language wins; null on
+            // ties or when the corpus has no parsed subroutines yet.
+            var corpora = await db.Corpora
                 .OrderByDescending(c => c.UpdatedAt)
-                .Select(c => new CorpusListItem(
+                .Select(c => new
+                {
                     c.Id,
                     c.Name,
                     c.SourceType,
                     c.State,
                     c.FileCount,
                     c.TotalLoc,
-                    c.UpdatedAt))
+                    c.UpdatedAt,
+                    LatestVersionId = c.Versions
+                        .OrderByDescending(v => v.IngestedAt)
+                        .Select(v => (Guid?)v.Id)
+                        .FirstOrDefault(),
+                })
                 .ToListAsync(ct);
+
+            var latestVersionIds = corpora
+                .Where(c => c.LatestVersionId.HasValue)
+                .Select(c => c.LatestVersionId!.Value)
+                .ToList();
+
+            var langCounts = latestVersionIds.Count == 0
+                ? new List<LangCount>()
+                : await db.Subroutines
+                    .Where(s => latestVersionIds.Contains(s.SourceFile!.SourceVersionId))
+                    .GroupBy(s => new { Vid = s.SourceFile!.SourceVersionId, s.SourceLanguage })
+                    .Select(g => new LangCount(g.Key.Vid, g.Key.SourceLanguage, g.Count()))
+                    .ToListAsync(ct);
+
+            // Per-version: pick the language with the strict-majority
+            // count. Ties resolve to null so the UI can render a
+            // neutral pill instead of arbitrarily picking one branch.
+            var langByVersion = langCounts
+                .GroupBy(x => x.VersionId)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var max = g.Max(x => x.Count);
+                        var leaders = g.Where(x => x.Count == max).ToList();
+                        return leaders.Count == 1 ? leaders[0].SourceLanguage : null;
+                    });
+
+            var rows = corpora.Select(c =>
+            {
+                string? lang = null;
+                if (c.LatestVersionId.HasValue
+                    && langByVersion.TryGetValue(c.LatestVersionId.Value, out var picked))
+                {
+                    lang = picked;
+                }
+                return new CorpusListItem(
+                    c.Id,
+                    c.Name,
+                    c.SourceType,
+                    c.State,
+                    c.FileCount,
+                    c.TotalLoc,
+                    lang,
+                    c.UpdatedAt);
+            }).ToList();
+
             return Results.Ok(new { data = rows });
         });
 
@@ -93,5 +153,8 @@ public static class CorpusEndpoints
         string State,
         int FileCount,
         int TotalLoc,
+        string? SourceLanguage,
         DateTimeOffset UpdatedAt);
+
+    private sealed record LangCount(Guid VersionId, string SourceLanguage, int Count);
 }
