@@ -260,6 +260,25 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             }
         }
 
+        // Phase 10.2.a — truncation telemetry. When the streamed
+        // output_tokens count lands within 5% of the configured cap,
+        // there's a strong chance Claude hit max_tokens mid-JSON and the
+        // parse below will fail with a misleading "malformed JSON"
+        // error. Log a structured warning so the audit trail surfaces
+        // the real cause without waiting for the parse to fail. We don't
+        // throw here — the parse may still succeed (small JSON, just
+        // close to the cap), and even if it fails, the existing
+        // provider.malformed_json path returns a usable error event.
+        // The hard split between "near-cap" and "truncated" comes in 10.2.b.
+        if (_opts.MaxOutputTokens > 0
+            && outputTokens >= (int)(_opts.MaxOutputTokens * 0.95))
+        {
+            _logger.LogWarning(
+                "Anthropic output near cap: {Output}/{Cap} tokens (sourceLanguage={SourceLanguage}, targetStack={TargetStack}). " +
+                "If the parse fails, this is almost certainly the cause — bump Llm:Anthropic:MaxOutputTokens.",
+                outputTokens, _opts.MaxOutputTokens, request.SourceLanguage, request.TargetStack);
+        }
+
         // ── Parse buffered text → spec JSON ─────────────────────────────
         yield return Stage("validating", 4, "Schema + citation post-validation");
         await Task.Delay(120, ct);

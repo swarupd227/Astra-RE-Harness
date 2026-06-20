@@ -343,7 +343,7 @@ services:
       Llm__Anthropic__ApiKey: "${ANTHROPIC_API_KEY:-}"
       Llm__Anthropic__Model: "${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}"
       Llm__Anthropic__BaseUrl: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
-      Llm__Anthropic__MaxOutputTokens: "${ANTHROPIC_MAX_OUTPUT_TOKENS:-8192}"
+      Llm__Anthropic__MaxOutputTokens: "${ANTHROPIC_MAX_OUTPUT_TOKENS:-16384}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       OTEL_SERVICE_NAME: astra-api
     ports:
