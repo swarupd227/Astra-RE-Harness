@@ -267,11 +267,13 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         // error. Log a structured warning so the audit trail surfaces
         // the real cause without waiting for the parse to fail. We don't
         // throw here — the parse may still succeed (small JSON, just
-        // close to the cap), and even if it fails, the existing
-        // provider.malformed_json path returns a usable error event.
-        // The hard split between "near-cap" and "truncated" comes in 10.2.b.
-        if (_opts.MaxOutputTokens > 0
-            && outputTokens >= (int)(_opts.MaxOutputTokens * 0.95))
+        // close to the cap).
+        // Phase 10.2.b — also feeds the error-code split below so the
+        // user sees `provider.output_truncated` instead of the cryptic
+        // `provider.malformed_json` when this is the cause.
+        var outputNearCap = _opts.MaxOutputTokens > 0
+            && outputTokens >= (int)(_opts.MaxOutputTokens * 0.95);
+        if (outputNearCap)
         {
             _logger.LogWarning(
                 "Anthropic output near cap: {Output}/{Cap} tokens (sourceLanguage={SourceLanguage}, targetStack={TargetStack}). " +
@@ -298,14 +300,35 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         }
         if (parseErrorMessage is not null || specDoc is null)
         {
-            yield return new("error", new
+            // Phase 10.2.b — split the error code so the operator/UI can
+            // tell "model exhausted output budget" (actionable: raise cap
+            // or split routine) apart from "model emitted real garbage"
+            // (actionable: tighten the prompt, retry). Both stay
+            // retryable so the UI offers a re-extract button either way.
+            if (outputNearCap)
             {
-                code = "provider.malformed_json",
-                message =
-                    $"Anthropic response was not valid JSON: {parseErrorMessage ?? "empty response"}. " +
-                    "View raw response or retry with a tightened prompt.",
-                retryable = true,
-            });
+                yield return new("error", new
+                {
+                    code = "provider.output_truncated",
+                    message =
+                        $"The model ran out of output budget after {outputTokens:N0} of {_opts.MaxOutputTokens:N0} tokens " +
+                        "and the partial JSON could not be parsed. " +
+                        "Raise Llm:Anthropic:MaxOutputTokens, pick a lighter target paradigm (e.g. minapi instead of blazor), " +
+                        "or split this routine into smaller pieces, then retry.",
+                    retryable = true,
+                });
+            }
+            else
+            {
+                yield return new("error", new
+                {
+                    code = "provider.malformed_json",
+                    message =
+                        $"Anthropic response was not valid JSON: {parseErrorMessage ?? "empty response"}. " +
+                        "View raw response or retry with a tightened prompt.",
+                    retryable = true,
+                });
+            }
             yield break;
         }
 
