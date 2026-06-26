@@ -200,6 +200,17 @@ def run_endpoint(req: RunRequest) -> RunResult:
 
 @app.post("/compile-and-run", response_model=CompileAndRunResult, response_model_by_alias=True)
 def compile_and_run_endpoint(req: CompileAndRunRequest) -> CompileAndRunResult:
+    # Phase 10.3.c — VB.NET dev path. When every source file ends in
+    # `.vb` the caller is running a dotnet-vb reference (the equivalence
+    # smoke in CrossRuntimeValidator.RunVb6SmokeAsync is the canonical
+    # caller). The VB source LOOKS like VB6 (Option Explicit, Dim As
+    # Long, CLng, Currency, etc.) and compiles via `dotnet build`. No
+    # licensed Microsoft runtime is required — the dev tier works on
+    # a vanilla Linux container. Production tier keeps the vb6.exe +
+    # msvbvm60.dll path for binary-exact equivalence against the
+    # original VB6 build.
+    if _is_dotnet_vb_only(req.sources):
+        return _dotnet_vb_compile_and_run(req.sources, req.stdin, req.timeout_ms)
     _require_runtime()
     compile_result = _compile(req.sources, "executable", req.extra_flags, req.main_project)
     if compile_result.exit_code != 0:
@@ -384,6 +395,158 @@ def _build_compile_cmd(vbp: Path, output_exe: Path, extra_flags: list[str]) -> l
         # Under Wine we invoke vb6.exe via the wine launcher.
         return ["wine", *args]
     return args
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Phase 10.3.c — VB.NET (dotnet) dev-tier reference
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _is_dotnet_vb_only(sources: list[Vb6Source]) -> bool:
+    """True iff every source path ends with .vb — caller is running a
+    dotnet VB.NET reference, no vb6.exe / msvbvm60.dll needed."""
+    return bool(sources) and all(s.path.lower().endswith(".vb") for s in sources)
+
+
+_VBPROJ_TEMPLATE = """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Demo.Vb6Reference</RootNamespace>
+    <AssemblyName>app</AssemblyName>
+    <Nullable>disable</Nullable>
+    <OptionExplicit>On</OptionExplicit>
+    <OptionStrict>Off</OptionStrict>
+    <OptionInfer>On</OptionInfer>
+  </PropertyGroup>
+</Project>
+"""
+
+
+def _dotnet_vb_compile_and_run(
+    sources: list[Vb6Source],
+    stdin_text: str,
+    timeout_ms: int,
+) -> CompileAndRunResult:
+    """Compile + run a VB.NET project as the dev-tier VB6 reference.
+    The contract keeps the same compile + run shape as the vb6.exe
+    path so the validator can treat both uniformly. Caller sends
+    sources whose paths end with `.vb`; we synthesise a minimal
+    `app.vbproj` next to them and shell out to `dotnet build` then
+    `dotnet bin/Debug/net10.0/app.dll`. The published artefact lives
+    under `app/bin/Debug/net10.0/` and persists in WORKDIR so the
+    `/run` endpoint can re-invoke without rebuilding."""
+    if not sources:
+        raise HTTPException(status_code=400, detail="At least one .vb source is required.")
+
+    artifact_id = uuid.uuid4().hex
+    build_dir = WORKDIR / artifact_id
+    proj_dir = build_dir / "app"
+    proj_dir.mkdir(parents=True, exist_ok=False)
+
+    # Materialise every .vb source under the project directory.
+    for src in sources:
+        rel = src.path.lstrip("/").replace("/", os.sep)
+        # Strip any leading dir component so all .vb files live next to vbproj.
+        rel = os.path.basename(rel)
+        abs_path = proj_dir / rel
+        abs_path.write_text(src.content, encoding="utf-8")
+
+    (proj_dir / "app.vbproj").write_text(_VBPROJ_TEMPLATE, encoding="utf-8")
+
+    # Compile via `dotnet build`. Cache packages between artefacts via
+    # a shared NuGet directory so cold builds aren't every-call.
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.run(
+            ["dotnet", "build", "--nologo", "-c", "Debug", "-v", "minimal", "app.vbproj"],
+            cwd=str(proj_dir),
+            capture_output=True,
+            text=True,
+            timeout=COMPILE_TIMEOUT_S,
+            env={**os.environ, "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1"},
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(build_dir, ignore_errors=True)
+        raise HTTPException(status_code=504, detail=f"dotnet build exceeded {COMPILE_TIMEOUT_S}s") from None
+    except FileNotFoundError as ex:
+        shutil.rmtree(build_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"dotnet not found on PATH: {ex}. Phase 10.3.c expects the .NET 10 "
+                "SDK to be installed in the vb6-sidecar container — see Dockerfile.wine."
+            ),
+        ) from None
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    log_text = (
+        f"=== dotnet build app.vbproj ===\n"
+        f"{proc.stdout}\n"
+        + (f"=== stderr ===\n{proc.stderr}\n" if proc.stderr else "")
+        + f"=== exit {proc.returncode} ===\n"
+    )
+    lower = log_text.lower()
+    # VB.NET compiler diagnostics: `VBNC1234: error BC30005: ...`
+    err_count = lower.count("error bc") + lower.count("error :")
+    warn_count = lower.count("warning bc") + lower.count("warning :")
+    log.info(
+        "dotnet-vb compile artifact=%s files=%d exit=%d ms=%d errors=%d warnings=%d",
+        artifact_id, len(sources), proc.returncode, elapsed_ms, err_count, warn_count,
+    )
+    compile_result = CompileResult(
+        artifact_id=artifact_id,
+        exit_code=proc.returncode,
+        log=log_text,
+        warning_count=warn_count,
+        error_count=err_count,
+        duration_ms=elapsed_ms,
+    )
+
+    if proc.returncode != 0:
+        return CompileAndRunResult(
+            compile=compile_result,
+            run=None,
+            skipped_run_reason="compile_failed",
+        )
+
+    # Run via `dotnet app.dll`.
+    dll_path = proj_dir / "bin" / "Debug" / "net10.0" / "app.dll"
+    t0 = time.monotonic()
+    timed_out = False
+    try:
+        run_proc = subprocess.run(
+            ["dotnet", str(dll_path)],
+            cwd=str(proj_dir),
+            input=stdin_text,
+            capture_output=True,
+            text=True,
+            timeout=max(1, timeout_ms) / 1000,
+            env={**os.environ, "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1"},
+        )
+        run_exit = run_proc.returncode
+        stdout = run_proc.stdout
+        stderr = run_proc.stderr
+    except subprocess.TimeoutExpired as ex:
+        timed_out = True
+        run_exit = -1
+        stdout = ex.stdout.decode("utf-8", errors="replace") if ex.stdout else ""
+        stderr = (ex.stderr.decode("utf-8", errors="replace") if ex.stderr else "") + \
+                 f"\n[vb6-sidecar] dotnet run killed after {timeout_ms}ms"
+
+    run_elapsed_ms = int((time.monotonic() - t0) * 1000)
+    log.info(
+        "dotnet-vb run artifact=%s exit=%d ms=%d timed_out=%s stdout_bytes=%d stderr_bytes=%d",
+        artifact_id, run_exit, run_elapsed_ms, timed_out, len(stdout), len(stderr),
+    )
+    run_result = RunResult(
+        exit_code=run_exit,
+        stdout=stdout,
+        stderr=stderr,
+        duration_ms=run_elapsed_ms,
+        timed_out=timed_out,
+    )
+    return CompileAndRunResult(compile=compile_result, run=run_result)
 
 
 def _build_run_cmd(binary: Path) -> list[str]:

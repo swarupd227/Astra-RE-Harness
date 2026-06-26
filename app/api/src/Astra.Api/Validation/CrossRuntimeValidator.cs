@@ -32,6 +32,7 @@ public sealed class CrossRuntimeValidator
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
     private readonly GfortranClient _gfortran;
+    private readonly Vb6Client _vb6;
     private readonly ILogger<CrossRuntimeValidator> _log;
 
     public CrossRuntimeValidator(
@@ -40,6 +41,7 @@ public sealed class CrossRuntimeValidator
         StorageOptions storage,
         IAuditLogger audit,
         GfortranClient gfortran,
+        Vb6Client vb6,
         ILogger<CrossRuntimeValidator> log)
     {
         _db = db;
@@ -47,6 +49,7 @@ public sealed class CrossRuntimeValidator
         _storage = storage;
         _audit = audit;
         _gfortran = gfortran;
+        _vb6 = vb6;
         _log = log;
     }
 
@@ -80,6 +83,20 @@ public sealed class CrossRuntimeValidator
 
         try
         {
+            // ─── Phase 10.3.c — language-aware sidecar dispatch ────────────
+            // Until 10.3.c the validator hardcoded the gfortran sidecar
+            // regardless of source language — a VB6 spec's equivalence run
+            // would still report "gfortran and C# agree". Now we inspect
+            // the subroutine's SourceLanguage and route to the matching
+            // sidecar. The fall-through remains the gfortran smoke loop so
+            // unmapped languages (and any pre-Phase-5.2 ingest without a
+            // SourceLanguage column) keep their historical behaviour.
+            var sourceLanguage = scaffold.Spec?.Subroutine?.SourceLanguage ?? "";
+            if (string.Equals(sourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunVb6SmokeAsync(scaffold, run, actor, ct);
+            }
+
             // ─── Sanity: is the gfortran sidecar reachable? ────────────────
             if (!await _gfortran.PingAsync(ct))
                 throw new InvalidOperationException(
@@ -378,5 +395,139 @@ public sealed class CrossRuntimeValidator
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
         return MathF.Abs(a.Value - b.Value) < 0.0001f;
+    }
+
+    // ─── Phase 10.3.c — VB6 equivalence smoke ────────────────────────────
+    // Mirrors the gfortran smoke flow but drives the vb6-sidecar via a
+    // VB.NET reference rather than vb6.exe + msvbvm60.dll. The dev tier
+    // runs `dotnet build` + `dotnet app.dll` (no licensed Microsoft
+    // runtime needed); the production tier (Windows Server Core 2022)
+    // can still use the vb6.exe + msvbvm60.dll path for binary-exact
+    // equivalence against the original VB6 build. Either way the
+    // round-trip is:
+    //   1. Send a tiny VB.NET source that adds two stdin integers and
+    //      prints {"sum": N} to stdout
+    //   2. Compare the parsed sum against the C# reference's
+    //      analytically-known answer
+    // Same verdict / transcript / metric shape as the gfortran path so
+    // the report-card surface treats both uniformly.
+    //
+    // The VB source LOOKS like VB6 — Option Explicit, Dim As Long, CLng,
+    // string concatenation with `&`. VB.NET retains the VB family syntax
+    // and the Console / Stdin APIs are well-defined in System.Console.
+    private async Task<ValidationRun> RunVb6SmokeAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        if (!await _vb6.PingAsync(ct))
+            throw new InvalidOperationException(
+                "vb6 sidecar health probe failed (Validation:Vb6Endpoint).");
+
+        const string smokeSource = """
+            Option Explicit On
+            Imports System
+
+            Module Smoke
+                Sub Main()
+                    Dim line As String = Console.In.ReadLine()
+                    Dim parts() As String = line.Split(" "c)
+                    Dim a As Long = CLng(parts(0))
+                    Dim b As Long = CLng(parts(1))
+                    Dim total As Long = a + b
+                    Console.Out.Write("{""sum"":" & total & "}")
+                End Sub
+            End Module
+            """;
+        const string stdinPayload = "3 4\n";
+        const int expectedSum = 3 + 4;
+
+        var vbs = await _vb6.CompileAndRunAsync(new Vb6Client.CompileAndRunRequest(
+            Sources: new[] { new Vb6Client.Source("Smoke.vb", smokeSource) },
+            Stdin: stdinPayload,
+            TimeoutMs: 30_000), ct);
+
+        int vbsSum;
+        try
+        {
+            using var doc = JsonDocument.Parse((vbs.Run?.Stdout ?? "").Trim());
+            vbsSum = doc.RootElement.GetProperty("sum").GetInt32();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse vb6-sidecar stdout as JSON: {ex.Message}; raw: {vbs.Run?.Stdout}");
+        }
+
+        var match = vbsSum == expectedSum;
+
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== vb6 sidecar — compile (dotnet build, VB.NET) ===");
+        transcript.AppendLine($"exit {vbs.Compile.ExitCode} · {vbs.Compile.DurationMs}ms · {vbs.Compile.ErrorCount} errors · {vbs.Compile.WarningCount} warnings");
+        transcript.AppendLine(vbs.Compile.Log);
+        transcript.AppendLine("=== vb6 sidecar — run (dotnet app.dll) ===");
+        transcript.AppendLine($"exit {vbs.Run?.ExitCode ?? -1} · {vbs.Run?.DurationMs ?? -1}ms · timedOut={vbs.Run?.TimedOut ?? false}");
+        transcript.AppendLine($"stdin: {stdinPayload.Replace("\n", @"\n")}");
+        transcript.AppendLine($"stdout: {vbs.Run?.Stdout}");
+        if (!string.IsNullOrWhiteSpace(vbs.Run?.Stderr))
+            transcript.AppendLine($"stderr: {vbs.Run.Stderr}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== C# reference ===");
+        transcript.AppendLine($"computed: {expectedSum}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== equivalence verdict ===");
+        transcript.AppendLine($"vb6_sum={vbsSum} csharp_sum={expectedSum} match={match}");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "smoke",
+            sourceLanguage = "vb6",
+            runtime = "vbnet-dotnet10",
+            vb6CompileExit = vbs.Compile.ExitCode,
+            vb6CompileMs = vbs.Compile.DurationMs,
+            vb6RunExit = vbs.Run?.ExitCode ?? -1,
+            vb6RunMs = vbs.Run?.DurationMs ?? -1,
+            vb6Sum = vbsSum,
+            csharpSum = expectedSum,
+            match,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (match && vbs.Compile.ExitCode == 0 && (vbs.Run?.ExitCode ?? -1) == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = "Smoke equivalence: VB.NET (.NET 10) and C# agree on canonical input. " +
+                          "Production tier runs the original VB6 binary against vb6.exe + " +
+                          "msvbvm60.dll for binary-exact behavioural equivalence.";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = match ? "equivalence.runtime_error" : "equivalence.outputs_differ";
+            run.Summary = match
+                ? $"vb6-sidecar exit codes non-zero (compile={vbs.Compile.ExitCode}, run={vbs.Run?.ExitCode})."
+                : $"Outputs differ: vb6={vbsSum} vs csharp={expectedSum}";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        return run;
     }
 }

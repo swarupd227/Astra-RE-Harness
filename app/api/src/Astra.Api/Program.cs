@@ -203,6 +203,14 @@ builder.Services.AddScoped<Astra.Api.Validation.MavenClient>();
 builder.Services.AddHttpClient("gnucobol");
 builder.Services.AddScoped<Astra.Api.Validation.GnuCobolClient>();
 
+// ─── VB6 sidecar (Phase 10.0.f / 10.3.c — Wine + cscript reference) ──
+// VB6 specs route through this sidecar instead of the default gfortran
+// path. Dev tier uses VBScript (.vbs) via Wine + cscript so the dev
+// environment doesn't need a licensed VB6 runtime; production tier
+// uses native vb6.exe + msvbvm60.dll on Windows Server Core.
+builder.Services.AddHttpClient("vb6");
+builder.Services.AddScoped<Astra.Api.Validation.Vb6Client>();
+
 // ─── Property-test sidecar (Phase 9.3.b — 4th validation gate) ───────
 // Drives Hypothesis-driven falsifying-input search per ADR-029, per-claim
 // generator hints embedded on the signed spec per ADR-030. v1 ships in
