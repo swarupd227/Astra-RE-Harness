@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Demo.OrderEntry.Web</RootNamespace>
     <AssemblyName>Demo.OrderEntry.Web</AssemblyName>
+    <!-- Phase 10.3 — exclude tests/ from main project's implicit globs.
+         The tests/ folder has its own csproj with xunit/bUnit references;
+         leaving the default <Compile Include="**/*.cs" /> picks up test
+         files in the main build and fails because xunit isn't a main-
+         project dep. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
     <Description>
       Reference .NET 10 / Blazor Server scaffold for VB6 thick-client form apps
       that the customer wants to web-modernise, generated from a signed VB6 spec

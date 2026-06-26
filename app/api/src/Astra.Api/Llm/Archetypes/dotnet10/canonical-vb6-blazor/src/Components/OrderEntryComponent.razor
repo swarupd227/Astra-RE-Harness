@@ -12,9 +12,12 @@
           two-way binding against State.CustomerName.
 *@
 @page "/orders/new"
-@inject OrderEntryState State
-@inject OrderRepository Orders
-@inject InvoiceExporter Exporter
+@namespace Demo.OrderEntry.Web.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Demo.OrderEntry.Web.Services
+@* Phase 10.3 — [Inject] declarations live in the code-behind partial
+   class (OrderEntryComponent.razor.cs). Declaring @inject here too
+   would generate duplicate properties on the merged partial. *@
 
 <h1>New Order</h1>
 

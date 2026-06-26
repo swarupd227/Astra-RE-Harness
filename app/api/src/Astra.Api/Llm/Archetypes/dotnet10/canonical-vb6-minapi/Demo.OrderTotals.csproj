@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Demo.OrderTotals</RootNamespace>
     <AssemblyName>Demo.OrderTotals</AssemblyName>
+    <!-- Phase 10.3 — exclude tests/ from main project's implicit globs.
+         Tests live in tests/Demo.OrderTotals.Tests.csproj and pull
+         xunit/EF Core 10.0 packages this main project doesn't carry. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
     <Description>
       Reference .NET 10 / minimal API scaffold for code-only VB6 sub-corpora, generated
       from a signed VB6 spec (spec/v1, schemaId=vb6, target_archetype_hint=MinimalApi).

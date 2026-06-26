@@ -26,6 +26,7 @@
     { "path": "src/Components/OrderEntryComponent.razor.cs","language": "csharp","derivedFromClaimIds": ["INV-1","INV-2","OE-1","EH-1","DP-1","SE-1","EC-1","EC-2"] },
     { "path": "src/Services/OrderEntryState.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-1"] },
     { "path": "src/Services/OrderRepository.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1"] },
+    { "path": "src/Services/InvoiceExporter.cs",       "language": "csharp", "derivedFromClaimIds": ["SE-2"] },
     { "path": "tests/OrderEntryComponentTests.cs",     "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","EC-2"] }
   ]
 }

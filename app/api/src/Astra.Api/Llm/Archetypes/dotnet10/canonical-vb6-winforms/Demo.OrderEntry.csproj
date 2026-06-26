@@ -7,6 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Demo.OrderEntry</RootNamespace>
     <AssemblyName>Demo.OrderEntry</AssemblyName>
+    <!-- Phase 10.3 — exclude tests/ from main project's implicit globs.
+         Tests project (tests/Demo.OrderEntry.Tests.csproj) has its own
+         xunit reference; leaving the default <Compile Include="**/*.cs" />
+         picks up test files in the main build and fails. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
     <Description>
       Reference .NET 10 / WinForms scaffold for VB6 thick-client form apps, generated
       from a signed VB6 spec (spec/v1, schemaId=vb6, target_archetype_hint=WinForms).

@@ -92,15 +92,3 @@ public sealed partial class OrderEntryComponent : ComponentBase
         ex.ErrorCode == 3022 || ex.ErrorCode == 3134;
 }
 
-// Placeholder for the invoice exporter — implementer wires this up at
-// scaffold time. For Blazor Server, ClosedXML output is streamed to the
-// browser via a download endpoint or saved to the customer-configured
-// shared storage; the choice is an Open Question on the spec.
-public sealed class InvoiceExporter
-{
-    public Task ExportInvoiceAsync(long orderId)
-    {
-        // TODO: stream the .xlsx to the browser or write to shared storage.
-        return Task.CompletedTask;
-    }
-}
