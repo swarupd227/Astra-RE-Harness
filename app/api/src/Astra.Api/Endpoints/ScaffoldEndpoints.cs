@@ -48,7 +48,6 @@ public static class ScaffoldEndpoints
             // canonical-rollstock @ preview and cobol-canonical-payroll
             // @ production), the previous gate rejected production
             // requests whenever a preview archetype was registered first.
-            var chosenTarget = string.IsNullOrWhiteSpace(targetStack) ? "dotnet8" : targetStack.Trim();
 
             // Look up the spec's subroutine name so PickForSubroutine
             // can match correctly. Spec → Subroutine join lives in the DB.
@@ -57,6 +56,46 @@ public static class ScaffoldEndpoints
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == id, ct);
             var subroutineName = spec?.Subroutine?.Name ?? "";
+            var sourceLanguage = spec?.Subroutine?.SourceLanguage ?? "";
+
+            // Phase 10.3.b — when no targetStack is supplied, pick a sensible
+            // default based on which target stacks actually have archetypes
+            // compatible with this spec's schema. The previous "always
+            // dotnet8" default silently scaffolded VB6 specs into the
+            // alphabetical-first dotnet8 archetype (canonical-cpp-fmt) — a
+            // foot-gun that took the whole demo recording session to
+            // diagnose. Logic:
+            //   - explicit ?targetStack=X wins, no matter what
+            //   - else: stacks whose archetypes list `compatibleSchemas`
+            //     including this spec's schemaId become the candidate set
+            //   - prefer "dotnet8" if it's in the set (keeps Fortran /
+            //     COBOL / Delphi / C++ on the well-trodden path)
+            //   - otherwise pick the first stack alphabetically — VB6 has
+            //     only "dotnet10" archetypes so this routes correctly
+            //   - fallback to "dotnet8" if no archetype is compatible at
+            //     all (preserves legacy behaviour)
+            string chosenTarget;
+            if (!string.IsNullOrWhiteSpace(targetStack))
+            {
+                chosenTarget = targetStack.Trim();
+            }
+            else
+            {
+                var compatibleStacks = archetypes.All()
+                    .Where(a => string.IsNullOrEmpty(sourceLanguage)
+                        || a.Manifest.CompatibleSchemas.Any(s =>
+                            string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase)))
+                    .Select(a => a.Manifest.TargetStack)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                chosenTarget = compatibleStacks.Contains("dotnet8", StringComparer.OrdinalIgnoreCase)
+                    ? "dotnet8"
+                    : (compatibleStacks.FirstOrDefault() ?? "dotnet8");
+                log.LogInformation(
+                    "Scaffold default targetStack for spec {SpecId} (schema={Schema}): {Stack} (from candidates {Candidates})",
+                    id, sourceLanguage, chosenTarget, string.Join(",", compatibleStacks));
+            }
 
             // Any archetype registered for this target stack at all?
             var anyForTarget = archetypes.All()

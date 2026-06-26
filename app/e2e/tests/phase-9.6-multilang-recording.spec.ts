@@ -374,12 +374,12 @@ function makeRecordingTest(t: Target) {
       // Pre-bake state (API only — no on-screen wait).
       const specId = await ensureSpec(request, subId);
       await ensureSigned(request, subId, specId);
-      // Phase 10.3 — VB6 archetypes ship under dotnet10, not the
-       // default dotnet8 (per ADR-035). Pass targetStack explicitly so
-       // the scaffold engine picks canonical-vb6-blazor instead of
-       // falling through to the alphabetical-first dotnet8 archetype.
-       const scaffoldTargetStack = t.langId === 'vb6' ? 'dotnet10' : undefined;
-       const scaffoldId = await ensureScaffold(request, specId, scaffoldTargetStack);
+      // Phase 10.3.b — backend now auto-routes scaffold targetStack
+       // from the spec's schemaId (VB6 specs default to dotnet10), so
+       // the recording no longer needs to override. The ensureScaffold
+       // signature keeps the optional targetStack parameter for tests
+       // that genuinely want to force a non-default stack.
+       const scaffoldId = await ensureScaffold(request, specId);
       await ensureMigrationPlan(request, corpusId);
       // Phase 10.3 — for VB6, pre-bake the four gates to PASSED via API
       // so the recording's validation step can just narrate the green
