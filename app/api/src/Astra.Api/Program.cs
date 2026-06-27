@@ -149,6 +149,9 @@ builder.Services.AddScoped<Astra.Api.Docs.DocsExtractionService>();
 builder.Services.Configure<Astra.Api.Docs.DocsOptions>(builder.Configuration.GetSection("Docs:Generator"));
 builder.Services.AddScoped<Astra.Api.Docs.RoutineTierClassifier>();
 builder.Services.AddSingleton<Astra.Api.Docs.RoutineSummaryPipeline>();
+// Phase 11.0.b — module + overview rollup; orchestrator chains stages.
+builder.Services.AddSingleton<Astra.Api.Docs.HierarchicalRollupPipeline>();
+builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
 // is registered as IPlanStrategy; MigrationPlanner picks one by name

@@ -39,26 +39,39 @@ public static class DocsEndpoints
             });
         });
 
-        // Phase 11.0.a — production routine-summary generator. Returns 202
-        // with a generationRunId; the actual work runs in the background
-        // and the caller polls /status until State leaves RUNNING.
-        // Optional ?take=N caps work for spot-runs; ?force=true wipes any
-        // existing routine-summary sections for the same SourceVersion
-        // before re-generating.
+        // Phase 11.0.a/b — multi-stage documentation generator. Returns 202
+        // with a generationRunId; work runs in the background and the
+        // caller polls /status until State leaves RUNNING.
+        //
+        // Query parameters:
+        //   ?stages=routine-summary,module,overview
+        //     Comma-separated stage list. Default: all three, in order.
+        //   ?take=N
+        //     Caps work in the routine-summary stage to N routines.
+        //   ?force=true
+        //     Wipes any existing DocSections in the requested stages
+        //     for the same SourceVersion before re-generating.
         app.MapPost("/api/v1/corpora/{corpusId:guid}/docs/generate", async (
             Guid corpusId,
+            string? stages,
             int? take,
             bool? force,
-            Astra.Api.Docs.RoutineSummaryPipeline pipeline,
+            Astra.Api.Docs.DocsGenerationOrchestrator orchestrator,
             CancellationToken ct) =>
         {
-            var runId = await pipeline.StartAsync(
+            var stagesList = string.IsNullOrWhiteSpace(stages)
+                ? Astra.Api.Docs.DocsGenerationOrchestrator.DefaultStages
+                : stages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            var runId = await orchestrator.StartAsync(
                 corpusId,
-                new Astra.Api.Docs.RoutineSummaryPipeline.GenerateOptions(take, force ?? false),
+                new Astra.Api.Docs.DocsGenerationOrchestrator.GenerateOptions(
+                    stagesList, take, force ?? false),
                 ct);
             return Results.Accepted($"/api/v1/docs/runs/{runId}", new
             {
                 generationRunId = runId,
+                stages = stagesList,
                 statusUrl = $"/api/v1/docs/runs/{runId}",
             });
         });

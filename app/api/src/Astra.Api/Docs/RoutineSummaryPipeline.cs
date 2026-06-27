@@ -72,7 +72,15 @@ public sealed class RoutineSummaryPipeline
 
     public sealed record GenerateOptions(int? Take, bool Force);
 
-    /// <summary>Create a DocGenerationRun row and background the work. Returns the run ID.</summary>
+    public sealed record StageResult(int Succeeded, int Failed, int Skipped, string MetricsJson);
+
+    /// <summary>
+    /// Phase 11.0.a single-stage entry point: create a DocGenerationRun
+    /// row and background the routine-summary work. Kept for backward
+    /// compat with callers that want exactly one stage; the 11.0.b
+    /// multi-stage orchestrator takes a different entry point and uses
+    /// <see cref="RunRoutineSummaryStageAsync"/> directly.
+    /// </summary>
     public async Task<Guid> StartAsync(Guid corpusId, GenerateOptions opts, CancellationToken ct)
     {
         Guid runId;
@@ -104,22 +112,56 @@ public sealed class RoutineSummaryPipeline
         // Fire-and-forget. Pattern matches DevEndpoints' background-reset flow:
         // the request scope dies the moment the endpoint responds, so the
         // worker must create its own scope and use its own CancellationToken.
-        _ = Task.Run(() => RunAsync(runId, corpusId, sourceVersionId, opts));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await RunRoutineSummaryStageAsync(runId, corpusId, sourceVersionId, opts, CancellationToken.None);
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var state = result.Failed == 0
+                    ? "SUCCEEDED"
+                    : (result.Succeeded > 0 ? "PARTIAL" : "FAILED");
+                var summary = $"{result.Succeeded}/{result.Succeeded + result.Failed} succeeded · {result.Failed} failed · {result.Skipped} skipped";
+                var row = await db.DocGenerationRuns.FirstOrDefaultAsync(r => r.Id == runId);
+                if (row is null) return;
+                row.State = state;
+                row.Summary = summary.Length > 1024 ? summary[..1024] : summary;
+                row.MetricsJson = result.MetricsJson;
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Doc generation run {RunId} crashed", runId);
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.DocGenerationRuns.FirstOrDefaultAsync(r => r.Id == runId);
+                if (row is null) return;
+                row.State = "FAILED";
+                row.ErrorSummary = ex.Message.Length > 4000 ? ex.Message[..4000] : ex.Message;
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+        });
         return runId;
     }
 
-    private async Task RunAsync(Guid runId, Guid corpusId, Guid sourceVersionId, GenerateOptions opts)
+    /// <summary>
+    /// Run the routine-summary stage against an EXISTING DocGenerationRun row.
+    /// Does not mark the run completed — the orchestrator chains stages and
+    /// only marks completion after the last stage finishes.
+    /// </summary>
+    public async Task<StageResult> RunRoutineSummaryStageAsync(
+        Guid runId, Guid corpusId, Guid sourceVersionId, GenerateOptions opts, CancellationToken ct)
     {
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var blob = scope.ServiceProvider.GetRequiredService<IBlobClient>();
-            var classifier = scope.ServiceProvider.GetRequiredService<RoutineTierClassifier>();
-            var httpFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-            var ct = CancellationToken.None;
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var blob = scope.ServiceProvider.GetRequiredService<IBlobClient>();
+        var classifier = scope.ServiceProvider.GetRequiredService<RoutineTierClassifier>();
+        var httpFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
 
-            await MarkAsync(db, runId, "RUNNING", "Loading corpus", null, ct);
+        await MarkAsync(db, runId, "RUNNING", "Loading corpus", null, ct);
 
             var tiers = await classifier.ClassifyForCorpusAsync(corpusId, sourceVersionId, ct);
 
@@ -163,9 +205,8 @@ public sealed class RoutineSummaryPipeline
 
             if (todo.Count == 0)
             {
-                await MarkAsync(db, runId, "SUCCEEDED", "Nothing to do",
-                    new MetricsAccumulator { Skipped = existing.Count }, ct, completed: true);
-                return;
+                var emptyMetrics = new MetricsAccumulator { Skipped = existing.Count };
+                return new StageResult(0, 0, existing.Count, emptyMetrics.ToJson());
             }
 
             var metrics = new MetricsAccumulator { Skipped = existing.Count };
@@ -203,29 +244,15 @@ public sealed class RoutineSummaryPipeline
 
             await Task.WhenAll(pendingSingle);
 
-            // Final metrics flush.
+            // Final per-stage metrics flush — but DON'T mark completed. The
+            // single-stage StartAsync wrapper and the 11.0.b orchestrator
+            // each handle their own completion marking.
             using (var finalScope = _scopeFactory.CreateScope())
             {
                 var finalDb = finalScope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var state = metrics.Failed == 0
-                    ? "SUCCEEDED"
-                    : (metrics.Succeeded > 0 ? "PARTIAL" : "FAILED");
-                var summaryText = $"{metrics.Succeeded}/{todo.Count} succeeded · {metrics.Failed} failed · {metrics.Skipped} skipped";
-                await MarkAsync(finalDb, runId, state, summaryText, metrics, ct, completed: true);
+                await UpdateMetricsAsync(finalDb, runId, metrics, ct);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Doc generation run {RunId} crashed", runId);
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var row = await db.DocGenerationRuns.FirstOrDefaultAsync(r => r.Id == runId);
-            if (row is null) return;
-            row.State = "FAILED";
-            row.ErrorSummary = ex.Message.Length > 4000 ? ex.Message[..4000] : ex.Message;
-            row.CompletedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync();
-        }
+        return new StageResult(metrics.Succeeded, metrics.Failed, metrics.Skipped, metrics.ToJson());
     }
 
     private async Task RunSingleAsync(
