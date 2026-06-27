@@ -166,21 +166,25 @@ const CPP: Target = {
   },
 };
 
-// Phase 10.0.i — VB6 target. Headline routine is the same
-// frmOrderEntry.btnSubmit_Click used in the standalone
-// vb6-inventory-demo.spec.ts: it exercises every new VB6 claim kind
-// (onErrorHandler, comInteropContract, eventHandlerContract,
-// defaultPropertyUsage, lateBindingCall) in one ~50-LOC handler.
+// Phase 10.0.i (target) + Phase 10.3.e (re-targeted).
+// Original demo cut walked frmOrderEntry.btnSubmit_Click, which exercises
+// every new VB6 claim kind in one ~50-LOC handler. Phase 10.3.e re-points
+// the recording at modPricing.SafeAverage instead: pure Currency function,
+// On Error Resume Next swallow trap (the canonical VB6 gotcha), 4 lines —
+// reads cleanly on camera, and the property gate exercises the Currency
+// generatorHints non-vacuously (Phase 10.3.d) for a real 4-green close.
+// The btnSubmit_Click spec from the earlier recording is SIGNED so the
+// extraction pipeline short-circuits; re-target avoids the paid re-extract
+// AND tells a cleaner story.
 const VB6: Target = {
   langId: 'vb6',
   langLabel: 'VB6',
   corpusName: 'VB6 Inventory Sample (Nous)',
   equivalenceCaption: 'Validation · cross-runtime (VB6 ↔ .NET 10)',
   graphNodeCaption: '38 routines',
-  // VB6 archetypes ship under dotnet10 (per ADR-035/036); the
-  // SpecReviewPage auto-correct effect (Phase 10.1.a.3) picks the
-  // right stack from the spec's schema, so scaffold POST works
-  // without an explicit ?target= override.
+  // VB6 archetypes ship under dotnet10 (per ADR-035/036); 10.3.b's
+  // server-side auto-routing default picks dotnet10 from schemaId
+  // automatically, so scaffold POST works without an override.
   scaffoldStackRegex: /\d+ files · \d+ TODOs · dotnet1[08]/,
   async findRoutine(req) {
     const list = await req.get(`${API_BASE}/api/v1/corpora`, { headers: ENG }).then((r) => r.json());
@@ -188,11 +192,9 @@ const VB6: Target = {
     if (!corpus) return null;
     const detail = await req.get(`${API_BASE}/api/v1/corpora/${corpus.id}`, { headers: ENG }).then((r) => r.json());
     for (const file of detail.latestVersion?.files ?? []) {
-      if (!/frmOrderEntry/i.test(file.relativePath ?? '')) continue;
+      if (!/modPricing/i.test(file.relativePath ?? '')) continue;
       for (const sub of file.subroutines ?? []) {
-        // Accept either bare or qualified form — v0 parser may settle
-        // on either `btnSubmit_Click` or `frmOrderEntry.btnSubmit_Click`.
-        if (/(^|\.)btnSubmit_Click$/i.test(sub.name)) {
+        if (/(^|\.)SafeAverage$/i.test(sub.name)) {
           return { corpusId: corpus.id, subId: sub.id, subName: sub.name };
         }
       }

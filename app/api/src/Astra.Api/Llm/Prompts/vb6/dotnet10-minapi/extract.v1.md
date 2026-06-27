@@ -121,13 +121,56 @@ Rules:
     to the schema below.
 
 **Property-test 4th gate — `generatorHints` (per ADR-030 + Phase 10.0.g):**
-same guidance as the WinForms prompt, including the type-token table
-that covers the five VB6-specific extensions (`currency`, `variant`,
-`date`, `recordset`, `dispatch`) and their extra-fields surface.
-Minimal-API targets tend to have clean parameter surfaces (the routine
-is or becomes an endpoint function), so generator hints are usually
-applicable for invariants and edge cases — emit them by default unless
-the claim is structural or touches non-deterministic state.
+
+For every `invariant` and `edge_case` claim, decide whether to emit a `generatorHints` field. **Emit** when the claim's truth depends on values flowing through input parameters that you can describe as a generator (Long with bounds, String with max length, Currency with min/max, Variant covering a coercion boundary, Recordset shape, late-bound Dispatch members). **Omit** when the claim is purely structural or when the routine touches non-deterministic state (clock, random, COM with side effects). Minimal-API targets tend to have clean parameter surfaces (the routine is or becomes an endpoint function), so generator hints are usually applicable for invariants and edge cases — emit them by default. The `inputs[*].name` MUST match the spec's top-level `inputs[*].name`. When in doubt, omit — the 4th gate will skip the claim with `skipReason: no_hints`, which is the honest signal.
+
+Type tokens (universal plus the five VB6-specific extensions registered with the property-test sidecar in Phase 10.0.g):
+
+| Token | When to use | Extra fields |
+|-------|-------------|--------------|
+| `long`, `double`, `bool`, `string`, `bytes` | Universal numeric / boolean / textual inputs | `min`, `max`, `maxLen`, `alphabet` |
+| `currency` | VB6 `Currency` invariants — preserve scaled-integer precision (4 decimal places) | `min`, `max` (as decimal STRINGS; floats lose precision over the JSON boundary) |
+| `variant` | Parameter declared `As Variant`, invariant depends on the runtime coercion path | `variantOf` (subtype tokens list; omit for broad mix) |
+| `date` | Routine reads a `Date` value and the invariant depends on calendar boundaries | none — strategy covers the boundary cases |
+| `recordset` | Routine walks a `DAO.Recordset` or `ADODB.Recordset` and the invariant depends on row count / column types | `columns` (`[{name, type, min?, max?}]`), `minRows`, `maxRows` |
+| `dispatch` | Parameter is `As Object`, routine late-binds via `CallByName` or default-property | `members` (`{name: type_token, ...}`) |
+
+Shape (the LITERAL JSON shape — `inputs` array of named-and-typed items, NOT a flat parameter list):
+
+```json
+"generatorHints": {
+  "inputs": [
+    { "name": "<MUST match a spec.inputs[*].name>",
+      "type": "long|currency|double|bool|string|bytes|variant|date|recordset|dispatch",
+      "min": <number-or-decimal-string-or-omit>, "max": <number-or-decimal-string-or-omit>,
+      "maxLen": <number-or-omit>, "alphabet": "<chars-or-omit>",
+      "variantOf": ["<subtype>", ...],
+      "columns": [ {"name": "<col>", "type": "<type>", "min": <n>, "max": <n>} ],
+      "minRows": <number-or-omit>, "maxRows": <number-or-omit>,
+      "members": { "<name>": "<type>" }
+    }
+  ],
+  "constraint": "<plain-English filter on inputs, or omit>",
+  "examples": [ { "<input_name>": <value> } ]
+}
+```
+
+Worked example (an INV-1 on a Currency sum):
+
+```json
+"generatorHints": {
+  "inputs": [
+    { "name": "lines", "type": "recordset",
+      "columns": [
+        {"name": "Total", "type": "currency", "min": "0.00", "max": "9999.99"},
+        {"name": "Quantity", "type": "long", "min": 0, "max": 100}
+      ],
+      "minRows": 0, "maxRows": 20 }
+  ],
+  "constraint": "sum of Total across rows fits in Currency range",
+  "examples": [ { "lines": [] }, { "lines": [{"Total": "12.34", "Quantity": 1}] } ]
+}
+```
 
 Output schema (spec/v1, vb6, minimal-API target): same shape as the
 WinForms prompt EXCEPT `target_archetype_hint` is `"MinimalApi"`.
