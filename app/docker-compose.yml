@@ -344,6 +344,23 @@ services:
       Llm__Anthropic__Model: "${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}"
       Llm__Anthropic__BaseUrl: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
       Llm__Anthropic__MaxOutputTokens: "${ANTHROPIC_MAX_OUTPUT_TOKENS:-16384}"
+      # Phase 11.0 — documentation generation (per ADR-038). Generator
+      # rides the same Llm__Provider abstraction (mock | anthropic) with
+      # per-tier model overrides so the long-tail routine-summary stage
+      # can use Haiku while headline routines escalate to Sonnet/Opus.
+      # GitMirror is the on-sign push to a dedicated astra-docs/<corpus-id>
+      # branch; disabled by default so a fresh clone never tries to push
+      # anywhere unintended.
+      Docs__Generator__Provider: "${DOCS_GENERATOR_PROVIDER:-mock}"
+      Docs__Generator__HaikuModel: "${DOCS_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
+      Docs__Generator__SonnetModel: "${DOCS_SONNET_MODEL:-claude-sonnet-4-5-20250929}"
+      Docs__Generator__OpusModel: "${DOCS_OPUS_MODEL:-claude-opus-4-5-20250929}"
+      Docs__Generator__BatchSize: "${DOCS_BATCH_SIZE:-20}"
+      Docs__GitMirror__Enabled: "${DOCS_GIT_MIRROR_ENABLED:-false}"
+      Docs__GitMirror__BranchPattern: "${DOCS_GIT_MIRROR_BRANCH:-astra-docs/{corpusId}}"
+      Docs__GitMirror__AuthorName: "${DOCS_GIT_MIRROR_AUTHOR_NAME:-Astra Documentation Bot}"
+      Docs__GitMirror__AuthorEmail: "${DOCS_GIT_MIRROR_AUTHOR_EMAIL:-docs-bot@astra.local}"
+      Docs__GitMirror__PushPolicy: "${DOCS_GIT_MIRROR_PUSH_POLICY:-on-sign}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       OTEL_SERVICE_NAME: astra-api
     ports:

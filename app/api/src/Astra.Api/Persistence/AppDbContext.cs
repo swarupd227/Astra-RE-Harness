@@ -29,6 +29,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<HarmonisationFinding> HarmonisationFindings => Set<HarmonisationFinding>();
     public DbSet<MigrationPlan> MigrationPlans => Set<MigrationPlan>();
     public DbSet<MigrationWave> MigrationWaves => Set<MigrationWave>();
+    public DbSet<DocSection> DocSections => Set<DocSection>();
+    public DbSet<DocGenerationRun> DocGenerationRuns => Set<DocGenerationRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -501,6 +503,64 @@ public sealed class AppDbContext : DbContext
             b.HasOne<MigrationPlan>().WithMany()
              .HasForeignKey(x => x.MigrationPlanId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.MigrationPlanId, x.WaveNumber });
+        });
+
+        modelBuilder.Entity<DocSection>(b =>
+        {
+            b.ToTable("doc_sections");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.SectionKind).HasColumnName("section_kind").HasMaxLength(32).IsRequired();
+            b.Property(x => x.Scope).HasColumnName("scope").HasMaxLength(16).IsRequired();
+            b.Property(x => x.SubroutineId).HasColumnName("subroutine_id");
+            b.Property(x => x.ModuleName).HasColumnName("module_name").HasMaxLength(256);
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.RenderedMarkdown).HasColumnName("rendered_markdown");
+            b.Property(x => x.LlmCallId).HasColumnName("llm_call_id");
+            b.Property(x => x.GenerationRunId).HasColumnName("generation_run_id");
+            b.Property(x => x.SignatureId).HasColumnName("signature_id");
+            b.Property(x => x.CreatedBy).HasColumnName("created_by");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.Property(x => x.PreviousSectionId).HasColumnName("previous_section_id");
+
+            b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Subroutine).WithMany().HasForeignKey(x => x.SubroutineId).OnDelete(DeleteBehavior.SetNull);
+            b.HasOne(x => x.LlmCall).WithMany().HasForeignKey(x => x.LlmCallId).OnDelete(DeleteBehavior.SetNull);
+            // Re-sync lineage, mirrors Spec's PreviousSpecId pattern.
+            b.HasOne<DocSection>().WithMany()
+             .HasForeignKey(x => x.PreviousSectionId).OnDelete(DeleteBehavior.ClientSetNull);
+
+            // Main list queries: per-corpus by section_kind, per-corpus by state
+            // (review queue), per-subroutine for the routine-detail page.
+            b.HasIndex(x => new { x.CorpusId, x.SectionKind });
+            b.HasIndex(x => new { x.CorpusId, x.State });
+            b.HasIndex(x => x.SubroutineId);
+            b.HasIndex(x => x.GenerationRunId);
+        });
+
+        modelBuilder.Entity<DocGenerationRun>(b =>
+        {
+            b.ToTable("doc_generation_runs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.StagesRequested).HasColumnName("stages_requested").HasMaxLength(512).IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.MetricsJson).HasColumnName("metrics_json").HasColumnType("jsonb");
+            b.Property(x => x.Summary).HasColumnName("summary").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.ErrorCode).HasColumnName("error_code").HasMaxLength(128);
+            b.Property(x => x.ErrorSummary).HasColumnName("error_summary").HasMaxLength(4000);
+            b.Property(x => x.TriggeredBy).HasColumnName("triggered_by");
+            b.Property(x => x.StartedAt).HasColumnName("started_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+
+            b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.CorpusId, x.StartedAt });
         });
     }
 }

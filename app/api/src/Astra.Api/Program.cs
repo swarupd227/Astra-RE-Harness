@@ -463,6 +463,58 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_migration_waves_plan_wave
               ON migration_waves (migration_plan_id, wave_number);
             """);
+
+        // Phase 11.0 — Documentation sections + generation runs
+        // (per ADR-038). Additive DDL so dev databases pick up without
+        // RecreateOnStartup. Column types mirror the EF model in
+        // AppDbContext.OnModelCreating; field-level constraints stay
+        // owned by the EF side.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS doc_sections (
+                id                    uuid        PRIMARY KEY,
+                corpus_id             uuid        NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                source_version_id     uuid        NOT NULL,
+                section_kind          varchar(32) NOT NULL,
+                scope                 varchar(16) NOT NULL,
+                subroutine_id         uuid        NULL REFERENCES subroutines(id) ON DELETE SET NULL,
+                module_name           varchar(256) NULL,
+                state                 varchar(32) NOT NULL,
+                payload_json          jsonb       NOT NULL,
+                rendered_markdown     text        NULL,
+                llm_call_id           uuid        NULL REFERENCES llm_calls(id) ON DELETE SET NULL,
+                generation_run_id     uuid        NULL,
+                signature_id          uuid        NULL,
+                created_by            uuid        NULL,
+                created_at            timestamptz NOT NULL,
+                updated_at            timestamptz NOT NULL,
+                previous_section_id   uuid        NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_doc_sections_corpus_kind
+              ON doc_sections (corpus_id, section_kind);
+            CREATE INDEX IF NOT EXISTS ix_doc_sections_corpus_state
+              ON doc_sections (corpus_id, state);
+            CREATE INDEX IF NOT EXISTS ix_doc_sections_subroutine
+              ON doc_sections (subroutine_id);
+            CREATE INDEX IF NOT EXISTS ix_doc_sections_generation_run
+              ON doc_sections (generation_run_id);
+
+            CREATE TABLE IF NOT EXISTS doc_generation_runs (
+                id                  uuid        PRIMARY KEY,
+                corpus_id           uuid        NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                source_version_id   uuid        NOT NULL,
+                stages_requested    varchar(512) NOT NULL,
+                state               varchar(32) NOT NULL,
+                metrics_json        jsonb       NULL,
+                summary             varchar(1024) NOT NULL,
+                error_code          varchar(128) NULL,
+                error_summary       varchar(4000) NULL,
+                triggered_by        uuid        NULL,
+                started_at          timestamptz NOT NULL,
+                completed_at        timestamptz NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_doc_generation_runs_corpus_started
+              ON doc_generation_runs (corpus_id, started_at);
+            """);
     }
     if (canConnect && seedDemo)
     {

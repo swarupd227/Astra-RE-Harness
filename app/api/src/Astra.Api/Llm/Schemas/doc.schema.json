@@ -1,0 +1,169 @@
+{
+  "$schema": "https://astra.nous.ai/doc-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "doc",
+  "displayName": "Transition documentation",
+  "description": "Section taxonomy for AI-drafted transition documentation. Each kind maps to one of the artefacts a manual transition team produces during legacy hand-over: system overview, entry-point map, module catalogue, data dictionary, glossary, interface catalogue, business-rule catalogue, headline diagrams. Risk register and operational runbook are intentionally absent — they need humans who ran the system in production and are not safe to auto-draft. Per ADR-038 each DocSection row carries one of these kinds and rides the DRAFT → IN_REVIEW → SIGNED lifecycle of Spec.",
+  "supportedSourceExtensions": ["*"],
+  "compatibleSourceSchemas": ["fortran-f77", "cobol", "delphi", "cpp", "vb6"],
+  "sectionKinds": [
+    {
+      "id": "overview",
+      "label": "System overview",
+      "idPrefix": "OV",
+      "scope": "corpus",
+      "rollupSource": null,
+      "displayTone": "draft",
+      "description": "2-5 page summary of what the system does in business terms, headline subsystems, key flows. The first page a new engineer reads. Auto-drafted from rolled-up module summaries; SME heavily edits before signing.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "title", "kind": "string", "required": true },
+        { "name": "summary", "kind": "markdown", "required": true, "doc": "Plain-English description, 200-1000 words. Markdown allowed (headings, lists, links, mermaid blocks)." },
+        { "name": "subsystems", "kind": "string[]", "required": false, "doc": "Names of headline subsystems referenced from the overview." },
+        { "name": "citations", "kind": "citation[]", "required": true, "doc": "Cite the modules / files the overview synthesises from. Drift detection uses these." }
+      ]
+    },
+    {
+      "id": "entry-point",
+      "label": "Entry-point map",
+      "idPrefix": "EP",
+      "scope": "corpus",
+      "rollupSource": "subroutine-blast-radius",
+      "displayTone": "draft",
+      "description": "Ranked list of the 10-20 routines that explain 80% of the system. Ranking comes from the migration-plan blast-radius score (Phase 8.0.c) — no LLM judgement needed for the ranking, only for the per-entry justification. Cuts onboarding from weeks to days.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "entries", "kind": "object[]", "required": true, "doc": "Array of { subroutineId, justification, callDepth, blastRadiusScore }. Ordered by rank." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "module",
+      "label": "Module catalogue entry",
+      "idPrefix": "MOD",
+      "scope": "module",
+      "rollupSource": "routine-summary",
+      "displayTone": "draft",
+      "description": "Per-module entry: domain purpose, public surface (entry points), 'you would touch this when…', dependencies, notable risks. Rolls up routine summaries within the module.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "moduleName", "kind": "string", "required": true },
+        { "name": "purpose", "kind": "markdown", "required": true, "doc": "Domain-level description, 50-300 words." },
+        { "name": "publicSurface", "kind": "string[]", "required": true, "doc": "Names of routines / data items intended for external callers." },
+        { "name": "touchWhen", "kind": "string", "required": false, "doc": "One sentence: when would an engineer come edit this module?" },
+        { "name": "knownRisks", "kind": "string[]", "required": false, "doc": "Brittle bits the LLM noticed. SME confirms or removes during review." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "routine-summary",
+      "label": "Routine summary",
+      "idPrefix": "RS",
+      "scope": "subroutine",
+      "rollupSource": null,
+      "displayTone": "draft",
+      "description": "1-3 sentence summary of what a single routine does, in domain language. The long-tail leaf of the documentation tree. Generated with Haiku for utility routines, Sonnet for mid-tier, Opus for headline routines (model tier picked by blast-radius score per ADR-038 §11.0.a).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "summary", "kind": "string", "required": true, "doc": "1-3 sentences, plain prose. No code." },
+        { "name": "inputs", "kind": "string[]", "required": false, "doc": "Named inputs in domain terms (not 'INTEGER N' but 'number of policies')." },
+        { "name": "outputs", "kind": "string[]", "required": false, "doc": "Named outputs in domain terms." },
+        { "name": "sideEffects", "kind": "string[]", "required": false, "doc": "Files written, COMMON blocks mutated, IO performed." },
+        { "name": "tier", "kind": "enum:headline|mid|utility", "required": true, "doc": "Picked from migration-plan blast-radius score. Drives model selection." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "data-dictionary",
+      "label": "Data dictionary entry",
+      "idPrefix": "DD",
+      "scope": "corpus",
+      "rollupSource": "common-block",
+      "displayTone": "draft",
+      "description": "Per data-item entry: name, type, business meaning, units, valid ranges, where it is read / written. Built from parser COMMON-block output (Phase 5.x parser) plus an LLM pass that infers business meaning + units. The thing Doxygen-style tools never produce.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "name", "kind": "string", "required": true },
+        { "name": "container", "kind": "string", "required": false, "doc": "COMMON block name, type name, or file name." },
+        { "name": "type", "kind": "string", "required": true, "doc": "Source-language type (e.g. 'REAL*8', 'INTEGER*4', 'CHARACTER*80'). Verbatim from the parser." },
+        { "name": "businessMeaning", "kind": "string", "required": true, "doc": "Domain-level description ('customer policy number' not 'unique identifier'). LLM-inferred; SME-confirmed." },
+        { "name": "units", "kind": "string", "required": false, "doc": "Physical / monetary units ('USD cents', 'metres', 'days since 1970'). LOW confidence by default; SME must promote." },
+        { "name": "validRange", "kind": "string", "required": false },
+        { "name": "readers", "kind": "string[]", "required": false, "doc": "Routines that read this item." },
+        { "name": "writers", "kind": "string[]", "required": false, "doc": "Routines that write this item." },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "glossary",
+      "label": "Glossary term",
+      "idPrefix": "GL",
+      "scope": "corpus",
+      "rollupSource": null,
+      "displayTone": "draft",
+      "description": "Domain term in use across the codebase, with definition + source evidence ('POL = policy', 'LOB = line of business'). Bulk-extracted across the whole corpus in one prompt with prompt-caching. Without this, the code reads as gibberish to new engineers.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "term", "kind": "string", "required": true, "doc": "The abbreviation / jargon as it appears in the code." },
+        { "name": "definition", "kind": "string", "required": true, "doc": "Plain-English expansion + meaning." },
+        { "name": "examples", "kind": "string[]", "required": false, "doc": "Quoted snippets where the term appears." },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "interface",
+      "label": "External interface entry",
+      "idPrefix": "IF",
+      "scope": "corpus",
+      "rollupSource": "io-pattern",
+      "displayTone": "draft",
+      "description": "Catalogue of every file, JCL DD card, socket, database, MQ queue, COM object, or external service the system touches. Generated from the parser's IO-pattern output (already extracted for Fortran in Phase 5.x) plus an LLM pass that categorises direction + purpose. The external-dependency surface.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "name", "kind": "string", "required": true, "doc": "Logical name as the customer would refer to it (e.g. 'CUSTOMER_MASTER', 'mainframe billing API', 'audit log file')." },
+        { "name": "kind", "kind": "enum:file|database|socket|queue|service|com|stdio", "required": true },
+        { "name": "direction", "kind": "enum:read|write|both", "required": true },
+        { "name": "purpose", "kind": "string", "required": true, "doc": "Why the system touches this interface, in business terms." },
+        { "name": "format", "kind": "string", "required": false, "doc": "File format / schema / protocol (e.g. 'fixed-width 240 columns', 'CSV with header', 'JSON over HTTPS')." },
+        { "name": "touchpoints", "kind": "string[]", "required": false, "doc": "Routines that read or write this interface." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "business-rule",
+      "label": "Business rule",
+      "idPrefix": "BR",
+      "scope": "subroutine",
+      "rollupSource": null,
+      "displayTone": "draft",
+      "description": "Embedded business rule extracted from a conditional or formula in the code. Hybrid extraction mode per ADR-038: conservative by default (only emit when the source has an explicit conditional with clear intent); SME marks rules-dense modules where the aggressive pass runs (every branch becomes a candidate). Confidence field carries the call.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "ruleText", "kind": "string", "required": true, "doc": "Plain-English statement of the rule. Use IF…THEN… form when the source is a conditional." },
+        { "name": "category", "kind": "string", "required": false, "doc": "Business domain (e.g. 'pricing', 'eligibility', 'compliance')." },
+        { "name": "extractionMode", "kind": "enum:conservative|aggressive", "required": true, "doc": "Which extraction pass emitted this. Drives default review weight in the UI." },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "diagram",
+      "label": "Diagram",
+      "idPrefix": "DG",
+      "scope": "subroutine",
+      "rollupSource": "call-graph",
+      "displayTone": "draft",
+      "description": "Rendered diagram (Mermaid source) for a headline flow or module dependency. Sequence diagrams emit from a single entry routine + call-graph walk; dependency diagrams reuse the existing Phase 8.0.a graph. Picked for the top-N routines by blast-radius score.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "diagramKind", "kind": "enum:sequence|dependency|flow", "required": true },
+        { "name": "title", "kind": "string", "required": true },
+        { "name": "mermaidSource", "kind": "string", "required": true, "doc": "Raw Mermaid source. The renderer in the doc-site emits this verbatim." },
+        { "name": "narrative", "kind": "markdown", "required": false, "doc": "Optional caption explaining what the diagram shows." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    }
+  ]
+}
