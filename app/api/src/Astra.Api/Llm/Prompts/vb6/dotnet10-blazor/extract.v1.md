@@ -118,10 +118,15 @@ Rules:
     markdown fences, no trailing commentary.** It must conform exactly
     to the schema below.
 
-**Property-test 4th gate — `generatorHints` (per ADR-030):** same
-guidance as the WinForms prompt. Emit when the claim depends on
-parameter values you can describe as a generator; omit for structural
-claims and non-deterministic state.
+**Property-test 4th gate — `generatorHints` (per ADR-030 + Phase 10.0.g):**
+same guidance as the WinForms prompt, including the type-token table that
+covers the five VB6-specific extensions (`currency`, `variant`, `date`,
+`recordset`, `dispatch`) and their extra-fields surface. Emit when the
+claim depends on parameter values you can describe as a generator; omit
+for structural claims (component lifecycle, event ordering) and
+non-deterministic state. The Blazor target tends to have wider DI
+surfaces than the routine accepts as parameters — only hint the
+parameters that flow through the routine, not the injected services.
 
 Output schema (spec/v1, vb6, Blazor target): same shape as the
 WinForms prompt EXCEPT `target_archetype_hint` is `"BlazorServer"`.

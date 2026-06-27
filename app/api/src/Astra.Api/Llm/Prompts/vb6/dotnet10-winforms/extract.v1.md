@@ -123,9 +123,20 @@ Rules:
     markdown fences, no trailing commentary.** It must conform exactly
     to the schema below.
 
-**Property-test 4th gate — `generatorHints` (per ADR-030):**
+**Property-test 4th gate — `generatorHints` (per ADR-030 + Phase 10.0.g VB6 strategies):**
 
-For every `invariant` and `edge_case` claim, decide whether to emit a `generatorHints` field. **Emit** when the claim's truth depends on values flowing through input parameters that you can describe as a generator (long with bounds, string with max length, currency with min/max, variant covering a coercion boundary). **Omit** when the claim is purely structural (event ordering, control-lifecycle assumptions), or when the routine touches non-deterministic state (clock, random, COM with side effects). The `inputs[*].name` MUST match the spec's top-level `inputs[*].name`. When in doubt, omit.
+For every `invariant` and `edge_case` claim, decide whether to emit a `generatorHints` field. **Emit** when the claim's truth depends on values flowing through input parameters that you can describe as a generator (Long with bounds, String with max length, Currency with min/max, Variant covering a coercion boundary, Recordset shape, late-bound Dispatch members). **Omit** when the claim is purely structural (event ordering, control-lifecycle assumptions), or when the routine touches non-deterministic state (clock, random, COM with side effects). The `inputs[*].name` MUST match the spec's top-level `inputs[*].name`. When in doubt, omit — the 4th gate will skip the claim with `skipReason: no_hints`, which is the honest signal.
+
+Type tokens — universal plus the five VB6-specific extensions that Phase 10.0.g registered with the property-test sidecar:
+
+| Token | When to use | Extra fields |
+|-------|-------------|--------------|
+| `long`, `double`, `bool`, `string`, `bytes` | Universal numeric / boolean / textual inputs | `min`, `max`, `maxLen`, `alphabet` |
+| `currency` | VB6 `Currency` invariants — preserve scaled-integer precision (4 decimal places). Use when an invariant cites total / line / discount Currency math | `min`, `max` (as decimal strings; floats lose precision over the JSON boundary) |
+| `variant` | When the parameter declared `As Variant` and the invariant depends on the runtime coercion path | `variantOf` (list of subtype tokens — `["long","currency","double","string","date","null"]`; omit for a broad mix) |
+| `date` | When the routine reads a `Date` value and the invariant depends on calendar boundaries (leap year, century, MIN/MAX) | none — strategy already covers the boundary cases |
+| `recordset` | When the routine walks a `DAO.Recordset` or `ADODB.Recordset` and the invariant depends on row count / column types | `columns` (list of `{name, type, min?, max?}`), `minRows`, `maxRows` |
+| `dispatch` | When the parameter is `As Object` and the routine late-binds via `CallByName` or default-property — invariant depends on the member surface | `members` (`{name: type_token, ...}` mapping CallByName members to types) |
 
 Shape:
 
@@ -133,12 +144,34 @@ Shape:
 "generatorHints": {
   "inputs": [
     { "name": "<input_name>",
-      "type": "long|currency|double|bool|string|variant|date|bytes",
-      "min": <number-or-omit>, "max": <number-or-omit>,
-      "maxLen": <number-or-omit>, "alphabet": "<chars-or-omit>" }
+      "type": "long|currency|double|bool|string|bytes|variant|date|recordset|dispatch",
+      "min": <number-or-string-or-omit>, "max": <number-or-string-or-omit>,
+      "maxLen": <number-or-omit>, "alphabet": "<chars-or-omit>",
+      "variantOf": ["<subtype>", ...],
+      "columns": [ {"name": "<col>", "type": "<type>", "min": <n>, "max": <n>} ],
+      "minRows": <number-or-omit>, "maxRows": <number-or-omit>,
+      "members": { "<name>": "<type>" }
+    }
   ],
   "constraint": "<plain-English filter on inputs, or omit>",
   "examples": [ { "<input_name>": <value> } ]
+}
+```
+
+Worked example (an INV-1 on a Currency sum, hint on the `lines` input):
+
+```json
+"generatorHints": {
+  "inputs": [
+    { "name": "lines", "type": "recordset",
+      "columns": [
+        {"name": "Total", "type": "currency", "min": "0.00", "max": "9999.99"},
+        {"name": "Quantity", "type": "long", "min": 0, "max": 100}
+      ],
+      "minRows": 0, "maxRows": 20 }
+  ],
+  "constraint": "sum of Total across rows fits in Currency range",
+  "examples": [ { "lines": [] }, { "lines": [{"Total": "12.34", "Quantity": 1}] } ]
 }
 ```
 

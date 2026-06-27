@@ -120,11 +120,14 @@ Rules:
     markdown fences, no trailing commentary.** It must conform exactly
     to the schema below.
 
-**Property-test 4th gate — `generatorHints` (per ADR-030):** same
-guidance as the WinForms prompt. Minimal-API targets tend to have
-clean parameter surfaces (the routine is or becomes an endpoint
-function), so generator hints are usually applicable for invariants
-and edge cases.
+**Property-test 4th gate — `generatorHints` (per ADR-030 + Phase 10.0.g):**
+same guidance as the WinForms prompt, including the type-token table
+that covers the five VB6-specific extensions (`currency`, `variant`,
+`date`, `recordset`, `dispatch`) and their extra-fields surface.
+Minimal-API targets tend to have clean parameter surfaces (the routine
+is or becomes an endpoint function), so generator hints are usually
+applicable for invariants and edge cases — emit them by default unless
+the claim is structural or touches non-deterministic state.
 
 Output schema (spec/v1, vb6, minimal-API target): same shape as the
 WinForms prompt EXCEPT `target_archetype_hint` is `"MinimalApi"`.
