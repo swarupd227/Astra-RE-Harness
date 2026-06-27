@@ -138,10 +138,17 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
 
 // Phase 11.0 vertical slice — documentation generation service. Uses
 // a named HttpClient so the timeout setting in DocsExtractionService
-// composes cleanly with the global HTTP infra. Production pipeline
-// (batching, caching, tier-based dispatch) ships in Phase 11.0.a.
+// composes cleanly with the global HTTP infra.
 builder.Services.AddHttpClient("docs-summary");
 builder.Services.AddScoped<Astra.Api.Docs.DocsExtractionService>();
+
+// Phase 11.0.a — production routine-summary pipeline.
+// Bind Docs:Generator options, register the tier classifier + pipeline.
+// The pipeline backgrounds via Task.Run + IServiceScopeFactory because
+// the request scope dies the moment the endpoint returns 202.
+builder.Services.Configure<Astra.Api.Docs.DocsOptions>(builder.Configuration.GetSection("Docs:Generator"));
+builder.Services.AddScoped<Astra.Api.Docs.RoutineTierClassifier>();
+builder.Services.AddSingleton<Astra.Api.Docs.RoutineSummaryPipeline>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
 // is registered as IPlanStrategy; MigrationPlanner picks one by name

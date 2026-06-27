@@ -39,6 +39,56 @@ public static class DocsEndpoints
             });
         });
 
+        // Phase 11.0.a — production routine-summary generator. Returns 202
+        // with a generationRunId; the actual work runs in the background
+        // and the caller polls /status until State leaves RUNNING.
+        // Optional ?take=N caps work for spot-runs; ?force=true wipes any
+        // existing routine-summary sections for the same SourceVersion
+        // before re-generating.
+        app.MapPost("/api/v1/corpora/{corpusId:guid}/docs/generate", async (
+            Guid corpusId,
+            int? take,
+            bool? force,
+            Astra.Api.Docs.RoutineSummaryPipeline pipeline,
+            CancellationToken ct) =>
+        {
+            var runId = await pipeline.StartAsync(
+                corpusId,
+                new Astra.Api.Docs.RoutineSummaryPipeline.GenerateOptions(take, force ?? false),
+                ct);
+            return Results.Accepted($"/api/v1/docs/runs/{runId}", new
+            {
+                generationRunId = runId,
+                statusUrl = $"/api/v1/docs/runs/{runId}",
+            });
+        });
+
+        // Status poll for a generation run. Returns state, summary, metrics.
+        app.MapGet("/api/v1/docs/runs/{runId:guid}", async (
+            Guid runId,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var run = await db.DocGenerationRuns
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == runId, ct);
+            if (run is null)
+                return Results.NotFound(new { error = new { code = "docs.run.not_found" } });
+            return Results.Ok(new
+            {
+                id = run.Id,
+                corpusId = run.CorpusId,
+                state = run.State,
+                summary = run.Summary,
+                metrics = run.MetricsJson is null
+                    ? null
+                    : (System.Text.Json.JsonElement?)System.Text.Json.JsonDocument.Parse(run.MetricsJson).RootElement,
+                startedAt = run.StartedAt,
+                completedAt = run.CompletedAt,
+                errorSummary = run.ErrorSummary,
+            });
+        });
+
         // Read-back: GET /api/v1/dev/docs/sections?corpusId=...
         // Returns the rendered markdown for every DocSection on the corpus
         // so the slice output can be read by eye.

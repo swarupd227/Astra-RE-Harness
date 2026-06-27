@@ -354,7 +354,7 @@ services:
       Docs__Generator__Provider: "${DOCS_GENERATOR_PROVIDER:-mock}"
       Docs__Generator__HaikuModel: "${DOCS_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
       Docs__Generator__SonnetModel: "${DOCS_SONNET_MODEL:-claude-sonnet-4-5-20250929}"
-      Docs__Generator__OpusModel: "${DOCS_OPUS_MODEL:-claude-opus-4-5-20250929}"
+      Docs__Generator__OpusModel: "${DOCS_OPUS_MODEL:-claude-opus-4-5}"
       Docs__Generator__BatchSize: "${DOCS_BATCH_SIZE:-20}"
       Docs__GitMirror__Enabled: "${DOCS_GIT_MIRROR_ENABLED:-false}"
       Docs__GitMirror__BranchPattern: "${DOCS_GIT_MIRROR_BRANCH:-astra-docs/{corpusId}}"
