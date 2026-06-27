@@ -136,6 +136,13 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.DependencyGraphBuilder>();
 // the dependency graph; persists MigrationPlan + MigrationWave rows.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationPlanner>();
 
+// Phase 11.0 vertical slice — documentation generation service. Uses
+// a named HttpClient so the timeout setting in DocsExtractionService
+// composes cleanly with the global HTTP infra. Production pipeline
+// (batching, caching, tier-based dispatch) ships in Phase 11.0.a.
+builder.Services.AddHttpClient("docs-summary");
+builder.Services.AddScoped<Astra.Api.Docs.DocsExtractionService>();
+
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
 // is registered as IPlanStrategy; MigrationPlanner picks one by name
 // at plan-generation time. Order doesn't matter — name lookup keys
@@ -653,6 +660,7 @@ app.MapCommentEndpoints();
 app.MapNotificationEndpoints();
 app.MapEvidenceEndpoints();
 app.MapDevEndpoints();
+app.MapDocsEndpoints();
 
 app.MapGet("/", () => Results.Ok(new
 {
