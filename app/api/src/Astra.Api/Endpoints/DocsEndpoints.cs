@@ -1,3 +1,5 @@
+using Astra.Api.Audit;
+using Astra.Api.Auth;
 using Astra.Api.Docs;
 using Astra.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -132,6 +134,157 @@ public static class DocsEndpoints
             return Results.Ok(new { count = sections.Count, sections });
         });
 
+        // ── 11.0.e Review endpoints ────────────────────────────────────────────
+
+        // GET /api/v1/corpora/{corpusId}/docs/sections
+        //   ?kind=routine-summary  optional section-kind filter
+        //   ?state=DRAFT           optional state filter (uppercase)
+        //   ?page=1&pageSize=50    pagination
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/docs/sections", async (
+            Guid corpusId,
+            string? kind,
+            string? state,
+            int? page,
+            int? pageSize,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var pg = Math.Max(1, page ?? 1);
+            var sz = Math.Clamp(pageSize ?? 50, 1, 200);
+            var q = db.DocSections.AsNoTracking()
+                .Where(s => s.CorpusId == corpusId);
+            if (!string.IsNullOrWhiteSpace(kind))
+                q = q.Where(s => s.SectionKind == kind);
+            if (!string.IsNullOrWhiteSpace(state))
+                q = q.Where(s => s.State == state.ToUpperInvariant());
+            var total = await q.CountAsync(ct);
+            var items = await q
+                .OrderBy(s => s.SectionKind).ThenBy(s => s.CreatedAt)
+                .Skip((pg - 1) * sz).Take(sz)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    kind = s.SectionKind,
+                    scope = s.Scope,
+                    state = s.State,
+                    moduleName = s.ModuleName,
+                    subroutineId = s.SubroutineId,
+                    generationRunId = s.GenerationRunId,
+                    createdAt = s.CreatedAt,
+                    updatedAt = s.UpdatedAt,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(new { total, page = pg, pageSize = sz, data = items });
+        });
+
+        // GET /api/v1/docs/sections/{id}  — full section detail including payload + markdown
+        app.MapGet("/api/v1/docs/sections/{id:guid}", async (
+            Guid id,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var s = await db.DocSections.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == id, ct);
+            if (s is null)
+                return Results.NotFound(new { error = new { code = "docs.section.not_found" } });
+            return Results.Ok(new
+            {
+                id = s.Id,
+                corpusId = s.CorpusId,
+                sourceVersionId = s.SourceVersionId,
+                kind = s.SectionKind,
+                scope = s.Scope,
+                state = s.State,
+                moduleName = s.ModuleName,
+                subroutineId = s.SubroutineId,
+                renderedMarkdown = s.RenderedMarkdown,
+                payload = s.PayloadJson.RootElement,
+                generationRunId = s.GenerationRunId,
+                llmCallId = s.LlmCallId,
+                createdAt = s.CreatedAt,
+                updatedAt = s.UpdatedAt,
+            });
+        });
+
+        // POST /api/v1/docs/sections/{id}/accept  — DRAFT/IN_REVIEW → SIGNED (Admin only)
+        app.MapPost("/api/v1/docs/sections/{id:guid}/accept", async (
+            Guid id,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            var section = await db.DocSections.FirstOrDefaultAsync(s => s.Id == id, ct);
+            if (section is null)
+                return Results.NotFound(new { error = new { code = "docs.section.not_found" } });
+            if (section.State == "SIGNED")
+                return Results.Conflict(new { error = new { code = "docs.section.already_signed" } });
+            if (section.State == "REJECTED")
+                return Results.BadRequest(new { error = new { code = "docs.section.rejected", message = "Cannot sign a rejected section." } });
+
+            var previousState = section.State;
+            section.State = "SIGNED";
+            section.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync(
+                "doc_section.accepted", "doc_section", section.Id, actor,
+                payload: new { previousState, kind = section.SectionKind, scope = section.Scope },
+                ct: ct);
+
+            return Results.Ok(new { id = section.Id, state = section.State, updatedAt = section.UpdatedAt });
+        });
+
+        // DELETE /api/v1/docs/sections/{id}  — reject: soft-delete → REJECTED (Admin only)
+        // Returns 204 on success and on idempotent re-reject.
+        app.MapDelete("/api/v1/docs/sections/{id:guid}", async (
+            Guid id,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            var section = await db.DocSections.FirstOrDefaultAsync(s => s.Id == id, ct);
+            if (section is null)
+                return Results.NotFound(new { error = new { code = "docs.section.not_found" } });
+            if (section.State == "SIGNED")
+                return Results.Conflict(new { error = new { code = "docs.section.already_signed", message = "Cannot reject a signed section." } });
+            if (section.State == "REJECTED")
+                return Results.NoContent(); // idempotent
+
+            var previousState = section.State;
+            section.State = "REJECTED";
+            section.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync(
+                "doc_section.rejected", "doc_section", section.Id, actor,
+                payload: new { previousState, kind = section.SectionKind, scope = section.Scope },
+                ct: ct);
+
+            return Results.NoContent();
+        });
+
+        // GET /api/v1/corpora/{corpusId}/docs/summary  — counts by kind × state
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/docs/summary", async (
+            Guid corpusId,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var breakdown = await db.DocSections.AsNoTracking()
+                .Where(s => s.CorpusId == corpusId)
+                .GroupBy(s => new { s.SectionKind, s.State })
+                .Select(g => new { kind = g.Key.SectionKind, state = g.Key.State, count = g.Count() })
+                .OrderBy(r => r.kind).ThenBy(r => r.state)
+                .ToListAsync(ct);
+            return Results.Ok(new { corpusId, breakdown });
+        });
+
         return app;
     }
+
+    private static IResult Forbid() =>
+        Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
 }
