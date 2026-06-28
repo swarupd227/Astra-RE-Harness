@@ -151,6 +151,8 @@ builder.Services.AddScoped<Astra.Api.Docs.RoutineTierClassifier>();
 builder.Services.AddSingleton<Astra.Api.Docs.RoutineSummaryPipeline>();
 // Phase 11.0.b — module + overview rollup; orchestrator chains stages.
 builder.Services.AddSingleton<Astra.Api.Docs.HierarchicalRollupPipeline>();
+// Phase 11.0.c — cross-cutting catalogs.
+builder.Services.AddSingleton<Astra.Api.Docs.CatalogPipeline>();
 builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation

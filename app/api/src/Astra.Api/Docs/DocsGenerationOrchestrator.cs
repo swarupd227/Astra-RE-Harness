@@ -19,26 +19,33 @@ namespace Astra.Api.Docs;
 /// </summary>
 public sealed class DocsGenerationOrchestrator
 {
-    public static readonly string[] DefaultStages = { "routine-summary", "module", "overview" };
+    public static readonly string[] DefaultStages = {
+        "routine-summary", "module", "overview",
+        "data-dictionary", "glossary", "interface", "business-rules",
+    };
     private static readonly HashSet<string> ValidStages = new(StringComparer.OrdinalIgnoreCase)
     {
         "routine-summary", "module", "overview",
+        "data-dictionary", "glossary", "interface", "business-rules",
     };
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly RoutineSummaryPipeline _summaryPipeline;
     private readonly HierarchicalRollupPipeline _rollupPipeline;
+    private readonly CatalogPipeline _catalogPipeline;
     private readonly ILogger<DocsGenerationOrchestrator> _logger;
 
     public DocsGenerationOrchestrator(
         IServiceScopeFactory scopeFactory,
         RoutineSummaryPipeline summaryPipeline,
         HierarchicalRollupPipeline rollupPipeline,
+        CatalogPipeline catalogPipeline,
         ILogger<DocsGenerationOrchestrator> logger)
     {
         _scopeFactory = scopeFactory;
         _summaryPipeline = summaryPipeline;
         _rollupPipeline = rollupPipeline;
+        _catalogPipeline = catalogPipeline;
         _logger = logger;
     }
 
@@ -113,6 +120,34 @@ public sealed class DocsGenerationOrchestrator
                         var (succ, fail) = await _rollupPipeline.RunOverviewStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["overview"] = new { sections = succ, failed = fail };
+                        break;
+                    }
+                    case "data-dictionary":
+                    {
+                        var r = await _catalogPipeline.RunDataDictionaryAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["data-dictionary"] = new { entries = r.Entries, failed = r.Failed };
+                        break;
+                    }
+                    case "glossary":
+                    {
+                        var r = await _catalogPipeline.RunGlossaryAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["glossary"] = new { entries = r.Entries, failed = r.Failed };
+                        break;
+                    }
+                    case "interface":
+                    {
+                        var r = await _catalogPipeline.RunInterfaceAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["interface"] = new { entries = r.Entries, failed = r.Failed };
+                        break;
+                    }
+                    case "business-rules":
+                    {
+                        var r = await _catalogPipeline.RunBusinessRulesAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["business-rules"] = new { entries = r.Entries, failed = r.Failed };
                         break;
                     }
                 }
