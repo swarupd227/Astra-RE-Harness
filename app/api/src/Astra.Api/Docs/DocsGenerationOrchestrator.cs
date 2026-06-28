@@ -22,17 +22,20 @@ public sealed class DocsGenerationOrchestrator
     public static readonly string[] DefaultStages = {
         "routine-summary", "module", "overview",
         "data-dictionary", "glossary", "interface", "business-rules",
+        "sequence-diagram", "dependency-diagram",
     };
     private static readonly HashSet<string> ValidStages = new(StringComparer.OrdinalIgnoreCase)
     {
         "routine-summary", "module", "overview",
         "data-dictionary", "glossary", "interface", "business-rules",
+        "sequence-diagram", "dependency-diagram",
     };
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly RoutineSummaryPipeline _summaryPipeline;
     private readonly HierarchicalRollupPipeline _rollupPipeline;
     private readonly CatalogPipeline _catalogPipeline;
+    private readonly DiagramPipeline _diagramPipeline;
     private readonly ILogger<DocsGenerationOrchestrator> _logger;
 
     public DocsGenerationOrchestrator(
@@ -40,12 +43,14 @@ public sealed class DocsGenerationOrchestrator
         RoutineSummaryPipeline summaryPipeline,
         HierarchicalRollupPipeline rollupPipeline,
         CatalogPipeline catalogPipeline,
+        DiagramPipeline diagramPipeline,
         ILogger<DocsGenerationOrchestrator> logger)
     {
         _scopeFactory = scopeFactory;
         _summaryPipeline = summaryPipeline;
         _rollupPipeline = rollupPipeline;
         _catalogPipeline = catalogPipeline;
+        _diagramPipeline = diagramPipeline;
         _logger = logger;
     }
 
@@ -148,6 +153,20 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunBusinessRulesAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["business-rules"] = new { entries = r.Entries, failed = r.Failed };
+                        break;
+                    }
+                    case "sequence-diagram":
+                    {
+                        var r = await _diagramPipeline.RunSequenceStageAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["sequence-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
+                        break;
+                    }
+                    case "dependency-diagram":
+                    {
+                        var r = await _diagramPipeline.RunDependencyStageAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["dependency-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
                         break;
                     }
                 }

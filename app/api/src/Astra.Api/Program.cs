@@ -153,6 +153,8 @@ builder.Services.AddSingleton<Astra.Api.Docs.RoutineSummaryPipeline>();
 builder.Services.AddSingleton<Astra.Api.Docs.HierarchicalRollupPipeline>();
 // Phase 11.0.c — cross-cutting catalogs.
 builder.Services.AddSingleton<Astra.Api.Docs.CatalogPipeline>();
+// Phase 11.0.d — sequence + dependency diagrams.
+builder.Services.AddSingleton<Astra.Api.Docs.DiagramPipeline>();
 builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
