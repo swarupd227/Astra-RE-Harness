@@ -1281,6 +1281,27 @@ export const api = {
     ),
   rejectDocSection: (sectionId: string) =>
     apiFetch<void>(`/api/v1/docs/sections/${sectionId}`, { method: 'DELETE' }),
+
+  // Phase 11.0.g — documentation export.
+  // Returns a Blob + the server-provided filename (from Content-Disposition).
+  // Formats: mkdocs (zip), docx, pdf, confluence (json).
+  exportDocs: async (corpusId: string, format: string): Promise<{ blob: Blob; filename: string }> => {
+    const headers = new Headers();
+    headers.set('X-Dev-Persona', getPersona());
+    const res = await fetch(
+      `${API_BASE}/api/v1/corpora/${encodeURIComponent(corpusId)}/docs/export?format=${encodeURIComponent(format)}`,
+      { headers }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new ApiError(res.status, 'docs.export.failed', `Export failed (${res.status}): ${text}`);
+    }
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] ?? `docs-export-${format}`;
+    const blob = await res.blob();
+    return { blob, filename };
+  },
 };
 
 // ─── Validation types ─────────────────────────────────────────────────

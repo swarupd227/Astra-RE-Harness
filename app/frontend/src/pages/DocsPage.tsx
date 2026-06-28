@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Download, FileText, ShieldCheck, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, getPersona } from '@/lib/api';
@@ -58,6 +58,29 @@ export function DocsPage() {
   const [selectedKind, setSelectedKind] = useState<string>(KIND_ORDER[0]);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [sectionPage, setSectionPage] = useState(1);
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExport = async (format: string) => {
+    if (exportLoading) return;
+    setExportLoading(format);
+    setExportError(null);
+    try {
+      const { blob, filename } = await api.exportDocs(id, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError((err as Error).message ?? 'Export failed');
+    } finally {
+      setExportLoading(null);
+    }
+  };
 
   const corpus = useQuery({
     queryKey: ['corpus', id],
@@ -161,14 +184,36 @@ export function DocsPage() {
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{c.name}</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {Object.entries(globalCounts).map(([state, count]) => (
               <Badge key={state} tone={stateTone(state)}>
                 {count} {state}
               </Badge>
             ))}
+            {persona === 'admin' && (
+              <div className="relative ml-2">
+                <select
+                  value=""
+                  onChange={e => { if (e.target.value) handleExport(e.target.value); }}
+                  disabled={!!exportLoading}
+                  aria-label="Export documentation"
+                  className="appearance-none cursor-pointer rounded border border-border-subtle bg-raised py-1.5 pl-8 pr-7 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">{exportLoading ? `Exporting ${exportLoading}…` : 'Export…'}</option>
+                  <option value="mkdocs">MkDocs site (.zip)</option>
+                  <option value="docx">Word document (.docx)</option>
+                  <option value="pdf">PDF (.pdf)</option>
+                  <option value="confluence">Confluence JSON (.json)</option>
+                </select>
+                <Download className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-tertiary" />
+              </div>
+            )}
           </div>
         </div>
+        {exportError && (
+          <p className="mt-1 text-xs text-rose-600">{exportError}</p>
+        )}
       </header>
 
       {/* Three-pane body */}

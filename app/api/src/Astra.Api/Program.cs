@@ -266,6 +266,9 @@ builder.Services.AddScoped<IngestPipeline>();
 // ─── Docs drift detection (Phase 11.0.f) ─────────────────────────────
 builder.Services.AddScoped<DriftDetectionService>();
 
+// ─── Docs export (Phase 11.0.g) ───────────────────────────────────────
+builder.Services.AddScoped<DocExportService>();
+
 // ─── OpenTelemetry ────────────────────────────────────────────────────
 var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "astra-api";
 builder.Services.AddOpenTelemetry()

@@ -37,6 +37,16 @@ RUN dotnet publish -c Release -o /app /p:UseAppHost=false
 # ─── runtime: minimal image ───────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app
+
+# Phase 11.0.g — documentation export.
+# pandoc: mkdocs zip (no-op), docx, and pdf (--pdf-engine=weasyprint) formats.
+# weasyprint: HTML→PDF renderer; avoids a TeX distribution (~200 MB total).
+# Both packages are in Debian Bookworm apt repos.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pandoc \
+    weasyprint \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app .
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080

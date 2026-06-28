@@ -283,6 +283,59 @@ public static class DocsEndpoints
             return Results.Ok(new { corpusId, breakdown });
         });
 
+        // GET /api/v1/corpora/{corpusId}/docs/export?format=mkdocs|docx|pdf|confluence
+        //
+        // Returns a file download.
+        //   mkdocs     → <name>-docs.zip  (application/zip)
+        //   docx       → <name>-docs.docx (requires pandoc in $PATH)
+        //   pdf        → <name>-docs.pdf  (requires pandoc + weasyprint)
+        //   confluence → <name>-confluence.json (Confluence REST API page payloads)
+        //
+        // Only SIGNED + STALE sections are included. STALE sections get an
+        // "out of date" admonition/warning banner. Admin persona required.
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/docs/export", async (
+            Guid corpusId,
+            string? format,
+            DocExportService exporter,
+            IAuditLogger audit,
+            DevPersonaContext actor,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+
+            var fmt = (format ?? "mkdocs").ToLowerInvariant();
+            try
+            {
+                var result = await exporter.ExportAsync(corpusId, fmt, ct);
+
+                await audit.LogAsync(
+                    "docs.exported", "corpus", corpusId, actor,
+                    payload: new { format = fmt, fileName = result.FileName, bytes = result.Bytes.Length },
+                    ctx, ct);
+
+                return Results.File(result.Bytes, result.ContentType, fileDownloadName: result.FileName);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    error = new { code = "docs.export.unknown_format", message = ex.Message },
+                });
+            }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("Pandoc"))
+            {
+                return Results.Problem(
+                    detail: ex.Message,
+                    title: "Export tool unavailable — pandoc is not installed in this container.",
+                    statusCode: 503);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+            {
+                return Results.NotFound(new { error = new { code = "docs.corpus.not_found" } });
+            }
+        });
+
         return app;
     }
 
