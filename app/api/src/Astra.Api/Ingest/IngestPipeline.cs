@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
+using Astra.Api.Docs;
 using Astra.Api.Parser;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
@@ -33,6 +34,7 @@ public sealed class IngestPipeline
     private readonly IFortranParserClient _parser;
     private readonly IAuditLogger _audit;
     private readonly DevPersonaContext _persona;
+    private readonly DriftDetectionService _drift;
     private readonly ILogger<IngestPipeline> _logger;
 
     public IngestPipeline(
@@ -42,6 +44,7 @@ public sealed class IngestPipeline
         IFortranParserClient parser,
         IAuditLogger audit,
         DevPersonaContext persona,
+        DriftDetectionService drift,
         ILogger<IngestPipeline> logger)
     {
         _db = db;
@@ -50,6 +53,7 @@ public sealed class IngestPipeline
         _parser = parser;
         _audit = audit;
         _persona = persona;
+        _drift = drift;
         _logger = logger;
     }
 
@@ -248,6 +252,8 @@ public sealed class IngestPipeline
             _logger.LogInformation(
                 "Ingest complete: corpus={Corpus} files={Files} loc={Loc} subs={Subs} warnings={W}",
                 corpus.Id, corpus.FileCount, totalLoc, totalSubs, warnings.Count);
+
+            await _drift.MarkStaleAsync(corpus.Id, versionId, _persona, ct);
 
             return new IngestResult(
                 CorpusId: corpus.Id,
@@ -532,6 +538,8 @@ public sealed class IngestPipeline
             _logger.LogInformation(
                 "Re-sync complete: corpus={Corpus} files={Files} loc={Loc} subs={Subs} carried={C} superseded={S}",
                 corpus.Id, corpus.FileCount, totalLoc, totalSubs, carriedForward, superseded);
+
+            await _drift.MarkStaleAsync(corpus.Id, newVersionId, _persona, ct);
 
             return new ReingestResult(
                 CorpusId: corpus.Id,

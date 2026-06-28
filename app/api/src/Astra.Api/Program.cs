@@ -1,5 +1,6 @@
 using Astra.Api.Audit;
 using Astra.Api.Auth;
+using Astra.Api.Docs;
 using Astra.Api.Endpoints;
 using Astra.Api.Ingest;
 using Astra.Api.Llm;
@@ -261,6 +262,9 @@ builder.Services.AddSingleton<IFortranParserClient, FortranParserClient>();
 
 // ─── Ingest pipeline (Phase C.1) ──────────────────────────────────────
 builder.Services.AddScoped<IngestPipeline>();
+
+// ─── Docs drift detection (Phase 11.0.f) ─────────────────────────────
+builder.Services.AddScoped<DriftDetectionService>();
 
 // ─── OpenTelemetry ────────────────────────────────────────────────────
 var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "astra-api";
