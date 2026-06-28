@@ -169,6 +169,7 @@ public static class DocsEndpoints
                     state = s.State,
                     moduleName = s.ModuleName,
                     subroutineId = s.SubroutineId,
+                    subroutineName = s.Subroutine != null ? s.Subroutine.Name : null,
                     generationRunId = s.GenerationRunId,
                     createdAt = s.CreatedAt,
                     updatedAt = s.UpdatedAt,

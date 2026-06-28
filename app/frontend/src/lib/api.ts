@@ -1260,6 +1260,27 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, 'http.error', `Could not fetch log (${res.status})`);
     return await res.text();
   },
+
+  // Phase 11.0 — Documentation review
+  getDocSummary: (corpusId: string) =>
+    apiFetch<DocSummary>(`/api/v1/corpora/${corpusId}/docs/summary`),
+  listDocSections: (corpusId: string, params?: { kind?: string; state?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.kind) q.set('kind', params.kind);
+    if (params?.state) q.set('state', params.state);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+    const qs = q.size ? `?${q.toString()}` : '';
+    return apiFetch<DocSectionListResult>(`/api/v1/corpora/${corpusId}/docs/sections${qs}`);
+  },
+  getDocSection: (sectionId: string) =>
+    apiFetch<DocSectionDetail>(`/api/v1/docs/sections/${sectionId}`),
+  acceptDocSection: (sectionId: string) =>
+    apiFetch<{ id: string; state: string; updatedAt: string }>(
+      `/api/v1/docs/sections/${sectionId}/accept`, { method: 'POST' }
+    ),
+  rejectDocSection: (sectionId: string) =>
+    apiFetch<void>(`/api/v1/docs/sections/${sectionId}`, { method: 'DELETE' }),
 };
 
 // ─── Validation types ─────────────────────────────────────────────────
@@ -1563,3 +1584,35 @@ export type MyReviewsResponse = {
 export const myReviewsApi = {
   list: () => apiFetch<MyReviewsResponse>(`/api/v1/my-reviews`),
 };
+
+// ─── Phase 11.0 — Documentation types ────────────────────────────────
+export type DocSectionSummaryItem = {
+  id: string;
+  kind: string;
+  scope: string;
+  state: string;
+  moduleName?: string;
+  subroutineId?: string;
+  subroutineName?: string;
+  generationRunId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DocSectionDetail = DocSectionSummaryItem & {
+  corpusId: string;
+  sourceVersionId: string;
+  renderedMarkdown?: string;
+  payload: Record<string, unknown>;
+  llmCallId?: string;
+};
+
+export type DocSectionListResult = {
+  total: number;
+  page: number;
+  pageSize: number;
+  data: DocSectionSummaryItem[];
+};
+
+export type DocSummaryBreakdown = { kind: string; state: string; count: number };
+export type DocSummary = { corpusId: string; breakdown: DocSummaryBreakdown[] };
