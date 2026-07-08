@@ -130,6 +130,7 @@ export function SignatureHealthPage() {
               No signed specs yet. Specs appear here once the SME signs them.
             </p>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-body">
               <thead className="bg-sunken/60 text-caption text-ink-tertiary">
                 <tr>
@@ -157,6 +158,7 @@ export function SignatureHealthPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </CardBody>
       </Card>
@@ -272,13 +274,20 @@ function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
     return Array.from(byCorpus.values());
   }, [rows]);
 
+  // Non-visual equivalent — summarise healthy vs drifted for assistive tech.
+  const totalHealthy = data.reduce((n, d) => n + d.Healthy, 0);
+  const totalDrifted = data.reduce((n, d) => n + d.Drifted, 0);
+  const chartLabel = `Signature health by corpus across ${data.length} ${
+    data.length === 1 ? 'corpus' : 'corpora'
+  }: ${totalHealthy} healthy, ${totalDrifted} drifted.`;
+
   return (
     <div className="card p-4">
       <p className="label mb-2">By corpus</p>
       {data.length === 0 ? (
         <p className="text-[12px] text-ink-secondary">No signed specs yet.</p>
       ) : (
-        <div style={{ width: '100%', height: 130 }}>
+        <div style={{ width: '100%', height: 130 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 0, right: 4, left: -16, bottom: -4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

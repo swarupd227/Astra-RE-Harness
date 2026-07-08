@@ -460,7 +460,7 @@ function FrontmatterTable({ rows }: { rows: Record<string, string> }) {
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Frontmatter</div>
-      <div className="mt-2 overflow-hidden rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
         <table className="w-full text-body">
           <tbody>
             {entries.map(([k, v]) => (

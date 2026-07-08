@@ -39,11 +39,15 @@ export function CardHeader({
   description,
   action,
   className,
+  titleAs: TitleTag = 'h3',
 }: {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
   className?: string;
+  /** Heading level for the title — defaults to h3. Set h2 for top-level page
+      sections so the document outline doesn't skip a level under the page h1. */
+  titleAs?: 'h2' | 'h3';
 }) {
   return (
     <div
@@ -53,7 +57,7 @@ export function CardHeader({
       )}
     >
       <div>
-        <h3 className="text-h-md font-semibold text-ink-primary">{title}</h3>
+        <TitleTag className="text-h-md font-semibold text-ink-primary">{title}</TitleTag>
         {description && (
           <p className="mt-1 text-body text-ink-secondary">{description}</p>
         )}

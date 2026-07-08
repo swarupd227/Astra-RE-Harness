@@ -219,8 +219,15 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
             <span className="mt-1 truncate font-mono text-caption text-ink-tertiary" title={k.sub}>{k.sub}</span>
           </div>
         );
+        // Only KPIs with a destination are links — give them a hover lift so
+        // their interactivity is signalled; the static tiles stay flat, so the
+        // two are visually distinguishable (they previously looked identical).
         return k.href ? (
-          <Link key={k.label} to={k.href} className="block focus-visible:outline-2 focus-visible:outline-ink-primary">
+          <Link
+            key={k.label}
+            to={k.href}
+            className="block rounded-xl transition-all duration-fast hover:-translate-y-0.5 hover:shadow-card focus-visible:outline-2 focus-visible:outline-ink-primary"
+          >
             {tile}
           </Link>
         ) : (
@@ -249,6 +256,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
       {nextSteps.length > 0 && (
         <Card data-testid="next-steps">
           <CardHeader
+            titleAs="h2"
             title={<span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> What's next</span>}
             description="Actionable handles based on the current pipeline state."
           />
@@ -279,8 +287,9 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card data-testid="home-corpora">
           <CardHeader
+            titleAs="h2"
             title={<span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Projects</span>}
-            description="Connect a Git URL or upload Fortran files to start the pipeline."
+            description="Connect a Git URL or upload source files to start the pipeline."
             action={
               <Link to="/projects/new"><Button variant="primary" size="sm"><Plus className="h-4 w-4" /> Add project</Button></Link>
             }
@@ -542,6 +551,7 @@ function RecentActivityCard({
   return (
     <Card data-testid="home-activity">
       <CardHeader
+        titleAs="h2"
         title={<span className="inline-flex items-center gap-2"><HistoryIcon className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Pipeline activity</span>}
         description="Most recent events across every project."
       />

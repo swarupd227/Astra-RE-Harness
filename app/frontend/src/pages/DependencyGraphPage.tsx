@@ -12,6 +12,8 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
 import { StateBadge } from '@/components/StateBadge';
+import { EmptyState } from '@/components/EmptyState';
+import { AwaitingDataIllustration } from '@/illustrations/AwaitingData';
 
 cytoscape.use(fcose);
 
@@ -270,6 +272,28 @@ export function DependencyGraphPage() {
   }
 
   const g = graph.data;
+
+  if (g.nodes.length === 0) {
+    return (
+      <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10 fadeup">
+        <PageHero
+          tone="violet"
+          eyebrow={`Phase 8.0 · dependency-aware migration · ${corpus.data?.name ?? corpusId}`}
+          title="Dependency graph"
+          lead="Parser-extracted call graph + shared-storage references."
+        />
+        <Card>
+          <CardBody>
+            <EmptyState
+              illustration={<AwaitingDataIllustration size={140} />}
+              title="No call graph yet"
+              description="This corpus has no cross-routine CALL or shared-storage references to graph — either it hasn't finished parsing, or every routine is self-contained."
+            />
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div

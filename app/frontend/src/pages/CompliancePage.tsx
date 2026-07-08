@@ -227,7 +227,7 @@ function FilterField({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         >
           {options?.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -238,7 +238,7 @@ function FilterField({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 font-mono text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 font-mono text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       )}
     </label>
@@ -249,7 +249,7 @@ function ColumnTable({ columns }: { columns: { id: string; header: string; descr
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Columns in this bundle</div>
-      <div className="mt-2 overflow-hidden rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>

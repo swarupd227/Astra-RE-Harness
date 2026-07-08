@@ -1,22 +1,20 @@
-import { useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowRight, CheckCircle2, FileCode, GitBranch, RefreshCw, Upload, X } from 'lucide-react';
 import { ApiError, api, type ReingestResult } from '@/lib/api';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 type Mode = 'upload' | 'git';
 
-const FORTRAN_EXTS = [
-  '.f', '.f77', '.for', '.fpp', '.ftn',
-  '.f90', '.f95', '.f03', '.f08', '.f15', '.f18',
-  '.zip',
-];
-
-function isFortranLike(name: string): boolean {
+// Was hardcoded to Fortran-only extensions, so re-ingesting any of the other
+// 9 registered languages silently rejected every uploaded file. Now sourced
+// from the registered schemas — same as NewCorpusPage's auto-detect mode.
+function isAcceptable(name: string, exts: string[]): boolean {
   const lower = name.toLowerCase();
-  return FORTRAN_EXTS.some((e) => lower.endsWith(e));
+  return exts.some((e) => lower.endsWith(e));
 }
 
 /**
@@ -48,8 +46,21 @@ export function ReingestModal({
   const initialMode: Mode = defaultSourceType === 'git' ? 'git' : 'upload';
   const [mode, setMode] = useState<Mode>(initialMode);
   const [files, setFiles] = useState<File[]>([]);
+  const [rejected, setRejected] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const schemasQuery = useQuery({
+    queryKey: ['spec-schemas'],
+    queryFn: () => api.listSpecSchemas(),
+  });
+  const acceptedExts = useMemo(() => {
+    const all = new Set<string>(['.zip']);
+    for (const s of schemasQuery.data?.data ?? []) {
+      for (const e of s.supportedSourceExtensions) all.add(e);
+    }
+    return Array.from(all);
+  }, [schemasQuery.data]);
 
   const [gitUrl, setGitUrl] = useState(defaultGitUrl ?? '');
   const [branch, setBranch] = useState(defaultBranch ?? '');
@@ -66,6 +77,14 @@ export function ReingestModal({
     },
   });
 
+  function handleClose() {
+    if (reingest.isPending) return;
+    if (reingest.isSuccess) onSuccess(reingest.data);
+    onClose();
+  }
+
+  const dialogRef = useModalA11y<HTMLDivElement>(open, handleClose);
+
   if (!open) return null;
 
   const canSubmit =
@@ -76,7 +95,12 @@ export function ReingestModal({
   function handleFiles(picked: FileList | null) {
     if (!picked) return;
     const accepted: File[] = [];
-    for (const f of picked) if (isFortranLike(f.name)) accepted.push(f);
+    const rej: string[] = [];
+    for (const f of picked) {
+      if (isAcceptable(f.name, acceptedExts)) accepted.push(f);
+      else rej.push(f.name);
+    }
+    setRejected(rej);
     if (accepted.length === 0) return;
     setFiles((prev) => {
       const seen = new Set(prev.map((p) => `${p.name}:${p.size}`));
@@ -93,15 +117,11 @@ export function ReingestModal({
     setFiles((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function handleClose() {
-    if (reingest.isPending) return;
-    if (reingest.isSuccess) onSuccess(reingest.data);
-    onClose();
-  }
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center motion-safe:animate-fade-in"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center outline-none motion-safe:animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="reingest-modal-title"
@@ -195,13 +215,29 @@ export function ReingestModal({
                     ref={inputRef}
                     type="file"
                     multiple
-                    accept={FORTRAN_EXTS.join(',')}
+                    accept={acceptedExts.join(',')}
                     className="hidden"
                     onChange={(e) => handleFiles(e.target.files)}
                     data-testid="reingest-file-input"
                   />
                 </div>
               </div>
+              {rejected.length > 0 && (
+                <div
+                  role="alert"
+                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-[#FBF1D9] px-4 py-3 text-caption text-status-scaffolded"
+                  data-testid="reingest-rejected-files"
+                >
+                  <p className="font-medium">
+                    Skipped {rejected.length} unsupported {rejected.length === 1 ? 'file' : 'files'}:{' '}
+                    <span className="font-mono">{rejected.slice(0, 5).join(', ')}</span>
+                    {rejected.length > 5 ? ` +${rejected.length - 5} more` : ''}
+                  </p>
+                  <p className="mt-0.5 text-ink-secondary">
+                    Accepted: <span className="font-mono">{acceptedExts.join(', ')}</span>
+                  </p>
+                </div>
+              )}
               {files.length > 0 && (
                 <ul className="mt-3 max-h-48 overflow-y-auto divide-y divide-border-subtle rounded-md border border-border-subtle bg-raised">
                   {files.map((f, i) => (

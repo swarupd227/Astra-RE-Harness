@@ -17,7 +17,7 @@ export default {
         ink: {
           primary:   '#0f172a', // slate-900 — body
           secondary: '#475569', // slate-600 — supporting text
-          tertiary:  '#94a3b8', // slate-400 — captions, meta
+          tertiary:  '#64748b', // slate-500 — captions, meta (4.8:1 on white — WCAG AA)
           inverse:   '#f1f5f9', // for use on dark sidebar
           link:      '#4f46e5', // indigo-600
         },

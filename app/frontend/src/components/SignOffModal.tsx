@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/Button';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import type { SpecResponse } from '@/lib/api';
 
 export function SignOffModal({
@@ -19,6 +20,9 @@ export function SignOffModal({
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const guardedClose = () => { if (!submitting) onClose(); };
+  const dialogRef = useModalA11y<HTMLDivElement>(open, guardedClose);
 
   if (!open || !spec) return null;
 
@@ -40,11 +44,13 @@ export function SignOffModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center motion-safe:animate-fade-in"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center outline-none motion-safe:animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="sign-modal-title"
-      onClick={() => (!submitting ? onClose() : undefined)}
+      onClick={guardedClose}
     >
       <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
       <div

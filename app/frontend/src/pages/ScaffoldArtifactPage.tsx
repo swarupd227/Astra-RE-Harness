@@ -183,9 +183,9 @@ export function ScaffoldArtifactPage() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-[240px_minmax(0,1fr)_minmax(0,360px)] divide-x divide-border-subtle bg-canvas">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,360px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         {/* File tree */}
-        <div className="min-h-0 overflow-y-auto bg-raised">
+        <div className="h-52 min-h-0 overflow-y-auto bg-raised lg:h-auto">
           <div className="border-b border-border-subtle px-3 py-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
             Package
           </div>
@@ -193,7 +193,7 @@ export function ScaffoldArtifactPage() {
         </div>
 
         {/* Code editor */}
-        <div className="min-h-0 flex flex-col bg-canvas">
+        <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
           <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{active?.path}</span>
             <span className="text-ink-tertiary">{active?.lineCount ?? '—'} lines · {active?.todoCount ?? 0} TODOs</span>
@@ -215,7 +215,7 @@ export function ScaffoldArtifactPage() {
         </div>
 
         {/* Traceability panel */}
-        <div className="min-h-0 overflow-y-auto bg-raised">
+        <div className="max-h-64 min-h-0 overflow-y-auto bg-raised lg:max-h-none">
           <TraceabilityPanel spec={spec.data ?? null} claimIds={active?.derivedFromClaimIds ?? []} />
         </div>
       </div>

@@ -1,6 +1,6 @@
 import type { Persona } from '@/tokens/tokens';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 const PERSONA_KEY = 'astra.devPersona';
 
@@ -1282,6 +1282,17 @@ export const api = {
   rejectDocSection: (sectionId: string) =>
     apiFetch<void>(`/api/v1/docs/sections/${sectionId}`, { method: 'DELETE' }),
 
+  generateDocs: (corpusId: string, opts?: { stages?: string[]; take?: number; force?: boolean }) => {
+    const q = new URLSearchParams();
+    const stages = opts?.stages ?? ['routine-summary', 'module', 'overview', 'data-dictionary', 'glossary', 'interface', 'business-rules', 'sequence-diagram', 'dependency-diagram'];
+    q.set('stages', stages.join(','));
+    if (opts?.take != null) q.set('take', String(opts.take));
+    if (opts?.force) q.set('force', 'true');
+    return apiFetch<DocGenerateResult>(`/api/v1/corpora/${corpusId}/docs/generate?${q.toString()}`, { method: 'POST' });
+  },
+  getDocRun: (runId: string) =>
+    apiFetch<DocRun>(`/api/v1/docs/runs/${runId}`),
+
   // Phase 11.0.g — documentation export.
   // Returns a Blob + the server-provided filename (from Content-Disposition).
   // Formats: mkdocs (zip), docx, pdf, confluence (json).
@@ -1637,3 +1648,20 @@ export type DocSectionListResult = {
 
 export type DocSummaryBreakdown = { kind: string; state: string; count: number };
 export type DocSummary = { corpusId: string; breakdown: DocSummaryBreakdown[] };
+
+export type DocGenerateResult = {
+  generationRunId: string;
+  stages: string[];
+  statusUrl: string;
+};
+
+export type DocRun = {
+  id: string;
+  corpusId: string;
+  state: string;
+  summary?: string;
+  metrics?: Record<string, unknown>;
+  startedAt: string;
+  completedAt?: string;
+  errorSummary?: string;
+};

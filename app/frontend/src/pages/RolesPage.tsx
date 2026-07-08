@@ -239,7 +239,7 @@ function UsersPanel() {
             No users yet. Click "Add user" to create the first one.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-md border border-border-subtle">
+          <div className="overflow-x-auto rounded-md border border-border-subtle">
             <table className="w-full text-body">
               <thead className="bg-sunken/60 text-caption text-ink-tertiary">
                 <tr>
@@ -254,7 +254,11 @@ function UsersPanel() {
                   <UserRowItem
                     key={u.id}
                     user={u}
-                    onPersonaChange={(persona) => update.mutate({ id: u.id, persona })}
+                    onPersonaChange={(persona) => {
+                      if (window.confirm(`Change ${u.displayName}'s role to ${persona}?`)) {
+                        update.mutate({ id: u.id, persona });
+                      }
+                    }}
                     onDelete={() => {
                       if (window.confirm(`Delete user ${u.displayName} (${u.email})?`)) {
                         remove.mutate(u.id);
@@ -293,7 +297,7 @@ function UserRowItem({
           onChange={(e) => onPersonaChange(e.target.value as PersonaId)}
           disabled={pending}
           aria-label="Persona"
-          className="rounded-md border border-border-subtle bg-raised px-2 py-1 text-caption text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-border-subtle bg-raised px-2 py-1 text-caption text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         >
           <option value="engineer">Engineer</option>
           <option value="sme">SME</option>
@@ -339,7 +343,7 @@ function LabelledInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
     </label>
   );
@@ -362,7 +366,7 @@ function LabelledSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -406,7 +410,7 @@ function CategoryBlock({
   return (
     <div data-testid={`matrix-category-${category.toLowerCase()}`}>
       <div className="mb-2 text-caption uppercase tracking-wide text-ink-tertiary">{category}</div>
-      <div className="overflow-hidden rounded-md border border-border-subtle">
+      <div className="overflow-x-auto rounded-md border border-border-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>

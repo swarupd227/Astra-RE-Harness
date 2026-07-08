@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { TopBar } from '@/shell/TopBar';
 import { LeftNav } from '@/shell/LeftNav';
+import { MobileNav } from '@/shell/MobileNav';
 import { Breadcrumb } from '@/shell/Breadcrumb';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
@@ -142,11 +143,14 @@ function prettyPlatformLeaf(pathname: string): string {
 
 export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
   const openHelp = useCallback(() => setHelpOpen(true), []);
   const closeHelp = useCallback(() => setHelpOpen(false), []);
+  const openMobileNav = useCallback(() => setMobileNavOpen(true), []);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   useEffect(() => {
     let chord: string | null = null;
@@ -196,10 +200,17 @@ export function App() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <TopBar onOpenHelp={openHelp} />
+      <a
+        href="#main-content"
+        className="sr-only z-50 rounded-md bg-ink-primary px-4 py-2 text-body font-medium text-white focus:not-sr-only focus:absolute focus:left-3 focus:top-2 focus:outline-2 focus:outline-accent"
+      >
+        Skip to content
+      </a>
+      <TopBar onOpenHelp={openHelp} onOpenNav={openMobileNav} />
+      <MobileNav open={mobileNavOpen} onClose={closeMobileNav} />
       <div className="flex flex-1">
         <LeftNav />
-        <main className="min-w-0 flex-1 bg-canvas">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 bg-canvas">
           <Breadcrumb items={crumbs} />
           <Routes>
             <Route path="/" element={<HomePage />} />

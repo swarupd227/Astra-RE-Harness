@@ -286,13 +286,18 @@ function StateDistributionChart({
     { name: 'Committed',  value: totals.committedCount,  fill: STATE_COLORS.committed },
   ].filter((d) => d.value > 0);
 
+  // Non-visual equivalent — the SVG pie is opaque to assistive tech.
+  const chartLabel = `Routine state distribution across every corpus: ${data
+    .map((d) => `${d.value} ${d.name.toLowerCase()}`)
+    .join(', ')}.`;
+
   return (
     <div className="card p-5">
       <h2 className="label mb-3">Routine state distribution</h2>
       {data.length === 0 ? (
         <p className="text-[12px] text-ink-secondary">No routines yet.</p>
       ) : (
-        <div style={{ width: '100%', height: 220 }}>
+        <div style={{ width: '100%', height: 220 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
             <PieChart>
               <Pie
@@ -342,13 +347,27 @@ function PerCorpusProgressChart({ rows }: { rows: PortfolioCorpusRow[] }) {
     ),
   }));
 
+  // Non-visual equivalent — summarise the stacked totals for assistive tech.
+  const agg = data.reduce(
+    (a, d) => ({
+      signed: a.signed + d.Signed,
+      scaffolded: a.scaffolded + d.Scaffolded,
+      committed: a.committed + d.Committed,
+      pending: a.pending + d.Pending,
+    }),
+    { signed: 0, scaffolded: 0, committed: 0, pending: 0 },
+  );
+  const chartLabel = `Per-corpus migration progress for ${data.length} ${
+    data.length === 1 ? 'corpus' : 'corpora'
+  }. Totals: ${agg.signed} signed, ${agg.scaffolded} scaffolded, ${agg.committed} committed, ${agg.pending} pending.`;
+
   return (
     <div className="card p-5">
       <h2 className="label mb-3">Per-corpus migration progress</h2>
       {data.length === 0 ? (
         <p className="text-[12px] text-ink-secondary">No corpora yet.</p>
       ) : (
-        <div style={{ width: '100%', height: 220 }}>
+        <div style={{ width: '100%', height: 220 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

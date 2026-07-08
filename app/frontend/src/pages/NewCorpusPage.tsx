@@ -32,6 +32,7 @@ export function NewCorpusPage() {
   const [name, setName] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [rejected, setRejected] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Git fields
@@ -89,9 +90,13 @@ export function NewCorpusPage() {
   function handleFiles(picked: FileList | null) {
     if (!picked) return;
     const accepted: File[] = [];
+    const rej: string[] = [];
     for (const f of picked) {
       if (isAcceptable(f.name, acceptedExts)) accepted.push(f);
+      else rej.push(f.name);
     }
+    // Surface skipped files instead of dropping them silently.
+    setRejected(rej);
     if (accepted.length === 0) return;
     setFiles((prev) => {
       const seen = new Set(prev.map((p) => `${p.name}:${p.size}`));
@@ -150,7 +155,7 @@ export function NewCorpusPage() {
             </button>
           </div>
 
-          <FieldRow label="Project name" htmlFor="corpus-name" hint="Displayed in the projects list. Must be unique.">
+          <FieldRow label="Project name" htmlFor="corpus-name" hint="Displayed in the projects list. Must be unique." required>
             <input
               id="corpus-name"
               type="text"
@@ -160,6 +165,8 @@ export function NewCorpusPage() {
               className={inputClass}
               data-testid="corpus-name"
               disabled={ingest.isPending || ingest.isSuccess}
+              required
+              aria-describedby="corpus-name-hint"
             />
           </FieldRow>
 
@@ -240,6 +247,22 @@ export function NewCorpusPage() {
                   />
                 </div>
               </div>
+              {rejected.length > 0 && (
+                <div
+                  role="alert"
+                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-[#FBF1D9] px-4 py-3 text-caption text-status-scaffolded"
+                  data-testid="rejected-files"
+                >
+                  <p className="font-medium">
+                    Skipped {rejected.length} unsupported {rejected.length === 1 ? 'file' : 'files'}:{' '}
+                    <span className="font-mono">{rejected.slice(0, 5).join(', ')}</span>
+                    {rejected.length > 5 ? ` +${rejected.length - 5} more` : ''}
+                  </p>
+                  <p className="mt-0.5 text-ink-secondary">
+                    Accepted: <span className="font-mono">{acceptedExts.join(', ')}</span>
+                  </p>
+                </div>
+              )}
               {files.length > 0 && (
                 <ul className="mt-3 divide-y divide-border-subtle rounded-md border border-border-subtle bg-raised">
                   {files.map((f, i) => (
@@ -264,7 +287,7 @@ export function NewCorpusPage() {
             </FieldRow>
           ) : (
             <>
-              <FieldRow label="Git URL" htmlFor="git-url" hint="HTTPS clone URL. The API container must be able to reach this host.">
+              <FieldRow label="Git URL" htmlFor="git-url" hint="HTTPS clone URL. The API container must be able to reach this host." required>
                 <input
                   id="git-url"
                   type="url"
@@ -274,6 +297,8 @@ export function NewCorpusPage() {
                   className={inputClass}
                   data-testid="git-url"
                   disabled={ingest.isPending || ingest.isSuccess}
+                  required
+                  aria-describedby="git-url-hint"
                 />
               </FieldRow>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -367,19 +392,29 @@ function FieldRow({
   label,
   htmlFor,
   hint,
+  required,
   children,
 }: {
   label: string;
   htmlFor: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div>
       <label htmlFor={htmlFor} className="text-body font-medium text-ink-primary">
         {label}
+        {required && (
+          <span className="ml-1 text-status-failed" aria-hidden="true">*</span>
+        )}
+        {required && <span className="sr-only"> (required)</span>}
       </label>
-      {hint && <p className="mt-0.5 text-caption text-ink-tertiary">{hint}</p>}
+      {hint && (
+        <p id={`${htmlFor}-hint`} className="mt-0.5 text-caption text-ink-tertiary">
+          {hint}
+        </p>
+      )}
       {children}
     </div>
   );

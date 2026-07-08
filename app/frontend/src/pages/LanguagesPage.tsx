@@ -27,7 +27,9 @@ type RoadmapEntry = {
   displayName: string;
   description: string;
   status: 'roadmap';
-  targetQuarter: string;
+  // Relative horizon label ("Next up", "Planned"), NOT a hardcoded quarter —
+  // a literal date silently goes stale. When a roadmap API exists, source this.
+  horizon: string;
 };
 
 const ROADMAP: RoadmapEntry[] = [
@@ -37,7 +39,7 @@ const ROADMAP: RoadmapEntry[] = [
     description:
       'Schema and prompts for RPG IV / Free-form RPG on IBM i. Targets COBOL-grade fixture density and the same invariant/side-effect/edge-case taxonomy.',
     status: 'roadmap',
-    targetQuarter: 'Q3 2026',
+    horizon: 'Next up',
   },
   {
     id: 'pl1',
@@ -45,7 +47,7 @@ const ROADMAP: RoadmapEntry[] = [
     description:
       'Schema and prompts for PL/I procedures on z/OS. Pair-engagement track first, then promotes to a standard ship after two production accounts ratify the taxonomy.',
     status: 'roadmap',
-    targetQuarter: 'Q4 2026',
+    horizon: 'Planned',
   },
 ];
 
@@ -249,7 +251,7 @@ function RoadmapCard({ entry }: { entry: RoadmapEntry }) {
             {entry.displayName}
           </span>
         }
-        action={<Badge tone="neutral">Roadmap · {entry.targetQuarter}</Badge>}
+        action={<Badge tone="neutral">Roadmap · {entry.horizon}</Badge>}
       />
       <CardBody>
         <p className="text-body text-ink-secondary">{entry.description}</p>
@@ -435,14 +437,14 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       ) : (
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       )}
     </label>
@@ -453,7 +455,7 @@ function ClaimKindTable({ kinds }: { kinds: ClaimKindSummary[] }) {
   return (
     <div className="mt-6">
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Claim kinds</div>
-      <div className="mt-2 overflow-hidden rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>

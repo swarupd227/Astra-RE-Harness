@@ -1,6 +1,6 @@
-import { Link, useLocation, useMatch } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp, Menu } from 'lucide-react';
 import { Badge } from '@/components/Badge';
 import { CommandBarTrigger } from '@/components/CommandBarTrigger';
 import { ApiLatencyIndicator } from '@/components/ApiLatencyIndicator';
@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 // ACE-style TopBar — light surface, breadcrumb on the left, status pills
 // + persona switcher on the right. Sits above a thin brand-stripe (the
 // orange-to-indigo identity sliver).
-export function TopBar({ onOpenHelp }: { onOpenHelp: () => void }) {
+export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOpenNav: () => void }) {
   const provider = useQuery({
     queryKey: ['provider-settings'],
     queryFn: () => api.getProviderSettings(),
@@ -27,6 +27,15 @@ export function TopBar({ onOpenHelp }: { onOpenHelp: () => void }) {
       {/* Brand stripe — orange → amber → indigo identity sliver */}
       <div aria-hidden className="h-[2px] w-full bg-brand-stripe" />
       <div className="flex h-12 items-center gap-3 border-b border-border-subtle bg-raised px-5">
+        <button
+          type="button"
+          onClick={onOpenNav}
+          className="-ml-1 flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent md:hidden"
+          aria-label="Open navigation menu"
+          data-testid="mobile-nav-trigger"
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </button>
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <Link
             to="/"
@@ -59,7 +68,7 @@ export function TopBar({ onOpenHelp }: { onOpenHelp: () => void }) {
               </span>
             </Tooltip>
           )}
-          <Badge tone="neutral" className="font-mono">DEV</Badge>
+          {import.meta.env.DEV && <Badge tone="neutral" className="font-mono">DEV</Badge>}
           <Tooltip content="Keyboard shortcuts (?)">
             <button
               type="button"

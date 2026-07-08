@@ -210,6 +210,17 @@ export function LiveExtractionPage() {
           </div>
           <div className="flex items-center gap-3">
             <StageIndicator currentStage={stage} />
+            {/* Screen-reader announcement of stage/status changes — the visual
+                StageIndicator alone gives no signal to assistive tech. */}
+            <p className="sr-only" role="status" aria-live="polite">
+              {status === 'success'
+                ? 'Extraction complete.'
+                : status === 'error'
+                  ? 'Extraction failed.'
+                  : stage
+                    ? `Extraction stage: ${stage}.`
+                    : ''}
+            </p>
             {status === 'streaming' && (
               <Button variant="secondary" size="sm" onClick={onCancel}>
                 <X className="h-4 w-4" />
@@ -266,9 +277,9 @@ export function LiveExtractionPage() {
       )}
 
       {/* Body — two-pane */}
-      <div className="grid flex-1 min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,560px)] divide-x divide-border-subtle bg-canvas">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         {/* Streaming spec */}
-        <div className="min-h-0 overflow-y-auto bg-raised">
+        <div className="h-[420px] min-h-0 overflow-y-auto bg-raised lg:h-auto">
           {status === 'idle' && (
             <div className="flex h-full items-center justify-center text-ink-tertiary">
               <p className="font-mono text-caption">Connecting to provider…</p>
@@ -302,7 +313,7 @@ export function LiveExtractionPage() {
         </div>
 
         {/* Source pane */}
-        <div className="min-h-0 flex flex-col bg-canvas">
+        <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
           <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{s.file.relativePath}</span>
             <span className="text-ink-tertiary">{source.data!.lineCount} lines</span>

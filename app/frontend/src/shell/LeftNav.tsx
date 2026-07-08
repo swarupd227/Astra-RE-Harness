@@ -41,7 +41,9 @@ type Section = {
 
 // ACE pattern: dark indigo sidebar, sectioned by activity area, with
 // a collapsible flag persisted in localStorage. Compact 13px nav rows.
-const SECTIONS: Section[] = [
+// Exported so the mobile nav drawer (MobileNav) renders the same source of
+// truth rather than a duplicated list.
+export const SECTIONS: Section[] = [
   {
     title: 'Workspace',
     items: [
@@ -65,18 +67,26 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'Platform · Admin',
-    adminOnly: true,
+    // Read-only analytics + catalogs — visible to every persona so the
+    // platform surfaces are discoverable, not just to admins.
+    title: 'Platform',
     items: [
       { to: '/platform',                label: 'Overview',         icon: Sparkles },
       { to: '/platform/portfolio',      label: 'Portfolio',        icon: Network },
       { to: '/platform/golden-dataset', label: 'Golden Dataset',   icon: Database },
       { to: '/platform/prompts',        label: 'Prompt Catalog',   icon: FileText },
+      { to: '/platform/signatures',     label: 'Signature Health', icon: BookOpen },
       { to: '/platform/harmonisation',  label: 'Harmonisation',    icon: GitBranch },
       { to: '/platform/languages',      label: 'Languages',        icon: Languages },
-      { to: '/platform/validation',     label: 'Validation Policy', icon: SlidersHorizontal },
-      { to: '/platform/signatures',     label: 'Signature Health', icon: BookOpen },
-      { to: '/platform/roles',          label: 'Roles & Permissions', icon: Users },
+    ],
+  },
+  {
+    // Privileged configuration — remains admin-gated.
+    title: 'Admin',
+    adminOnly: true,
+    items: [
+      { to: '/platform/validation',     label: 'Validation Policy',    icon: SlidersHorizontal },
+      { to: '/platform/roles',          label: 'Roles & Permissions',  icon: Users },
     ],
   },
 ];
@@ -131,7 +141,7 @@ export function LeftNav() {
         </div>
         {!collapsed && (
           <div className="mt-3 text-[10px] uppercase tracking-wider text-slate-500">
-            Fortran · COBOL · multi-target
+            Multi-language · multi-target
           </div>
         )}
       </div>
@@ -180,7 +190,7 @@ export function LeftNav() {
               </span>
             </div>
             <div className="text-[9px] text-slate-600">
-              v{buildInfo.version} · Phase {buildInfo.phase} · {buildInfo.builtAt}
+              v{buildInfo.version} · {buildInfo.builtAt}
             </div>
           </div>
         )}

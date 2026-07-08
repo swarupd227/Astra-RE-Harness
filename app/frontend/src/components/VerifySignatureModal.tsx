@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, X, AlertTriangle } from 'lucide-react';
 import { api, type EvidenceResponse, type PublicKeyResponse, type SignedManifest } from '@/lib/api';
 import { Button } from '@/components/Button';
@@ -59,6 +60,8 @@ export function VerifySignatureModal({
     () => steps.every((s) => s.state === 'ok' || s.state === 'skip'),
     [steps],
   );
+
+  const dialogRef = useModalA11y<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
@@ -161,7 +164,9 @@ export function VerifySignatureModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center motion-safe:animate-fade-in"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center outline-none motion-safe:animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="verify-title"

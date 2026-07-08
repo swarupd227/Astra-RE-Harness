@@ -180,6 +180,17 @@ export function LiveScaffoldPage() {
           </div>
           <div className="flex items-center gap-3">
             <StagePill stage={stage} />
+            {/* Screen-reader announcement of stage/status changes — StagePill
+                alone gives no signal to assistive tech. */}
+            <p className="sr-only" role="status" aria-live="polite">
+              {status === 'success'
+                ? 'Scaffold generation complete.'
+                : status === 'error'
+                  ? 'Scaffold generation failed.'
+                  : stage
+                    ? `Scaffold stage: ${stage}.`
+                    : ''}
+            </p>
             {status === 'streaming' && (
               <Button variant="secondary" size="sm" onClick={onCancel}>
                 <X className="h-4 w-4" /> Cancel
@@ -205,8 +216,8 @@ export function LiveScaffoldPage() {
         <div className="px-6 py-3"><ErrorBlock title="Scaffold failed" message={errorMessage} /></div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-[260px_minmax(0,1fr)_minmax(0,400px)] divide-x divide-border-subtle bg-canvas">
-        <div className="min-h-0 overflow-y-auto bg-raised">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,400px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+        <div className="h-52 min-h-0 overflow-y-auto bg-raised lg:h-auto">
           <div className="border-b border-border-subtle px-3 py-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
             Generated files
           </div>
@@ -225,7 +236,7 @@ export function LiveScaffoldPage() {
           )}
         </div>
 
-        <div className="min-h-0 flex flex-col bg-canvas">
+        <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
           <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{active?.path ?? 'Awaiting first file…'}</span>
             <span className="text-ink-tertiary">{active?.lineCount ? `${active.lineCount} lines` : '—'}</span>
@@ -246,7 +257,7 @@ export function LiveScaffoldPage() {
           )}
         </div>
 
-        <div className="min-h-0 overflow-y-auto bg-raised p-5 font-mono text-caption text-ink-secondary">
+        <div className="max-h-64 min-h-0 overflow-y-auto bg-raised p-5 font-mono text-caption text-ink-secondary lg:max-h-none">
           <p className="uppercase tracking-wider text-ink-tertiary">Derived from</p>
           {active && active.derivedFrom.length > 0 ? (
             <ul className="mt-3 space-y-1.5">
