@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-shared-variable-coupling",
+  "schemaId": "openedge",
+  "title": "DEFINE SHARED variables couple procedures with hidden state — must become explicit parameters or Spring beans, never static fields",
+  "trapCategory": "state/shared-variable",
+  "difficulty": "hard",
+  "sourcePath": "openedge/snippets/post-invoice.p",
+  "sourceLines": "1-15",
+  "sourceContent": "/* post-invoice.p - posts one invoice using shared session context */\nDEFINE INPUT PARAMETER piInvNum AS INTEGER NO-UNDO.\nDEFINE SHARED VARIABLE gSessionUser AS CHARACTER NO-UNDO.\nDEFINE SHARED VARIABLE gPostingDate AS DATE      NO-UNDO.\nDEFINE SHARED VARIABLE gLastPosted  AS INTEGER   NO-UNDO.\n\nFIND FIRST Invoice WHERE Invoice.InvNum = piInvNum EXCLUSIVE-LOCK NO-ERROR.\nIF AVAILABLE Invoice THEN DO:\n    ASSIGN Invoice.Status   = \"POSTED\"\n           Invoice.PostedBy = gSessionUser      /* reads shared state */\n           Invoice.PostedOn = gPostingDate.\n    gLastPosted = Invoice.InvNum.               /* mutates shared state */\nEND.\n",
+  "expectedClaims": [
+    {
+      "kind": "sharedVariableScope",
+      "id": "SV-1",
+      "pattern": "(?i)(SHARED|gSessionUser|gPostingDate|gLastPosted|bean|parameter|inject|hidden\\s+coupling)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(ASSIGN|Invoice\\.Status|POSTED|database\\s+write|update|gLastPosted)"
+    },
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-2",
+      "pattern": "(?i)(FIND\\s+FIRST|EXCLUSIVE-LOCK|PESSIMISTIC|managed\\s+entity|write\\s+transaction)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "DEFINE SHARED variables are read and written across procedure boundaries with no parameter passing — invisible coupling. gSessionUser/gPostingDate are read; gLastPosted is mutated (a side effect other procedures observe). The Java target must pass these explicitly (method params or a request-scoped bean) and never model them as static mutable fields. The FIND EXCLUSIVE-LOCK is a write-locked managed entity."
+}

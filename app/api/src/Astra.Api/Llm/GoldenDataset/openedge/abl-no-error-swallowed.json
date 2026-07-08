@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-no-error-swallowed",
+  "schemaId": "openedge",
+  "title": "FIND ... NO-ERROR without an AVAILABLE check swallows the failure and dereferences an unavailable buffer, yielding the Unknown value",
+  "trapCategory": "error/no-error-swallowed",
+  "difficulty": "medium",
+  "sourcePath": "openedge/snippets/lookup-price.p",
+  "sourceLines": "1-8",
+  "sourceContent": "/* lookup-price.p - look up a unit price (unsafely) */\nDEFINE INPUT  PARAMETER pcItem  AS CHARACTER NO-UNDO.\nDEFINE OUTPUT PARAMETER pdPrice AS DECIMAL   NO-UNDO.\n\nFIND FIRST PriceList WHERE PriceList.ItemNum = pcItem NO-LOCK NO-ERROR.\n/* No IF AVAILABLE check! If the item has no price row, the buffer is\n   NOT AVAILABLE and PriceList.Price returns the Unknown value (?). */\npdPrice = PriceList.Price.\n",
+  "expectedClaims": [
+    {
+      "kind": "errorHandlingContract",
+      "id": "EH-1",
+      "pattern": "(?i)(NO-ERROR|swallow|suppress|no\\s+.*AVAILABLE\\s+check|silent|try\\s*/?\\s*catch)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-2",
+      "pattern": "(?i)(Unknown\\s+value|\\?|NOT\\s+AVAILABLE|unavailable\\s+buffer|null)"
+    },
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-5",
+      "pattern": "(?i)(FIND\\s+FIRST|NO-LOCK|read.only|Optional|findFirst)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "NO-ERROR suppresses the runtime error from a failed FIND; without a following IF AVAILABLE guard, the failure is swallowed and the subsequent PriceList.Price dereferences an unavailable buffer, returning the Unknown value (?) rather than a real price. The Java target must guard the lookup (Optional / null check) and decide how to represent 'no price' — this is a latent bug the SME must confirm."
+}

@@ -1,0 +1,19 @@
+{
+  "entryId": "csharp-thread-currentprincipal",
+  "schemaId": "csharp",
+  "title": "Thread.CurrentPrincipal is unreliable in async .NET 10 code — use HttpContext.User (ClaimsPrincipal)",
+  "trapCategory": "security/identity-ambient-context",
+  "difficulty": "hard",
+  "sourcePath": "csharp/snippets/thread_current_principal.cs",
+  "sourceLines": "1-35",
+  "sourceContent": "using System.Security.Principal;\nusing System.Threading;\n\npublic class AuthorizationHelper\n{\n    // Thread.CurrentPrincipal was set by WCF / ASP.NET Framework\n    // per-request. In .NET 10 async code, await continuations run on\n    // different threads — CurrentPrincipal is NOT propagated across\n    // await points in ASP.NET Core.\n    public static bool IsInRole(string role)\n    {\n        return Thread.CurrentPrincipal?.IsInRole(role) ?? false;\n    }\n\n    public static string GetCurrentUser()\n    {\n        return Thread.CurrentPrincipal?.Identity?.Name ?? \"anonymous\";\n    }\n\n    // Also common: setting Thread.CurrentPrincipal in a custom\n    // HTTP module or message handler, then reading it elsewhere.\n    public static void SetPrincipal(IPrincipal principal)\n    {\n        Thread.CurrentPrincipal = principal;\n    }\n\n    // WCF variant: using ServiceSecurityContext\n    // public static string GetWcfCaller()\n    // {\n    //     return ServiceSecurityContext.Current?.PrimaryIdentity?.Name;\n    // }\n}\n",
+  "expectedClaims": [
+    { "kind": "obsoleteApiUsage", "id": "OA-PRINC-1", "pattern": "(?i)(Thread\\.CurrentPrincipal|IPrincipal|ServiceSecurityContext|WindowsPrincipal.*Thread|GenericPrincipal.*Thread)" },
+    { "kind": "asyncAntiPattern", "id": "AP-PRINC-1", "pattern": "(?i)(async.*await.*principal|principal.*async|await.*continu|thread.*hop|SynchronizationContext)" },
+    { "kind": "dependencyInjectionContract", "id": "DI-PRINC-1", "pattern": "(?i)(IHttpContextAccessor|HttpContext\\.User|ClaimsPrincipal|inject.*user|ICurrentUserService)" },
+    { "kind": "sideEffect", "id": "SE-PRINC-1", "pattern": "(?i)(Thread\\.CurrentPrincipal\\s*=|set.*principal|mutate.*principal|modify.*thread)" },
+    { "kind": "openQuestion", "id": "Q-PRINC-1", "pattern": "(?i)(WCF|Windows\\s+authentication|Kerberos|NTLM|service\\s+account|impersonat)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "Thread.CurrentPrincipal was propagated by ASP.NET Framework's SynchronizationContext and by WCF. In .NET Core and .NET 10, async continuations may resume on a different ThreadPool thread, and Thread.CurrentPrincipal is NOT propagated. Any code that reads it after an await is reading an undefined value. The correct .NET 10 replacement is HttpContext.User (a ClaimsPrincipal), accessed via IHttpContextAccessor injected through DI. For background services with no HttpContext, the user identity must be captured before the first await and passed explicitly. This is a hard trap because it compiles without error but fails silently at runtime under async load."
+}

@@ -1,0 +1,19 @@
+{
+  "entryId": "csharp-system-web-mvc-namespace",
+  "schemaId": "csharp",
+  "title": "System.Web.Mvc / System.Web.Http attributes do not exist in .NET 10 — replaced by Microsoft.AspNetCore.Mvc",
+  "trapCategory": "api/namespace-migration",
+  "difficulty": "medium",
+  "sourcePath": "csharp/snippets/system_web_mvc_controller.cs",
+  "sourceLines": "1-40",
+  "sourceContent": "using System.Web.Http;                   // Web API 2 — NOT available in .NET 10\nusing System.Web.Http.Description;       // IHttpActionResult, ApiExplorer\nusing System.Web.Mvc;                    // MVC 5 — NOT available in .NET 10\n\n// Web API 2 controller\npublic class OrdersController : ApiController\n{\n    [Route(\"api/orders/{id:int}\")]\n    [ResponseType(typeof(OrderDto))]\n    public IHttpActionResult GetOrder(int id)\n    {\n        var order = _service.Find(id);\n        if (order == null)\n            return NotFound();            // ApiController.NotFound()\n        return Ok(order);                 // ApiController.Ok(T)\n    }\n\n    // Web API 2: model binding from URI uses [FromUri]; body uses [FromBody].\n    // ASP.NET Core: [FromRoute] / [FromQuery] / [FromBody] / [FromForm].\n    public IHttpActionResult CreateOrder([FromBody] CreateOrderRequest request)\n    {\n        if (!ModelState.IsValid)\n            return BadRequest(ModelState); // returns 400 with ModelState\n        var id = _service.Create(request);\n        return Created($\"api/orders/{id}\", new { id });\n    }\n\n    // MVC 5 ActionResult pattern for a view-returning action\n    public class HomeController : Controller\n    {\n        public ActionResult Index()\n        {\n            ViewBag.Title = \"Home\";\n            return View();\n        }\n\n        [ValidateAntiForgeryToken]\n        [HttpPost]\n        public ActionResult Submit(FormModel model)\n        {\n            if (!ModelState.IsValid) return View(model);\n            return RedirectToAction(\"Index\");\n        }\n    }\n}\n",
+  "expectedClaims": [
+    { "kind": "obsoleteApiUsage", "id": "OA-NS-1", "pattern": "(?i)(System\\.Web\\.Http|System\\.Web\\.Mvc|ApiController|IHttpActionResult|ResponseType|FromUri|ActionResult(?!<))" },
+    { "kind": "obsoleteApiUsage", "id": "OA-NS-2", "pattern": "(?i)(ApiController|ModelState\\.IsValid|BadRequest\\(ModelState\\)|NotFound\\(\\)|Ok\\()" },
+    { "kind": "invariant", "id": "INV-NS-1", "pattern": "(?i)(route\\s+pattern|api/orders|\\{id\\}|Route\\(|MapRoute|attribute\\s+routing)" },
+    { "kind": "exceptionHandlingContract", "id": "EX-NS-1", "pattern": "(?i)(ValidationProblem|ProblemDetails|RFC\\s*9457|IActionResult|Results\\.ValidationProblem|Results\\.NotFound)" },
+    { "kind": "openQuestion", "id": "Q-NS-1", "pattern": "(?i)(OData|ApiExplorer|Swashbuckle|NSwag|output.*format|content.*negotiation)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "System.Web.Http (Web API 2) and System.Web.Mvc (MVC 5) are Framework-only assemblies that do not exist in .NET 10. Every using directive that references them is a compilation error. The rename is mostly mechanical: ApiController → ControllerBase with [ApiController], IHttpActionResult → IActionResult, [FromUri] → [FromQuery]/[FromRoute], Ok(x) / NotFound() / BadRequest(ModelState) → Results.Ok(x) / Results.NotFound() / ValidationProblem(ModelState). ModelState.IsValid can be removed entirely when [ApiController] is present — the framework auto-returns 400 on invalid models. The spec must record every route pattern exactly so attribute routing on ASP.NET Core can reproduce the same URL structure."
+}

@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-unknown-value-propagation",
+  "schemaId": "openedge",
+  "title": "The Unknown value (?) is distinct from null AND zero, and propagates through arithmetic — a discount of ? makes the whole net Unknown",
+  "trapCategory": "type/unknown-value",
+  "difficulty": "hard",
+  "sourcePath": "openedge/snippets/apply-discount.p",
+  "sourceLines": "1-11",
+  "sourceContent": "/* apply-discount.p - net = base - discount, guarding the Unknown value */\nDEFINE INPUT  PARAMETER pdBase     AS DECIMAL NO-UNDO.\nDEFINE INPUT  PARAMETER pdDiscount AS DECIMAL NO-UNDO.  /* may be ? (Unknown) */\nDEFINE OUTPUT PARAMETER pdNet      AS DECIMAL NO-UNDO.\n\n/* If pdDiscount is ? (Unknown), then pdBase - pdDiscount is ? too\n   -- the whole net silently becomes Unknown, NOT the base price. */\npdNet = pdBase - pdDiscount.\nIF pdNet = ? THEN pdNet = pdBase.   /* explicit Unknown guard */\n",
+  "expectedClaims": [
+    {
+      "kind": "edgeCase",
+      "id": "EC-3",
+      "pattern": "(?i)(Unknown\\s+value|\\?|propagat|distinct\\s+from\\s+(null|zero)|null\\s+arithmetic)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-3",
+      "pattern": "(?i)(pdNet|net\\s*=\\s*base|discount|guard)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-1",
+      "pattern": "(?i)(represent.*(\\?|Unknown)|Optional|nullable|BigDecimal|sentinel|how\\s+to\\s+model)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "ABL's Unknown value (?) is a third state distinct from null and from zero, and it propagates: any arithmetic or comparison involving ? yields ?. Here a ? discount makes pdNet Unknown rather than equal to the base, so the explicit `IF pdNet = ?` guard is load-bearing. The Java target must choose a representation for ? (null BigDecimal / Optional / a sentinel) and reproduce the propagation + guard — an openQuestion for the SME."
+}

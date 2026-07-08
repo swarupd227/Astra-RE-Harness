@@ -205,6 +205,28 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── csharp sidecar (Phase 12.0.a — C#/.NET 10 cross-runtime equivalence) ──
+  # Compiles C# source via .NET 10 SDK (`dotnet publish`) and runs the resulting
+  # binary against a stdin-encoded input vector. REST contract mirrors gpp /
+  # fpc / gfortran sidecars so CrossRuntimeValidator only adds a dispatch arm.
+  # .NET 10 SDK pre-warmed during image build; NuGet cache persisted in layer.
+  csharp-sidecar:
+    build:
+      context: ./csharp-sidecar
+    ports:
+      - "${CSHARP_PORT:-51059}:51059"
+    environment:
+      CSHARP_PORT: 51059
+      CSHARP_WORKDIR: /var/tmp/csharp-runs
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51059/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── property-test sidecar (Phase 9.0.g — Hypothesis-driven 4th gate) ──
   # Reads a signed spec + caller-supplied equivalence callback URL and
   # exercises the 4th gate (falsifying-input search) per ADR-029. Budget
@@ -249,6 +271,8 @@ services:
         condition: service_started
       vb6-sidecar:
         condition: service_started
+      csharp-sidecar:
+        condition: service_started
       property-test-sidecar:
         condition: service_started
     environment:
@@ -264,6 +288,7 @@ services:
       Validation__FpcEndpoint: "http://fpc-sidecar:51055"
       Validation__GppEndpoint: "http://gpp-sidecar:51057"
       Validation__Vb6Endpoint: "http://vb6-sidecar:51058"
+      Validation__CsharpEndpoint: "http://csharp-sidecar:51059"
       Validation__PropertyTestEndpoint: "http://property-test-sidecar:51056"
       # Phase 9.3.b: the property-test sidecar drives Hypothesis and posts
       # each generated input back to the API at the callback URL below.
@@ -331,6 +356,10 @@ services:
       # the headline VB6 corpus. Local-only (no network); source files
       # ship with the API image under SeedData/vb6-inventory-sample/.
       Database__SeedVb6Demo: "${DATABASE_SEED_VB6_DEMO:-true}"
+      # Phase 12.0.g: seed Microsoft's MvcMusicStore as the headline C#
+      # corpus (~25 .cs files, ASP.NET MVC 5, .NET Framework 4.6). Network-
+      # dependent (GitHub clone). Set false to skip in offline/CI environments.
+      Database__SeedMvcMusicStoreDemo: "${DATABASE_SEED_MVC_MUSIC_STORE_DEMO:-true}"
       # Dev-only reset endpoint at POST /api/v1/dev/reset. ALWAYS off in any
       # deployed environment.
       Dev__ResetEnabled: "${DEV_RESET_ENABLED:-true}"
@@ -371,12 +400,13 @@ services:
       # doesn't trip over the Windows bind-mount path layout.
       - api-bin:/src/Astra.Api/bin
       - api-obj:/src/Astra.Api/obj
+    command: ["dotnet", "run", "--no-launch-profile"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 20
-      start_period: 60s
+      retries: 60
+      start_period: 600s
     networks: [astra]
 
   # ─── Worker (.NET 8 + Hangfire) ───────────────────────────────────────

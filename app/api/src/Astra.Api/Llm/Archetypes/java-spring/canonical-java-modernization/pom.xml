@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.kiwiplan</groupId>
+    <artifactId>demo-mes-modernized</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>Kiwiplan MES (Java 11 → Java 21 / Spring Boot 3 modernization)</name>
+    <description>
+      Reference Java 11 → Java 21 LTS modernization scaffold for a Kiwiplan MES
+      work-order slice, from a signed java spec (spec/v1, schemaId=java,
+      targetStack=java-spring). This is an IN-PLACE upgrade, not a cross-language
+      migration — so the scaffold shows the MODERNIZED Java 21 forms:
+        * a verbose POJO ⟶ a record (Dimensions)
+        * a status enum/int + if-else ⟶ a sealed interface + pattern-matching
+          switch (WorkOrderState / WorkOrderStateMachine)
+        * new Date(y-1900,m-1,d) / new Integer(int) ⟶ java.time.LocalDate /
+          Integer.valueOf (ShipmentScheduler)
+        * collect(Collectors.toList()) that is later mutated ⟶ a MUTABLE copy of
+          Stream.toList() (BatchPlanner) — the unmodifiable-toList edge case
+        * multi-line string concatenation ⟶ a text block (PricingReport)
+
+      The framework-level upgrades (javax.* ⟶ jakarta.*, WebSecurityConfigurer-
+      Adapter ⟶ SecurityFilterChain) CANNOT be compiled offline (no Spring/
+      jakarta in the maven-sidecar cache), so they are documented @Modernization
+      contracts (SecurityConfigContract) rather than stubbed live wiring. The
+      Java 21 LANGUAGE modernizations ARE real code the JUnit suite verifies —
+      the whole point is that behaviour is preserved across the upgrade, so the
+      invariants are the contract.
+
+      Builds OFFLINE on the maven-sidecar's JDK 21 (pinned plugins + junit/
+      assertj). Source AND target are Java, so source-execution equivalence is
+      feasible in principle, but is not wired; the golden extraction score + this
+      suite are the gates.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.2</junit.version>
+        <assertj.version>3.25.3</assertj.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- Plugins pinned to the maven-sidecar's baked OFFLINE cache
+             (compiler 3.13.0 / resources 3.3.1 / surefire 3.2.5). -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

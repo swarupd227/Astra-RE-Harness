@@ -1,0 +1,29 @@
+{
+  "entryId": "vbnet-on-error-resume-next-swallows",
+  "schemaId": "vbnet",
+  "title": "On Error Resume Next swallows all runtime errors — a bad parse silently returns 0",
+  "trapCategory": "error/on-error-resume",
+  "difficulty": "medium",
+  "sourcePath": "vbnet/snippets/legacy_import.vb",
+  "sourceLines": "1-10",
+  "sourceContent": "Public Class LegacyImport\n    Public Function ParseRow(raw As String) As Integer\n        On Error Resume Next          ' swallows EVERY runtime error below\n        Dim n As Integer = CInt(raw)  ' non-numeric raw -> error swallowed, n stays 0\n        Return n                       ' silently returns 0 on bad input\n    End Function\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "errorHandlingContract",
+      "id": "EHC-1",
+      "pattern": "(?i)(On\\s+Error\\s+Resume\\s+Next|swallow|suppress|Try\\s*/?\\s*Catch|unstructured)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-EHC-1",
+      "pattern": "(?i)(returns?\\s+0|silent|non.numeric|FormatException|invalid\\s+input)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-EHC-1",
+      "pattern": "(?i)(rethrow|log|which\\s+errors|intended.*swallow|TryParse)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "On Error Resume Next continues past any runtime error, leaving variables at their last value. Here a non-numeric input makes CInt throw, the error is swallowed, and the method returns 0 as if the input were valid. A faithful C# port must reproduce the swallow (try/catch returning 0) OR — more likely the real intent — use int.TryParse; the extractor should surface which behaviour is wanted."
+}

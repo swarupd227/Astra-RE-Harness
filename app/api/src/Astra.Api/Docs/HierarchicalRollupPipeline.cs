@@ -151,7 +151,7 @@ public sealed class HierarchicalRollupPipeline
                     var userMessage = BuildModuleUserMessage(moduleName, captured.RelativePath, routineInputs);
                     var (payload, _) = await CallAnthropicAsync(
                         httpFactory, _docsOpts.SonnetModel, _modulePrompt, userMessage,
-                        expectArray: false, ct);
+                        "emit_module_documentation", ModuleToolSchema, ct);
 
                     using var innerScope = _scopeFactory.CreateScope();
                     var innerDb = innerScope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -232,7 +232,7 @@ public sealed class HierarchicalRollupPipeline
                 (m.ModuleName ?? "(unknown)", m.PayloadJson)).ToList());
             var (payload, _) = await CallAnthropicAsync(
                 httpFactory, _docsOpts.SonnetModel, _overviewPrompt, userMessage,
-                expectArray: false, ct);
+                "emit_system_overview", OverviewToolSchema, ct);
 
             var section = new DocSection
             {
@@ -338,12 +338,83 @@ public sealed class HierarchicalRollupPipeline
         var touch = root.TryGetProperty("touchWhen", out var tw) ? tw.GetString() : null;
         var sb = new StringBuilder();
         sb.Append("## Module: ").Append(moduleName).Append("\n\n");
-        sb.Append(purpose).Append("\n\n");
+        // The model's purpose prose may carry its own headings; push them below
+        // the module title so they nest as sub-sections instead of colliding
+        // with it. Note groups sit at the same level (###) as those subheads.
+        sb.Append(DemotePurposeHeadings(purpose ?? "")).Append("\n\n");
         if (!string.IsNullOrWhiteSpace(touch))
-            sb.Append("**When to edit:** ").Append(touch).Append("\n\n");
-        AppendList(sb, root, "publicSurface", "**Public surface**");
-        AppendList(sb, root, "knownRisks", "**Known risks**");
+            sb.Append("> **When to edit:** ").Append(touch).Append("\n\n");
+        AppendModuleCallouts(sb, root, "architecturalNotes", "### Architectural Notes");
+        AppendPublicSurface(sb, root);
+        AppendModuleCallouts(sb, root, "knownRisks", "### Known Risks");
         return sb.ToString();
+    }
+
+    // Push a purpose paragraph's headings so the shallowest becomes H3 (below
+    // the ## module title), preserving relative depth. Fenced code is skipped.
+    private static string DemotePurposeHeadings(string purpose, int floor = 3)
+    {
+        var lines = purpose.Replace("\r\n", "\n").Split('\n');
+        var inFence = false;
+        var min = int.MaxValue;
+        foreach (var line in lines)
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith("```", StringComparison.Ordinal) || t.StartsWith("~~~", StringComparison.Ordinal))
+            { inFence = !inFence; continue; }
+            if (inFence) continue;
+            var h = HeadingDepth(line);
+            if (h > 0) min = Math.Min(min, h);
+        }
+        if (min == int.MaxValue) return purpose;   // no headings
+        var delta = floor - min;
+        if (delta <= 0) return purpose;            // already deep enough
+
+        var sb = new StringBuilder();
+        inFence = false;
+        foreach (var line in lines)
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith("```", StringComparison.Ordinal) || t.StartsWith("~~~", StringComparison.Ordinal))
+            { inFence = !inFence; sb.Append(line).Append('\n'); continue; }
+            var h = inFence ? 0 : HeadingDepth(line);
+            if (h > 0)
+                sb.Append(new string('#', Math.Min(h + delta, 6))).Append(line[h..]).Append('\n');
+            else
+                sb.Append(line).Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // ATX heading depth if the line is a heading (#..###### followed by space),
+    // else 0.
+    private static int HeadingDepth(string line)
+    {
+        var h = 0;
+        while (h < line.Length && line[h] == '#') h++;
+        return h is >= 1 and <= 6 && h < line.Length && line[h] == ' ' ? h : 0;
+    }
+
+    private static void AppendPublicSurface(StringBuilder sb, JsonElement root)
+    {
+        if (!root.TryGetProperty("publicSurface", out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
+            return;
+        sb.Append("### Public API\n\n");
+        sb.Append("| Routine |\n");
+        sb.Append("|---------|\n");
+        foreach (var item in arr.EnumerateArray())
+            sb.Append("| `").Append(item.GetString()).Append("` |\n");
+        sb.Append('\n');
+    }
+
+    private static void AppendModuleCallouts(StringBuilder sb, JsonElement root, string prop, string heading)
+    {
+        if (!root.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
+            return;
+        sb.Append(heading).Append("\n\n");
+        foreach (var item in arr.EnumerateArray())
+            sb.Append("> ").Append(item.GetString()).Append('\n');
+        sb.Append('\n');
     }
 
     private static string RenderOverviewMarkdown(string payloadJson)
@@ -363,19 +434,15 @@ public sealed class HierarchicalRollupPipeline
         return $"# {title}\n\n{summary}\n";
     }
 
-    private static void AppendList(StringBuilder sb, JsonElement root, string prop, string heading)
-    {
-        if (!root.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
-            return;
-        sb.Append(heading).Append('\n');
-        foreach (var item in arr.EnumerateArray())
-            sb.Append("- ").Append(item.GetString()).Append('\n');
-        sb.Append('\n');
-    }
-
+    // Structured output via tool use. Forcing the model to answer through a
+    // tool whose input_schema we define means the Anthropic API assembles the
+    // JSON — an unescaped quote or control character inside a string value
+    // becomes structurally impossible, unlike hand-written JSON in a text block
+    // (which reliably broke on content-heavy modules such as order-post.p /
+    // AccountController). The tool_use block's `input` is always valid JSON.
     private async Task<(string payload, TokenUsage usage)> CallAnthropicAsync(
         IHttpClientFactory httpFactory, string model, string systemPrompt, string userMessage,
-        bool expectArray, CancellationToken ct)
+        string toolName, object inputSchema, CancellationToken ct)
     {
         var requestBody = new Dictionary<string, object?>
         {
@@ -390,6 +457,22 @@ public sealed class HierarchicalRollupPipeline
                     ["cache_control"] = new { type = "ephemeral" },
                 },
             },
+            ["tools"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name"] = toolName,
+                    ["description"] = "Emit the documentation section as structured fields.",
+                    ["input_schema"] = inputSchema,
+                },
+            },
+            // Pin the answer to the tool so every response is a tool_use block
+            // whose `input` the API has already validated as JSON.
+            ["tool_choice"] = new Dictionary<string, object?>
+            {
+                ["type"] = "tool",
+                ["name"] = toolName,
+            },
             ["messages"] = new[]
             {
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = userMessage },
@@ -398,6 +481,7 @@ public sealed class HierarchicalRollupPipeline
 
         var http = httpFactory.CreateClient("docs-summary");
         http.Timeout = TimeSpan.FromMinutes(3);
+
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/messages")
         {
             Content = new StringContent(
@@ -414,14 +498,21 @@ public sealed class HierarchicalRollupPipeline
 
         using var doc = JsonDocument.Parse(bodyText);
         var root = doc.RootElement;
-        string? text = null;
-        foreach (var block in root.GetProperty("content").EnumerateArray())
-            if (block.TryGetProperty("type", out var t) && t.GetString() == "text")
-                text = block.GetProperty("text").GetString();
-        if (text is null) throw new InvalidOperationException("No text block in Anthropic response.");
 
-        var payload = expectArray ? TrimToJsonArray(text) : TrimToJsonObject(text);
-        using (var _ = JsonDocument.Parse(payload)) { /* parse-validate */ }
+        // The tool_use block's `input` is API-assembled JSON — extract it verbatim.
+        string? payload = null;
+        foreach (var block in root.GetProperty("content").EnumerateArray())
+        {
+            if (block.TryGetProperty("type", out var bt) && bt.GetString() == "tool_use"
+                && block.TryGetProperty("input", out var input))
+            {
+                payload = input.GetRawText();
+                break;
+            }
+        }
+        if (payload is null)
+            throw new InvalidOperationException(
+                "No tool_use block in Anthropic response: " + Truncate(bodyText, 300));
 
         var usage = root.GetProperty("usage");
         int cacheRead = usage.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : 0;
@@ -432,21 +523,69 @@ public sealed class HierarchicalRollupPipeline
             cacheRead, cacheCreate));
     }
 
-    private static string TrimToJsonObject(string text)
-    {
-        var open = text.IndexOf('{');
-        var close = text.LastIndexOf('}');
-        if (open < 0 || close <= open) throw new InvalidOperationException("Not a JSON object: " + Truncate(text, 200));
-        return text[open..(close + 1)];
-    }
+    // ── Tool input schemas (structured-output contracts) ─────────────────
+    // Mirror the shapes the doc-module / doc-overview prompts describe. Optional
+    // fields stay out of "required" so a module with no known risks still
+    // validates; the Render* methods read fields defensively with TryGetProperty.
 
-    private static string TrimToJsonArray(string text)
+    private static Dictionary<string, object?> StringArray(string description) => new()
     {
-        var open = text.IndexOf('[');
-        var close = text.LastIndexOf(']');
-        if (open < 0 || close <= open) throw new InvalidOperationException("Not a JSON array: " + Truncate(text, 200));
-        return text[open..(close + 1)];
-    }
+        ["type"] = "array",
+        ["description"] = description,
+        ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+    };
+
+    private static Dictionary<string, object?> CitationsArray() => new()
+    {
+        ["type"] = "array",
+        ["items"] = new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["lines"] = new Dictionary<string, object?> { ["type"] = "string" },
+            },
+        },
+    };
+
+    private static readonly object ModuleToolSchema = new Dictionary<string, object?>
+    {
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object?>
+        {
+            ["id"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["moduleName"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["purpose"] = new Dictionary<string, object?>
+            {
+                ["type"] = "string",
+                ["description"] = "300–600 words of markdown covering the module's role, the abstraction it provides, its call-graph position, algorithmic strategy, and performance characteristics.",
+            },
+            ["architecturalNotes"] = StringArray("Design-level observations visible only at module scope; one sentence each."),
+            ["publicSurface"] = StringArray("Names of the routines callable from outside the module."),
+            ["touchWhen"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["knownRisks"] = StringArray("Risks grounded in the per-routine summaries."),
+            ["citations"] = CitationsArray(),
+        },
+        ["required"] = new[] { "moduleName", "purpose", "publicSurface" },
+    };
+
+    private static readonly object OverviewToolSchema = new Dictionary<string, object?>
+    {
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object?>
+        {
+            ["id"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["title"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["summary"] = new Dictionary<string, object?>
+            {
+                ["type"] = "string",
+                ["description"] = "2–5 pages of markdown: an elevator-pitch first paragraph, subsystem sections, and the load-bearing concepts a new engineer must internalise.",
+            },
+            ["subsystems"] = StringArray("Titles of the subsystem sections produced in the summary markdown."),
+            ["citations"] = CitationsArray(),
+        },
+        ["required"] = new[] { "title", "summary" },
+    };
 
     private static string StripFrontmatter(string md)
     {

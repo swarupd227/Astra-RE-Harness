@@ -47,7 +47,13 @@ RUN cd /warmup && mvn -B -q \
         dependency:resolve-plugins \
         dependency:resolve \
         -Dsilent=true \
-    && rm -rf /warmup
+ # Actually RUN the JUnit 5 warmup test (online, at build time) so Surefire
+ # resolves and caches its JUnit Platform provider (surefire-junit-platform)
+ # plus the junit-platform launcher/engine jars. Without a real test run these
+ # never land in the baked ~/.m2, and every scaffold's `mvn -o test` fails
+ # offline with "surefire-junit-platform:jar:3.2.5 (absent)".
+ && cd /warmup && mvn -B test \
+ && rm -rf /warmup
 
 COPY maven_sidecar/ maven_sidecar/
 

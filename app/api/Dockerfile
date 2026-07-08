@@ -14,6 +14,13 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && rm /tmp/dotnet-install.sh \
     && dotnet --list-sdks
 
+# Phase 11.0.g — documentation export tools needed in dev AND runtime.
+# Installing in sdk so the dev stage (which derives from sdk) also has them.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pandoc \
+    weasyprint \
+    && rm -rf /var/lib/apt/lists/*
+
 # Restore (cached layer) — copy csproj first
 COPY src/Astra.Api/Astra.Api.csproj src/Astra.Api/
 RUN dotnet restore src/Astra.Api/Astra.Api.csproj

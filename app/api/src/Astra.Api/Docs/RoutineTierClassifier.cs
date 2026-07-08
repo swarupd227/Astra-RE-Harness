@@ -2,39 +2,46 @@ using System.Text.Json;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Astra.Api.Docs;
 
 /// <summary>
-/// Phase 11.0.a — picks a routine's model tier (utility | mid | headline) for
+/// Phase 11.0.a — picks a routine's model tier (headline | standard) for
 /// the doc-summary pipeline. Tier drives which model handles the routine
-/// (Haiku batched / Sonnet / Opus) and how much of the prompt context budget
-/// it gets.
+/// (Opus for headline, Sonnet for standard).
 ///
-/// We deliberately DO NOT depend on Phase 8.0.c's BlastRadius service: that
-/// path requires a fully-loaded dependency graph per routine and a
-/// MigrationPlan row to materialise readiness, neither of which an SME
-/// should have to do before generating documentation. Instead we derive
-/// importance from two cheap, per-corpus signals already on the Subroutine
-/// rows:
+/// Phase 11.0.f quality upgrade: Haiku/batch/utility tier removed entirely.
+/// All routines now run single-shot; the only question is Opus vs. Sonnet.
+/// The top <see cref="DocsOptions.HeadlinePercentile"/> percent by composite
+/// importance score go to Opus; the rest get Sonnet.
 ///
-///   1. **Reverse-call count.** How many routines in the same corpus call
-///      this one (read from <c>Subroutine.CalledSubroutines</c> jsonb).
-///      Load-bearing routines tend to be called from many places.
-///   2. **LOC (LineEnd − LineStart + 1).** Big routines tend to carry more
-///      logic and need a fuller summary.
+/// Importance score = callerCount × 3 + (loc / 5). The multipliers weight
+/// reach (how many routines call this one) more heavily than raw size, since
+/// a large but leaf-level routine is less load-bearing than a small but
+/// widely-called one. Calibrated on LAPACK BLAS: with HeadlinePercentile=10
+/// the top tier captures DGEMM, DTRSM, and the main BLAS-3 kernels.
 ///
-/// Thresholds were calibrated against LAPACK BLAS during the 11.0 slice;
-/// they will be revisited when 11.0.h's E2E demo run gives us a per-tier
-/// quality + cost breakdown.
+/// CallerNames are included in TierAssignment so the pipeline can pass them
+/// into the doc-summary prompt as additional context, helping the model
+/// understand which higher-level routines depend on this one.
 /// </summary>
 public sealed class RoutineTierClassifier
 {
     private readonly AppDbContext _db;
+    private readonly DocsOptions _opts;
 
-    public RoutineTierClassifier(AppDbContext db) => _db = db;
+    public RoutineTierClassifier(AppDbContext db, IOptions<DocsOptions> opts)
+    {
+        _db = db;
+        _opts = opts.Value;
+    }
 
-    public sealed record TierAssignment(string Tier, int CallerCount, int Loc);
+    public sealed record TierAssignment(
+        string Tier,
+        int CallerCount,
+        int Loc,
+        IReadOnlyList<string> CallerNames);
 
     public async Task<IReadOnlyDictionary<Guid, TierAssignment>> ClassifyForCorpusAsync(
         Guid corpusId, Guid sourceVersionId, CancellationToken ct)
@@ -45,12 +52,12 @@ public sealed class RoutineTierClassifier
             .Where(s => s.SourceFile != null && s.SourceFile.SourceVersionId == sourceVersionId)
             .ToListAsync(ct);
 
-        // Reverse-call count. Subroutine.Name is not unique across files
-        // (think Fortran SUBROUTINE F in two files) so we count by name and
-        // accept the noise — over-counting a clashed name pushes that routine
-        // up a tier, which is harmless. Under-counting is the failure mode
-        // we'd care about.
-        var callerCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Build reverse-call maps: callee name → caller names, and callee name → caller count.
+        // Subroutine.Name is not unique across files (Fortran allows duplicate names in
+        // different source units) so we count by name and accept the noise.
+        var callerCountMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var callerNamesMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var sub in subs)
         {
             if (sub.CalledSubroutines is null) continue;
@@ -59,48 +66,50 @@ public sealed class RoutineTierClassifier
                 using var doc = JsonDocument.Parse(sub.CalledSubroutines.RootElement.GetRawText());
                 foreach (var callee in EnumerateNames(doc.RootElement))
                 {
-                    callerCounts.TryGetValue(callee, out var existing);
-                    callerCounts[callee] = existing + 1;
+                    callerCountMap.TryGetValue(callee, out var existing);
+                    callerCountMap[callee] = existing + 1;
+
+                    if (!callerNamesMap.TryGetValue(callee, out var list))
+                        callerNamesMap[callee] = list = [];
+                    if (!list.Contains(sub.Name, StringComparer.OrdinalIgnoreCase))
+                        list.Add(sub.Name);
                 }
             }
             catch { /* malformed jsonb on a single row is non-fatal */ }
         }
 
-        var result = new Dictionary<Guid, TierAssignment>(subs.Count);
-        foreach (var sub in subs)
+        // Compute composite importance score for each routine.
+        var scored = subs.Select(sub =>
         {
-            var calls = callerCounts.TryGetValue(sub.Name, out var c) ? c : 0;
-            var loc = sub.LineEnd > sub.LineStart ? (sub.LineEnd - sub.LineStart + 1) : 0;
-            var tier = PickTier(calls, loc);
-            result[sub.Id] = new TierAssignment(tier, calls, loc);
+            var calls = callerCountMap.TryGetValue(sub.Name, out var c) ? c : 0;
+            var loc = sub.LineEnd > sub.LineStart ? sub.LineEnd - sub.LineStart + 1 : 0;
+            var score = calls * 3 + loc / 5;
+            return (sub, calls, loc, score);
+        }).ToList();
+
+        // Top HeadlinePercentile % → Opus ("headline"); rest → Sonnet ("standard").
+        var pct = Math.Clamp(_opts.HeadlinePercentile, 1, 50);
+        var headlineCount = Math.Max(1, (int)Math.Ceiling(scored.Count * pct / 100.0));
+        var headlineIds = scored
+            .OrderByDescending(x => x.score)
+            .Take(headlineCount)
+            .Select(x => x.sub.Id)
+            .ToHashSet();
+
+        var result = new Dictionary<Guid, TierAssignment>(subs.Count);
+        foreach (var (sub, calls, loc, _) in scored)
+        {
+            var tier = headlineIds.Contains(sub.Id) ? "headline" : "standard";
+            var callerNames = callerNamesMap.TryGetValue(sub.Name, out var cn)
+                ? (IReadOnlyList<string>)cn
+                : Array.Empty<string>();
+            result[sub.Id] = new TierAssignment(tier, calls, loc, callerNames);
         }
         return result;
     }
 
-    private static string PickTier(int callerCount, int loc)
-    {
-        // Thresholds calibrated against LAPACK Reference BLAS (154 routines)
-        // during the 11.0.a verification pass: the initial loose rules
-        // promoted 30% of routines to headline, blowing the cost band on
-        // Opus. The current rules target ~5% headline / ~25% mid / ~70%
-        // utility on a typical scientific-library corpus.
-        //
-        // Headline: load-bearing AND substantial. A 500-LOC leaf is
-        // probably dead code; a 20-LOC routine called from 100 places is
-        // probably a one-line wrapper.
-        if (callerCount >= 25 && loc >= 80) return "headline";
-        if (loc >= 400) return "headline";
-
-        // Mid: meaningful complexity OR meaningful reach.
-        if (callerCount >= 8 || loc >= 120) return "mid";
-
-        return "utility";
-    }
-
     private static IEnumerable<string> EnumerateNames(JsonElement element)
     {
-        // CalledSubroutines may be either a flat array of strings or an
-        // array of objects ({name, ...}). Tolerate both shapes.
         if (element.ValueKind != JsonValueKind.Array) yield break;
         foreach (var item in element.EnumerateArray())
         {

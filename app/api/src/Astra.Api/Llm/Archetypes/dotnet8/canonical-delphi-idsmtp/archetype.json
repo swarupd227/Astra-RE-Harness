@@ -17,7 +17,7 @@
     "fallback": "Used whenever the routine's enclosing_class matches a TIdSMTP* family member."
   },
   "owner": "Nous · Delphi migration accelerator",
-  "status": "preview",
+  "status": "production",
   "files": [
     { "path": "Demo.IdSMTP.csproj",                "language": "xml",    "derivedFromClaimIds": [] },
     { "path": "tests/Demo.IdSMTP.Tests.csproj",    "language": "xml",    "derivedFromClaimIds": [] },

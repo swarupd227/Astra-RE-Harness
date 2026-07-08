@@ -393,6 +393,13 @@ public sealed class CatalogPipeline
         // global Llm__Anthropic__MaxOutputTokens default; the BLAS run
         // tripped the 4k ceiling on the data-dictionary and glossary
         // stages mid-array.
+        // Structured output via tool use. The catalogue array is wrapped in an
+        // `entries` object (tool input_schemas must be objects) and the Anthropic
+        // API assembles the JSON — an unescaped quote or control character in an
+        // entry can no longer break the whole batch. On a max_tokens truncation
+        // the model simply emits fewer complete entries; the API still returns
+        // valid JSON, which subsumes the manual balanced-array recovery the old
+        // text path needed.
         var requestBody = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -405,6 +412,20 @@ public sealed class CatalogPipeline
                     ["text"] = systemPrompt,
                     ["cache_control"] = new { type = "ephemeral" },
                 },
+            },
+            ["tools"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name"] = "emit_catalogue",
+                    ["description"] = "Emit the catalogue entries as structured data.",
+                    ["input_schema"] = CatalogueToolSchema,
+                },
+            },
+            ["tool_choice"] = new Dictionary<string, object?>
+            {
+                ["type"] = "tool",
+                ["name"] = "emit_catalogue",
             },
             ["messages"] = new[]
             {
@@ -430,79 +451,39 @@ public sealed class CatalogPipeline
 
         using var doc = JsonDocument.Parse(bodyText);
         var root = doc.RootElement;
-        string? text = null;
-        foreach (var block in root.GetProperty("content").EnumerateArray())
-            if (block.TryGetProperty("type", out var t) && t.GetString() == "text")
-                text = block.GetProperty("text").GetString();
-        if (text is null) throw new InvalidOperationException("No text block in Anthropic response.");
         var stopReason = root.TryGetProperty("stop_reason", out var sr) ? sr.GetString() ?? "" : "";
 
-        // Find the OUTERMOST balanced array by depth-tracking rather than
-        // LastIndexOf(']'), which the original implementation got wrong: a
-        // truncated mid-array response still contains inner-array `]`
-        // characters (e.g. from "writers": ["A","B"]) and the naive trim
-        // would lock onto those, producing an unclosed-outer-array string
-        // that fails to parse.
-        var trimmed = TrimToOutermostArray(text);
-        return (trimmed, stopReason, text.Length);
-    }
-
-    private static string TrimToOutermostArray(string text)
-    {
-        var open = text.IndexOf('[');
-        if (open < 0)
-            throw new InvalidOperationException("Not a JSON array (no '['): " + Truncate(text, 200));
-        int depth = 0;
-        int close = -1;
-        for (var i = open; i < text.Length; i++)
+        foreach (var block in root.GetProperty("content").EnumerateArray())
         {
-            var c = text[i];
-            if (c == '[') depth++;
-            else if (c == ']')
+            if (block.TryGetProperty("type", out var t) && t.GetString() == "tool_use"
+                && block.TryGetProperty("input", out var input))
             {
-                depth--;
-                if (depth == 0) { close = i; break; }
+                var rawLen = input.GetRawText().Length;
+                if (input.TryGetProperty("entries", out var entries)
+                    && entries.ValueKind == JsonValueKind.Array)
+                    return (entries.GetRawText(), stopReason, rawLen);
+                // Tool answered without a usable entries array — treat as empty.
+                return ("[]", stopReason, rawLen);
             }
         }
-        if (close < 0)
-        {
-            // Output is truncated mid-array. Walk back to the last
-            // complete top-level object to recover as many entries as we
-            // can without dropping the whole batch.
-            var recovered = TryRecoverArrayFromTruncated(text, open);
-            if (recovered is not null) return recovered;
-            throw new InvalidOperationException(
-                $"Truncated JSON array (depth still {depth} at end). Output length: {text.Length}. " +
-                "Tail: " + Truncate(text[Math.Max(0, text.Length - 200)..], 200));
-        }
-        return text[open..(close + 1)];
+        throw new InvalidOperationException(
+            "No tool_use block in Anthropic response: " + Truncate(bodyText, 300));
     }
 
-    /// <summary>
-    /// Best-effort recovery from a max_tokens-truncated array response.
-    /// Walks the text from the opening '[' tracking depth; remembers the
-    /// position of the last complete top-level element (depth went 1→0
-    /// crossing a '}') and synthesises a closed array up to that point.
-    /// Drops the partial final element. Returns null if no complete
-    /// element was found.
-    /// </summary>
-    private static string? TryRecoverArrayFromTruncated(string text, int openIdx)
+    private static readonly object CatalogueToolSchema = new Dictionary<string, object?>
     {
-        int depth = 0;
-        int lastCompleteEnd = -1;
-        for (var i = openIdx; i < text.Length; i++)
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object?>
         {
-            var c = text[i];
-            if (c == '[' || c == '{') depth++;
-            else if (c == ']' || c == '}')
+            ["entries"] = new Dictionary<string, object?>
             {
-                depth--;
-                if (depth == 1 && c == '}') lastCompleteEnd = i;
-            }
-        }
-        if (lastCompleteEnd < 0) return null;
-        return text[openIdx..(lastCompleteEnd + 1)] + "]";
-    }
+                ["type"] = "array",
+                ["description"] = "One object per catalogue entry, each in the exact field shape the instructions specify.",
+                ["items"] = new Dictionary<string, object?> { ["type"] = "object" },
+            },
+        },
+        ["required"] = new[] { "entries" },
+    };
 
     private static string StripFrontmatter(string md)
     {

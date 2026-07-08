@@ -1,0 +1,45 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-php-catalog-service",
+  "targetStack": "dotnet8",
+  "displayName": "Acme storefront cart/pricing (PHP → .NET 8 / C# 12)",
+  "description": "Reference PHP → .NET 8 / C# 12 scaffold for an Acme storefront cart/pricing slice, from a signed php spec (targetStack=dotnet8). The .NET option of a dual-target pair — java-spring/canonical-php-catalog-service is the Java projection of the same signed spec, and the SME picks the target per routine. Demonstrates the same PHP→static-type idiom gap: loose == juggling (\"0\" == false) ⟶ explicit typed comparison; the PHP array-as-ordered-map ⟶ a CartLine record + Dictionary; isset/empty/?? ⟶ nullable + explicit checks WITHOUT the empty(\"0\") bug; the $_SESSION superglobal ⟶ an injected ISessionCart; money-as-float ⟶ decimal (AwayFromZero, 2dp); and @-suppressed silent failures ⟶ explicit typed exceptions. Built as a console Exe so the csharp-sidecar's /compile-and-run EXECUTES the Program.cs acceptance harness — genuine compile + run verification (the sidecar has no xUnit runner). Dependency-free, so dotnet publish needs no NuGet beyond the base SDK.",
+  "compatibleSchemas": ["php"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "applyCoupon" },
+      { "subroutineName": "cartTotal" },
+      { "subroutineName": "resolveQty" },
+      { "subroutineName": "addToCart" },
+      { "subroutineName": "lineTotal" },
+      { "subroutineName": "fetchPrice" }
+    ],
+    "fallback": "Used for php routines in a cart/pricing/checkout slice when the SME picks the .NET target."
+  },
+  "owner": "Nous · Java/Spring + .NET migration accelerator",
+  "status": "preview",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "PHP has a free/OSS runtime, so source-execution equivalence is FEASIBLE via a php-sidecar — that sidecar is not built yet, so equivalence is NOT claimed here.",
+    "gatesActive": [
+      "golden-dataset extraction score (php, target-neutral claims)",
+      "csharp-sidecar compile (dotnet publish, exit 0)",
+      "csharp-sidecar /compile-and-run of the Program.cs acceptance harness (exit 0 = all checks pass)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "php-sidecar source-execution equivalence (feasible; not built)",
+      "xUnit tests via `dotnet test` (the csharp-sidecar has no test route; the runnable Program.cs harness is the executed check instead)"
+    ]
+  },
+  "files": [
+    { "path": "Acme.Catalog.csproj",            "language": "xml", "derivedFromClaimIds": [] },
+    { "path": "Program.cs",                     "language": "csharp", "derivedFromClaimIds": ["LTC-1","NUL-1","EC-1","INV-1","SG-1","SE-1","EH-1","ARR-1"] },
+    { "path": "src/Markers.cs",                 "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/CartLine.cs",                "language": "csharp", "derivedFromClaimIds": ["ARR-1","EC-1"] },
+    { "path": "src/MoneyMath.cs",               "language": "csharp", "derivedFromClaimIds": ["EC-1","INV-1","LTC-1"] },
+    { "path": "src/CouponService.cs",           "language": "csharp", "derivedFromClaimIds": ["LTC-1","INV-1"] },
+    { "path": "src/QuantityResolver.cs",        "language": "csharp", "derivedFromClaimIds": ["NUL-1","EC-1"] },
+    { "path": "src/CartService.cs",             "language": "csharp", "derivedFromClaimIds": ["SG-1","SE-1","ARR-1","INV-1"] },
+    { "path": "src/PriceFetcher.cs",            "language": "csharp", "derivedFromClaimIds": ["EH-1","SE-1"] }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "entryId": "java-javax-to-jakarta-entity",
+  "schemaId": "java",
+  "title": "A JPA entity on javax.persistence + javax.validation must move to jakarta.* (and Hibernate 5→6)",
+  "trapCategory": "namespace/jakarta",
+  "difficulty": "medium",
+  "sourcePath": "java/snippets/WorkOrder.java",
+  "sourceLines": "1-20",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport javax.persistence.Entity;\nimport javax.persistence.Id;\nimport javax.persistence.Column;\nimport javax.validation.constraints.NotNull;\nimport javax.validation.constraints.Min;\n\n@Entity\npublic class WorkOrder {\n    @Id\n    private Long id;\n\n    @NotNull\n    @Column(nullable = false)\n    private String sku;\n\n    @Min(1)\n    private int quantity;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "jakartaNamespaceMigration",
+      "id": "JAK-1",
+      "pattern": "(?i)(javax\\.persistence|javax\\.validation|jakarta\\.|@Entity|namespace)"
+    },
+    {
+      "kind": "libraryMajorBump",
+      "id": "LIB-1",
+      "pattern": "(?i)(hibernate|validator|jakarta.persistence|major|5.*6|6\\.x)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(quantity|@Min|@NotNull|sku|not.null|>=\\s*1)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Every javax.persistence.* and javax.validation.* import moves to jakarta.* under Spring Boot 3 / Jakarta EE 9. That forces Hibernate 5→6 (which targets jakarta.persistence). The invariant (quantity>=1, sku not null) must survive the annotation move unchanged."
+}

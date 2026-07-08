@@ -1,0 +1,29 @@
+{
+  "entryId": "java-spring-security-adapter",
+  "schemaId": "java",
+  "title": "WebSecurityConfigurerAdapter + antMatchers is removed in Spring Boot 3 → a SecurityFilterChain bean with requestMatchers",
+  "trapCategory": "spring-boot/security",
+  "difficulty": "hard",
+  "sourcePath": "java/snippets/SecurityConfig.java",
+  "sourceLines": "1-18",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport org.springframework.context.annotation.Configuration;\nimport org.springframework.security.config.annotation.web.builders.HttpSecurity;\nimport org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;\n\n@Configuration\npublic class SecurityConfig extends WebSecurityConfigurerAdapter {\n    @Override\n    protected void configure(HttpSecurity http) throws Exception {\n        http\n            .authorizeRequests()\n            .antMatchers(\"/admin/**\").hasRole(\"ADMIN\")\n            .antMatchers(\"/public/**\").permitAll()\n            .anyRequest().authenticated();\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "springBootUpgrade",
+      "id": "SB-1",
+      "pattern": "(?i)(WebSecurityConfigurerAdapter|SecurityFilterChain|antMatchers|requestMatchers|authorizeHttpRequests|filter\\s*chain|@Bean)"
+    },
+    {
+      "kind": "libraryMajorBump",
+      "id": "LIB-1",
+      "pattern": "(?i)(spring[- ]security|5.*6|major|6\\.x|spring\\s+framework\\s*6)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(/admin|ADMIN|hasRole|authoriz|permitAll|access\\s+control|/public)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Spring Boot 3 (Spring Security 6) removed WebSecurityConfigurerAdapter — the config becomes a SecurityFilterChain @Bean — and renamed antMatchers/mvcMatchers to requestMatchers. The access-control invariant (/admin requires ADMIN, /public is open, everything else authenticated) must be preserved exactly through the rewrite."
+}

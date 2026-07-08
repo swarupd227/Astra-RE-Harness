@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-temp-table-by-reference",
+  "schemaId": "openedge",
+  "title": "TEMP-TABLE built and returned BY-REFERENCE — maps to a Java record list / in-memory table, coupling caller and callee",
+  "trapCategory": "data/temp-table",
+  "difficulty": "medium",
+  "sourcePath": "openedge/snippets/build-order-lines.p",
+  "sourceLines": "1-18",
+  "sourceContent": "/* build-order-lines.p - build a temp-table of order lines for the caller */\nDEFINE INPUT  PARAMETER piOrder AS INTEGER NO-UNDO.\nDEFINE OUTPUT PARAMETER TABLE FOR ttOrderLine.\n\nDEFINE TEMP-TABLE ttOrderLine NO-UNDO\n    FIELD OrderNum AS INTEGER\n    FIELD ItemNum  AS CHARACTER\n    FIELD Qty      AS INTEGER\n    FIELD LineAmt  AS DECIMAL\n    INDEX idxOrder IS PRIMARY OrderNum ItemNum.\n\nFOR EACH OrderLine WHERE OrderLine.OrderNum = piOrder NO-LOCK:\n    CREATE ttOrderLine.\n    ASSIGN ttOrderLine.OrderNum = OrderLine.OrderNum\n           ttOrderLine.ItemNum  = OrderLine.ItemNum\n           ttOrderLine.Qty      = OrderLine.Qty\n           ttOrderLine.LineAmt  = OrderLine.Qty * OrderLine.Price.\nEND.\n",
+  "expectedClaims": [
+    {
+      "kind": "tempTableUsage",
+      "id": "TT-1",
+      "pattern": "(?i)(ttOrderLine|TEMP-TABLE|List<|record\\s+class|in-memory|BY-REFERENCE|index)"
+    },
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-1",
+      "pattern": "(?i)(FOR\\s+EACH|NO-LOCK|read.only|query|repository)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(LineAmt|Qty\\s*\\*\\s*Price|extended\\s+price|per.line)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "DEFINE TEMP-TABLE creates an in-memory, indexed relational table; OUTPUT PARAMETER TABLE passes it to the caller (coupling). The Java target is a List<OrderLine record> (or an in-memory H2 table if the caller queries it by index). The extractor must name the temp-table, note the index and the BY-REFERENCE/return coupling, and capture the FOR EACH NO-LOCK read."
+}

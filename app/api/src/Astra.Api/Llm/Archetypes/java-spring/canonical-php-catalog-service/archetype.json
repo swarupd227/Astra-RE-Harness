@@ -1,0 +1,53 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-php-catalog-service",
+  "targetStack": "java-spring",
+  "displayName": "Acme storefront cart/pricing (PHP → Java 21 + Spring Boot 3 + JUnit 5)",
+  "description": "Reference PHP → Java-21 / Spring Boot 3 scaffold for an Acme storefront cart/pricing slice, from a signed php spec (targetStack=java-spring). Demonstrates the PHP→static-type idiom gap end-to-end: loose == juggling (\"0\" == false) ⟶ explicit typed comparison; the PHP array-as-ordered-map ⟶ a CartLine record + Map; isset/empty/?? ⟶ Optional/nullable WITHOUT the empty(\"0\") bug (a real 0 is preserved); the $_SESSION superglobal ⟶ an injected SessionCartPort; money-as-float ⟶ BigDecimal (HALF_UP, 2dp); and @-suppressed silent failures ⟶ explicit typed exceptions. Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj, no framework on the classpath); the Spring constructs are documented @TargetMapping contracts and the pure business logic is real Java the JUnit suite verifies. This is the Java option of a dual-target pair — dotnet8/canonical-php-catalog-service is the .NET 8 projection of the same signed spec, and the SME picks the target per routine.",
+  "compatibleSchemas": ["php"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "applyCoupon" },
+      { "subroutineName": "cartTotal" },
+      { "subroutineName": "resolveQty" },
+      { "subroutineName": "addToCart" },
+      { "subroutineName": "lineTotal" },
+      { "subroutineName": "fetchPrice" }
+    ],
+    "fallback": "Used for php routines in a cart/pricing/checkout slice (loose comparisons, array shapes, superglobal state, money math, or @-suppressed error handling)."
+  },
+  "owner": "Nous · Java/Spring + .NET migration accelerator",
+  "status": "preview",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "PHP has a free/OSS runtime, so source-execution equivalence is FEASIBLE via a php-sidecar (run the source, compare outputs) — unlike ABL. That sidecar is not built yet, so equivalence is NOT claimed here.",
+    "gatesActive": [
+      "golden-dataset extraction score (php, target-neutral claims)",
+      "maven-sidecar offline compile (mvn -o test-compile)",
+      "JUnit 5 suite offline (example tests over the real domain logic)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "php-sidecar source-execution equivalence (feasible; not built)",
+      "property-test-sidecar (Hypothesis) — needs per-claim generatorHints on php.schema.json"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                          "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/catalog/SpecClaim.java",                    "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/catalog/TargetMapping.java",                "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/catalog/CartLine.java",                     "language": "java", "derivedFromClaimIds": ["ARR-1","EC-1"] },
+    { "path": "src/main/java/com/acme/catalog/MoneyMath.java",                    "language": "java", "derivedFromClaimIds": ["EC-1","INV-1","LTC-1"] },
+    { "path": "src/main/java/com/acme/catalog/CouponService.java",                "language": "java", "derivedFromClaimIds": ["LTC-1","INV-1"] },
+    { "path": "src/main/java/com/acme/catalog/QuantityResolver.java",             "language": "java", "derivedFromClaimIds": ["NUL-1","EC-1"] },
+    { "path": "src/main/java/com/acme/catalog/SessionCartPort.java",              "language": "java", "derivedFromClaimIds": ["SG-1","SE-1"] },
+    { "path": "src/main/java/com/acme/catalog/CartService.java",                  "language": "java", "derivedFromClaimIds": ["SG-1","SE-1","ARR-1","INV-1"] },
+    { "path": "src/main/java/com/acme/catalog/RemotePricePort.java",              "language": "java", "derivedFromClaimIds": ["SE-1"] },
+    { "path": "src/main/java/com/acme/catalog/PriceUnavailableException.java",    "language": "java", "derivedFromClaimIds": ["EH-1"] },
+    { "path": "src/main/java/com/acme/catalog/PriceFetcher.java",                 "language": "java", "derivedFromClaimIds": ["EH-1"] },
+    { "path": "src/test/java/com/acme/catalog/CouponServiceTests.java",           "language": "java", "derivedFromClaimIds": ["LTC-1","INV-1"] },
+    { "path": "src/test/java/com/acme/catalog/QuantityResolverTests.java",        "language": "java", "derivedFromClaimIds": ["NUL-1","EC-1"] },
+    { "path": "src/test/java/com/acme/catalog/MoneyMathTests.java",               "language": "java", "derivedFromClaimIds": ["EC-1","INV-1","LTC-1"] },
+    { "path": "src/test/java/com/acme/catalog/CartServiceTests.java",             "language": "java", "derivedFromClaimIds": ["SG-1","SE-1","ARR-1","INV-1"] },
+    { "path": "src/test/java/com/acme/catalog/PriceFetcherTests.java",            "language": "java", "derivedFromClaimIds": ["EH-1"] }
+  ]
+}

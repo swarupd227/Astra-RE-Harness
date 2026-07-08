@@ -12,42 +12,37 @@ namespace Astra.Api.Docs;
 /// <summary>
 /// Phase 11.0.a — production routine-summary pipeline.
 ///
-/// Differences vs. the 11.0 vertical slice (<see cref="DocsExtractionService"/>):
+/// Phase 11.0.f quality upgrade: Haiku batch tier removed. All routines run
+/// single-shot with a 4096-token output budget.  Two tiers remain:
+///   * **headline** (top <see cref="DocsOptions.HeadlinePercentile"/> % by
+///     composite importance score) → Opus.
+///   * **standard** (remainder) → Sonnet.
 ///
-///  * **Model tiering.** RoutineTierClassifier picks utility / mid / headline
-///    per routine; the pipeline dispatches to Haiku (batched) / Sonnet
-///    (single-shot) / Opus (single-shot) accordingly.
-///  * **Prompt caching.** The system message uses Anthropic's cache_control:
-///    ephemeral block so the second call within 5 minutes pays the 90%
-///    input-token discount on the shared rules + worked example.
-///  * **Batched utility tier.** Haiku calls aggregate <see cref="DocsOptions.BatchSize"/>
-///    routines per request; the LLM returns a JSON ARRAY of summary
-///    objects in the same order.
-///  * **Bounded concurrency.** A <see cref="SemaphoreSlim"/> caps parallel
-///    Anthropic requests at <see cref="DocsOptions.MaxConcurrency"/> so we
-///    stay comfortably below the rate ceiling.
-///  * **Idempotency.** Routines with an existing routine-summary DocSection
-///    for the same SourceVersion are skipped (unless force=true).
-///  * **Background mode.** The endpoint creates a DocGenerationRun and
-///    returns 202 + run ID; the pipeline progresses on a Task.Run scoped
-///    to a fresh DI scope (the request scope dies on response send).
-///  * **Incremental metrics.** MetricsJson is updated on every batch so
-///    the UI can poll progress.
+/// Other features retained from 11.0.a:
+///  * **Prompt caching.** System message cached with cache_control:ephemeral;
+///    first call pays full price, subsequent calls within 5 min pay 10%.
+///  * **Caller context.** The user message now includes the names of routines
+///    that call this one, giving the model richer context to write accurate
+///    domain-language summaries.
+///  * **Bounded concurrency.** SemaphoreSlim caps parallel requests at
+///    <see cref="DocsOptions.MaxConcurrency"/>.
+///  * **Idempotency.** Skips existing sections for same SourceVersion unless
+///    force=true.
+///  * **Background mode.** Returns 202 + run ID; worker scoped separately.
+///  * **Incremental metrics.** MetricsJson updated per call for UI polling.
 /// </summary>
 public sealed class RoutineSummaryPipeline
 {
-    private const string SingleShotPromptId = "fortran-doc-summary";
-    private const string SingleShotPromptVersion = "v1.0";
-    private const string BatchPromptId = "fortran-doc-summary-batch";
-    private const string BatchPromptVersion = "v1.0";
+    private const string PromptId = "fortran-doc-summary";
+    private const string PromptVersion = "v2.0";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DocsOptions _docsOpts;
-    private readonly string _singleShotPrompt;
-    private readonly string _batchPrompt;
+    private readonly string _prompt;
     private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _apiVersion;
+    private readonly DocRunLogger _runLogger;
     private readonly ILogger<RoutineSummaryPipeline> _logger;
 
     public RoutineSummaryPipeline(
@@ -55,19 +50,19 @@ public sealed class RoutineSummaryPipeline
         IOptions<DocsOptions> docsOpts,
         IConfiguration cfg,
         IWebHostEnvironment env,
+        DocRunLogger runLogger,
         ILogger<RoutineSummaryPipeline> logger)
     {
         _scopeFactory = scopeFactory;
         _docsOpts = docsOpts.Value;
+        _runLogger = runLogger;
         _logger = logger;
         _apiKey = cfg.GetValue<string>("Llm:Anthropic:ApiKey") ?? "";
         _baseUrl = cfg.GetValue<string>("Llm:Anthropic:BaseUrl") ?? "https://api.anthropic.com";
         _apiVersion = cfg.GetValue<string>("Llm:Anthropic:ApiVersion") ?? "2023-06-01";
 
-        _singleShotPrompt = StripFrontmatter(File.ReadAllText(
+        _prompt = StripFrontmatter(File.ReadAllText(
             ResolvePromptPath(env.ContentRootPath, "doc-summary.v1.md")));
-        _batchPrompt = StripFrontmatter(File.ReadAllText(
-            ResolvePromptPath(env.ContentRootPath, "doc-summary-batch.v1.md")));
     }
 
     public sealed record GenerateOptions(int? Take, bool Force);
@@ -210,39 +205,19 @@ public sealed class RoutineSummaryPipeline
             }
 
             var metrics = new MetricsAccumulator { Skipped = existing.Count };
-            var utility = new List<Subroutine>();
-            var mid = new List<Subroutine>();
-            var headline = new List<Subroutine>();
-            foreach (var sub in todo)
-            {
-                var tier = tiers.TryGetValue(sub.Id, out var t) ? t.Tier : "utility";
-                switch (tier)
-                {
-                    case "headline": headline.Add(sub); break;
-                    case "mid":       mid.Add(sub); break;
-                    default:           utility.Add(sub); break;
-                }
-            }
-
             var sem = new SemaphoreSlim(Math.Max(1, _docsOpts.MaxConcurrency));
-            var pendingSingle = new List<Task>();
 
-            // Single-shot tasks (headline / mid). Each runs through its own scope.
-            foreach (var sub in headline)
-                pendingSingle.Add(RunSingleAsync(sub, "headline", _docsOpts.OpusModel, sem, runId, corpusId, sourceVersionId, metrics, httpFactory, blob, ct));
-            foreach (var sub in mid)
-                pendingSingle.Add(RunSingleAsync(sub, "mid", _docsOpts.SonnetModel, sem, runId, corpusId, sourceVersionId, metrics, httpFactory, blob, ct));
+            // All routines run single-shot. Headline tier → Opus; standard → Sonnet.
+            var tasks = todo.Select(sub =>
+            {
+                var assignment = tiers.TryGetValue(sub.Id, out var t) ? t : null;
+                var tier = assignment?.Tier ?? "standard";
+                var model = tier == "headline" ? _docsOpts.OpusModel : _docsOpts.SonnetModel;
+                var callerNames = assignment?.CallerNames ?? Array.Empty<string>();
+                return RunSingleAsync(sub, tier, model, callerNames, sem, runId, corpusId, sourceVersionId, metrics, httpFactory, blob, ct);
+            }).ToList();
 
-            // Utility batches. Group by source file so the batch shares context.
-            var batchSize = Math.Max(1, _docsOpts.BatchSize);
-            var batches = utility
-                .GroupBy(s => s.SourceFileId)
-                .SelectMany(g => Partition(g.ToList(), batchSize))
-                .ToList();
-            foreach (var batch in batches)
-                pendingSingle.Add(RunBatchAsync(batch, sem, runId, corpusId, sourceVersionId, metrics, httpFactory, blob, ct));
-
-            await Task.WhenAll(pendingSingle);
+            await Task.WhenAll(tasks);
 
             // Final per-stage metrics flush — but DON'T mark completed. The
             // single-stage StartAsync wrapper and the 11.0.b orchestrator
@@ -256,8 +231,8 @@ public sealed class RoutineSummaryPipeline
     }
 
     private async Task RunSingleAsync(
-        Subroutine sub, string tier, string model, SemaphoreSlim sem,
-        Guid runId, Guid corpusId, Guid sourceVersionId,
+        Subroutine sub, string tier, string model, IReadOnlyList<string> callerNames,
+        SemaphoreSlim sem, Guid runId, Guid corpusId, Guid sourceVersionId,
         MetricsAccumulator metrics, IHttpClientFactory httpFactory, IBlobClient blob,
         CancellationToken ct)
     {
@@ -266,10 +241,10 @@ public sealed class RoutineSummaryPipeline
         {
             var source = await blob.GetTextAsync(sub.SourceFile!.BlobUri, ct);
             var routineLines = ExtractRoutineLines(source, sub.LineStart, sub.LineEnd);
-            var user = BuildSingleUserMessage(sub.Name, TryGetEnclosingModule(sub), tier, routineLines);
+            var user = BuildUserMessage(sub.Name, TryGetEnclosingModule(sub), tier, callerNames, routineLines);
 
             var (payload, usage) = await CallAnthropicAsync(
-                httpFactory, model, _singleShotPrompt, user, expectArray: false, ct);
+                httpFactory, model, _prompt, user, ct);
 
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -296,82 +271,9 @@ public sealed class RoutineSummaryPipeline
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Single-shot doc summary failed for {Routine}", sub.Name);
+            _logger.LogWarning(ex, "Doc summary failed for {Routine}", sub.Name);
+            _runLogger.Log(runId, $"  ✗ '{sub.Name}': {FirstLine(ex.Message)}");
             metrics.Failed++;
-        }
-        finally
-        {
-            sem.Release();
-        }
-    }
-
-    private async Task RunBatchAsync(
-        IReadOnlyList<Subroutine> batch, SemaphoreSlim sem,
-        Guid runId, Guid corpusId, Guid sourceVersionId,
-        MetricsAccumulator metrics, IHttpClientFactory httpFactory, IBlobClient blob,
-        CancellationToken ct)
-    {
-        await sem.WaitAsync(ct);
-        try
-        {
-            // All routines in the batch share a SourceFile (we grouped that way),
-            // so one blob read covers them all.
-            var fileSource = await blob.GetTextAsync(batch[0].SourceFile!.BlobUri, ct);
-            var userBuilder = new StringBuilder();
-            for (var i = 0; i < batch.Count; i++)
-            {
-                if (i > 0) userBuilder.Append("\n---\n\n");
-                var sub = batch[i];
-                userBuilder.Append("ROUTINE ").Append(i + 1).Append('\n');
-                userBuilder.Append("routine_name: ").Append(sub.Name).Append('\n');
-                userBuilder.Append("enclosing_module: ").Append(TryGetEnclosingModule(sub) ?? "null").Append('\n');
-                userBuilder.Append("source:\n");
-                userBuilder.Append(ExtractRoutineLines(fileSource, sub.LineStart, sub.LineEnd));
-            }
-
-            var (payload, usage) = await CallAnthropicAsync(
-                httpFactory, _docsOpts.HaikuModel, _batchPrompt, userBuilder.ToString(),
-                expectArray: true, ct);
-
-            using var arrayDoc = JsonDocument.Parse(payload);
-            var arr = arrayDoc.RootElement;
-            if (arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() != batch.Count)
-                throw new InvalidOperationException(
-                    $"Batch response shape mismatch: expected array of {batch.Count}, got {arr.ValueKind}/{(arr.ValueKind == JsonValueKind.Array ? arr.GetArrayLength() : 0)}");
-
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            for (var i = 0; i < batch.Count; i++)
-            {
-                var sub = batch[i];
-                var itemJson = arr[i].GetRawText();
-                var section = new DocSection
-                {
-                    Id = Guid.NewGuid(),
-                    CorpusId = corpusId,
-                    SourceVersionId = sourceVersionId,
-                    SectionKind = "routine-summary",
-                    Scope = "subroutine",
-                    SubroutineId = sub.Id,
-                    State = "DRAFT",
-                    PayloadJson = JsonDocument.Parse(itemJson),
-                    RenderedMarkdown = RenderMarkdown(itemJson, sub.Name),
-                    GenerationRunId = runId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow,
-                };
-                db.DocSections.Add(section);
-            }
-            await db.SaveChangesAsync(ct);
-
-            metrics.Record("utility", batch.Count, usage.input, usage.output, usage.cacheRead, usage.cacheCreate);
-            await UpdateMetricsAsync(db, runId, metrics, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Batched doc summary failed for {Count} routines starting with {First}",
-                batch.Count, batch[0].Name);
-            metrics.Failed += batch.Count;
         }
         finally
         {
@@ -381,12 +283,17 @@ public sealed class RoutineSummaryPipeline
 
     private async Task<(string payload, TokenUsage usage)> CallAnthropicAsync(
         IHttpClientFactory httpFactory, string model, string systemPrompt, string userMessage,
-        bool expectArray, CancellationToken ct)
+        CancellationToken ct)
     {
-        // Cache the system prompt — for 11.0.a it's the load-bearing
-        // discount surface. cache_control:ephemeral lasts 5 minutes; the
-        // shared rules + worked example pay full price on the first call
-        // and 10% on every subsequent call within the window.
+        // Prompt caching: system prompt marked cache_control:ephemeral.
+        // First call in any 5-minute window pays full input-token cost;
+        // all subsequent calls pay 10% (the 90% cache discount). With
+        // concurrency=6 and ~150 routines, most calls hit the cache.
+        // Structured output via tool use: the model answers through a tool whose
+        // input_schema we define, so the Anthropic API assembles the JSON. An
+        // unescaped quote or control character in a string value (which broke the
+        // old text-block parse on content-heavy routines) is now impossible — the
+        // tool_use block's `input` is always valid JSON.
         var requestBody = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -399,6 +306,20 @@ public sealed class RoutineSummaryPipeline
                     ["text"] = systemPrompt,
                     ["cache_control"] = new { type = "ephemeral" },
                 },
+            },
+            ["tools"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name"] = "emit_routine_summary",
+                    ["description"] = "Emit the routine's transition-documentation summary as structured fields.",
+                    ["input_schema"] = RoutineSummaryToolSchema,
+                },
+            },
+            ["tool_choice"] = new Dictionary<string, object?>
+            {
+                ["type"] = "tool",
+                ["name"] = "emit_routine_summary",
             },
             ["messages"] = new[]
             {
@@ -415,6 +336,7 @@ public sealed class RoutineSummaryPipeline
         };
         req.Headers.Add("x-api-key", _apiKey);
         req.Headers.Add("anthropic-version", _apiVersion);
+        req.Headers.Add("anthropic-beta", "prompt-caching-2024-07-31");
 
         using var resp = await http.SendAsync(req, ct);
         var bodyText = await resp.Content.ReadAsStringAsync(ct);
@@ -424,14 +346,17 @@ public sealed class RoutineSummaryPipeline
 
         using var doc = JsonDocument.Parse(bodyText);
         var root = doc.RootElement;
-        string? text = null;
+        string? payload = null;
         foreach (var block in root.GetProperty("content").EnumerateArray())
-            if (block.TryGetProperty("type", out var t) && t.GetString() == "text")
-                text = block.GetProperty("text").GetString();
-        if (text is null) throw new InvalidOperationException("No text block in Anthropic response.");
-
-        var payload = expectArray ? TrimToJsonArray(text) : TrimToJsonObject(text);
-        using (var _ = JsonDocument.Parse(payload)) { /* parse-validate */ }
+            if (block.TryGetProperty("type", out var t) && t.GetString() == "tool_use"
+                && block.TryGetProperty("input", out var input))
+            {
+                payload = input.GetRawText();
+                break;
+            }
+        if (payload is null)
+            throw new InvalidOperationException(
+                "No tool_use block in Anthropic response: " + Truncate(bodyText, 300));
 
         var usage = root.GetProperty("usage");
         int cacheRead = usage.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : 0;
@@ -465,13 +390,18 @@ public sealed class RoutineSummaryPipeline
         await db.SaveChangesAsync(ct);
     }
 
-    private static string BuildSingleUserMessage(string routineName, string? enclosing, string tier, string sourceLines) =>
-        $"routine_name: {routineName}\nenclosing_module: {enclosing ?? "null"}\ntier: {tier}\nsource:\n{sourceLines}";
-
-    private static IEnumerable<IReadOnlyList<T>> Partition<T>(IList<T> items, int size)
+    private static string BuildUserMessage(
+        string routineName, string? enclosing, string tier,
+        IReadOnlyList<string> callerNames, string sourceLines)
     {
-        for (var i = 0; i < items.Count; i += size)
-            yield return items.Skip(i).Take(size).ToList();
+        var sb = new StringBuilder();
+        sb.Append("routine_name: ").Append(routineName).Append('\n');
+        sb.Append("enclosing_module: ").Append(enclosing ?? "null").Append('\n');
+        sb.Append("tier: ").Append(tier).Append('\n');
+        if (callerNames.Count > 0)
+            sb.Append("callers: ").Append(string.Join(", ", callerNames.Take(10))).Append('\n');
+        sb.Append("source:\n").Append(sourceLines);
+        return sb.ToString();
     }
 
     private static string ExtractRoutineLines(string fullSource, int lineStart, int lineEnd)
@@ -489,21 +419,54 @@ public sealed class RoutineSummaryPipeline
     private static string? TryGetEnclosingModule(Subroutine sub) =>
         sub.SourceFile?.RelativePath is { } p ? Path.GetFileNameWithoutExtension(p) : null;
 
-    private static string TrimToJsonObject(string text)
-    {
-        var open = text.IndexOf('{');
-        var close = text.LastIndexOf('}');
-        if (open < 0 || close <= open) throw new InvalidOperationException("Not a JSON object: " + Truncate(text, 200));
-        return text[open..(close + 1)];
-    }
+    // ── Tool input schema (structured-output contract) ──────────────────
+    // Mirrors the doc-summary prompt's JSON shape. Only `summary` is required
+    // so a pure routine with no side effects still validates; RenderMarkdown
+    // reads every field defensively.
 
-    private static string TrimToJsonArray(string text)
+    private static Dictionary<string, object?> StringArray(string description) => new()
     {
-        var open = text.IndexOf('[');
-        var close = text.LastIndexOf(']');
-        if (open < 0 || close <= open) throw new InvalidOperationException("Not a JSON array: " + Truncate(text, 200));
-        return text[open..(close + 1)];
-    }
+        ["type"] = "array",
+        ["description"] = description,
+        ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+    };
+
+    private static readonly object RoutineSummaryToolSchema = new Dictionary<string, object?>
+    {
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object?>
+        {
+            ["id"] = new Dictionary<string, object?> { ["type"] = "string" },
+            ["summary"] = new Dictionary<string, object?>
+            {
+                ["type"] = "string",
+                ["description"] = "3–6 sentences in domain language: what the routine does, why a caller uses it, and the key constraints.",
+            },
+            ["inputs"] = StringArray("Named inputs in domain terms."),
+            ["outputs"] = StringArray("Named outputs in domain terms."),
+            ["sideEffects"] = StringArray("Mutations beyond the return value (files, COMMON blocks, I/O, errors)."),
+            ["preconditions"] = StringArray("Caller-must-satisfy contracts."),
+            ["edgeCases"] = StringArray("Boundary conditions and numerical traps."),
+            ["tier"] = new Dictionary<string, object?>
+            {
+                ["type"] = "string",
+                ["enum"] = new[] { "headline", "standard" },
+            },
+            ["citations"] = new Dictionary<string, object?>
+            {
+                ["type"] = "array",
+                ["items"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object?>
+                    {
+                        ["lines"] = new Dictionary<string, object?> { ["type"] = "string" },
+                    },
+                },
+            },
+        },
+        ["required"] = new[] { "summary" },
+    };
 
     private static string RenderMarkdown(string payloadJson, string routineName)
     {
@@ -512,20 +475,44 @@ public sealed class RoutineSummaryPipeline
         var summary = root.TryGetProperty("summary", out var s) ? s.GetString() : "";
         var sb = new StringBuilder();
         sb.Append("### ").Append(routineName).Append("\n\n").Append(summary).Append("\n\n");
-        AppendList(sb, root, "inputs", "**Inputs**");
-        AppendList(sb, root, "outputs", "**Outputs**");
-        AppendList(sb, root, "sideEffects", "**Side effects**");
+        AppendTable(sb, root, "inputs",        "#### Inputs",        "Description");
+        AppendTable(sb, root, "outputs",       "#### Outputs",       "Description");
+        AppendCallouts(sb, root, "sideEffects",   "#### Side Effects");
+        AppendTable(sb, root, "preconditions", "#### Preconditions", "Requirement");
+        AppendCallouts(sb, root, "edgeCases",     "#### Edge Cases");
         return sb.ToString();
     }
 
-    private static void AppendList(StringBuilder sb, JsonElement root, string prop, string heading)
+    private static void AppendTable(StringBuilder sb, JsonElement root, string prop, string heading, string col)
     {
         if (!root.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
             return;
-        sb.Append(heading).Append('\n');
+        sb.Append(heading).Append("\n\n");
+        sb.Append("| # | ").Append(col).Append(" |\n");
+        sb.Append("|--:|--------|\n");
+        int i = 1;
         foreach (var item in arr.EnumerateArray())
-            sb.Append("- ").Append(item.GetString()).Append('\n');
+            sb.Append("| ").Append(i++).Append(" | ").Append(EscapeTableCell(item.GetString() ?? "")).Append(" |\n");
         sb.Append('\n');
+    }
+
+    private static void AppendCallouts(StringBuilder sb, JsonElement root, string prop, string heading)
+    {
+        if (!root.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
+            return;
+        sb.Append(heading).Append("\n\n");
+        foreach (var item in arr.EnumerateArray())
+            sb.Append("> ").Append(item.GetString()).Append('\n');
+        sb.Append('\n');
+    }
+
+    private static string EscapeTableCell(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+
+    private static string FirstLine(string msg)
+    {
+        var nl = msg.IndexOfAny(['\n', '\r']);
+        return nl > 0 ? msg[..nl] : msg;
     }
 
     private static string StripFrontmatter(string md)
@@ -562,8 +549,7 @@ public sealed class RoutineSummaryPipeline
         private readonly Dictionary<string, TierMetrics> _byTier = new()
         {
             ["headline"] = new TierMetrics(),
-            ["mid"] = new TierMetrics(),
-            ["utility"] = new TierMetrics(),
+            ["standard"] = new TierMetrics(),
         };
         private readonly object _lock = new();
 

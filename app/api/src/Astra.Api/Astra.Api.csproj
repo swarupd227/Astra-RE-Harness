@@ -77,6 +77,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Themed pandoc reference document for DOCX export. Carries the Astra
+         Word styles (Calibri, navy/teal headings, shaded table headers) that
+         pandoc applies via its reference-doc option. Ships next to the binary;
+         located at runtime via AppContext.BaseDirectory (as with the prompts). -->
+    <Content Include="Docs/assets/reference.docx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Externalized scaffold archetypes (Phase #3c). Each archetype is a
          directory of template files (.cs, .java, .xml, etc.) plus an
          archetype.json. These are *template* content shipped with the

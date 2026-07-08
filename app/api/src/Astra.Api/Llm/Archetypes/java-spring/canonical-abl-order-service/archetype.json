@@ -1,0 +1,52 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-abl-order-service",
+  "targetStack": "java-spring",
+  "displayName": "Acme-ERP order/stock procedures (Java 21 + Spring Boot 3 + JUnit 5)",
+  "description": "Reference OpenEdge ABL → Java-21 / Spring Boot 3 scaffold for the Acme-ERP order and stock procedures. Demonstrates the wide ABL→Java idiom gap end-to-end: a TEMP-TABLE working set becomes a record list (OrderLine); DEFINE SHARED session variables become an explicit injected SessionContextPort (never a static field); FIND/FOR EACH record phrases become repository ports that PRESERVE the lock mode (EXCLUSIVE-LOCK ⟶ @Lock(PESSIMISTIC_WRITE), NO-LOCK ⟶ read-only) and return Optional for the NOT-AVAILABLE guard; the block-scoped DO TRANSACTION becomes a single @Transactional per-batch boundary with real all-or-nothing rollback; NO-ERROR becomes explicit exception handling; and the Unknown value (?) is mapped to a nullable BigDecimal whose propagation + guard are reproduced. Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj only, no Spring on the classpath) — the Spring/JPA constructs are documented @TargetMapping contracts, and the pure business logic (stock arithmetic, Unknown-value guard, batch atomicity) is real Java the JUnit suite verifies. There is NO source-execution equivalence gate for ABL (the Progress AVM is proprietary); the golden-dataset extraction score (18/18) plus this test suite are the verification, and that limitation is documented rather than stubbed.",
+  "compatibleSchemas": ["openedge"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "reserve-stock.p" },
+      { "subroutineName": "post-batch.p" },
+      { "subroutineName": "apply-discount.p" },
+      { "subroutineName": "post-invoice.p" },
+      { "subroutineName": "build-order-lines.p" },
+      { "subroutineName": "lookup-price.p" }
+    ],
+    "fallback": "Used for openedge routines whose enclosing program is an order/stock procedure (temp-table, record-phrase, transaction-scoped, or shared-variable heavy)."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "status": "preview",
+  "verification": {
+    "sourceExecutionEquivalence": "unavailable",
+    "sourceExecutionEquivalenceReason": "No free/OSS Progress OpenEdge runtime exists (the AVM is proprietary), so the ABL source cannot be executed to compare behaviour. This is documented, not stubbed.",
+    "gatesActive": [
+      "golden-dataset extraction score (openedge: 18/18 = 1.00, verified 2026-07-06)",
+      "maven-sidecar offline compile (mvn -o test-compile: exit 0, 0 errors)",
+      "JUnit 5 suite offline (13 tests green: incl. the reserveNeverGoesNegative property test over qty 0..15)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "property-test-sidecar (Hypothesis): the shared sidecar exists, but driving it for openedge needs per-claim generatorHints authored on openedge.schema.json — not done yet, so NOT claimed as passing here"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                        "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/orders/SpecClaim.java",                   "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/orders/TargetMapping.java",               "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/orders/OrderLine.java",                   "language": "java", "derivedFromClaimIds": ["TT-1","INV-1"] },
+    { "path": "src/main/java/com/acme/orders/Item.java",                        "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/orders/ReservationResult.java",           "language": "java", "derivedFromClaimIds": ["EH-1"] },
+    { "path": "src/main/java/com/acme/orders/ItemRepositoryPort.java",          "language": "java", "derivedFromClaimIds": ["RP-3","RP-3b","SE-1"] },
+    { "path": "src/main/java/com/acme/orders/StockReservationService.java",     "language": "java", "derivedFromClaimIds": ["RP-3","RP-3b","INV-2"] },
+    { "path": "src/main/java/com/acme/orders/DiscountCalculator.java",          "language": "java", "derivedFromClaimIds": ["EC-3","INV-3","Q-1"] },
+    { "path": "src/main/java/com/acme/orders/SessionContextPort.java",          "language": "java", "derivedFromClaimIds": ["SV-1"] },
+    { "path": "src/main/java/com/acme/orders/Order.java",                       "language": "java", "derivedFromClaimIds": ["SE-1"] },
+    { "path": "src/main/java/com/acme/orders/LedgerPort.java",                  "language": "java", "derivedFromClaimIds": ["SE-1"] },
+    { "path": "src/main/java/com/acme/orders/OrderRepositoryPort.java",         "language": "java", "derivedFromClaimIds": ["RP-4","SE-1"] },
+    { "path": "src/main/java/com/acme/orders/OrderPostingService.java",         "language": "java", "derivedFromClaimIds": ["TX-1","RP-4","SV-1"] },
+    { "path": "src/test/java/com/acme/orders/StockReservationServiceTests.java","language": "java", "derivedFromClaimIds": ["RP-3","RP-3b","INV-2"] },
+    { "path": "src/test/java/com/acme/orders/DiscountCalculatorTests.java",     "language": "java", "derivedFromClaimIds": ["EC-3","INV-3","Q-1"] },
+    { "path": "src/test/java/com/acme/orders/OrderPostingServiceTests.java",    "language": "java", "derivedFromClaimIds": ["TX-1","RP-4","SV-1"] }
+  ]
+}

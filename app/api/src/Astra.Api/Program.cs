@@ -76,6 +76,7 @@ builder.Services.AddScoped<LapackBlasSeed>();
 builder.Services.AddScoped<IndyDemoSeed>();
 builder.Services.AddScoped<FmtDemoSeed>();
 builder.Services.AddScoped<Vb6DemoSeed>();
+builder.Services.AddScoped<MvcMusicStoreSeed>();
 builder.Services.AddScoped<GoldenDatasetSeed>();
 
 // ─── LLM provider + extraction pipeline ──────────────────────────────
@@ -157,6 +158,8 @@ builder.Services.AddSingleton<Astra.Api.Docs.CatalogPipeline>();
 // Phase 11.0.d — sequence + dependency diagrams.
 builder.Services.AddSingleton<Astra.Api.Docs.DiagramPipeline>();
 builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
+// Phase 11.0.f — in-process SSE log bus for generation runs.
+builder.Services.AddSingleton<Astra.Api.Docs.DocRunLogger>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
 // is registered as IPlanStrategy; MigrationPlanner picks one by name
@@ -232,6 +235,14 @@ builder.Services.AddScoped<Astra.Api.Validation.GnuCobolClient>();
 // uses native vb6.exe + msvbvm60.dll on Windows Server Core.
 builder.Services.AddHttpClient("vb6");
 builder.Services.AddScoped<Astra.Api.Validation.Vb6Client>();
+
+// ─── C# / .NET 10 sidecar (Phase 12.0.f) ────────────────────────────
+// Compiles and runs .NET 10 C# sources via `dotnet publish`. Routes
+// subroutines with SourceLanguage == "csharp" or "vbnet" (VB.NET-sourced
+// specs whose scaffolds target dotnet10) to this sidecar rather than
+// the gfortran smoke path.
+builder.Services.AddHttpClient("csharp");
+builder.Services.AddScoped<Astra.Api.Validation.CsharpClient>();
 
 // ─── Property-test sidecar (Phase 9.3.b — 4th validation gate) ───────
 // Drives Hypothesis-driven falsifying-input search per ADR-029, per-claim
@@ -311,6 +322,7 @@ using (var scope = app.Services.CreateScope())
     var seedIndyDemo = builder.Configuration.GetValue("Database:SeedIndyDemo", false);
     var seedFmtDemo = builder.Configuration.GetValue("Database:SeedFmtDemo", false);
     var seedVb6Demo = builder.Configuration.GetValue("Database:SeedVb6Demo", false);
+    var seedMvcMusicStoreDemo = builder.Configuration.GetValue("Database:SeedMvcMusicStoreDemo", false);
 
     if (canConnect && recreate)
     {
@@ -644,6 +656,25 @@ using (var scope = app.Services.CreateScope())
                 await seeder.SeedAsync();
             }
             catch (Exception ex) { Log.Warning(ex, "Background VB6 demo seed failed"); }
+        });
+    }
+    if (canConnect && seedMvcMusicStoreDemo)
+    {
+        // Phase 12.0.g: seed Microsoft's MvcMusicStore as the headline C#
+        // corpus. Pulls Controllers/, Models/, ViewModels/, App_Start/ from
+        // GitHub — ~25 .cs files, ~3k LOC, all targeting .NET Framework 4.6
+        // + ASP.NET MVC 5. Ideal demo target for the C# → .NET 10 migration
+        // track because it contains every common Framework migration trap.
+        var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var bgScope = scopeFactory.CreateScope();
+                var seeder = bgScope.ServiceProvider.GetRequiredService<MvcMusicStoreSeed>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Background MvcMusicStore demo seed failed"); }
         });
     }
 }

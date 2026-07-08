@@ -87,13 +87,29 @@ public static class DevEndpoints
                 });
             }
 
+            var seedMvcMusicStore = cfg.GetValue("Database:SeedMvcMusicStoreDemo", false);
+            if (seedMvcMusicStore)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var bgScope = scopeFactory.CreateScope();
+                        var seeder = bgScope.ServiceProvider.GetRequiredService<MvcMusicStoreSeed>();
+                        await seeder.SeedAsync();
+                    }
+                    catch (Exception ex) { log.LogWarning(ex, "Background MVC Music Store reseed failed"); }
+                });
+            }
+
             log.LogWarning("Demo state reset via POST /api/v1/dev/reset");
             return Results.Ok(new
             {
                 reset = true,
                 seeded = true,
                 minpackSeeding = seedMinpack,
-                lapackBlasSeeding = seedLapackBlas
+                lapackBlasSeeding = seedLapackBlas,
+                mvcMusicStoreSeeding = seedMvcMusicStore
             });
         });
 

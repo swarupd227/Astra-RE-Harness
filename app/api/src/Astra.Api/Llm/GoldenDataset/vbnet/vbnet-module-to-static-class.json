@@ -1,0 +1,18 @@
+{
+  "entryId": "vbnet-module-to-static-class",
+  "schemaId": "vbnet",
+  "title": "VB.NET Module exposes public shared state and procedures — migrate to C# static class, exposing hidden global state",
+  "trapCategory": "structure/module-to-static",
+  "difficulty": "medium",
+  "sourcePath": "vbnet/snippets/vbnet_module.vb",
+  "sourceLines": "1-40",
+  "sourceContent": "' VB.NET Module — equivalent to a C# sealed static class in most ways,\n' BUT members are directly accessible without qualification inside the\n' same assembly. This implicit-import behaviour has NO equivalent in C#.\n' Any C# file that uses these members must qualify them with the class name.\nModule AppGlobals\n    ' Module-level variable: shared across the entire process lifetime.\n    ' Maps to a C# static field — exposes process-wide mutable state.\n    Public CurrentUserId As String = \"anonymous\"\n    Public RequestCount As Integer = 0\n\n    ' Sub in a Module = public static void method in C#.\n    Public Sub IncrementRequest()\n        RequestCount += 1\n    End Sub\n\n    ' Function returning a computed value from the mutable state.\n    Public Function GetSummary() As String\n        Return $\"User={CurrentUserId}, Requests={RequestCount}\"\n    End Function\nEnd Module\n\n' Calling code — note no qualification needed in VB.NET:\n' IncrementRequest()   -- works without AppGlobals.IncrementRequest()\n' Dim s = GetSummary() -- works without AppGlobals.GetSummary()\n'\n' In C#, every call site must be updated to:\n' AppGlobals.IncrementRequest();\n' var s = AppGlobals.GetSummary();\n'\n' Module-level variables that accumulate state across requests\n' are almost certainly bugs in a multi-threaded ASP.NET Core app.\n",
+  "expectedClaims": [
+    { "kind": "moduleToStaticClass", "id": "MOD-1", "pattern": "(?i)(Module\\s+\\w+|End\\s+Module|VB\\.NET\\s+[Mm]odule|static\\s+class|sealed\\s+static)" },
+    { "kind": "sideEffect", "id": "SE-MOD-1", "pattern": "(?i)(module.level|static\\s+field|shared\\s+state|mutable.*static|process.wide|global\\s+variable)" },
+    { "kind": "invariant", "id": "INV-MOD-1", "pattern": "(?i)(CurrentUserId|RequestCount|GetSummary|IncrementRequest|qualification|implicit.import)" },
+    { "kind": "openQuestion", "id": "Q-MOD-1", "pattern": "(?i)(thread.safe|Interlocked|lock|race\\s+condition|singleton.*DI|refactor.*inject)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "VB.NET Modules are the closest equivalent to C# static classes, but they differ in one critical way: members are implicitly imported and callable without qualification anywhere in the assembly. C# has no such mechanism — every call site must be updated to prefix the class name. More importantly, module-level mutable variables (Public X As Integer) become static fields on the C# class. In a Framework Web Forms app these were reset on each AppPool recycle; in ASP.NET Core running on .NET 10 under Kestrel they are never reset between requests, meaning they accumulate state for the lifetime of the process. This is a common source of subtle concurrency bugs in migrated apps. The spec must enumerate every mutable module variable and flag them as potential sideEffect / openQuestion for refactoring to injected services."
+}

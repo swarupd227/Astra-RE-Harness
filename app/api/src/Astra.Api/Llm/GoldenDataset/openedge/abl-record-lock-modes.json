@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-record-lock-modes",
+  "schemaId": "openedge",
+  "title": "Record phrases carry lock modes (EXCLUSIVE-LOCK vs NO-LOCK) that dictate the JPA transaction/lock — losing them corrupts concurrency",
+  "trapCategory": "data/lock-mode",
+  "difficulty": "hard",
+  "sourcePath": "openedge/snippets/reserve-stock.p",
+  "sourceLines": "1-13",
+  "sourceContent": "/* reserve-stock.p - reserve stock for an order line */\nDEFINE INPUT PARAMETER pcItem AS CHARACTER NO-UNDO.\nDEFINE INPUT PARAMETER piQty  AS INTEGER   NO-UNDO.\n\nFIND FIRST Item WHERE Item.ItemNum = pcItem EXCLUSIVE-LOCK NO-ERROR.\nIF NOT AVAILABLE Item THEN RETURN \"ITEM-NOT-FOUND\".\nIF Item.OnHand < piQty THEN RETURN \"SHORT\".\nItem.OnHand = Item.OnHand - piQty.   /* update under the exclusive lock */\n\nDEFINE VARIABLE iAlloc AS INTEGER NO-UNDO.\nFOR EACH Allocation WHERE Allocation.ItemNum = pcItem NO-LOCK:\n    iAlloc = iAlloc + Allocation.Qty.\nEND.\n",
+  "expectedClaims": [
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-3",
+      "pattern": "(?i)(EXCLUSIVE-LOCK|NO-LOCK|@Lock|PESSIMISTIC_WRITE|read.only|lock\\s+mode)"
+    },
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-3b",
+      "pattern": "(?i)(NOT\\s+AVAILABLE|not\\s+found|unavailable|IF\\s+AVAILABLE|Optional|empty)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-2",
+      "pattern": "(?i)(OnHand\\s*(>=|<|-)|sufficient\\s+stock|never\\s+negative|reserve)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "The EXCLUSIVE-LOCK on the Item FIND means the row is locked for update inside the transaction — the Java target needs @Lock(PESSIMISTIC_WRITE) (or optimistic versioning) to preserve the concurrency guarantee. The FOR EACH ... NO-LOCK is a read-only aggregate. Dropping the lock modes in translation silently changes concurrency behaviour. NOT AVAILABLE after FIND is the guarded not-found path."
+}

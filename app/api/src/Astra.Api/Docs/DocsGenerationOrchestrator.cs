@@ -36,6 +36,7 @@ public sealed class DocsGenerationOrchestrator
     private readonly HierarchicalRollupPipeline _rollupPipeline;
     private readonly CatalogPipeline _catalogPipeline;
     private readonly DiagramPipeline _diagramPipeline;
+    private readonly DocRunLogger _runLogger;
     private readonly ILogger<DocsGenerationOrchestrator> _logger;
 
     public DocsGenerationOrchestrator(
@@ -44,6 +45,7 @@ public sealed class DocsGenerationOrchestrator
         HierarchicalRollupPipeline rollupPipeline,
         CatalogPipeline catalogPipeline,
         DiagramPipeline diagramPipeline,
+        DocRunLogger runLogger,
         ILogger<DocsGenerationOrchestrator> logger)
     {
         _scopeFactory = scopeFactory;
@@ -51,6 +53,7 @@ public sealed class DocsGenerationOrchestrator
         _rollupPipeline = rollupPipeline;
         _catalogPipeline = catalogPipeline;
         _diagramPipeline = diagramPipeline;
+        _runLogger = runLogger;
         _logger = logger;
     }
 
@@ -97,10 +100,12 @@ public sealed class DocsGenerationOrchestrator
     private async Task RunPipelineAsync(Guid runId, Guid corpusId, Guid sourceVersionId, GenerateOptions opts)
     {
         var allStageMetrics = new Dictionary<string, object?>();
+        _runLogger.Log(runId, $"Run started — {opts.Stages.Count} stage(s): {string.Join(", ", opts.Stages)}");
         try
         {
             foreach (var stage in opts.Stages)
             {
+                _runLogger.Log(runId, $"▶ Stage: {stage}");
                 await UpdateAsync(runId, "RUNNING", $"Running stage: {stage}", null);
                 var ct = CancellationToken.None;
                 switch (stage.ToLowerInvariant())
@@ -111,6 +116,7 @@ public sealed class DocsGenerationOrchestrator
                             runId, corpusId, sourceVersionId,
                             new RoutineSummaryPipeline.GenerateOptions(opts.Take, opts.Force), ct);
                         allStageMetrics["routine-summary"] = ParseMetrics(r.MetricsJson);
+                        _runLogger.Log(runId, $"  routine-summary: {r.Succeeded} succeeded, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
                     case "module":
@@ -118,6 +124,7 @@ public sealed class DocsGenerationOrchestrator
                         var (succ, fail) = await _rollupPipeline.RunModuleStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["module"] = new { sections = succ, failed = fail };
+                        _runLogger.Log(runId, $"  module: {succ} sections, {fail} failed");
                         break;
                     }
                     case "overview":
@@ -125,6 +132,7 @@ public sealed class DocsGenerationOrchestrator
                         var (succ, fail) = await _rollupPipeline.RunOverviewStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["overview"] = new { sections = succ, failed = fail };
+                        _runLogger.Log(runId, $"  overview: {succ} sections, {fail} failed");
                         break;
                     }
                     case "data-dictionary":
@@ -132,6 +140,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunDataDictionaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["data-dictionary"] = new { entries = r.Entries, failed = r.Failed };
+                        _runLogger.Log(runId, $"  data-dictionary: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
                     case "glossary":
@@ -139,6 +148,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunGlossaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["glossary"] = new { entries = r.Entries, failed = r.Failed };
+                        _runLogger.Log(runId, $"  glossary: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
                     case "interface":
@@ -146,6 +156,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunInterfaceAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["interface"] = new { entries = r.Entries, failed = r.Failed };
+                        _runLogger.Log(runId, $"  interface: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
                     case "business-rules":
@@ -153,6 +164,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunBusinessRulesAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["business-rules"] = new { entries = r.Entries, failed = r.Failed };
+                        _runLogger.Log(runId, $"  business-rules: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
                     case "sequence-diagram":
@@ -160,6 +172,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _diagramPipeline.RunSequenceStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["sequence-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
+                        _runLogger.Log(runId, $"  sequence-diagram: {r.Diagrams} diagrams, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
                     case "dependency-diagram":
@@ -167,17 +180,22 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _diagramPipeline.RunDependencyStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["dependency-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
+                        _runLogger.Log(runId, $"  dependency-diagram: {r.Diagrams} diagrams, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
                 }
                 await UpdateAsync(runId, "RUNNING", $"Completed stage: {stage}", allStageMetrics);
             }
 
+            _runLogger.Log(runId, $"✓ All {opts.Stages.Count} stage(s) complete.");
             await UpdateAsync(runId, "SUCCEEDED", $"All {opts.Stages.Count} stage(s) complete", allStageMetrics, completed: true);
+            _runLogger.Complete(runId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Docs orchestrator run {RunId} crashed", runId);
+            _runLogger.Log(runId, $"✗ Error: {ex.Message}");
+            _runLogger.Complete(runId);
             await FailAsync(runId, ex.Message);
         }
     }

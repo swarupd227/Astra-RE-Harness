@@ -1,0 +1,19 @@
+{
+  "entryId": "csharp-winforms-timer-to-periodictimer",
+  "schemaId": "csharp",
+  "title": "System.Windows.Forms.Timer / System.Timers.Timer with Thread.Sleep loops — replace with PeriodicTimer in .NET 10",
+  "trapCategory": "concurrency/timer-replacement",
+  "difficulty": "medium",
+  "sourcePath": "csharp/snippets/winforms_timer.cs",
+  "sourceLines": "1-55",
+  "sourceContent": "using System;\nusing System.Threading;\nusing System.Timers;\n// Note: System.Windows.Forms is NOT available outside of net10.0-windows TFM.\n// The snippets below cover both the Forms.Timer and the Thread.Sleep polling pattern.\n\n// Pattern 1 — System.Windows.Forms.Timer (UI thread affinity).\n// CANNOT be used in an ASP.NET Core or Worker Service project at all.\n// Forms.Timer fires on the UI SynchronizationContext. If there is no\n// UI thread, it never fires.\npublic class FormsTimerExample\n{\n    private System.Windows.Forms.Timer _timer;\n\n    public void Start()\n    {\n        _timer = new System.Windows.Forms.Timer();\n        _timer.Interval = 5000;           // 5 seconds\n        _timer.Tick += OnTick;\n        _timer.Start();\n    }\n\n    private void OnTick(object sender, EventArgs e)\n    {\n        // Run background work on the UI thread — this blocks the GUI.\n        DoWork();\n    }\n\n    private void DoWork() { /* ... */ }\n}\n\n// Pattern 2 — Thread.Sleep polling loop inside a ThreadPool thread.\n// Works in Framework; in .NET 10 BackgroundService should be used instead.\npublic class SleepPollingService\n{\n    private bool _running;\n\n    public void Start()\n    {\n        _running = true;\n        ThreadPool.QueueUserWorkItem(_ =>\n        {\n            while (_running)\n            {\n                ProcessBatch();\n                Thread.Sleep(10000); // sleep 10 seconds between batches\n            }\n        });\n    }\n\n    public void Stop() => _running = false;\n\n    private void ProcessBatch() { /* ... */ }\n}\n",
+  "expectedClaims": [
+    { "kind": "obsoleteApiUsage", "id": "OA-TMR-1", "pattern": "(?i)(System\\.Windows\\.Forms\\.Timer|Forms\\.Timer|Thread\\.Sleep|ThreadPool\\.QueueUserWorkItem|System\\.Timers\\.Timer(?!.*PeriodicTimer))" },
+    { "kind": "obsoleteApiUsage", "id": "OA-TMR-2", "pattern": "(?i)(PlatformOnly|windows.only|TFM.*windows|net10\\.0-windows|UI.thread|SynchronizationContext)" },
+    { "kind": "invariant", "id": "INV-TMR-1", "pattern": "(?i)(interval|tick|5\\s*[Ss]econd|10\\s*[Ss]econd|period|poll.*interval|schedule)" },
+    { "kind": "asyncAntiPattern", "id": "AP-TMR-1", "pattern": "(?i)(Thread\\.Sleep|blocking.*sleep|sync.*block|ThreadPool.*sleep|BackgroundWorker)" },
+    { "kind": "openQuestion", "id": "Q-TMR-1", "pattern": "(?i)(CancellationToken|graceful.*shutdown|PeriodicTimer|IHostedService|BackgroundService|Quartz|Hangfire)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "System.Windows.Forms.Timer is only available in the net10.0-windows TFM and requires a UI message pump — it cannot be used in ASP.NET Core or Worker Service projects. System.Timers.Timer is cross-platform but fires on ThreadPool threads without CancellationToken support, making graceful shutdown unreliable. Thread.Sleep loops block a thread and cannot be cancelled cleanly. In .NET 10, the idiomatic replacement for all three is PeriodicTimer combined with BackgroundService: `await using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10)); while (await timer.WaitForNextTickAsync(stoppingToken)) { await ProcessBatch(stoppingToken); }`. The spec must capture the tick interval and whether the work is CPU-bound or I/O-bound, as PeriodicTimer coalesces missed ticks (no queue build-up) whereas some Framework timers do not."
+}

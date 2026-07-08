@@ -1,0 +1,29 @@
+{
+  "entryId": "abl-block-scoped-transaction",
+  "schemaId": "openedge",
+  "title": "ABL transactions are BLOCK-scoped (DO TRANSACTION), not begin/commit — the batch commits atomically; maps to a single @Transactional boundary",
+  "trapCategory": "transaction/block-scope",
+  "difficulty": "hard",
+  "sourcePath": "openedge/snippets/post-batch.p",
+  "sourceLines": "1-11",
+  "sourceContent": "/* post-batch.p - post every order in a batch atomically */\nDEFINE INPUT PARAMETER piBatch AS INTEGER NO-UNDO.\n\nDO TRANSACTION:\n    FOR EACH Order WHERE Order.BatchId = piBatch EXCLUSIVE-LOCK:\n        Order.Status = \"POSTED\".\n        RUN update-ledger.p (INPUT Order.OrderNum, INPUT Order.Total).\n    END.\nEND.  /* the WHOLE batch commits or rolls back together */\n",
+  "expectedClaims": [
+    {
+      "kind": "transactionScope",
+      "id": "TX-1",
+      "pattern": "(?i)(DO\\s+TRANSACTION|block.scoped|@Transactional|per.batch|commit.*together|atomic)"
+    },
+    {
+      "kind": "recordPhraseSemantics",
+      "id": "RP-4",
+      "pattern": "(?i)(FOR\\s+EACH|EXCLUSIVE-LOCK|managed\\s+entity|@Lock)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-2",
+      "pattern": "(?i)(Order\\.Status|POSTED|RUN\\s+update-ledger|database\\s+write|update)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "The DO TRANSACTION block bounds the transaction: every Order.Status update AND the update-ledger.p side effects commit or roll back together (per-batch granularity). The Java target is a single @Transactional method over the batch — NOT per-record. An UNDO would reverse the whole block. Getting the granularity wrong (per-record @Transactional) breaks the atomicity guarantee."
+}

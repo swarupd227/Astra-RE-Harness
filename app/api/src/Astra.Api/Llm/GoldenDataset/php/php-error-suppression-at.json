@@ -1,0 +1,29 @@
+{
+  "entryId": "php-error-suppression-at",
+  "schemaId": "php",
+  "title": "@file_get_contents + json_decode swallow failures silently — the caller gets null, not an error",
+  "trapCategory": "error/suppression",
+  "difficulty": "medium",
+  "sourcePath": "php/snippets/fetch_price.php",
+  "sourceLines": "1-11",
+  "sourceContent": "<?php\n// fetch_price.php - fetch a remote price, swallowing errors\nfunction fetchPrice($url) {\n    // TRAP: @ suppresses the warning if the URL is unreachable; on\n    // failure file_get_contents returns FALSE, then json_decode(false)\n    // returns null, so the failure is silently swallowed.\n    $body = @file_get_contents($url);\n    $data = json_decode($body, true);\n    return $data['price'] ?? 0.0;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "errorHandlingContract",
+      "id": "EH-1",
+      "pattern": "(?i)(@|suppress|swallow|false|silent|try\\s*/?\\s*catch|exception|json_decode)"
+    },
+    {
+      "kind": "nullSafetyContract",
+      "id": "NUL-1",
+      "pattern": "(?i)(\\?\\?|null|default|isset|coalesc|missing\\s+key)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(file_get_contents|fetch|http|curl|external|I/O|network|read|remote)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "The @ operator suppresses the warning and file_get_contents returns false on failure; json_decode(false) yields null, so a network/parse failure is silently swallowed and the caller gets 0.0 with no signal. The migration must classify this as a swallowed error and use try/catch + a typed exception. The remote fetch is a side effect; the ?? is a null-safety default."
+}

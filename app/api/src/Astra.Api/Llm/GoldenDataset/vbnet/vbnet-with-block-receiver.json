@@ -1,0 +1,24 @@
+{
+  "entryId": "vbnet-with-block-receiver",
+  "schemaId": "vbnet",
+  "title": "With...End With accesses members off an implicit receiver — C# has no equivalent and needs a local",
+  "trapCategory": "structure/with-block",
+  "difficulty": "medium",
+  "sourcePath": "vbnet/snippets/invoice_builder.vb",
+  "sourceLines": "1-12",
+  "sourceContent": "Public Class InvoiceBuilder\n    Public Sub Populate(inv As Invoice)\n        With inv\n            .Number = NextNumber()\n            .Total = .Subtotal + .Tax   ' .Subtotal / .Tax read off the SAME receiver\n            .Status = \"DRAFT\"\n        End With\n    End Sub\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "withBlockUsage",
+      "id": "WBU-1",
+      "pattern": "(?i)(With\\s*\\.\\.\\.?\\s*End\\s+With|With\\s+inv|implicit\\s+receiver|leading\\s+dot)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-WBU-1",
+      "pattern": "(?i)(Number|Subtotal|Tax|Status|local\\s+variable|inv\\.)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "With...End With binds a receiver so members can be accessed with a leading dot. C# has no With statement, so the target must introduce a local (`var inv = ...`) and qualify each member, being careful that a `With` over an expression with side effects is evaluated exactly once. Straightforward but every member access must be rewritten."
+}

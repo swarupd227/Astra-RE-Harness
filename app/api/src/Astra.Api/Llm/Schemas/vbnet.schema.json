@@ -1,0 +1,211 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "vbnet",
+  "displayName": "VB.NET → C# 13 / .NET 10",
+  "description": "VB.NET source (.vb files) targeting .NET Framework 4.x migration to C# 13 + .NET 10 LTS. Calibrated against DDI Inform (#2 in the Tier-1 portfolio). VB.NET → C# translation is lower-risk than VB6 → C# (no COM, no On Error Resume Next) but has its own idiom gap: Modules vs static classes, implicit narrowing conversions, Dim x = ... type inference vs var, With...End With blocks, string comparison operators (= vs String.Compare), late binding via Object, optional parameters with IsNothing checks, My.Settings access, and On Error GoTo (structured vs unstructured).",
+  "supportedSourceExtensions": [".vb"],
+  "compatibleTargetStacks": ["dotnet10"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the method/module must preserve across all valid inputs.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "moduleToStaticClass",
+      "label": "Module → static class",
+      "idPrefix": "MOD",
+      "specJsonField": "module_to_static_class",
+      "textField": "contract",
+      "displayTone": "scaffolded",
+      "description": "VB.NET Module declarations expose all members without qualification (similar to C# static imports). In C# they become static classes. Key risks: extension methods defined in a Module must become extension methods in a static class (this keyword); members accessed without qualification in other VB.NET files become fully-qualified in C#; Module-level state becomes static fields and thread-safety must be assessed.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "module_name", "kind": "string", "required": true },
+        { "name": "member_count", "kind": "string", "required": false },
+        { "name": "has_state", "kind": "enum:yes|no|unknown", "required": true, "doc": "Whether the Module contains mutable Shared/static fields — if yes, thread-safety of the static class must be assessed." },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "extension_methods", "kind": "string[]", "required": false, "doc": "Names of any VB.NET extension methods in the Module — these must use `this` parameter in C#." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "implicitConversionRisk",
+      "label": "Implicit conversion risk",
+      "idPrefix": "IC",
+      "specJsonField": "implicit_conversion_risks",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "VB.NET with Option Strict Off allows implicit narrowing conversions that would be compiler errors in C# (e.g. assigning Double to Integer, Long to Integer, Object to a typed variable). Also covers VB.NET string-to-numeric coercions (CInt('5') = 5), Integer overflow wrapping without OverflowException (unlike C# checked context), and Date/String implicit conversions in format expressions. These become explicit casts in C# and may introduce runtime failures if the coercion path was wrong.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "source_expression", "kind": "string", "required": true },
+        { "name": "source_type", "kind": "string", "required": true },
+        { "name": "target_type", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "csharp_equivalent", "kind": "string", "required": true, "doc": "The explicit C# form (e.g. '(int)doubleValue', 'int.Parse(str)', 'Convert.ToInt32(obj)')." },
+        { "name": "overflow_risk", "kind": "enum:high|medium|low|none", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "withBlockUsage",
+      "label": "With...End With block",
+      "idPrefix": "WB",
+      "specJsonField": "with_block_usages",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "VB.NET With...End With blocks allow accessing members of an object without repeating the object reference. In C# the nearest equivalent is a scoped variable (using var x = obj; x.Prop1 = ...; x.Prop2 = ...). When the With target is a value type (Structure), .NET behaviour differs: the With block operates on a COPY, not the original — mutations inside the block are lost unless the struct is assigned back. Flag every With block on a struct/value type as a potential silent mutation loss.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "with_target", "kind": "string", "required": true, "doc": "The expression inside With (...) (e.g. 'Me.txtName', '.Fields(\"CustomerName\")', 'orderRecord')." },
+        { "name": "target_is_value_type", "kind": "enum:yes|no|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "csharp_pattern", "kind": "string", "required": true, "doc": "The recommended C# pattern (e.g. 'var order = GetOrder(); order.Total = x; order.Tax = y;' for class types; 'var s = struct; s.Field = x; struct = s;' for value types)." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "stringComparisonSemantics",
+      "label": "String comparison semantics",
+      "idPrefix": "SC",
+      "specJsonField": "string_comparison_semantics",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "VB.NET string equality (=) with Option Compare Text is CASE-INSENSITIVE by default — a major semantic difference from C#'s case-sensitive ==. Also covers: VB.NET Like operator (wildcard pattern) → Regex in C#, string concatenation & vs + (VB.NET & never coerces to numeric; C#'s + can), IsNothing(s) vs s Is Nothing vs String.IsNullOrEmpty(s), and VB.NET Asc/Chr functions → (int)c and (char)i in C#.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "comparison_expression", "kind": "string", "required": true },
+        { "name": "option_compare", "kind": "enum:Text|Binary|Unknown", "required": true, "doc": "Option Compare Text = case-insensitive (default in VB6, frequent in VB.NET); Binary = case-sensitive (matches C# ==)." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "csharp_equivalent", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "errorHandlingContract",
+      "label": "Error handling contract",
+      "idPrefix": "EH",
+      "specJsonField": "error_handling_contracts",
+      "textField": "contract",
+      "displayTone": "review",
+      "description": "VB.NET supports both structured (Try/Catch/Finally) and unstructured (On Error GoTo label, On Error Resume Next) error handling, sometimes mixed in the same file. C# supports only structured try/catch. Unstructured error handling must be rewritten — On Error GoTo label → try/catch with explicit state; On Error Resume Next → try/catch per statement with bool flag. Also captures VB.NET-specific Err object use (Err.Number, Err.Description).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "style", "kind": "enum:TryCatch|OnErrorGoto|OnErrorResumeNext|Mixed|None", "required": true },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "uses_err_object", "kind": "enum:yes|no", "required": true },
+        { "name": "csharp_pattern", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: database writes, file I/O, My.Computer.FileSystem access, My.Settings writes, network calls (WebClient, HttpWebRequest), My.Application.Log writes, Windows Registry via My.Computer.Registry.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure conditions specific to VB.NET → C# migration: Nothing vs null (VB.NET Nothing is the zero-value for value types, not null; C# null only applies to reference types and Nullable<T>), Integer division (\\ vs /) operators, VB.NET Integer type is 32-bit (same as C# int), but Long is 64-bit — same name means same type, VB.NET Date serial number arithmetic, BitAnd/BitOr vs & / | in numeric context, UInteger/UShort/ULong (unsigned) in VB.NET → uint/ushort/ulong in C#.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities that require SME resolution. Common VB.NET cases: Option Strict Off usage (late binding, implicit conversions — hard to mechanically translate), My namespace accesses (My.Settings, My.Resources, My.Forms — must decide on .NET 10 equivalents), RaiseEvent in classes (must become C# events), Inherits from Microsoft.VisualBasic.* base classes (no direct equivalent in .NET 10), XML Literals (VB.NET built-in XML syntax has no C# equivalent — must become LINQ to XML calls).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false, "doc": "Module, Class, Interface, or Structure name (e.g. 'modOrders', 'clsCustomer', 'OrderService')." },
+    { "name": "option_strict", "kind": "enum:On|Off|NotDeclared", "required": false, "doc": "Option Strict setting in the file. Off = implicit conversions allowed; On = explicit only; NotDeclared = project default (usually Off for legacy VB.NET)." },
+    { "name": "option_compare", "kind": "enum:Text|Binary|NotDeclared", "required": false },
+    { "name": "target_archetype_hint", "kind": "enum:MinimalApi|BlazorWebApp|WebApiControllers|WorkerService", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "byref", "byval", "out", "return", "optional", "paramarray"],
+    "directionDescription": "VB.NET parameter modes. ByVal = pass by value; ByRef = pass by reference; Optional = optional with default; ParamArray = variadic tail; return = function return value."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "moduleToStaticClass",
+      "implicitConversionRisk",
+      "withBlockUsage",
+      "stringComparisonSemantics",
+      "errorHandlingContract",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "moduleToStaticClass": 0,
+      "implicitConversionRisk": 0,
+      "withBlockUsage": 0,
+      "stringComparisonSemantics": 0,
+      "errorHandlingContract": 0,
+      "sideEffect": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Check the file's Option Strict and Option Compare declarations — if absent, assume Off/Text (the permissive defaults). Every Module declaration is a moduleToStaticClass claim. Every With block is a withBlockUsage claim (especially value-type targets). Every = operator on String with Option Compare Text is a stringComparisonSemantics claim. Every implicit narrowing (Object/Double/Long assigned to Integer/String without CType/DirectCast) is an implicitConversionRisk. On Error GoTo or On Error Resume Next is an errorHandlingContract — VB.NET structured Try/Catch is fine, unstructured is not. My.Settings, My.Computer, My.Application accesses should be raised as openQuestion (no direct .NET 10 equivalent)."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "calibratedAgainst": [
+    "DDI Inform (#2, Tier-1 portfolio Phase 12.0) — VB.NET + UniverseDB",
+    "Microsoft VB.NET to C# language comparison guide"
+  ]
+}

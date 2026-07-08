@@ -15,6 +15,11 @@ public static class SourceLanguageDetector
     public const string Delphi = "delphi";
     public const string Cpp = "cpp";
     public const string Vb6 = "vb6";
+    public const string Csharp = "csharp";
+    public const string Vbnet = "vbnet";
+    public const string Openedge = "openedge";
+    public const string Java = "java";
+    public const string Php = "php";
 
     public static readonly string[] FortranExtensions =
     {
@@ -50,13 +55,60 @@ public static class SourceLanguageDetector
         ".bas", ".cls", ".frm", ".ctl",
     };
 
+    public static readonly string[] CsharpExtensions =
+    {
+        // Phase 12.0 — C# source extensions.
+        // .cs is the primary unit; .csx is C# script (used in some legacy
+        // build-automation files). .cshtml (Razor MVC views) is excluded —
+        // the parser extracts code-behind logic, not the template markup.
+        ".cs", ".csx",
+    };
+
+    public static readonly string[] VbnetExtensions =
+    {
+        // Phase 12.0 — VB.NET source extensions.
+        // .vb covers all VB.NET source; .vbhtml (Razor) excluded for the
+        // same reason as .cshtml above.
+        ".vb",
+    };
+
+    public static readonly string[] OpenedgeExtensions =
+    {
+        // Phase 13.0 — Progress OpenEdge ABL source extensions.
+        // .p procedure/program, .w SmartWindow, .i include. OO `.cls` is
+        // NOT listed — it collides with the VB6 class-module extension and
+        // needs content-based disambiguation (deferred). Legacy Progress
+        // apps are overwhelmingly procedural .p/.w.
+        ".p", ".w", ".i",
+    };
+
+    public static readonly string[] JavaExtensions =
+    {
+        // Phase 14.0 — Java source. .java covers all Java. Kotlin/Scala/Groovy
+        // are separate JVM languages and excluded.
+        ".java",
+    };
+
+    public static readonly string[] PhpExtensions =
+    {
+        // Phase 15.0 — PHP source (Magento / PHP 8). .php covers code files;
+        // .phtml (Magento view templates) is excluded — the parser reads code,
+        // not template markup.
+        ".php",
+    };
+
     /// <summary>Every extension we accept at ingest time.</summary>
     public static IEnumerable<string> AllowedExtensions =>
         FortranExtensions
             .Concat(CobolExtensions)
             .Concat(DelphiExtensions)
             .Concat(CppExtensions)
-            .Concat(Vb6Extensions);
+            .Concat(Vb6Extensions)
+            .Concat(CsharpExtensions)
+            .Concat(VbnetExtensions)
+            .Concat(OpenedgeExtensions)
+            .Concat(JavaExtensions)
+            .Concat(PhpExtensions);
 
     /// <summary>
     /// Map a file extension (case-insensitive, with leading dot) to a
@@ -71,6 +123,11 @@ public static class SourceLanguageDetector
         if (DelphiExtensions.Contains(ext)) return Delphi;
         if (CppExtensions.Contains(ext)) return Cpp;
         if (Vb6Extensions.Contains(ext)) return Vb6;
+        if (CsharpExtensions.Contains(ext)) return Csharp;
+        if (VbnetExtensions.Contains(ext)) return Vbnet;
+        if (OpenedgeExtensions.Contains(ext)) return Openedge;
+        if (JavaExtensions.Contains(ext)) return Java;
+        if (PhpExtensions.Contains(ext)) return Php;
         return null;
     }
 
@@ -89,9 +146,10 @@ public static class SourceLanguageDetector
     /// </summary>
     public static string SupportedLanguagesDescription() =>
         "Fortran (.f/.for/.f90), COBOL (.cob/.cbl/.cpy), Delphi (.pas/.dpr/.inc), " +
-        "C++ (.cpp/.h/.hpp), or VB6 (.bas/.cls/.frm)";
+        "C++ (.cpp/.h/.hpp), VB6 (.bas/.cls/.frm), C# (.cs), VB.NET (.vb), " +
+        "OpenEdge ABL (.p/.w/.i), Java (.java), or PHP (.php)";
 
     /// <summary>Just the language names — for "no source files found" copy.</summary>
     public static string SupportedLanguageNames() =>
-        "Fortran, COBOL, Delphi, C++, or VB6";
+        "Fortran, COBOL, Delphi, C++, VB6, C#, VB.NET, OpenEdge ABL, Java, or PHP";
 }

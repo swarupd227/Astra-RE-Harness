@@ -1,0 +1,31 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-dotnet10-workerservice",
+  "targetStack": "dotnet10",
+  "displayName": "C# Windows Service / Console → .NET 10 Worker Service (Generic Host + BackgroundService) + xUnit",
+  "description": "Reference scaffold for migrating Windows Services (ServiceBase), Console polling apps, and scheduled batch processors to .NET 10 Generic Host with BackgroundService. Primary target for Abaca Packaging 3000 (#14 — background DB batch processing with Actian Zen / Speedbase proprietary DB layers). Key patterns: ServiceBase.OnStart/OnStop → BackgroundService.ExecuteAsync with CancellationToken; Thread.Sleep loop → PeriodicTimer; Windows Event Log → ILogger<T> + Serilog; ConfigurationManager → IConfiguration + appsettings.json; raw ADO.NET with proprietary driver → Dapper + ODBC bridge (pending DB track) or EF Core 10. Deployable as Linux systemd service or Windows Service via UseWindowsService(). Serilog for structured logging. xUnit + TestServer for worker integration tests.",
+  "compatibleSchemas": ["csharp"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "BatchProcessor.OnStart" },
+      { "subroutineName": "DataSyncService.ProcessBatch" },
+      { "subroutineName": "ScheduledExporter.Execute" },
+      { "subroutineName": "OrderImportWorker.RunCycle" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'WorkerService' and schemaId is 'csharp'. Primary target for Windows Services and scheduled background processors."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.BatchWorker.csproj",                   "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.BatchWorker.Tests.csproj",       "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",                 "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                            "language": "csharp", "derivedFromClaimIds": ["DI-1","DI-2","CFG-1"] },
+    { "path": "src/Workers/BatchProcessorWorker.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-1","OA-1","AP-1","SE-1"] },
+    { "path": "src/Services/BatchService.cs",              "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","SE-1"] },
+    { "path": "src/Repositories/BatchRepository.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1","DI-2","CFG-2"] },
+    { "path": "src/Models/BatchRecord.cs",                 "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Infrastructure/AppDbContext.cs",         "language": "csharp", "derivedFromClaimIds": ["DI-2"] },
+    { "path": "tests/BatchServiceTests.cs",                "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1"] }
+  ]
+}

@@ -288,11 +288,11 @@ public static class DocsEndpoints
         // Returns a file download.
         //   mkdocs     → <name>-docs.zip  (application/zip)
         //   docx       → <name>-docs.docx (requires pandoc in $PATH)
-        //   pdf        → <name>-docs.pdf  (requires pandoc + weasyprint)
+        //   pdf        → <name>-docs.pdf  (requires pandoc + weasyprint; includes professional CSS + TOC)
         //   confluence → <name>-confluence.json (Confluence REST API page payloads)
         //
-        // Only SIGNED + STALE sections are included. STALE sections get an
-        // "out of date" admonition/warning banner. Admin persona required.
+        // SIGNED, STALE, and DRAFT sections are included. STALE and DRAFT
+        // sections render with warning/note banners. Admin persona required.
         app.MapGet("/api/v1/corpora/{corpusId:guid}/docs/export", async (
             Guid corpusId,
             string? format,
@@ -333,6 +333,34 @@ public static class DocsEndpoints
             catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
             {
                 return Results.NotFound(new { error = new { code = "docs.corpus.not_found" } });
+            }
+        });
+
+        // GET /api/v1/docs/runs/{runId}/logs  — SSE stream of log lines for an active run.
+        // Streams text/event-stream until the run completes or the client disconnects.
+        // Each event: data: {"message":"..."}\n\n
+        // Final event: event: done\ndata: {}\n\n
+        app.MapGet("/api/v1/docs/runs/{runId:guid}/logs", async (
+            Guid runId,
+            Astra.Api.Docs.DocRunLogger logger,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            ctx.Response.ContentType = "text/event-stream";
+            ctx.Response.Headers["Cache-Control"] = "no-cache";
+            ctx.Response.Headers["X-Accel-Buffering"] = "no";
+            await ctx.Response.Body.FlushAsync(ct);
+
+            await foreach (var line in logger.SubscribeAsync(runId, ct))
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(new { message = line });
+                await ctx.Response.WriteAsync($"data: {json}\n\n", ct);
+                await ctx.Response.Body.FlushAsync(ct);
+            }
+            if (!ct.IsCancellationRequested)
+            {
+                await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
+                await ctx.Response.Body.FlushAsync(ct);
             }
         });
 

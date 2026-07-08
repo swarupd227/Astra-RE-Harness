@@ -1,0 +1,29 @@
+{
+  "entryId": "java-verbose-pojo-to-record",
+  "schemaId": "java",
+  "title": "A verbose immutable POJO with hand-written equals/hashCode + an instanceof cast is a prime Java 21 record + pattern-switch candidate",
+  "trapCategory": "modernization/record",
+  "difficulty": "medium",
+  "sourcePath": "java/snippets/Dimensions.java",
+  "sourceLines": "1-24",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport java.util.Objects;\n\npublic final class Dimensions {\n    private final int width;\n    private final int height;\n\n    public Dimensions(int width, int height) {\n        this.width = width;\n        this.height = height;\n    }\n\n    public int getWidth() { return width; }\n    public int getHeight() { return height; }\n    public int area() { return width * height; }\n\n    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (!(o instanceof Dimensions)) return false;\n        Dimensions d = (Dimensions) o;\n        return width == d.width && height == d.height;\n    }\n\n    @Override\n    public int hashCode() { return Objects.hash(width, height); }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "modernizationOpportunity",
+      "id": "MOD-1",
+      "pattern": "(?i)(record|verbose|POJO|data\\s+carrier|boilerplate|instanceof|pattern\\s+match|equals|hashCode)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(area|width\\s*\\*\\s*height|equal|value)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(equals|hashCode|all\\s+fields|component|canonical|generated|semantic|area\\b)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Dimensions is an immutable data carrier whose whole boilerplate (constructor, getters, equals, hashCode) collapses to `record Dimensions(int width, int height)` plus the area() method. Edge case: a record's generated equals/hashCode cover ALL components, which matches the hand-written version here — but if the hand-written equals had omitted a field, the record would NOT be behaviourally identical, so it must be verified. The instanceof-cast can also become pattern matching."
+}

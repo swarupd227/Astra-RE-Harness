@@ -1,0 +1,205 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "php",
+  "displayName": "PHP / Magento → Java 21 · Spring Boot 3  OR  .NET 8",
+  "description": "PHP (Tier-4, incl. Magento-style storefronts) migrating to a strongly-typed managed target — the SME picks Java 21 / Spring Boot 3 OR .NET 8 per routine (compatibleTargetStacks lists both). The claim taxonomy is target-agnostic; each extract prompt (php/java-spring, php/dotnet8) supplies the language-specific mapping. PHP's idiom gap to a static language is dominated by its dynamic type system: loose equality / type juggling (== vs ===, \"0\" == false, numeric-string coercion), the array-as-ordered-map (a single type doing duty as both list and dictionary), null/absence semantics (isset / empty / ?? / the @ error-suppression operator, undefined-variable-is-null), superglobal request state ($_GET / $_POST / $_SESSION / $_SERVER) that couples code like hidden globals, and Throwable/@-suppression error handling. Unlike ABL, PHP has a free/OSS runtime, so source-execution equivalence is technically FEASIBLE via a php-sidecar (run the source, compare outputs) — but that sidecar is not built yet, so it is NOT claimed here; verification currently rests on golden-dataset extraction scoring plus compile + invariant-execution of the generated target.",
+  "supportedSourceExtensions": [".php"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the function must preserve across all valid inputs — the business rules a reviewer signs off on and the Java/.NET target must uphold.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "looseTypeCoercion",
+      "label": "Loose type coercion / juggling",
+      "idPrefix": "LTC",
+      "specJsonField": "loose_type_coercions",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "PHP's loose equality (==) and type juggling: \"0\" == false, 0 == \"\" (pre-8), \"1e2\" == \"100\", numeric-string vs string comparison, implicit string↔number coercion in arithmetic and conditionals. PHP 8 tightened some of these (0 == \"abc\" is now false), so the PHP VERSION matters. The migration must choose an EXPLICIT typed comparison in Java/.NET — the trap is that a naive translation to == / .equals() changes truthiness. Flag the exact juggling and the intended strict semantics.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "expression", "kind": "string", "required": false, "doc": "The PHP expression, e.g. 'if ($qty == false)' or '$a == $b' where $a is a numeric string." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "php_version_sensitive", "kind": "enum:yes|no|unknown", "required": true, "doc": "Whether the result changed between PHP 7 and PHP 8 (e.g. 0 == \"abc\")." },
+        { "name": "target_semantics", "kind": "string", "required": true, "doc": "The explicit typed comparison the Java/.NET target must use, e.g. 'compare as int after validating the string is numeric', or 'use === → .equals with same type'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "arrayShapeSemantics",
+      "label": "Array shape semantics",
+      "idPrefix": "ARR",
+      "specJsonField": "array_shape_semantics",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "The PHP array is a single ordered-map type doing duty as BOTH a list and a dictionary, and often both at once (mixed integer + string keys). The migration must resolve which each usage is: a sequential 0..n array ⟶ List / List<T>; an associative array ⟶ LinkedHashMap / Dictionary (order-preserving); a mixed/record shape ⟶ a DTO / record. Also capture array-function semantics that don't map 1:1 (array_merge renumbers integer keys, + does not; sort resets keys; foreach preserves insertion order).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "variable", "kind": "string", "required": false },
+        { "name": "array_role", "kind": "enum:sequential-list|associative-map|mixed-record|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "target_type", "kind": "string", "required": true, "doc": "e.g. 'List<CartLine>' / 'LinkedHashMap<String,Object>' / 'a CartLine record'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "nullSafetyContract",
+      "label": "Null / absence contract",
+      "idPrefix": "NUL",
+      "specJsonField": "null_safety_contracts",
+      "textField": "contract",
+      "displayTone": "review",
+      "description": "PHP's absence semantics, which are subtle and lossy: an undefined variable or missing array key reads as null (with a notice/warning, not an error); isset() is false for null AND unset; empty() is true for null, 0, \"\", \"0\", [], false (a frequent bug — empty(\"0\") is TRUE); ?? (null-coalescing) suppresses the undefined notice; ?-> (nullsafe) short-circuits; and the @ operator silently suppresses errors on any expression. The target must make each of these an EXPLICIT nullable / Optional with the correct default, and must NOT conflate empty() with null.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "construct", "kind": "enum:isset|empty|null-coalesce|nullsafe|error-suppression|undefined-read|unknown", "required": true },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "target_pattern", "kind": "string", "required": true, "doc": "e.g. 'Optional<T> with orElse(default)' / 'nullable + explicit != null check', noting the empty() vs null distinction." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "superglobalUsage",
+      "label": "Superglobal / request state usage",
+      "idPrefix": "SG",
+      "specJsonField": "superglobal_usages",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Direct reads/writes of PHP superglobals — $_GET, $_POST, $_REQUEST, $_SESSION, $_COOKIE, $_SERVER, $_FILES, $GLOBALS — which couple business logic to ambient request/session state exactly like a global variable (no parameter passing). These have NO equivalent in a Java/.NET service and are a security + testability trap. The migration must lift them to an EXPLICIT injected boundary: a request DTO / @RequestParam / bound model for inputs, and a request-scoped session bean for $_SESSION — never ambient static state. Writing a superglobal (e.g. $_SESSION['cart'] = ...) is also a side effect.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "superglobal", "kind": "string", "required": true, "doc": "e.g. '$_SESSION[\"cart\"]' or '$_POST[\"qty\"]'." },
+        { "name": "access", "kind": "enum:read|write|read-write|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "target_binding", "kind": "string", "required": true, "doc": "e.g. 'a @RequestParam int qty (validated)' / 'a request-scoped SessionCart bean'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "errorHandlingContract",
+      "label": "Error handling contract",
+      "idPrefix": "EH",
+      "specJsonField": "error_handling_contracts",
+      "textField": "contract",
+      "displayTone": "review",
+      "description": "PHP error handling spans several mechanisms that must all become typed exceptions: try/catch on Throwable (Exception + Error since PHP 7), the @ error-suppression operator (silently swallows warnings/errors on an expression — a latent-bug trap, classify as 'suppressed'), trigger_error / set_error_handler, and functions that signal failure by returning false (e.g. file_get_contents, json_decode) rather than throwing. The target uses try/catch + typed exceptions; every @-suppression and every false-return-on-failure must be classified checked vs swallowed.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "style", "kind": "enum:try-catch|at-suppression|false-return|trigger_error|none", "required": true },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "swallowed", "kind": "enum:yes|no|unknown", "required": true, "doc": "Whether the failure is silently swallowed with no follow-up check (a likely latent bug)." },
+        { "name": "target_pattern", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: database writes, output (echo / print / rendering), HTTP headers (header(), setcookie()), superglobal / $_SESSION mutation, file I/O (fopen / file_put_contents), external calls (curl), and mail(). Rendering/echo in the middle of business logic is a classic PHP concern-mixing trap the migration must separate.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and semantic conditions specific to PHP → Java/.NET: float precision (0.1 + 0.2 != 0.3; money must be a decimal type, never a float); integer overflow silently promotes to float; intval()/(int) truncates and parses leading digits ((int)\"5 apples\" == 5, (int)\"0x1A\" == 0 in PHP 7+); string increment ('a'++ == 'b', '9'++ == '10'); switch uses loose (==) matching; and the ternary/?? associativity quirks. Each must be reproduced with the correct typed behaviour.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities that require SME resolution. Common PHP/Magento cases: Magento framework coupling (the DI container / ObjectManager, plugins & interceptors, layout XML, the EAV data model, module config) has no direct target equivalent and must be re-platformed deliberately; magic methods (__get/__set/__call/__toString) and dynamic properties; variable variables ($$name) and variable function/method calls; dynamic include/require and eval(); and the physical DB schema behind raw SQL or an ORM.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false, "doc": "The enclosing class/trait, or the .php file basename for a free function." },
+    { "name": "target_archetype_hint", "kind": "enum:SpringService|SpringRestController|DotnetService", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "output", "input-output", "return", "reference", "superglobal"],
+    "directionDescription": "PHP parameter modes. Default = by value; &$x = by reference (input-output); return = the return value; superglobal = an ambient $_GET/$_POST/$_SESSION input the target must lift to an explicit parameter."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "looseTypeCoercion",
+      "arrayShapeSemantics",
+      "nullSafetyContract",
+      "superglobalUsage",
+      "errorHandlingContract",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "looseTypeCoercion": 0,
+      "arrayShapeSemantics": 0,
+      "nullSafetyContract": 0,
+      "superglobalUsage": 0,
+      "errorHandlingContract": 0,
+      "sideEffect": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Every == / != (loose) comparison is a looseTypeCoercion candidate — note whether PHP 8 changed it and give the strict typed target semantics. Every array is an arrayShapeSemantics claim — decide list vs map vs record. isset/empty/??/@ and undefined reads are nullSafetyContract claims; NEVER conflate empty() with null (empty(\"0\") is true). Every $_GET/$_POST/$_SESSION/$_SERVER touch is a superglobalUsage claim (hidden request/session coupling → explicit injected boundary). Every @ suppression and every false-on-failure return is an errorHandlingContract; classify swallowed vs checked. Treat money-as-float, int overflow→float, (int) truncation, and loose switch as edgeCase claims. Magento DI/plugins/EAV, magic methods, and dynamic include/eval are openQuestions."
+  },
+  "owner": "Nous · Java/Spring + .NET migration accelerator",
+  "calibratedAgainst": [
+    "Tier-4 PHP / Magento portfolio",
+    "PHP language reference (type juggling, arrays, superglobals, PHP 7→8 comparison changes)"
+  ]
+}

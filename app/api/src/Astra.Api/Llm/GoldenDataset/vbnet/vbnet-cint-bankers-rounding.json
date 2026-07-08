@@ -1,0 +1,29 @@
+{
+  "entryId": "vbnet-cint-bankers-rounding",
+  "schemaId": "vbnet",
+  "title": "CInt/CLng use banker's rounding (half-to-even); C# (int) truncates — same input, different integer",
+  "trapCategory": "type/conversion-rounding",
+  "difficulty": "hard",
+  "sourcePath": "vbnet/snippets/billing.vb",
+  "sourceLines": "1-12",
+  "sourceContent": "Public Class Billing\n    ' CInt / CLng round HALF-TO-EVEN (banker's rounding):\n    '   CInt(2.5) = 2 , CInt(3.5) = 4\n    ' C# (int) TRUNCATES toward zero:\n    '   (int)2.5 = 2 , (int)3.5 = 3   <-- DIFFERENT\n    Public Function RoundedCents(amount As Double) As Integer\n        Return CInt(amount * 100)\n    End Function\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "implicitConversionRisk",
+      "id": "ICR-1",
+      "pattern": "(?i)(CInt|CLng|banker|half.to.even|round.half|MidpointRounding|Math\\.Round|Convert\\.ToInt32)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-ICR-1",
+      "pattern": "(?i)(truncat|\\.5|half|toward\\s+zero|\\(int\\))"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-ICR-1",
+      "pattern": "(?i)(RoundedCents|cents|monetary|financial|penny)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "VB.NET's CInt/CLng conversion functions round half-to-even (banker's rounding); C#'s (int) cast truncates toward zero. For financial code this silently changes totals at .5 boundaries. The C# target must use Convert.ToInt32 or Math.Round(x, MidpointRounding.ToEven) to preserve behaviour — never a bare (int) cast."
+}

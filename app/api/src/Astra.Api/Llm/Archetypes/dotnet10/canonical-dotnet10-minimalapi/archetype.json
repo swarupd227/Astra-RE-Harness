@@ -1,0 +1,30 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-dotnet10-minimalapi",
+  "targetStack": "dotnet10",
+  "displayName": "C# .NET Framework / Core → .NET 10 Minimal API + EF Core 10 + xUnit",
+  "description": "Reference scaffold for migrating ASP.NET MVC / Web API 2 controllers and class libraries to ASP.NET Core 10 Minimal API (Carter-style feature modules) with EF Core 10, Serilog structured logging, and OpenTelemetry traces. This is the primary target archetype for Tier-1 apps with REST surfaces: Pepperi (#3), PINpoint (#4), InfinityQS Enact (#7), Commerce Vision CVe (#5 .NET portion), and Comsense (#11). Feature-folder layout: each domain (Orders, Products, Reports) gets its own ICarterModule subclass. EF Core DbContext is Scoped. HttpClient via IHttpClientFactory. No System.Web.* references. Targets net10.0 — Linux container deployable.",
+  "compatibleSchemas": ["csharp"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "OrderController.CreateOrder" },
+      { "subroutineName": "OrderService.CalculateTotal" },
+      { "subroutineName": "ProductRepository.GetByCategory" },
+      { "subroutineName": "ReportService.ExportSummary" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'MinimalApi' and schemaId is 'csharp'. Primary target for former ASP.NET MVC / Web API 2 controllers."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.OrderApi.csproj",                "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.OrderApi.Tests.csproj",    "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",           "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                      "language": "csharp", "derivedFromClaimIds": ["INV-1","DI-1","DI-2"] },
+    { "path": "src/Orders/OrderModule.cs",           "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","OA-1","SE-1"] },
+    { "path": "src/Orders/OrderService.cs",          "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","AP-1"] },
+    { "path": "src/Orders/OrderRepository.cs",       "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1","DI-2"] },
+    { "path": "src/Orders/OrderDto.cs",              "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "tests/OrderServiceTests.cs",          "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1"] }
+  ]
+}

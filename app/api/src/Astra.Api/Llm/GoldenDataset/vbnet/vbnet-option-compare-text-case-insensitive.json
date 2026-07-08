@@ -1,0 +1,29 @@
+{
+  "entryId": "vbnet-option-compare-text-case-insensitive",
+  "schemaId": "vbnet",
+  "title": "Option Compare Text makes '=' string comparisons case-INSENSITIVE — a naive C# '==' port silently changes matching behaviour",
+  "trapCategory": "comparison/option-compare-text",
+  "difficulty": "hard",
+  "sourcePath": "vbnet/snippets/login_validator.vb",
+  "sourceLines": "1-16",
+  "sourceContent": "Option Compare Text   ' <-- ALL string '=' comparisons in this file are case-INSENSITIVE\n\nPublic Class LoginValidator\n    ' Under Option Compare Text, \"ADMIN\" = \"admin\" is TRUE.\n    ' Ported naively to C# as (role == \"admin\"), \"ADMIN\" returns FALSE -> auth bug.\n    Public Function IsAdmin(role As String) As Boolean\n        Return role = \"admin\"\n    End Function\n\n    Public Function SameUser(a As String, b As String) As Boolean\n        Return a = b   ' case-insensitive under Option Compare Text\n    End Function\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "stringComparisonSemantics",
+      "id": "SCS-1",
+      "pattern": "(?i)(Option\\s+Compare\\s+Text|case.insensitive|StringComparison\\.(OrdinalIgnoreCase|InvariantCultureIgnoreCase))"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-SCS-1",
+      "pattern": "(?i)(ADMIN|uppercase|mixed.case|== .*case|string\\.Equals)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-SCS-1",
+      "pattern": "(?i)(which\\s+comparison|ordinal|culture|confirm.*case|SME)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Option Compare Text (file- or project-level) makes every unqualified '=' string comparison case-insensitive. C# '==' is always ordinal/case-sensitive, so a mechanical port flips the result for mixed-case input. The extractor must flag every string '=' under Option Compare Text and require an explicit StringComparison choice (OrdinalIgnoreCase vs InvariantCultureIgnoreCase) in the C# target."
+}

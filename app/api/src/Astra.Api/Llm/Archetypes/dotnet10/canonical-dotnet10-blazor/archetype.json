@@ -1,0 +1,31 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-dotnet10-blazor",
+  "targetStack": "dotnet10",
+  "displayName": "C# WinForms / WebForms → .NET 10 Blazor Web App (SSR + Interactive) + xUnit",
+  "description": "Reference scaffold for migrating WinForms and WebForms applications to Blazor Web App (.NET 10) in SSR + Interactive Server mode. Applies to InfinityQS ProFicient (#8 — WinForms quality metrics UI) and PQ Systems GAGEpack/SQCpack (#16 — desktop gauge calibration). Form controls become Blazor @page components with cascading scoped state services. DataGridView → <Virtualize> over List<T>. Timer → PeriodicTimer in IHostedService. System.Windows.Forms.* removed entirely. EF Core 10 for DB access (replaces DataTable/DataAdapter). SQL Server connection via IDbContextFactory<T> for thread-safe Singleton-owned access. Serilog for structured logging. xUnit + bUnit for component tests.",
+  "compatibleSchemas": ["csharp"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "OrderEntryForm.btnSubmit_Click" },
+      { "subroutineName": "GaugeCalibrationForm.LoadMeasurements" },
+      { "subroutineName": "MainForm.timer1_Tick" },
+      { "subroutineName": "ReportForm.dataGridView1_CellFormatting" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'BlazorWebApp' and schemaId is 'csharp'. Primary target for former WinForms and WebForms applications."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.GaugeCal.Web.csproj",                  "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.GaugeCal.Web.Tests.csproj",      "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",                 "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                            "language": "csharp", "derivedFromClaimIds": ["DI-1","DI-2"] },
+    { "path": "src/Components/Pages/GaugeCalibration.razor",    "language": "razor",  "derivedFromClaimIds": ["INV-1","OA-1","OA-2","EH-1"] },
+    { "path": "src/Components/Pages/GaugeCalibration.razor.cs", "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","AP-1","SE-1"] },
+    { "path": "src/Services/GaugeCalibrationService.cs",   "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","SE-1"] },
+    { "path": "src/Services/MeasurementRepository.cs",     "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1","DI-2"] },
+    { "path": "src/Components/Shared/ConfirmDialog.razor", "language": "razor",  "derivedFromClaimIds": ["OA-3"] },
+    { "path": "tests/GaugeCalibrationServiceTests.cs",     "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1"] }
+  ]
+}

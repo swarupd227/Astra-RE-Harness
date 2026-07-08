@@ -69,10 +69,20 @@ public sealed class GoldenDatasetScorer
         var entry = await _db.GoldenDatasetEntries.FirstOrDefaultAsync(e => e.Id == entryDbId, ct)
             ?? throw new InvalidOperationException($"Golden dataset entry {entryDbId} not found.");
 
-        // 1. Resolve the active extract prompt for this schema. We always
-        //    score against the dotnet8 target — claim quality is a property
-        //    of the EXTRACT pass, which is target-stack agnostic.
+        // 1. Resolve the active extract prompt for this schema. Claim quality
+        //    is a property of the EXTRACT pass, which is target-stack agnostic —
+        //    but the prompt only EXISTS under specific target stacks (the
+        //    vbnet/csharp extract prompts live under dotnet10, not dotnet8), so
+        //    probe the known stacks and score against whichever one the schema
+        //    actually ships an extract prompt for.
+        string[] candidateStacks = { "dotnet8", "dotnet10", "java-spring" };
         var prompt = _prompts.GetLatest(entry.SchemaId, "dotnet8", "extract");
+        var targetStack = "dotnet8";
+        foreach (var ts in candidateStacks)
+        {
+            var p = _prompts.GetLatest(entry.SchemaId, ts, "extract");
+            if (p is not null) { prompt = p; targetStack = ts; break; }
+        }
         var promptId = prompt?.PromptId ?? $"{entry.SchemaId}-extract";
         var promptVersion = prompt?.Version ?? "v0";
 
@@ -89,7 +99,7 @@ public sealed class GoldenDatasetScorer
             PromptTemplateId: promptId,
             PromptTemplateVersion: promptVersion,
             SourceLanguage: entry.SchemaId,
-            TargetStack: "dotnet8");
+            TargetStack: targetStack);
 
         string? finalSpecJson = null;
         await foreach (var ev in _provider.ExtractAsync(request, ct))
@@ -202,6 +212,51 @@ public sealed class GoldenDatasetScorer
         TryAddKind(buckets, root, "template_instantiations", "template_instantiation");
         TryAddKind(buckets, root, "undefined_behaviors", "undefined_behavior");
         TryAddKind(buckets, root, "exception_contracts", "exception_contract");
+        // VB.NET / VB6 kinds (Phase 12.0 + golden-set expansion). These schemas
+        // name their claim kinds in camelCase (matching the schema's claimKinds
+        // list) while the extract prompts emit snake_case top-level arrays, so
+        // register the net-new VB fields AND camelCase aliases for the shared
+        // kinds so VB golden entries score. The bucket dict is keyed by kindKey,
+        // so registering `edge_cases` under both "edge_case" and "edgeCase" is fine.
+        TryAddKind(buckets, root, "module_to_static_class", "moduleToStaticClass");
+        TryAddKind(buckets, root, "implicit_conversion_risks", "implicitConversionRisk");
+        TryAddKind(buckets, root, "with_block_usages", "withBlockUsage");
+        TryAddKind(buckets, root, "string_comparison_semantics", "stringComparisonSemantics");
+        TryAddKind(buckets, root, "error_handling_contracts", "errorHandlingContract");
+        TryAddKind(buckets, root, "invariants", "invariant");
+        TryAddKind(buckets, root, "side_effects", "sideEffect");
+        TryAddKind(buckets, root, "edge_cases", "edgeCase");
+        TryAddKind(buckets, root, "open_questions", "openQuestion");
+        // OpenEdge ABL kinds (Tier-2 migration). errorHandlingContract /
+        // invariant / sideEffect / edgeCase / openQuestion are shared with the
+        // VB taxonomy and already registered above (camelCase); only the four
+        // net-new ABL fields need a bucket entry. There is no source-execution
+        // equivalence gate for ABL (the Progress AVM is proprietary), so this
+        // golden scorer is the primary extraction-quality gate for openedge.
+        TryAddKind(buckets, root, "temp_table_usages", "tempTableUsage");
+        TryAddKind(buckets, root, "shared_variable_scopes", "sharedVariableScope");
+        TryAddKind(buckets, root, "record_phrase_semantics", "recordPhraseSemantics");
+        TryAddKind(buckets, root, "transaction_scopes", "transactionScope");
+        // PHP kinds (Tier-4 migration, dual target java-spring + dotnet8).
+        // errorHandlingContract / invariant / sideEffect / edgeCase /
+        // openQuestion are shared with the VB/ABL taxonomy and already
+        // registered above (camelCase); only the four net-new PHP fields need
+        // a bucket entry. PHP has a free runtime so source-execution
+        // equivalence is FEASIBLE via a future php-sidecar, but until that
+        // exists this golden scorer is the primary extraction-quality gate.
+        TryAddKind(buckets, root, "loose_type_coercions", "looseTypeCoercion");
+        TryAddKind(buckets, root, "array_shape_semantics", "arrayShapeSemantics");
+        TryAddKind(buckets, root, "null_safety_contracts", "nullSafetyContract");
+        TryAddKind(buckets, root, "superglobal_usages", "superglobalUsage");
+        // Java 11→21 modernization kinds (Tier-3, in-place upgrade). invariant /
+        // edgeCase / openQuestion are shared and already registered above
+        // (camelCase); only the six net-new modernization fields need a bucket.
+        TryAddKind(buckets, root, "jakarta_namespace_migrations", "jakartaNamespaceMigration");
+        TryAddKind(buckets, root, "removed_api_usages", "removedApiUsage");
+        TryAddKind(buckets, root, "deprecated_api_usages", "deprecatedApiUsage");
+        TryAddKind(buckets, root, "spring_boot_upgrades", "springBootUpgrade");
+        TryAddKind(buckets, root, "library_major_bumps", "libraryMajorBump");
+        TryAddKind(buckets, root, "modernization_opportunities", "modernizationOpportunity");
         return buckets;
     }
 

@@ -1,0 +1,29 @@
+{
+  "entryId": "vbnet-and-vs-andalso-short-circuit",
+  "schemaId": "vbnet",
+  "title": "'And'/'Or' are non-short-circuiting; porting to C# '&&'/'||' changes evaluation and can hide/expose a NullReference",
+  "trapCategory": "logic/short-circuit",
+  "difficulty": "hard",
+  "sourcePath": "vbnet/snippets/access_check.vb",
+  "sourceLines": "1-10",
+  "sourceContent": "Public Class AccessCheck\n    Public Function CanEdit(user As User) As Boolean\n        ' `And` is NON-short-circuiting: user.HasRole(...) is ALWAYS evaluated,\n        ' even when user Is Nothing -> NullReferenceException at runtime.\n        ' Ported to C# `&&` (short-circuit) it would NOT throw -> behaviour differs.\n        Return user IsNot Nothing And user.HasRole(\"editor\")\n    End Function\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "edgeCase",
+      "id": "EC-SC-1",
+      "pattern": "(?i)(And(?!Also)|AndAlso|Or(?!Else)|OrElse|short.circuit|non.short.circuit|evaluat)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-SC-1",
+      "pattern": "(?i)(CanEdit|HasRole|NullReference|side.effect|both\\s+operands)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-SC-1",
+      "pattern": "(?i)(intended.*short|preserve.*evaluation|&&|which\\s+operator)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "VB.NET `And`/`Or` evaluate BOTH operands; `AndAlso`/`OrElse` short-circuit. The guard `user IsNot Nothing And user.HasRole(...)` still dereferences a null user because `And` does not short-circuit — it relies on the exception, or is simply a latent bug. Mechanically translating `And`->`&&` changes semantics (C# `&&` short-circuits). The extractor must flag every `And`/`Or` on booleans and decide whether the intent was short-circuit (`AndAlso`) — usually yes."
+}

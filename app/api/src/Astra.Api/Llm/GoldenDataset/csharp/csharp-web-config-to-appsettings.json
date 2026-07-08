@@ -1,0 +1,18 @@
+{
+  "entryId": "csharp-web-config-to-appsettings",
+  "schemaId": "csharp",
+  "title": "ConfigurationManager.AppSettings / ConnectionStrings is not available in .NET 10 — replace with IConfiguration",
+  "trapCategory": "configuration/static-access",
+  "difficulty": "easy",
+  "sourcePath": "csharp/snippets/web_config_access.cs",
+  "sourceLines": "1-25",
+  "sourceContent": "using System.Configuration;\n\npublic class DatabaseSettings\n{\n    // ConfigurationManager reads from Web.config / App.config at runtime.\n    // Neither the assembly nor the XML file exist in a .NET 10 project.\n    public static string GetConnectionString()\n    {\n        return ConfigurationManager.ConnectionStrings[\"Default\"].ConnectionString;\n    }\n\n    public static int GetPageSize()\n    {\n        var raw = ConfigurationManager.AppSettings[\"Paging:PageSize\"];\n        return int.TryParse(raw, out var n) ? n : 20;\n    }\n\n    public static string GetApiKey()\n    {\n        // Often stored as plain text in Web.config in Framework projects.\n        // In .NET 10 this should be in appsettings.json with\n        // environment-variable override or a secrets manager.\n        return ConfigurationManager.AppSettings[\"ExternalApi:Key\"] ?? \"\";\n    }\n}\n",
+  "expectedClaims": [
+    { "kind": "obsoleteApiUsage", "id": "OA-CFG-1", "pattern": "(?i)(ConfigurationManager|System\\.Configuration|App\\.config|Web\\.config|AppSettings\\[|ConnectionStrings\\[)" },
+    { "kind": "configurationAccess", "id": "CFG-1", "pattern": "(?i)(IConfiguration|appsettings\\.json|GetConnectionString|GetValue|GetSection|IOptions)" },
+    { "kind": "dependencyInjectionContract", "id": "DI-CFG-1", "pattern": "(?i)(inject.*IConfiguration|IConfiguration.*inject|constructor.*IConfiguration)" },
+    { "kind": "openQuestion", "id": "Q-CFG-1", "pattern": "(?i)(secret|API\\s*[Kk]ey|plain\\s*text|credential|environment\\s+variable|IOptions|secrets\\s+manager)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "ConfigurationManager depends on the System.Configuration assembly, which targets the .NET Framework only. In .NET 10, configuration is provided through Microsoft.Extensions.Configuration, backed by appsettings.json, environment variables, and command-line args in priority order. The spec must record every key name and the expected type so the migration can reconstruct the configuration hierarchy in appsettings.json. API keys or secrets read from AppSettings should be flagged as openQuestions because the correct .NET 10 pattern depends on the deployment environment (Azure Key Vault, user secrets, env vars)."
+}

@@ -1,0 +1,207 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "openedge",
+  "displayName": "Progress OpenEdge ABL → Java 21 / Spring Boot 3",
+  "description": "Progress OpenEdge ABL (the 4GL, .p/.w/.i files) migrating to Java 21 + Spring Boot 3. This is the Tier-2 'talent-extinction' technology: the ABL developer pool is retiring, so behavioural specs must be captured now. ABL's idiom gap to Java is wide and specific: in-memory TEMP-TABLEs with indexes, implicit record buffers with lock modes (NO-LOCK / EXCLUSIVE-LOCK / SHARE-LOCK), block-scoped TRANSACTIONs (no explicit begin/commit), SHARED / GLOBAL variables that couple procedures, NO-ERROR error suppression + ERROR-STATUS, the Unknown value (?) that is distinct from both null and zero, and set-oriented FOR EACH / FIND phrases that map to JPA queries. NOTE: no free/OSS Progress runtime exists (the AVM is proprietary), so source-execution behavioural equivalence is NOT available for this schema — verification relies on golden-dataset extraction scoring and property-based checks of the generated Java target, and this limitation is documented rather than stubbed.",
+  "supportedSourceExtensions": [".p", ".w", ".i"],
+  "compatibleTargetStacks": ["java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the procedure/function must preserve across all valid inputs — the business rules a reviewer signs off on and the Java target must uphold.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "tempTableUsage",
+      "label": "Temp-table usage",
+      "idPrefix": "TT",
+      "specJsonField": "temp_table_usages",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "ABL DEFINE TEMP-TABLE declares a process-scoped, in-memory relational table with typed fields and indexes — used for working sets, ProDataset payloads, and passing structured data between procedures. Java has no direct equivalent: the target is a List<Dto> / record class (+ an index emulation such as a Map keyed on the index fields, or a lightweight in-memory H2 table when the temp-table is queried relationally). Flag whether the temp-table is passed BY-REFERENCE / BY-VALUE between procedures (shapes the Java method signature).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "temp_table_name", "kind": "string", "required": true },
+        { "name": "fields_summary", "kind": "string", "required": false, "doc": "Field names/types and index(es), e.g. 'ttOrder: OrderNum(int, index), CustNum(int), Amount(decimal)'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "passed_between_procedures", "kind": "enum:yes|no|unknown", "required": true, "doc": "TEMP-TABLE ... BY-REFERENCE parameters couple procedures — shapes the Java method signature (shared collection vs return value)." },
+        { "name": "java_equivalent", "kind": "string", "required": true, "doc": "Recommended Java form, e.g. 'List<OrderLine> record class' or 'in-memory H2 table via Spring Data' when queried relationally." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sharedVariableScope",
+      "label": "Shared / global variable scope",
+      "idPrefix": "SV",
+      "specJsonField": "shared_variable_scopes",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "ABL DEFINE SHARED / NEW SHARED / GLOBAL variables (and shared buffers/temp-tables) create implicit cross-procedure coupling: a called procedure reads or mutates state the caller declared, with no parameter passing. This hidden data flow has no Java equivalent and is a frequent bug source. The Java target must make the dependency explicit — a passed parameter, a Spring-managed bean, or request-scoped state — never a static mutable field on a shared class.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "variable_name", "kind": "string", "required": true },
+        { "name": "shared_kind", "kind": "enum:SHARED|NEW-SHARED|GLOBAL|SHARED-BUFFER|SHARED-TEMP-TABLE|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "mutated", "kind": "enum:yes|no|unknown", "required": true, "doc": "Whether this routine writes the shared variable (a side effect visible to other procedures)." },
+        { "name": "java_equivalent", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "recordPhraseSemantics",
+      "label": "Record phrase & lock semantics",
+      "idPrefix": "RP",
+      "specJsonField": "record_phrase_semantics",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "ABL data-access phrases — FIND FIRST/LAST/NEXT, FOR EACH, CAN-FIND, GET FIRST — operate on implicit record buffers one row at a time, with an explicit lock mode (NO-LOCK read-only, SHARE-LOCK shared, EXCLUSIVE-LOCK for update). The lock mode and the record-at-a-time cursor model map to JPA semantics: NO-LOCK → a read-only query / @Transactional(readOnly=true); EXCLUSIVE-LOCK → a managed entity inside a write transaction with @Lock(PESSIMISTIC_WRITE); FOR EACH → a JPA query returning a stream/list. FIND with no record and no NO-ERROR raises; FIND ... NO-ERROR then AVAILABLE-check is the guarded pattern.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "phrase", "kind": "string", "required": true, "doc": "The record phrase, e.g. 'FIND FIRST Customer WHERE ... EXCLUSIVE-LOCK'." },
+        { "name": "lock_mode", "kind": "enum:NO-LOCK|SHARE-LOCK|EXCLUSIVE-LOCK|none|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "jpa_equivalent", "kind": "string", "required": true, "doc": "The Spring Data / JPA form, e.g. 'repository.findFirstByCustNum(..) read-only' or '@Lock(PESSIMISTIC_WRITE) managed entity'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "transactionScope",
+      "label": "Transaction scope",
+      "idPrefix": "TX",
+      "specJsonField": "transaction_scopes",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "ABL transactions are BLOCK-SCOPED, not explicit begin/commit: the transaction spans the outermost block that performs a database update (a DO TRANSACTION block, or implicitly the procedure/FOR-EACH block containing the first update). All updates in that block commit or roll back together; an UNDO reverses to the block start. This implicit, structural boundary must become an explicit Spring @Transactional boundary in Java, and the reviewer must confirm the scope (per-record vs per-batch) matches. Sub-transactions and SUBTRANSACTION blocks map to nested/REQUIRES_NEW propagation.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "scope_block", "kind": "string", "required": true, "doc": "The block that defines the transaction boundary, e.g. 'DO TRANSACTION:' or 'the FOR EACH OrderLine block'." },
+        { "name": "granularity", "kind": "enum:per-record|per-batch|whole-procedure|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "spring_equivalent", "kind": "string", "required": true, "doc": "The @Transactional placement + propagation, e.g. '@Transactional on the batch method' or '@Transactional(propagation=REQUIRES_NEW) per record'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "errorHandlingContract",
+      "label": "Error handling contract",
+      "idPrefix": "EH",
+      "specJsonField": "error_handling_contracts",
+      "textField": "contract",
+      "displayTone": "review",
+      "description": "ABL error handling spans several styles that must all become Java exceptions: NO-ERROR (suppresses the error and sets ERROR-STATUS:ERROR / :GET-MESSAGE for the caller to check — a silent-failure trap if unchecked), classic ON ERROR / ON ENDKEY phrases, and modern structured CATCH ... END CATCH blocks (OpenEdge 10.1+). NO-ERROR without a following ERROR-STATUS check silently swallows failures. The Java target uses try/catch; every NO-ERROR must be classified as 'checked' (an AVAILABLE/ERROR-STATUS guard follows) or 'swallowed' (no guard — likely a latent bug the SME must confirm).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "style", "kind": "enum:NO-ERROR|NO-ERROR-checked|NO-ERROR-swallowed|CATCH|ON-ERROR|None", "required": true },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "java_pattern", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: database writes (CREATE / UPDATE / DELETE / ASSIGN on a buffer), file I/O (OUTPUT TO / INPUT FROM), shared-variable mutation, RUN of an external .p/.w with side effects, DYNAMIC-FUNCTION calls, and OS-command execution (OS-COMMAND / OS-COPY).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and semantic conditions specific to ABL → Java migration: the Unknown value (?) which is DISTINCT from null and from zero (a numeric field can be ? meaning 'no value', and ? propagates through arithmetic); ABL string comparison and keyword matching are CASE-INSENSITIVE by default (unlike Java's case-sensitive equals); DECIMAL is a fixed-point type with defined rounding (not IEEE double); integer division truncates; the leave/next block-label control flow; and FIND that returns no record leaving the buffer NOT AVAILABLE (dereferencing it is an error).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities that require SME resolution. Common ABL cases: character/GUI UI (FRAME / DISPLAY / FORM / SmartWindow .w files) has no server-side Java equivalent and must be re-platformed separately; RUN ... PERSISTENT procedure-handle lifecycle → decide the Spring bean/object lifecycle; {include.i} preprocessor includes and &GLOBAL-DEFINE macros must be resolved before the target is complete; the physical database schema behind buffer names must be mapped to JPA entities; and DYNAMIC-FUNCTION / dynamic query strings need a chosen Java strategy.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false, "doc": "The .p/.w program or the internal PROCEDURE/FUNCTION/METHOD name." },
+    { "name": "target_archetype_hint", "kind": "enum:SpringRestController|SpringService|SpringBatch", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "output", "input-output", "return", "buffer", "table-handle"],
+    "directionDescription": "ABL parameter modes. INPUT (default) = by value; OUTPUT = returned to caller; INPUT-OUTPUT = by reference; BUFFER / TABLE / TABLE-HANDLE = record/temp-table parameters; return = the FUNCTION return value."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "tempTableUsage",
+      "sharedVariableScope",
+      "recordPhraseSemantics",
+      "transactionScope",
+      "errorHandlingContract",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "tempTableUsage": 0,
+      "sharedVariableScope": 0,
+      "recordPhraseSemantics": 0,
+      "transactionScope": 0,
+      "errorHandlingContract": 0,
+      "sideEffect": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Every DEFINE TEMP-TABLE is a tempTableUsage claim (note BY-REFERENCE parameters). Every DEFINE SHARED / NEW SHARED / GLOBAL variable is a sharedVariableScope claim — hidden cross-procedure coupling. Every FIND / FOR EACH / CAN-FIND is a recordPhraseSemantics claim; ALWAYS capture the lock mode (NO-LOCK / SHARE-LOCK / EXCLUSIVE-LOCK) because it dictates the JPA transaction/lock. Every DB update establishes a transactionScope — identify the block that bounds it. Every NO-ERROR is an errorHandlingContract; classify checked vs swallowed. Treat the Unknown value (?) and ABL's default case-insensitivity as edgeCase claims. FRAME/DISPLAY UI, RUN PERSISTENT lifecycle, and {include.i} resolution are openQuestions."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "calibratedAgainst": [
+    "Tier-2 OpenEdge ABL portfolio (2 apps, talent-extinction risk)",
+    "Progress OpenEdge ABL Reference (temp-tables, record phrases, transaction scoping)"
+  ]
+}

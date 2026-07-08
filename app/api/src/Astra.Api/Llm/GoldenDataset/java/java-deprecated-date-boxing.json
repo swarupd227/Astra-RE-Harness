@@ -1,0 +1,29 @@
+{
+  "entryId": "java-deprecated-date-boxing",
+  "schemaId": "java",
+  "title": "Date(y,m,d), new Integer(int), and Runtime.exec(String) are deprecated-for-removal — modernize to java.time / valueOf / ProcessBuilder",
+  "trapCategory": "deprecated/for-removal",
+  "difficulty": "medium",
+  "sourcePath": "java/snippets/ShipmentScheduler.java",
+  "sourceLines": "1-16",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport java.util.Date;\n\npublic class ShipmentScheduler {\n    public Date dueDate(int year, int month, int day) {\n        // Date(year-1900, month-0-based, day) is deprecated.\n        return new Date(year - 1900, month - 1, day);\n    }\n\n    public Integer priorityBox(int p) {\n        return new Integer(p); // deprecated boxing constructor\n    }\n\n    public void runReport(String cmd) throws Exception {\n        Runtime.getRuntime().exec(cmd); // deprecated String overload\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "deprecatedApiUsage",
+      "id": "DEP-1",
+      "pattern": "(?i)(new\\s+Date|Date\\(|new\\s+Integer|Integer\\(|boxing|Runtime\\.exec|deprecated|valueOf|ProcessBuilder|LocalDate)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(1900|0-based|month|offset|semantic|off.by|year)"
+    },
+    {
+      "kind": "modernizationOpportunity",
+      "id": "MOD-1",
+      "pattern": "(?i)(LocalDate|ProcessBuilder|valueOf|java\\.time|modern|record)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Three deprecated-for-removal APIs in one class: the Date(year-1900, month-0-based, day) constructor (the 1900 offset and 0-based month semantics must be preserved when moving to LocalDate), the new Integer(int) boxing constructor (use Integer.valueOf), and Runtime.exec(String) (use the String[] overload / ProcessBuilder to avoid the naive-split shell-quoting change)."
+}

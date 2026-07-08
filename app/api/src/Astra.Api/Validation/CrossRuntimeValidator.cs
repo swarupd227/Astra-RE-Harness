@@ -33,6 +33,7 @@ public sealed class CrossRuntimeValidator
     private readonly IAuditLogger _audit;
     private readonly GfortranClient _gfortran;
     private readonly Vb6Client _vb6;
+    private readonly CsharpClient _csharp;
     private readonly ILogger<CrossRuntimeValidator> _log;
 
     public CrossRuntimeValidator(
@@ -42,6 +43,7 @@ public sealed class CrossRuntimeValidator
         IAuditLogger audit,
         GfortranClient gfortran,
         Vb6Client vb6,
+        CsharpClient csharp,
         ILogger<CrossRuntimeValidator> log)
     {
         _db = db;
@@ -50,6 +52,7 @@ public sealed class CrossRuntimeValidator
         _audit = audit;
         _gfortran = gfortran;
         _vb6 = vb6;
+        _csharp = csharp;
         _log = log;
     }
 
@@ -95,6 +98,13 @@ public sealed class CrossRuntimeValidator
             if (string.Equals(sourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase))
             {
                 return await RunVb6SmokeAsync(scaffold, run, actor, ct);
+            }
+
+            // ─── Phase 12.0.f — C# / .NET source → csharp sidecar ────────────
+            if (string.Equals(sourceLanguage, "csharp", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(sourceLanguage, "vbnet", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunCsharpSmokeAsync(scaffold, run, actor, ct);
             }
 
             // ─── Sanity: is the gfortran sidecar reachable? ────────────────
@@ -513,6 +523,120 @@ public sealed class CrossRuntimeValidator
             run.Summary = match
                 ? $"vb6-sidecar exit codes non-zero (compile={vbs.Compile.ExitCode}, run={vbs.Run?.ExitCode})."
                 : $"Outputs differ: vb6={vbsSum} vs csharp={expectedSum}";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        return run;
+    }
+
+    // ─── Phase 12.0.f — csharp smoke ──────────────────────────────────────────
+    // Compiles and runs a trivial C# console program via the csharp sidecar.
+    // The program reads two integers from stdin, adds them, and prints
+    // {"sum": N} to stdout. The C# reference computes the same value locally.
+    // Both must agree. Same verdict shape as the VB6 / gfortran paths.
+    private async Task<ValidationRun> RunCsharpSmokeAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        if (!await _csharp.PingAsync(ct))
+            throw new InvalidOperationException(
+                "csharp sidecar health probe failed (Validation:CsharpEndpoint).");
+
+        const string smokeSource = """
+            using System;
+            using System.Text.Json;
+
+            var parts = Console.ReadLine()!.Trim().Split(' ');
+            int a = int.Parse(parts[0]);
+            int b = int.Parse(parts[1]);
+            int sum = a + b;
+            Console.WriteLine(JsonSerializer.Serialize(new { sum }));
+            """;
+        const string stdinPayload = "3 4\n";
+        const int expectedSum = 3 + 4;
+
+        var result = await _csharp.CompileAndRunAsync(new CsharpClient.CompileAndRunRequest(
+            Sources: new[] { new CsharpClient.Source("Program.cs", smokeSource) },
+            Stdin: stdinPayload,
+            TimeoutMs: 30_000), ct);
+
+        int csharpSum;
+        try
+        {
+            using var doc = JsonDocument.Parse((result.Run?.Stdout ?? "").Trim());
+            csharpSum = doc.RootElement.GetProperty("sum").GetInt32();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse csharp sidecar stdout as JSON: {ex.Message}; raw: {result.Run?.Stdout}");
+        }
+
+        var match = csharpSum == expectedSum;
+
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== csharp sidecar — compile ===");
+        transcript.AppendLine($"exit {result.Compile.ExitCode} · {result.Compile.DurationMs}ms · {result.Compile.ErrorCount} errors · {result.Compile.WarningCount} warnings");
+        transcript.AppendLine(result.Compile.Log);
+        transcript.AppendLine("=== csharp sidecar — run ===");
+        transcript.AppendLine($"exit {result.Run?.ExitCode ?? -1} · {result.Run?.DurationMs ?? -1}ms · timedOut={result.Run?.TimedOut ?? false}");
+        transcript.AppendLine($"stdin: {stdinPayload.Replace("\n", @"\n")}");
+        transcript.AppendLine($"stdout: {result.Run?.Stdout}");
+        if (!string.IsNullOrWhiteSpace(result.Run?.Stderr))
+            transcript.AppendLine($"stderr: {result.Run.Stderr}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== C# reference ===");
+        transcript.AppendLine($"computed: {expectedSum}");
+        transcript.AppendLine();
+        transcript.AppendLine($"=== equivalence verdict ===");
+        transcript.AppendLine($"sidecar_sum={csharpSum} reference_sum={expectedSum} match={match}");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "smoke",
+            sourceLanguage = scaffold.Spec?.Subroutine?.SourceLanguage ?? "csharp",
+            runtime = "dotnet10",
+            compileExit = result.Compile.ExitCode,
+            compileMs = result.Compile.DurationMs,
+            runExit = result.Run?.ExitCode ?? -1,
+            runMs = result.Run?.DurationMs ?? -1,
+            sidecarSum = csharpSum,
+            referenceSum = expectedSum,
+            match,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (match && result.Compile.ExitCode == 0 && (result.Run?.ExitCode ?? -1) == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = "Smoke equivalence: csharp sidecar (.NET 10) and C# reference agree on canonical input.";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = match ? "equivalence.runtime_error" : "equivalence.outputs_differ";
+            run.Summary = match
+                ? $"csharp sidecar exit codes non-zero (compile={result.Compile.ExitCode}, run={result.Run?.ExitCode})."
+                : $"Outputs differ: sidecar={csharpSum} vs reference={expectedSum}";
         }
 
         await _db.SaveChangesAsync(ct);

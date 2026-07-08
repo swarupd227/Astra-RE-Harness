@@ -1,0 +1,203 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "java",
+  "displayName": "Java 11 → Java 21 · Spring Boot 2 → 3 modernization",
+  "description": "Tier-3 in-place modernization: existing Java 11 code (Kiwiplan MES #1, hard Java-11 EOL Sept 2026) upgrading to Java 21 LTS + Spring Boot 3. This is NOT a cross-language migration — source and target are both Java — so the claim taxonomy captures UPGRADE ACTIONS, not idiom gaps. The dominant, mechanical-but-pervasive break is the jakarta namespace: Spring Boot 3 / Jakarta EE 9+ renamed every javax.* (servlet, persistence, validation, annotation, mail, xml.bind) to jakarta.*. Beyond that: APIs REMOVED between JDK 11 and 21 (Nashorn/javax.script nashorn engine gone in 15, RMI Activation, Applet, several sun.* internals under strong encapsulation); APIs DEPRECATED-for-removal still compiling but risky (finalize(), the Integer(int)/Date(y,m,d) constructors, Runtime.exec(String), the URL(String) constructor, SecurityManager); Spring Boot 2→3 breaking changes (WebSecurityConfigurerAdapter removed → SecurityFilterChain bean, antMatchers → requestMatchers, spring.factories → AutoConfiguration.imports, Hibernate 5→6); third-party MAJOR bumps forced by the above (Hibernate 5→6, Jakarta Validation, Jackson, Lombok, Mockito); and the non-breaking Java 21 LANGUAGE modernizations worth adopting (records, sealed classes, pattern matching for switch/instanceof — final in 21, switch expressions, text blocks, virtual threads, Stream.toList()). Because source AND target are Java, source-execution equivalence IS feasible in principle; the maven-sidecar runs JDK 21, so the modernized Java 21 target compiles and its JUnit suite runs offline, but the framework-level (Spring Boot 3 / jakarta) upgrades cannot be compiled offline (no Spring in the sidecar cache) and are expressed as documented contracts, not stubbed.",
+  "supportedSourceExtensions": [".java"],
+  "compatibleTargetStacks": ["java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants that MUST be preserved bit-for-bit across the 11→21 upgrade — the business rules a reviewer signs off on. The whole point of a modernization is that behaviour is unchanged, so invariants carry the most weight.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "jakartaNamespaceMigration",
+      "label": "javax → jakarta namespace",
+      "idPrefix": "JAK",
+      "specJsonField": "jakarta_namespace_migrations",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "A javax.* import/type that Spring Boot 3 / Jakarta EE 9+ renamed to jakarta.* — javax.persistence.*, javax.servlet.*, javax.validation.*, javax.annotation.* (PostConstruct/PreDestroy), javax.mail.*, javax.xml.bind.*. Mechanical but pervasive; every occurrence must move, and the matching dependency changes major version (e.g. hibernate-core → the jakarta-persistence artifact). Note: some javax.* packages did NOT move (javax.sql, javax.crypto, javax.naming stay) — flag only the ones that did.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "javax_symbol", "kind": "string", "required": true, "doc": "e.g. 'javax.persistence.Entity' or 'javax.validation.constraints.NotNull'." },
+        { "name": "jakarta_symbol", "kind": "string", "required": true, "doc": "e.g. 'jakarta.persistence.Entity'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "removedApiUsage",
+      "label": "Removed API usage",
+      "idPrefix": "REM",
+      "specJsonField": "removed_api_usages",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Use of a JDK API that was REMOVED between Java 11 and Java 21 and will NOT compile/run on 21: the Nashorn JavaScript engine + javax.script 'nashorn' (removed JDK 15), RMI Activation (JDK 17), the Applet API (deprecated for removal, gone), pack200, several com.sun.* / sun.* internals now under strong encapsulation (JEP 403, JDK 17), and Thread.stop/suspend/resume behavior. Each needs a concrete replacement or an SME decision.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "removed_symbol", "kind": "string", "required": true },
+        { "name": "removed_in", "kind": "string", "required": false, "doc": "The JDK version that removed it, e.g. 'JDK 15'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "replacement", "kind": "string", "required": true, "doc": "The concrete Java 21 replacement, e.g. 'GraalVM JS / a rules engine' for Nashorn." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "deprecatedApiUsage",
+      "label": "Deprecated (for-removal) API usage",
+      "idPrefix": "DEP",
+      "specJsonField": "deprecated_api_usages",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Use of an API that still COMPILES on 21 but is deprecated (often for-removal) and should be replaced during the upgrade: Object.finalize(), the Integer(int)/Long(long)/Double(double) boxing constructors (use valueOf), the Date(year,month,day) constructor (use LocalDate/Calendar), Runtime.exec(String) (use the String[] overload / ProcessBuilder), the URL(String) constructor (use URI.create(..).toURL()), and SecurityManager (deprecated for removal, JEP 411).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "deprecated_symbol", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "replacement", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "springBootUpgrade",
+      "label": "Spring Boot 2 → 3 upgrade action",
+      "idPrefix": "SB",
+      "specJsonField": "spring_boot_upgrades",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "A Spring Boot 2 → 3 (Spring Framework 6) breaking change: WebSecurityConfigurerAdapter removed → a SecurityFilterChain @Bean; HttpSecurity.antMatchers/mvcMatchers → requestMatchers; spring.factories auto-config → META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports; @ConstructorBinding placement change; trailing-slash matching now off by default; Hibernate 5 → 6 (HQL/Criteria changes, the id-generator default change); and many property renames. Each is an explicit upgrade action tied to the jakarta move (SB3 requires Java 17+ and jakarta).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "area", "kind": "enum:security|autoconfig|web-mvc|data-jpa|properties|actuator|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "sb3_form", "kind": "string", "required": true, "doc": "The Spring Boot 3 replacement, e.g. 'a SecurityFilterChain @Bean using requestMatchers'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "libraryMajorBump",
+      "label": "Third-party library major bump",
+      "idPrefix": "LIB",
+      "specJsonField": "library_major_bumps",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "A third-party dependency that must jump a MAJOR version because of the Java 21 / jakarta / Spring Boot 3 move, with its own breaking changes: Hibernate 5 → 6 (jakarta.persistence, new id generation), the Jakarta Validation provider (hibernate-validator 6 → 8), Jackson, Lombok (Java 21 support needs a recent version), Mockito (inline mock maker / JDK 21), and the build plugins (maven-compiler/surefire, spring-boot-maven-plugin 3.x). Flag the library, the from→to majors, and the notable breakage.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "library", "kind": "string", "required": true },
+        { "name": "from_to", "kind": "string", "required": false, "doc": "e.g. 'Hibernate 5.x → 6.x'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "modernizationOpportunity",
+      "label": "Java 21 modernization opportunity",
+      "idPrefix": "MOD",
+      "specJsonField": "modernization_opportunities",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "A NON-breaking chance to adopt a Java 21 language feature that makes the upgraded code clearer and is finalized (no --enable-preview): a verbose data-carrier POJO (getters/equals/hashCode/toString) → a record; a closed type hierarchy → a sealed interface + records; an if-else/instanceof chain → pattern matching for switch (JEP 441, final in 21); a statement switch → a switch expression; concatenated multi-line strings → a text block; a thread-per-request executor → virtual threads (JEP 444); and Stream.collect(toList()) → Stream.toList(). These are opportunities, not requirements — the SME decides scope.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "feature", "kind": "enum:record|sealed|pattern-switch|switch-expression|text-block|virtual-threads|stream-toList|var|other", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Subtle BEHAVIOURAL changes across 11→21 that a purely mechanical upgrade can miss: strictfp is now always-on (JEP 306, JDK 17) so some floating-point results changed on non-strict code; List.of()/Collectors.toUnmodifiableList() and Stream.toList() return UNMODIFIABLE lists (mutating them throws, unlike the old ArrayList from collect(toList())); the default locale/charset provider and CLDR locale data updated (JDK 9+) so String.format / number formatting can differ; time-zone data updates; and the Hibernate 6 default id-generation / naming-strategy change. Each must be verified, not assumed identical.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Upgrade decisions needing SME resolution: whether to adopt the Java Platform Module System (JPMS) or stay on the classpath; which packages need --add-opens because of strong encapsulation (JEP 403) of JDK internals; the replacement strategy for a removed SecurityManager; the build-tool and CI base-image JDK bump (Maven/Gradle plugin versions, Docker base image → temurin:21); and whether to take the virtual-threads throughput win now or defer.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false },
+    { "name": "target_archetype_hint", "kind": "enum:SpringService|SpringRestController|DomainType", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "output", "input-output", "return", "field"],
+    "directionDescription": "Java method/field surfaces. in = parameter; return = return value; field = a class field (relevant when a POJO becomes a record)."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "jakartaNamespaceMigration",
+      "removedApiUsage",
+      "deprecatedApiUsage",
+      "springBootUpgrade",
+      "libraryMajorBump",
+      "modernizationOpportunity",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "jakartaNamespaceMigration": 0,
+      "removedApiUsage": 0,
+      "deprecatedApiUsage": 0,
+      "springBootUpgrade": 0,
+      "libraryMajorBump": 0,
+      "modernizationOpportunity": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Every javax.* import that moved is a jakartaNamespaceMigration claim (give the exact jakarta.* symbol; do NOT flag javax.sql/crypto/naming which stayed). Removed APIs (Nashorn, RMI Activation, sun.* internals) are removedApiUsage with a concrete replacement. finalize(), boxing constructors, Date(y,m,d), Runtime.exec(String), URL(String), SecurityManager are deprecatedApiUsage. WebSecurityConfigurerAdapter/antMatchers/spring.factories/Hibernate-5 patterns are springBootUpgrade. Hibernate 5→6 and validator/Jackson/Lombok/Mockito bumps are libraryMajorBump. Verbose POJOs, closed hierarchies, instanceof chains, statement switches, multi-line string concatenation are modernizationOpportunity (record/sealed/pattern-switch/switch-expression/text-block). strictfp-always-on, unmodifiable toList(), and locale-data changes are edgeCase. JPMS, --add-opens, and the CI/base-image JDK bump are openQuestions. Behaviour must be preserved — invariants are paramount."
+  },
+  "owner": "Nous · Java modernization accelerator",
+  "calibratedAgainst": [
+    "Tier-3 Java 11 portfolio (Kiwiplan MES #1, Java-11 EOL Sept 2026)",
+    "JDK 11→21 migration guide + Spring Boot 3.0 migration guide + Jakarta EE 9 rename"
+  ]
+}

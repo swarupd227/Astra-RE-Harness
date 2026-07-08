@@ -16,7 +16,7 @@
     "fallback": "Used when the routine sits inside fmt::* and exposes a format-string-plus-args API surface."
   },
   "owner": "Nous · C++ migration accelerator",
-  "status": "preview",
+  "status": "production",
   "files": [
     { "path": "Demo.Fmt.csproj",                "language": "xml",    "derivedFromClaimIds": [] },
     { "path": "tests/Demo.Fmt.Tests.csproj",    "language": "xml",    "derivedFromClaimIds": [] },

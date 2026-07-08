@@ -1,0 +1,29 @@
+{
+  "entryId": "java-stream-tolist-unmodifiable",
+  "schemaId": "java",
+  "title": "Stream.toList() returns an UNMODIFIABLE list — a later .add() throws where collect(toList()) did not",
+  "trapCategory": "edge/unmodifiable-toList",
+  "difficulty": "hard",
+  "sourcePath": "java/snippets/BatchPlanner.java",
+  "sourceLines": "1-15",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport java.util.List;\nimport java.util.stream.Collectors;\n\npublic class BatchPlanner {\n    // Returns SKUs above a threshold; the caller later MUTATES the list.\n    public List<String> highPriority(List<WorkItem> items) {\n        List<String> result = items.stream()\n            .filter(i -> i.getQty() > 10)\n            .map(WorkItem::getSku)\n            .collect(Collectors.toList()); // mutable ArrayList in Java 11\n        result.add(\"EXPEDITE\");            // caller mutates the result\n        return result;\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(toList|unmodifiable|immutable|\\.add|UnsupportedOperation|mutat|ArrayList|Collectors)"
+    },
+    {
+      "kind": "modernizationOpportunity",
+      "id": "MOD-1",
+      "pattern": "(?i)(toList|Stream\\.toList|collect|modern|Java\\s*(16|17|21))"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(qty\\s*>\\s*10|filter|sku|EXPEDITE|threshold|priority)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "A naive modernization of collect(Collectors.toList()) to Stream.toList() would BREAK this code: Stream.toList() returns an unmodifiable list, so the subsequent result.add(\"EXPEDITE\") throws UnsupportedOperationException. Because the list is mutated here, the collect(toList()) must stay (or become a mutable copy). This is exactly the behavioural edge case a mechanical upgrade misses; the invariant is the filtered SKUs plus EXPEDITE."
+}

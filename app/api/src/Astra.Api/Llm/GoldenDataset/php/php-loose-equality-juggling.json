@@ -1,0 +1,29 @@
+{
+  "entryId": "php-loose-equality-juggling",
+  "schemaId": "php",
+  "title": "Loose == juggling: \"0\" == false and (PHP7) 0 == \"SAVE10\" silently void a valid coupon",
+  "trapCategory": "type/loose-equality",
+  "difficulty": "hard",
+  "sourcePath": "php/snippets/discount.php",
+  "sourceLines": "1-14",
+  "sourceContent": "<?php\n// discount.php - apply a coupon, with loose-comparison traps\nfunction applyCoupon($subtotal, $couponCode) {\n    // TRAP: if $couponCode is the string \"0\", (\"0\" == false) is TRUE,\n    // so a legitimate coupon \"0\" is treated as \"no coupon\".\n    if ($couponCode == false) {\n        return $subtotal;\n    }\n    // TRAP: in PHP 7, (0 == \"SAVE10\") is TRUE; PHP 8 fixed it.\n    if ($couponCode == 0) {\n        return $subtotal;\n    }\n    $rate = ($couponCode === \"SAVE10\") ? 0.10 : 0.0;\n    return $subtotal - ($subtotal * $rate);\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "looseTypeCoercion",
+      "id": "LTC-1",
+      "pattern": "(?i)(juggl|loose|==\\s*false|==\\s*0|\\\"0\\\"|coerc|strict|===|typed)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(PHP\\s*8|PHP\\s*7|version|non-numeric|comparison\\s+chang|0\\s*==)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(coupon|discount|subtotal|reduce|rate|SAVE10)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "PHP loose == juggles types: \"0\" == false is true, and pre-PHP-8 0 == \"SAVE10\" is true (string coerced to int 0), so ANY non-numeric coupon voids the discount. PHP 8 changed the 0 == \"abc\" case to false, so the result is version-sensitive. The Java/.NET target must use an explicit typed comparison (=== semantics), not a naive == translation."
+}

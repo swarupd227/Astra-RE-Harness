@@ -1,0 +1,18 @@
+{
+  "entryId": "csharp-httpcontext-current",
+  "schemaId": "csharp",
+  "title": "HttpContext.Current is null in .NET 10 — replace with IHttpContextAccessor injected via DI",
+  "trapCategory": "api/ambient-context",
+  "difficulty": "medium",
+  "sourcePath": "csharp/snippets/httpcontext_current.cs",
+  "sourceLines": "1-22",
+  "sourceContent": "using System.Web;\n\npublic class AuditHelper\n{\n    // ASP.NET Framework: HttpContext.Current is a static ambient.\n    // Calling this from a background thread or async continuation\n    // already returned null in Framework; in .NET 10 it does not exist.\n    public static string GetCurrentUserId()\n    {\n        var ctx = HttpContext.Current;\n        if (ctx == null) return \"anonymous\";\n        return ctx.User?.Identity?.Name ?? \"anonymous\";\n    }\n\n    // Also common: reading the raw URL from the ambient context.\n    public static string GetRequestPath()\n    {\n        return HttpContext.Current?.Request?.RawUrl ?? \"/\";\n    }\n}\n",
+  "expectedClaims": [
+    { "kind": "obsoleteApiUsage", "id": "OA-HC-1", "pattern": "(?i)(HttpContext\\.Current|System\\.Web\\.HttpContext|ambient\\s+context|static\\s+HttpContext)" },
+    { "kind": "dependencyInjectionContract", "id": "DI-HC-1", "pattern": "(?i)(IHttpContextAccessor|inject.*HttpContext|HttpContext.*inject|AddHttpContextAccessor)" },
+    { "kind": "asyncAntiPattern", "id": "AP-HC-1", "pattern": "(?i)(background\\s+thread|async\\s+continu|null.*background|thread.*ambient)" },
+    { "kind": "openQuestion", "id": "Q-HC-1", "pattern": "(?i)(static.*helper|utility.*class|singleton.*context|refactor.*inject)" }
+  ],
+  "canonicalInputs": [],
+  "notes": "HttpContext.Current is the most common Framework → Core migration break. In .NET 10 System.Web is gone entirely. The fix is to inject IHttpContextAccessor into the consuming class and call .HttpContext?.User. Watch for it in static helper classes, which cannot use constructor injection — those classes must be refactored to instance types or dissolved. Background threads always received null from this API even in Framework, so any code that relied on it from a ThreadPool callback was already latently broken."
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-dotnet10-webapi",
+  "targetStack": "dotnet10",
+  "displayName": "C# / VB.NET Web API 2 → .NET 10 ASP.NET Core Web API (controllers) + xUnit",
+  "description": "Reference scaffold for migrating ASP.NET Web API 2 / MVC 5 controller-based APIs to ASP.NET Core 10 with full [ApiController] + [Route] attribute routing. This is the target for DDI Inform (#2 — complex VB.NET + C# mixed codebase with deep routing trees and OData queries). Includes: Asp.Versioning for v1/v2 API versioning, NSwag for OpenAPI 3.1 document generation, EF Core 10 with SQL Server provider, Serilog structured logging wired to OpenTelemetry, Problem Details (RFC 9457) for all error responses, and full DI registration for all services. Targets net10.0. Constructor injection only — no DependencyResolver or service locator.",
+  "compatibleSchemas": ["csharp", "vbnet"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "CustomersController.GetCustomer" },
+      { "subroutineName": "OrdersController.CreateOrder" },
+      { "subroutineName": "ProductsController.SearchProducts" },
+      { "subroutineName": "InvoicesController.ExportInvoice" }
+    ],
+    "fallback": "Used whenever the spec's target_archetype_hint is 'WebApiControllers' and schemaId is 'csharp' or 'vbnet'. Primary target for former ASP.NET Web API 2 / MVC 5 projects with complex routing or OData."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Demo.CustomerApi.csproj",                  "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Demo.CustomerApi.Tests.csproj",      "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/SpecClaimAttribute.cs",                "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Program.cs",                           "language": "csharp", "derivedFromClaimIds": ["DI-1","DI-2","DI-3"] },
+    { "path": "src/Controllers/CustomersController.cs",   "language": "csharp", "derivedFromClaimIds": ["INV-1","OA-1","OA-2","EH-1","AP-1"] },
+    { "path": "src/Services/CustomerService.cs",          "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1","SE-1"] },
+    { "path": "src/Repositories/CustomerRepository.cs",   "language": "csharp", "derivedFromClaimIds": ["INV-2","SE-1","DI-2"] },
+    { "path": "src/Models/CustomerDto.cs",                "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Infrastructure/AppDbContext.cs",        "language": "csharp", "derivedFromClaimIds": ["DI-2"] },
+    { "path": "tests/CustomerServiceTests.cs",            "language": "csharp", "derivedFromClaimIds": ["INV-1","INV-2","EC-1"] }
+  ]
+}

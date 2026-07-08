@@ -30,6 +30,11 @@ from parser_sidecar.cobol_parser import parse_source as _cobol_parse
 from parser_sidecar.delphi_parser import parse_source as _delphi_parse_v0
 from parser_sidecar.cpp_parser import parse_source as _cpp_parse_v0
 from parser_sidecar.vb6_parser import parse_source as _vb6_parse_v0
+from parser_sidecar.csharp_parser import parse_source as _csharp_parse_v0
+from parser_sidecar.vbnet_parser import parse_source as _vbnet_parse_v0
+from parser_sidecar.abl_parser import parse_source as _abl_parse_v0
+from parser_sidecar.java_parser import parse_source as _java_parse_v0
+from parser_sidecar.php_parser import parse_source as _php_parse_v0
 
 # Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
 # Imported lazily so a missing/broken grammar binding doesn't take the
@@ -42,6 +47,8 @@ _cpp_parse_libclang: "any | None" = None
 # Phase 10.0.a — production VB6 parser (ANTLR4 per ADR-035). Same
 # lazy-import + v0-fallback shape; the ANTLR4 grammar lands in 10.0.a.2.
 _vb6_parse_antlr: "any | None" = None
+# Phase 12.0 — C# v0 tokenizer; Phase 12.1 will swap in Roslyn/tree-sitter.
+# No lazy-import needed — _csharp_parse_v0 is always available.
 
 
 def _delphi_parse(filename: str, content: str):
@@ -113,6 +120,101 @@ def _cpp_parse(filename: str, content: str):
             return outcome
     return _cpp_parse_v0(filename=filename, content=content)
 
+
+def _csharp_parse(filename: str, content: str):
+    """Phase 12.0 — C# v0 tokenizer. Phase 12.1 will add Roslyn or
+    tree-sitter-c-sharp here with the same lazy-import + v0-fallback
+    shape used by the Delphi and C++ dispatchers."""
+    return _csharp_parse_v0(filename=filename, content=content)
+
+
+def _vbnet_parse(filename: str, content: str):
+    """Phase 12.2 — dedicated VB.NET structural parser. The VB.NET tokenizer
+    understands the full modifier grammar (Protected/Shared/Async/Overrides),
+    auto-properties, and Class/Module/Namespace containers that the VB6
+    tokenizer silently drops. On any unexpected error it falls back to the
+    VB6 v0 tokenizer (which recognises the shared Sub/Function block shape),
+    recording the fallback in `warnings` — same posture as the Delphi/C++/VB6
+    production dispatchers. A Roslyn-backed parser can slot in here later."""
+    try:
+        return _vbnet_parse_v0(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
+        log.info("vbnet parser error on %s (%s); vb6 tokenizer fallback", filename, e)
+        outcome = _vb6_parse_v0(filename=filename, content=content)
+        outcome.warnings.append(f"vbnet parser error: {e}; vb6 tokenizer fallback")
+        return outcome
+
+
+def _abl_parse(filename: str, content: str):
+    """Phase 13.0 — Progress OpenEdge ABL (.p/.w/.i) structural parser. The
+    ABL tokenizer surfaces PROCEDURE/FUNCTION/METHOD blocks, the file-level
+    main block, and RUN/{include} references for the documentation pipeline.
+    On any unexpected error it degrades to a single whole-file routine so an
+    unparseable file is still catalogued rather than dropped."""
+    try:
+        return _abl_parse_v0(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
+        log.warning("abl parser error on %s (%s); emitting whole-file routine", filename, e)
+        from parser_sidecar.abl_parser import ParseOutcome, SubroutineSummary
+        lines = (content or "").count("\n") + 1
+        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        return ParseOutcome(
+            line_count=lines,
+            subroutines=[SubroutineSummary(
+                name=f"{stem} (unparsed)", signature=f"External procedure {stem}",
+                line_start=1, line_end=lines,
+                common_block_refs=tuple(), called_subroutines=tuple())],
+            warnings=[f"abl parser error: {e}; whole-file fallback"],
+            filename=filename,
+        )
+
+
+def _java_parse(filename: str, content: str):
+    """Phase 14.0 — Java (.java) structural parser. The brace-aware tokenizer
+    surfaces constructors, methods, interface stubs, and the type hierarchy for
+    the documentation pipeline. On any unexpected error it degrades to a single
+    whole-file routine so an unparseable file is still catalogued."""
+    try:
+        return _java_parse_v0(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
+        log.warning("java parser error on %s (%s); emitting whole-file routine", filename, e)
+        from parser_sidecar.java_parser import ParseOutcome, SubroutineSummary
+        lines = (content or "").count("\n") + 1
+        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        return ParseOutcome(
+            line_count=lines,
+            subroutines=[SubroutineSummary(
+                name=f"{stem} (unparsed)", signature=f"Type {stem}",
+                line_start=1, line_end=lines,
+                common_block_refs=tuple(), called_subroutines=tuple())],
+            warnings=[f"java parser error: {e}; whole-file fallback"],
+            filename=filename,
+        )
+
+
+def _php_parse(filename: str, content: str):
+    """Phase 15.0 — PHP (.php) structural parser. The brace-aware tokenizer
+    surfaces classes/traits, functions, methods, and interface stubs for the
+    documentation pipeline. On any unexpected error it degrades to a single
+    whole-file routine so an unparseable file is still catalogued."""
+    try:
+        return _php_parse_v0(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
+        log.warning("php parser error on %s (%s); emitting whole-file routine", filename, e)
+        from parser_sidecar.php_parser import ParseOutcome, SubroutineSummary
+        lines = (content or "").count("\n") + 1
+        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        return ParseOutcome(
+            line_count=lines,
+            subroutines=[SubroutineSummary(
+                name=f"{stem} (unparsed)", signature=f"PHP unit {stem}",
+                line_start=1, line_end=lines,
+                common_block_refs=tuple(), called_subroutines=tuple())],
+            warnings=[f"php parser error: {e}; whole-file fallback"],
+            filename=filename,
+        )
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"astra-parser","msg":"%(message)s"}',
@@ -155,6 +257,11 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         is_delphi = (not is_cobol) and _looks_like_delphi(filename)
         is_cpp = (not is_cobol) and (not is_delphi) and _looks_like_cpp(filename)
         is_vb6 = (not is_cobol) and (not is_delphi) and (not is_cpp) and _looks_like_vb6(filename)
+        is_csharp = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and _looks_like_csharp(filename)
+        is_vbnet = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and _looks_like_vbnet(filename)
+        is_abl = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and _looks_like_abl(filename)
+        is_java = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and (not is_abl) and _looks_like_java(filename)
+        is_php = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and (not is_abl) and (not is_java) and _looks_like_php(filename)
         # fparser2 is the only parser that needs the process-wide lock
         # (global SymbolTable singleton); the COBOL / Delphi / C++ / VB6 paths
         # are purely local. We acquire the lock only for the Fortran path.
@@ -186,6 +293,41 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             outcome_warnings = vb6_outcome.warnings
             outcome_filename = vb6_outcome.filename
             language = "vb6"
+        elif is_csharp:
+            cs_outcome = _csharp_parse(filename=filename, content=request.content or "")
+            outcome_line_count = cs_outcome.line_count
+            outcome_subroutines = cs_outcome.subroutines
+            outcome_warnings = cs_outcome.warnings
+            outcome_filename = cs_outcome.filename
+            language = "csharp"
+        elif is_vbnet:
+            vbnet_outcome = _vbnet_parse(filename=filename, content=request.content or "")
+            outcome_line_count = vbnet_outcome.line_count
+            outcome_subroutines = vbnet_outcome.subroutines
+            outcome_warnings = vbnet_outcome.warnings
+            outcome_filename = vbnet_outcome.filename
+            language = "vbnet"
+        elif is_abl:
+            abl_outcome = _abl_parse(filename=filename, content=request.content or "")
+            outcome_line_count = abl_outcome.line_count
+            outcome_subroutines = abl_outcome.subroutines
+            outcome_warnings = abl_outcome.warnings
+            outcome_filename = abl_outcome.filename
+            language = "openedge"
+        elif is_java:
+            java_outcome = _java_parse(filename=filename, content=request.content or "")
+            outcome_line_count = java_outcome.line_count
+            outcome_subroutines = java_outcome.subroutines
+            outcome_warnings = java_outcome.warnings
+            outcome_filename = java_outcome.filename
+            language = "java"
+        elif is_php:
+            php_outcome = _php_parse(filename=filename, content=request.content or "")
+            outcome_line_count = php_outcome.line_count
+            outcome_subroutines = php_outcome.subroutines
+            outcome_warnings = php_outcome.warnings
+            outcome_filename = php_outcome.filename
+            language = "php"
         else:
             with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
@@ -287,6 +429,69 @@ def _looks_like_cpp(filename: str) -> bool:
         # arrives later we'll add a `.c` → C-mode branch.
         ".h",
     ))
+
+
+def _looks_like_csharp(filename: str) -> bool:
+    """Return True when the file path's extension marks it as C# source.
+
+    Phase 12.0: .cs (primary C# unit) and .csx (C# script, used in
+    some legacy build-automation files). .cshtml (Razor MVC views) is
+    excluded — the parser extracts code-behind logic, not template markup.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".cs", ".csx"))
+
+
+def _looks_like_vbnet(filename: str) -> bool:
+    """Return True when the file path's extension marks it as VB.NET source.
+
+    Phase 12.0: .vb covers all VB.NET source files. .vbhtml (Razor)
+    is excluded for the same reason as .cshtml above.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".vb",))
+
+
+def _looks_like_abl(filename: str) -> bool:
+    """Return True when the file path's extension marks it as Progress
+    OpenEdge ABL source.
+
+    Phase 13.0: .p (procedure/program), .w (SmartWindow), .i (include).
+    OO `.cls` is intentionally excluded — that extension is already claimed
+    by VB6 class modules, so ABL classes need content-based disambiguation
+    (deferred). Legacy Progress apps are overwhelmingly procedural .p/.w.
+    """
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith((".p", ".w", ".i"))
+
+
+def _looks_like_java(filename: str) -> bool:
+    """Return True when the file path's extension marks it as Java source.
+
+    Phase 14.0: .java covers all Java source. `.jav` (rare legacy) is not
+    matched. Kotlin/Scala/Groovy JVM languages are separate and excluded.
+    """
+    if not filename:
+        return False
+    return filename.lower().endswith(".java")
+
+
+def _looks_like_php(filename: str) -> bool:
+    """Return True when the file path's extension marks it as PHP source.
+
+    Phase 15.0: .php covers PHP code files. `.phtml` (Magento view templates)
+    is excluded — the parser extracts code, not template markup, same posture
+    as .cshtml / .vbhtml.
+    """
+    if not filename:
+        return False
+    return filename.lower().endswith(".php")
 
 
 def serve() -> None:

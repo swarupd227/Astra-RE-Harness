@@ -1,0 +1,29 @@
+{
+  "entryId": "php-money-float-precision",
+  "schemaId": "php",
+  "title": "Money as a PHP float loses precision (0.1+0.2 != 0.3); plus a loose == \"0\" comparison on the total",
+  "trapCategory": "numeric/money-float",
+  "difficulty": "medium",
+  "sourcePath": "php/snippets/invoice.php",
+  "sourceLines": "1-13",
+  "sourceContent": "<?php\n// invoice.php - line total with float money (precision trap)\nfunction lineTotal($price, $qty) {\n    // TRAP: PHP floats can't represent decimal money exactly\n    // (0.1 + 0.2 !== 0.3). Money must be a decimal type in the target.\n    $total = $price * $qty;\n    // TRAP: loose comparison of a float to an int-looking string.\n    if ($total == \"0\") {\n        return 0.0;\n    }\n    return round($total, 2);\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(float|precision|decimal|money|0\\.1|round|BigDecimal)"
+    },
+    {
+      "kind": "looseTypeCoercion",
+      "id": "LTC-1",
+      "pattern": "(?i)(==\\s*\\\"0\\\"|loose|juggl|coerc|strict|typed\\s+compar|===)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(total|price\\s*\\*\\s*qty|round|line|2\\s*decimal)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Money computed and stored as a PHP float can't represent decimals exactly, so the target must use BigDecimal/decimal, never double. There is also a loose $total == \"0\" comparison (float vs numeric string) that must become an explicit typed check. The invariant is total = price*qty rounded to 2dp."
+}

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    PHP → .NET 8 / C# 12 reference scaffold for an Acme storefront cart/pricing
+    slice, from a signed php spec (targetStack=dotnet8). The SME picks this OR
+    the sibling java-spring/canonical-php-catalog-service per routine.
+
+    Built as a console Exe so the csharp-sidecar's /compile-and-run can EXECUTE
+    the acceptance harness in Program.cs — that harness is the runnable
+    verification (the sidecar has no xUnit runner, so a runnable Main is the way
+    to genuinely execute + assert the C# domain logic, not just compile it).
+    Dependency-free, so `dotnet publish` needs no NuGet beyond the base SDK.
+
+    PHP has a free runtime, so source-execution equivalence is FEASIBLE via a
+    future php-sidecar (run the PHP, compare) — but that is not built, so
+    equivalence is NOT claimed. Verification = golden extraction score + this
+    compile + the Program.cs acceptance run.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Acme.Catalog</RootNamespace>
+    <AssemblyName>Acme.Catalog</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Compiled against the .NET 8 targeting pack (this is the dotnet8 target
+         stack). The csharp-sidecar image ships ONLY the .NET 10 runtime, so a
+         framework-dependent net8 app cannot launch there without
+         roll-forward. LatestMajor lets it execute on the sidecar's .NET 10
+         runtime for the acceptance-harness gate, while still running natively on
+         a real .NET 8 runtime in production. -->
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+</Project>

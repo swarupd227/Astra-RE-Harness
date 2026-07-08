@@ -1,0 +1,55 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-java-modernization",
+  "targetStack": "java-spring",
+  "displayName": "Kiwiplan MES (Java 11 → Java 21 / Spring Boot 3, JUnit 5)",
+  "description": "Reference Java 11 → Java 21 LTS + Spring Boot 3 IN-PLACE modernization scaffold for a Kiwiplan MES work-order slice, from a signed java spec (schemaId=java, targetStack=java-spring). Source and target are both Java, so this shows the MODERNIZED forms rather than a language translation: a verbose POJO → a record (Dimensions/WorkItem); an int status + if-else → a sealed interface + pattern-matching switch (WorkOrderState/WorkOrderStateMachine); new Date(y-1900,m-1,d)/new Integer(int) → java.time.LocalDate/Integer.valueOf (ShipmentScheduler); collect(Collectors.toList()) that is later mutated → a mutable copy of Stream.toList() (BatchPlanner, the unmodifiable-toList edge case); and multi-line concatenation → a text block (PricingReport). The framework-level upgrades — javax.* → jakarta.*, WebSecurityConfigurerAdapter → SecurityFilterChain — cannot compile offline (no Spring/jakarta in the maven-sidecar cache) and are documented @Modernization contracts (SecurityConfigContract), not stubbed. Builds OFFLINE on the sidecar's JDK 21 with real JUnit tests that verify behaviour is preserved across the upgrade. This completes the portfolio: Java is the last of the client's source languages to get a migration stack.",
+  "compatibleSchemas": ["java"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "WorkOrder" },
+      { "subroutineName": "SecurityConfig" },
+      { "subroutineName": "PricingRuleEvaluator" },
+      { "subroutineName": "ShipmentScheduler" },
+      { "subroutineName": "Dimensions" },
+      { "subroutineName": "BatchPlanner" },
+      { "subroutineName": "dueDate" },
+      { "subroutineName": "highPriority" }
+    ],
+    "fallback": "Used for java routines being modernized to Java 21 / Spring Boot 3 (jakarta move, removed/deprecated APIs, Spring Boot 2→3, or Java 21 language adoption)."
+  },
+  "owner": "Nous · Java modernization accelerator",
+  "status": "preview",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "Source and target are both Java, so equivalence is feasible in principle (run Java 11 vs Java 21 on the same inputs) — but it is not wired, and the framework-level upgrades can't run offline anyway. The golden score + this JUnit suite are the gates.",
+    "gatesActive": [
+      "golden-dataset extraction score (java modernization claims)",
+      "maven-sidecar offline compile on JDK 21 (mvn -o test-compile)",
+      "JUnit 5 suite offline (behaviour-preservation tests over the modernized code)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "Java 11 vs Java 21 source-execution equivalence (feasible; not built)",
+      "property-test-sidecar (Hypothesis) — needs per-claim generatorHints on java.schema.json",
+      "framework-level compile (Spring Boot 3 / jakarta) — needs those artifacts in the sidecar's offline cache"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                              "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/kiwiplan/mes/SpecClaim.java",                        "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/kiwiplan/mes/Modernization.java",                    "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/kiwiplan/mes/Dimensions.java",                       "language": "java", "derivedFromClaimIds": ["MOD-1","EC-1","INV-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/WorkItem.java",                         "language": "java", "derivedFromClaimIds": ["MOD-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/WorkOrderState.java",                   "language": "java", "derivedFromClaimIds": ["MOD-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/WorkOrderStateMachine.java",            "language": "java", "derivedFromClaimIds": ["MOD-1","INV-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/ShipmentScheduler.java",                "language": "java", "derivedFromClaimIds": ["DEP-1","EC-1","INV-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/BatchPlanner.java",                     "language": "java", "derivedFromClaimIds": ["EC-1","INV-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/PricingReport.java",                    "language": "java", "derivedFromClaimIds": ["MOD-1"] },
+    { "path": "src/main/java/com/kiwiplan/mes/SecurityConfigContract.java",           "language": "java", "derivedFromClaimIds": ["SB-1","JAK-1","INV-1"] },
+    { "path": "src/test/java/com/kiwiplan/mes/DimensionsTests.java",                  "language": "java", "derivedFromClaimIds": ["MOD-1","EC-1","INV-1"] },
+    { "path": "src/test/java/com/kiwiplan/mes/WorkOrderStateMachineTests.java",       "language": "java", "derivedFromClaimIds": ["MOD-1","INV-1"] },
+    { "path": "src/test/java/com/kiwiplan/mes/ShipmentSchedulerTests.java",           "language": "java", "derivedFromClaimIds": ["DEP-1","EC-1","INV-1"] },
+    { "path": "src/test/java/com/kiwiplan/mes/BatchPlannerTests.java",                "language": "java", "derivedFromClaimIds": ["EC-1","INV-1"] },
+    { "path": "src/test/java/com/kiwiplan/mes/PricingReportTests.java",               "language": "java", "derivedFromClaimIds": ["MOD-1"] }
+  ]
+}

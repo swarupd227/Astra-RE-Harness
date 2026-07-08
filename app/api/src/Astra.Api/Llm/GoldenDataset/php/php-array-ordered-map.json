@@ -1,0 +1,29 @@
+{
+  "entryId": "php-array-ordered-map",
+  "schemaId": "php",
+  "title": "A PHP cart array is one type doing duty as both list and map — the migration must resolve List vs Map, and money must not be a float",
+  "trapCategory": "type/array-shape",
+  "difficulty": "medium",
+  "sourcePath": "php/snippets/cart.php",
+  "sourceLines": "1-10",
+  "sourceContent": "<?php\n// cart.php - a cart is a PHP array doing double duty as list AND map\nfunction cartTotal($cart) {\n    // $cart is associative: sku => ['qty' => int, 'price' => float]\n    $total = 0.0;\n    foreach ($cart as $sku => $line) {\n        $total += $line['qty'] * $line['price'];\n    }\n    return $total;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "arrayShapeSemantics",
+      "id": "ARR-1",
+      "pattern": "(?i)(array|associative|map|dictionary|record|sku|list|ordered)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(total|sum|qty.*price|line\\s*item|foreach)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(float|precision|decimal|money|0\\.0|round|BigDecimal)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "$cart is an associative array keyed by sku, each value a record-shaped sub-array {qty, price}. The migration must decide LinkedHashMap/Dictionary (order-preserving) vs a CartLine record — a single PHP type is doing both jobs. Separately, $total starts as a float (0.0): money as float is a precision trap; the target must use BigDecimal/decimal."
+}

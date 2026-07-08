@@ -1,0 +1,29 @@
+{
+  "entryId": "java-nashorn-removed",
+  "schemaId": "java",
+  "title": "The Nashorn JavaScript engine was removed in JDK 15 — javax.script getEngineByName(\"nashorn\") returns null on 21",
+  "trapCategory": "removed-api/nashorn",
+  "difficulty": "hard",
+  "sourcePath": "java/snippets/PricingRuleEvaluator.java",
+  "sourceLines": "1-13",
+  "sourceContent": "package com.kiwiplan.mes;\n\nimport javax.script.ScriptEngine;\nimport javax.script.ScriptEngineManager;\n\npublic class PricingRuleEvaluator {\n    // Evaluates a customer-supplied pricing formula as JavaScript.\n    public double evaluate(String formula, double base) throws Exception {\n        ScriptEngineManager mgr = new ScriptEngineManager();\n        ScriptEngine engine = mgr.getEngineByName(\"nashorn\"); // REMOVED in JDK 15\n        engine.put(\"base\", base);\n        Object result = engine.eval(formula);\n        return ((Number) result).doubleValue();\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "removedApiUsage",
+      "id": "REM-1",
+      "pattern": "(?i)(nashorn|ScriptEngine|removed|JDK\\s*15|GraalVM|javax\\.script)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-1",
+      "pattern": "(?i)(GraalVM|rules\\s+engine|replace|eval|customer|security|which|strategy|SME|expression)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(evaluate|formula|base|result|pricing|double|number)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "getEngineByName(\"nashorn\") returns null on JDK 15+, so evaluate() NPEs at runtime — a removed-API break that compiles fine but fails in production. The replacement (GraalVM JS, a dedicated rules/expression engine, or removing runtime eval of customer input entirely) is a security-sensitive SME decision. The invariant is that evaluate returns the formula's numeric result given base."
+}

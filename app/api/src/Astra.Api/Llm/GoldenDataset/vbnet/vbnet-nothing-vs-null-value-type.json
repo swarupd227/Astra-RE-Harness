@@ -1,0 +1,29 @@
+{
+  "entryId": "vbnet-nothing-vs-null-value-type",
+  "schemaId": "vbnet",
+  "title": "'Nothing' on a value type means its DEFAULT (0/False), not null — 'x = Nothing' is not a null check",
+  "trapCategory": "nullability/nothing-vs-null",
+  "difficulty": "medium",
+  "sourcePath": "vbnet/snippets/order_state.vb",
+  "sourceLines": "1-14",
+  "sourceContent": "Public Class OrderState\n    ' For a VALUE type, `Nothing` is the type's default value (0 for Integer).\n    ' `qty = Nothing` is therefore `qty = 0` -- NOT a null check.\n    Public Function IsUnset(qty As Integer) As Boolean\n        Return qty = Nothing   ' TRUE when qty is 0\n    End Function\n\n    ' For a REFERENCE type, `Nothing` IS null.\n    Public Sub Reset(ByRef item As Object)\n        item = Nothing\n    End Sub\nEnd Class\n",
+  "expectedClaims": [
+    {
+      "kind": "edgeCase",
+      "id": "EC-NUL-1",
+      "pattern": "(?i)(Nothing|default\\s+value|value\\s+type|== 0|== default|null)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-NUL-1",
+      "pattern": "(?i)(IsUnset|qty|Integer|reference\\s+type)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-NUL-1",
+      "pattern": "(?i)(nullable|int\\?|intended.*null|sentinel|confirm)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "VB.NET overloads `Nothing` to mean both 'null' (reference types) and 'the default value' (value types). `qty = Nothing` on an Integer compiles and means `qty = 0`. A C# port must decide per-site whether the intent was a zero check (`qty == 0`) or genuine nullability (`int?` + `== null`); the two are behaviourally different and the extractor should raise an openQuestion."
+}

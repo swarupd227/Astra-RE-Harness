@@ -1,0 +1,212 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "csharp",
+  "displayName": "C# / .NET Framework → .NET 10",
+  "description": "C# source targeting .NET Framework 4.x, .NET Core, or .NET 8 that is to be migrated to .NET 10 LTS. Covers ASP.NET MVC / Web API controllers, WinForms, Windows Services, class libraries, and Console apps. Calibrated against the Tier-1 portfolio (Phase 12.0): DDI Inform, Pepperi, PINpoint, Commerce Vision CVe/Enact, Comsense, Abaca, PQ Systems. Key migration risks: HttpContext.Current removal, System.Web.* namespace replacement, Web.config → IConfiguration, Thread.CurrentPrincipal → ClaimsPrincipal, sync-over-async .Result/.Wait() patterns, and Windows-specific P/Invoke in headless services.",
+  "supportedSourceExtensions": [".cs", ".csx"],
+  "compatibleTargetStacks": ["dotnet10"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the method/type must preserve across all valid inputs. Includes return-value contracts, preconditions, postconditions, and thread-safety guarantees.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false, "doc": "Optional. Per-claim property-test generator hints per ADR-030. When present the 4th gate exercises the claim against generated .NET 10 inputs and the reference .NET Framework binary. When absent the gate skips with skipReason: no_hints." }
+      ]
+    },
+    {
+      "id": "obsoleteApiUsage",
+      "label": "Obsolete API usage",
+      "idPrefix": "OA",
+      "specJsonField": "obsolete_api_usages",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Calls to types or members that were removed, moved, or changed breaking semantics between .NET Framework 4.x and .NET 10. The most common: HttpContext.Current (System.Web), ConfigurationManager.AppSettings, System.Web.Mvc.* namespace, HttpServerUtility.MapPath, Thread.CurrentPrincipal set in ASP.NET pipeline, System.Web.HttpResponse.Redirect, TransactionScope with DTC, WCF ServiceModel (client or server), System.Drawing on Linux. Each instance is a blocker for compilation on .NET 10.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "api_signature", "kind": "string", "required": true, "doc": "The fully-qualified type or member being called (e.g. 'System.Web.HttpContext.Current', 'System.Configuration.ConfigurationManager.AppSettings[\"key\"]', 'System.Web.Mvc.Controller')." },
+        { "name": "removal_reason", "kind": "enum:Removed|Moved|SemanticChange|PlatformOnly|Deprecated", "required": true, "doc": "Removed = type/member gone entirely; Moved = now in a different NuGet package or namespace; SemanticChange = exists but behaves differently; PlatformOnly = still exists but only on Windows; Deprecated = still compiles but flagged for future removal." },
+        { "name": "description", "kind": "string", "required": true, "doc": "What the call does today and why the current usage breaks on .NET 10." },
+        { "name": "replacement_hint", "kind": "string", "required": true, "doc": "The recommended .NET 10 replacement (e.g. 'IHttpContextAccessor.HttpContext injected via DI', 'IConfiguration[\"key\"] from appsettings.json', 'Microsoft.AspNetCore.Mvc.Controller')." },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "dependencyInjectionContract",
+      "label": "Dependency injection contract",
+      "idPrefix": "DI",
+      "specJsonField": "dependency_injection_contracts",
+      "textField": "contract",
+      "displayTone": "scaffolded",
+      "description": "Services, repositories, or infrastructure objects the type consumes. In .NET Framework, these were typically instantiated with `new`, pulled from IoC containers via service locators, or accessed through static HttpContext/ConfigurationManager. In .NET 10 they must become constructor-injected dependencies. Captures the interface + lifetime (Singleton, Scoped, Transient) and any lifetime mismatch risks (e.g. a Singleton injecting a Scoped DbContext).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "dependency_type", "kind": "string", "required": true, "doc": "The type being consumed (e.g. 'SqlConnection', 'MyRepository', 'ILogger', 'IConfiguration')." },
+        { "name": "current_resolution", "kind": "enum:NewExpression|ServiceLocator|StaticAccess|ConstructorInjected|PropertyInjected|MethodParameter", "required": true, "doc": "How the dependency is currently obtained." },
+        { "name": "recommended_lifetime", "kind": "enum:Singleton|Scoped|Transient|Unknown", "required": true },
+        { "name": "contract", "kind": "string", "required": true, "doc": "What the consuming type expects of the dependency — methods called, assumptions about state." },
+        { "name": "lifetime_risk", "kind": "string", "required": false, "doc": "Any lifetime mismatch concern (e.g. 'DbContext captured in Singleton causes concurrency issues — must be Scoped or use IDbContextFactory<T>')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "asyncAntiPattern",
+      "label": "Async anti-pattern",
+      "idPrefix": "AP",
+      "specJsonField": "async_anti_patterns",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Synchronous blocking on async work — the primary cause of deadlocks when porting ASP.NET MVC to ASP.NET Core. Patterns: `.Result` on a Task, `.Wait()` on a Task, `Task.Run(() => asyncMethod().Result).Result`, `async void` event handlers used for non-event paths, `SynchronizationContext.Current` assumptions. In .NET Framework ASP.NET the synchronisation context makes these 'work by accident'; in ASP.NET Core there is no synchronisation context and the deadlock disappears — but it can still cause thread-pool starvation under load. Must be converted to `await`.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "pattern", "kind": "enum:DotResult|DotWait|TaskRunWrap|AsyncVoidNonEvent|SyncContextAssumption|GetAwaiterGetResult", "required": true },
+        { "name": "expression", "kind": "string", "required": true, "doc": "The problematic expression as written in source (e.g. 'GetDataAsync().Result', '_repo.SaveAsync().Wait()', 'Task.Run(() => ProcessAsync().Result).Result')." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "replacement_hint", "kind": "string", "required": true, "doc": "The async equivalent (e.g. 'await GetDataAsync()', 'await _repo.SaveAsync()', 'await ProcessAsync()')." },
+        { "name": "deadlock_risk", "kind": "enum:High|Medium|Low", "required": true, "doc": "Risk of deadlock in ASP.NET Core. High = definitely deadlocks; Medium = deadlocks under specific conditions; Low = thread-pool starvation only." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "exceptionHandlingContract",
+      "label": "Exception handling contract",
+      "idPrefix": "EX",
+      "specJsonField": "exception_handling_contracts",
+      "textField": "contract",
+      "displayTone": "review",
+      "description": "How the method handles, wraps, or propagates exceptions. Critical for HTTP pipeline migration: ASP.NET MVC's HandleError filter, CustomErrors pages, and catch-and-redirect patterns must become ASP.NET Core exception middleware or Problem Details (RFC 9457). Also captures: swallowed exceptions (empty catch blocks), AggregateException unwrapping from Task.Wait(), and catch (Exception ex) when { ex is X } patterns.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "exception_type", "kind": "string", "required": true, "doc": "The exception type caught or thrown (e.g. 'Exception', 'SqlException', 'HttpException', 'AggregateException')." },
+        { "name": "handling_style", "kind": "enum:Swallowed|Rethrown|Wrapped|Logged|Redirected|ProblemDetails", "required": true },
+        { "name": "contract", "kind": "string", "required": true },
+        { "name": "migration_note", "kind": "string", "required": false, "doc": "Specific .NET 10 replacement advice (e.g. 'Replace HttpException(404) throw with Results.NotFound()', 'AggregateException.InnerException unwrapping becomes unnecessary when awaiting the Task directly')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "configurationAccess",
+      "label": "Configuration access",
+      "idPrefix": "CFG",
+      "specJsonField": "configuration_accesses",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Reads from Web.config, App.config, or environment variables via ConfigurationManager, WebConfigurationManager, or direct environment reads. Must migrate to IConfiguration + appsettings.json + environment variable provider in .NET 10. Includes: connection strings, AppSettings keys, custom config sections, and Windows Registry reads for config values.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "config_source", "kind": "enum:AppSettings|ConnectionStrings|CustomSection|Registry|Environment|HardCoded", "required": true },
+        { "name": "key_or_path", "kind": "string", "required": true, "doc": "The config key or registry path being read (e.g. 'SmtpServer', 'DefaultConnection', 'HKCU:\\\\Software\\\\MyApp\\\\Settings')." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "dotnet10_path", "kind": "string", "required": true, "doc": "Where this value should live in .NET 10 (e.g. 'appsettings.json:Email:SmtpServer', 'appsettings.json:ConnectionStrings:Default', 'IOptions<MyAppSettings>.Value.Setting')." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: database writes (SqlCommand.ExecuteNonQuery, EF SaveChanges), file I/O (File.WriteAllText, StreamWriter), HTTP outbound calls (WebClient, HttpWebRequest, HttpClient), Windows Event Log writes, email sends (SmtpClient), queue/message-bus publishes, Windows Registry writes, P/Invoke calls to native DLLs.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary and failure conditions. C#/.NET migration-specific edges: null vs empty string handling in legacy string methods, DateTime.Kind (Unspecified vs Utc vs Local) mismatch across timezone boundaries, int overflow without checked context, decimal/double precision loss at the boundary, Encoding.Default (ANSI on Windows → UTF-8 on Linux in .NET 10), Path.Combine separator differences between Windows and Linux, System.Drawing.Bitmap (not supported on Linux in .NET 10).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities the source does not resolve that require SME sign-off before migration can proceed. Common C# cases: Windows-only P/Invoke that cannot run on Linux (must decide whether to keep Windows-only or find a cross-platform replacement), connection pooling behaviour differences between SqlConnection and Npgsql, ThreadStatic / CallContext vs AsyncLocal when porting to async, WCF service references that need gRPC or REST replacement, COM Interop usage in .NET 4.x code.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false, "doc": "Fully-qualified class or interface name (e.g. 'Namespace.OrderController', 'Services.OrderService')." },
+    { "name": "source_framework", "kind": "enum:net48|net472|net461|netcoreapp3.1|net6.0|net8.0|unknown", "required": false, "doc": "The detected or declared source TFM. Determines which obsolete APIs apply and which migration guides are relevant." },
+    { "name": "target_archetype_hint", "kind": "enum:MinimalApi|BlazorWebApp|WebApiControllers|WorkerService", "required": false, "doc": "Migration target paradigm chosen during Discovery. MinimalApi = Carter/Minimal API; BlazorWebApp = Blazor Web App SSR+WASM; WebApiControllers = MVC-style controller with Swagger; WorkerService = IHostedService + Generic Host." },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "ref", "out", "return", "optional"],
+    "directionDescription": "C# parameter modifiers. `in` = value parameter (default), `ref` = ref parameter, `out` = out parameter, `return` = method return value, `optional` = optional parameter with default value."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "obsoleteApiUsage",
+      "dependencyInjectionContract",
+      "asyncAntiPattern",
+      "exceptionHandlingContract",
+      "configurationAccess",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "obsoleteApiUsage": 0,
+      "dependencyInjectionContract": 0,
+      "asyncAntiPattern": 0,
+      "exceptionHandlingContract": 0,
+      "configurationAccess": 0,
+      "sideEffect": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Flag every HttpContext.Current, ConfigurationManager, System.Web.*, WebClient, HttpWebRequest, and Thread.CurrentPrincipal usage as obsoleteApiUsage claims. For every new X() instantiation of a service/repository/DbContext, raise a dependencyInjectionContract claim naming the recommended DI lifetime. For any .Result or .Wait() on a Task, raise an asyncAntiPattern claim with deadlock_risk: High (ASP.NET), Medium (WinForms), or Low (console). For every Web.config or AppSettings key access, raise a configurationAccess claim with the recommended appsettings.json path. P/Invoke calls targeting Windows-only DLLs that cannot be ported to Linux are automatic openQuestion candidates — the SME must decide whether the target deployment is Windows-only or cross-platform."
+  },
+  "owner": "Nous · .NET migration accelerator",
+  "calibratedAgainst": [
+    "Tier-1 portfolio Phase 12.0 (Pepperi, DDI Inform, PINpoint, Commerce Vision CVe, InfinityQS Enact, Comsense, Abaca, PQ Systems)",
+    ".NET Upgrade Assistant compatibility analyser output",
+    "Microsoft .NET Framework to .NET migration guide (learn.microsoft.com)"
+  ]
+}

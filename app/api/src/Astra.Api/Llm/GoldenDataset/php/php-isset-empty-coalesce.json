@@ -1,0 +1,29 @@
+{
+  "entryId": "php-isset-empty-coalesce",
+  "schemaId": "php",
+  "title": "empty(\"0\") is TRUE, so a legitimate qty of 0 is silently forced to 1 despite the ?? default",
+  "trapCategory": "null/empty-semantics",
+  "difficulty": "hard",
+  "sourcePath": "php/snippets/qty.php",
+  "sourceLines": "1-12",
+  "sourceContent": "<?php\n// qty.php - resolve a quantity from request input\nfunction resolveQty($input) {\n    // ?? gives 1 when 'qty' is absent or null (but NOT when it is \"0\").\n    $qty = $input['qty'] ?? 1;\n    // TRAP: empty(\"0\") is TRUE in PHP, so a legitimate qty of \"0\"\n    // is treated as \"not supplied\" and silently forced to 1.\n    if (empty($qty)) {\n        $qty = 1;\n    }\n    return (int) $qty;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "nullSafetyContract",
+      "id": "NUL-1",
+      "pattern": "(?i)(isset|empty|\\?\\?|coalesc|null|absent|default|Optional|nullable)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(\\(int\\)|intval|truncat|cast|\\\"0\\\"|empty\\(\\\"0\\\"\\)|empty)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(qty|quantity|positive|resolve|default|1)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Two distinct absence checks with different semantics: ?? only defaults on null/absent (so \"0\" survives it), but empty() is true for \"0\"/0/\"\"/[]/false, so the following guard silently rewrites a real 0 to 1. The migration must NOT conflate empty() with null; the (int) cast is a separate truncation edge case."
+}

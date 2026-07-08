@@ -1,0 +1,29 @@
+{
+  "entryId": "php-superglobal-cart-state",
+  "schemaId": "php",
+  "title": "$_SESSION['cart'] is read AND written directly — hidden global coupling that must become an injected session boundary",
+  "trapCategory": "state/superglobal",
+  "difficulty": "hard",
+  "sourcePath": "php/snippets/add_to_cart.php",
+  "sourceLines": "1-12",
+  "sourceContent": "<?php\n// add_to_cart.php - mutate the cart in the session superglobal\nfunction addToCart($sku, $qty) {\n    // TRAP: reads AND writes $_SESSION - hidden global coupling with\n    // no parameter passing.\n    if (!isset($_SESSION['cart'])) {\n        $_SESSION['cart'] = [];\n    }\n    $existing = $_SESSION['cart'][$sku] ?? 0;\n    $_SESSION['cart'][$sku] = $existing + $qty;\n    return $_SESSION['cart'];\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "superglobalUsage",
+      "id": "SG-1",
+      "pattern": "(?i)(\\$_SESSION|\\$_POST|superglobal|session|request|RequestParam|ISession|injected|bean|scoped)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(\\$_SESSION|write|mutat|session|side\\s*effect|store|persist)"
+    },
+    {
+      "kind": "nullSafetyContract",
+      "id": "NUL-1",
+      "pattern": "(?i)(isset|\\?\\?|null|default|absent|coalesc)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "$_SESSION['cart'] is initialised, read (with a ?? default), and written back — ambient global state with no parameter passing, which has no Java/.NET equivalent and is a testability + security trap. The migration must lift it to an injected request-scoped session boundary; the write-back is also a side effect."
+}
