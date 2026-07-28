@@ -98,7 +98,8 @@ public sealed class ScaffoldPipeline
             spec.SpecJson.RootElement.GetRawText(),
             targetStack,
             PromptTemplateId,
-            PromptTemplateVersion);
+            PromptTemplateVersion,
+            spec.Subroutine?.SourceLanguage ?? "");
 
         object? finalPayload = null;
         await foreach (var evt in _provider.GenerateAsync(req, ct))

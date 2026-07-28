@@ -24,7 +24,8 @@ public sealed record ScaffoldRequest(
     string SignedSpecJson,
     string TargetPlatform,
     string PromptTemplateId,
-    string PromptTemplateVersion);
+    string PromptTemplateVersion,
+    string SourceSchema = "");
 
 public sealed record ScaffoldFile(
     string Path,

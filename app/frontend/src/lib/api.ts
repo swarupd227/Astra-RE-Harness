@@ -1293,6 +1293,35 @@ export const api = {
   getDocRun: (runId: string) =>
     apiFetch<DocRun>(`/api/v1/docs/runs/${runId}`),
 
+  // Phase 12.0 — Pattern analysis (bulk extraction + claim-kind clustering).
+  runPatternAnalysis: (corpusId: string, opts?: { force?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.force) q.set('force', 'true');
+    const qs = q.size ? `?${q.toString()}` : '';
+    return apiFetch<PatternAnalysisStartResult>(
+      `/api/v1/corpora/${corpusId}/pattern-analysis${qs}`, { method: 'POST' }
+    );
+  },
+  getPatternAnalysisRun: (runId: string) =>
+    apiFetch<PatternAnalysisRun>(`/api/v1/pattern-analysis/runs/${runId}`),
+  listPatternClusters: (corpusId: string) =>
+    apiFetch<PatternClusterListResult>(`/api/v1/corpora/${corpusId}/pattern-clusters`),
+
+  // Phase 14.0 — Live archetype authoring.
+  proposeArchetype: (clusterId: string) =>
+    apiFetch<ArchetypeProposal>(`/api/v1/pattern-clusters/${clusterId}/propose-archetype`, { method: 'POST' }),
+  getArchetypeProposal: (id: string) =>
+    apiFetch<ArchetypeProposalDetail>(`/api/v1/archetype-proposals/${id}`),
+  listArchetypeProposals: (corpusId: string) =>
+    apiFetch<{ data: ArchetypeProposal[] }>(`/api/v1/corpora/${corpusId}/archetype-proposals`),
+  approveArchetypeProposal: (id: string) =>
+    apiFetch<ArchetypeProposal>(`/api/v1/archetype-proposals/${id}/approve`, { method: 'POST' }),
+  rejectArchetypeProposal: (id: string, reason: string) =>
+    apiFetch<ArchetypeProposal>(`/api/v1/archetype-proposals/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
   // Phase 11.0.g — documentation export.
   // Returns a Blob + the server-provided filename (from Content-Disposition).
   // Formats: mkdocs (zip), docx, pdf, confluence (json).
@@ -1664,4 +1693,71 @@ export type DocRun = {
   startedAt: string;
   completedAt?: string;
   errorSummary?: string;
+};
+
+// Phase 12.0 — Pattern analysis (bulk extraction + claim-kind clustering).
+export type PatternAnalysisStartResult = { runId: string; statusUrl: string };
+
+export type PatternAnalysisRun = {
+  id: string;
+  corpusId: string;
+  sourceVersionId: string;
+  stagesRequested: string;
+  state: string;
+  metrics?: Record<string, unknown>;
+  summary?: string;
+  errorSummary?: string;
+  triggeredBy?: string;
+  startedAt: string;
+  completedAt?: string;
+};
+
+export type PatternClusterMember = { subroutineId: string; subroutineName: string; specId?: string };
+
+export type PatternCluster = {
+  id: string;
+  patternAnalysisRunId: string;
+  corpusId: string;
+  claimKindSignature: string;
+  label: string;
+  suggestedArchetypeName: string;
+  rationale: string;
+  members: PatternClusterMember[];
+  memberCount: number;
+  createdAt: string;
+};
+
+export type PatternClusterListResult = {
+  run: PatternAnalysisRun | null;
+  clusters: PatternCluster[];
+};
+
+// Phase 14.0 — Live archetype authoring.
+export type ArchetypeProposal = {
+  id: string;
+  patternClusterId: string;
+  corpusId: string;
+  targetStack: string;
+  proposedArchetypeId: string;
+  displayName: string;
+  description: string;
+  matches: string[];
+  fileCount: number;
+  state: string;
+  compileErrorCount?: number;
+  testCount?: number;
+  testFailureCount?: number;
+  generatedBy?: string;
+  approvedBy?: string;
+  rejectedReason?: string;
+  createdAt: string;
+  verifiedAt?: string;
+  decidedAt?: string;
+};
+
+export type ArchetypeProposalFile = { path: string; language: string; content: string };
+
+export type ArchetypeProposalDetail = ArchetypeProposal & {
+  files: ArchetypeProposalFile[];
+  compileLog?: string;
 };

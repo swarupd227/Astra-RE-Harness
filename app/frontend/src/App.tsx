@@ -34,6 +34,7 @@ import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
 import { SignatureHealthPage } from '@/pages/SignatureHealthPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { DocsPage } from '@/pages/DocsPage';
+import { PatternAnalysisPage } from '@/pages/PatternAnalysisPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
 function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] {
@@ -227,6 +228,8 @@ export function App() {
             <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
             <Route path="/corpora/:id/docs" element={<DocsPage />} />
             <Route path="/projects/:id/docs" element={<DocsPage />} />
+            <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />
+            <Route path="/projects/:id/pattern-analysis" element={<PatternAnalysisPage />} />
             <Route path="/subroutines" element={<SubroutinesPage />} />
             <Route path="/subroutines/:id" element={<SubroutineDetailPage />} />
             <Route path="/subroutines/:id/extract" element={<LiveExtractionPage />} />

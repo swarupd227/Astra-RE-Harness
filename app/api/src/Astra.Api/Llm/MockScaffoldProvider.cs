@@ -41,9 +41,9 @@ public sealed class MockScaffoldProvider : IScaffoldProvider
         await Task.Delay(220, ct);
 
         // ── Pick the archetype keyed by target stack + subroutine name ──
-        var archetype = _archetypes.PickForSubroutine(request.TargetPlatform, request.SubroutineName)
+        var archetype = _archetypes.PickForSubroutine(request.TargetPlatform, request.SubroutineName, request.SourceSchema)
             ?? throw new InvalidOperationException(
-                $"No archetype registered for target stack '{request.TargetPlatform}'. " +
+                $"No archetype compatible with source schema '{request.SourceSchema}' is registered for target stack '{request.TargetPlatform}'. " +
                 $"Check Llm/Archetypes/{request.TargetPlatform}/.");
         _log.LogInformation(
             "Mock scaffold using archetype {Target}/{Id} for subroutine {Sub}",
