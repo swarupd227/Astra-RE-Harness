@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Llm.Archetypes;
 
@@ -68,6 +69,46 @@ public sealed class ArchetypeRegistry
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // Phase 14.0 — live registration (no code change or restart)
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>Registers or replaces an archetype in the live in-memory
+    /// index immediately — used when an engineer approves a Phase 14.0
+    /// <c>ArchetypeProposal</c>. No restart required.</summary>
+    public LoadedArchetype RegisterLive(LoadedArchetype archetype)
+    {
+        _byKey[(archetype.Manifest.TargetStack, archetype.Manifest.Id)] = archetype;
+        _log.LogInformation(
+            "Registered live archetype {Target}/{Id} ({Files} files) from {Dir}",
+            archetype.Manifest.TargetStack, archetype.Manifest.Id, archetype.Files.Count, archetype.ArchetypeDir);
+        return archetype;
+    }
+
+    /// <summary>Called once at boot (after the filesystem walk in the
+    /// constructor) to reload every PRODUCTION <c>ArchetypeProposal</c> from
+    /// the database — so archetypes approved in a prior run survive a
+    /// restart without ever having been written to disk.</summary>
+    public async Task LoadFromDatabaseAsync(Persistence.AppDbContext db, CancellationToken ct)
+    {
+        var rows = await db.ArchetypeProposals.AsNoTracking()
+            .Where(p => p.State == "PRODUCTION")
+            .ToListAsync(ct);
+        foreach (var row in rows)
+        {
+            try
+            {
+                RegisterLive(Astra.Api.Llm.PatternAnalysis.ArchetypeAuthoringService.BuildLoadedArchetype(row));
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to load archetype proposal {Id} from database", row.Id);
+            }
+        }
+        if (rows.Count > 0)
+            _log.LogInformation("Loaded {Count} live-authored archetype(s) from the database", rows.Count);
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // Public API
     // ────────────────────────────────────────────────────────────────────
 
@@ -80,22 +121,41 @@ public sealed class ArchetypeRegistry
         _byKey.TryGetValue((targetStack, id), out var a) ? a : null;
 
     /// <summary>
-    /// Pick an archetype for the given (targetStack, subroutineName).
-    /// Prefers the most-specific match in <c>archetype.json.matches.anyOf</c>;
-    /// falls back to the first archetype registered for the target stack
-    /// (today every target stack has exactly one archetype, so the fallback
-    /// is always the right answer — when we ship multiple archetypes per
-    /// stack the matcher tightens).
+    /// Pick an archetype for the given (targetStack, subroutineName), scoped
+    /// to archetypes compatible with <paramref name="sourceSchema"/>.
+    ///
+    /// Phase 15.0.a — a target stack like java-spring is shared across many
+    /// source languages (unibasic, cobol, delphi, cpp, java, ...), each with
+    /// its own archetype(s). Without the schema filter, a java-sourced
+    /// routine whose name didn't match java-modernization's anyOf list would
+    /// fall through to whichever java-spring archetype happened to be first
+    /// (alphabetically canonical-abl-order-service — an OpenEdge archetype
+    /// with nothing to do with Java). Filtering to compatibleSchemas FIRST,
+    /// then name-matching/falling-back only within that filtered set, is
+    /// what keeps the fallback meaningful instead of a coin-flip across
+    /// unrelated languages.
+    ///
+    /// An archetype with an empty/missing <c>compatibleSchemas</c> is treated
+    /// as compatible with every schema (legacy archetypes predating this
+    /// field default to the old "any schema" behaviour rather than becoming
+    /// silently unreachable).
     /// </summary>
-    public LoadedArchetype? PickForSubroutine(string targetStack, string subroutineName)
+    public LoadedArchetype? PickForSubroutine(string targetStack, string subroutineName, string? sourceSchema = null)
     {
         var byTarget = All().Where(a => string.Equals(a.Manifest.TargetStack, targetStack, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var candidates = string.IsNullOrWhiteSpace(sourceSchema)
+            ? byTarget
+            : byTarget.Where(a => IsCompatibleWithSchema(a, sourceSchema)).ToArray();
         // Exact subroutine match wins.
-        var match = byTarget.FirstOrDefault(a =>
+        var match = candidates.FirstOrDefault(a =>
             a.Manifest.Matches?.AnyOf?.Any(m =>
                 string.Equals(m.SubroutineName, subroutineName, StringComparison.OrdinalIgnoreCase)) == true);
-        return match ?? byTarget.FirstOrDefault();
+        return match ?? candidates.FirstOrDefault();
     }
+
+    private static bool IsCompatibleWithSchema(LoadedArchetype archetype, string sourceSchema) =>
+        archetype.Manifest.CompatibleSchemas.Count == 0
+        || archetype.Manifest.CompatibleSchemas.Any(s => string.Equals(s, sourceSchema, StringComparison.OrdinalIgnoreCase));
 
     // ────────────────────────────────────────────────────────────────────
     // Loader

@@ -161,6 +161,18 @@ builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
 // Phase 11.0.f — in-process SSE log bus for generation runs.
 builder.Services.AddSingleton<Astra.Api.Docs.DocRunLogger>();
 
+// Phase 12.0 — Pattern analysis (bulk extraction + claim-kind clustering).
+// Singleton orchestrator resolves ExtractionPipeline (Scoped) and AppDbContext
+// per work item via IServiceScopeFactory, same pattern as the Docs pipelines
+// above — the request scope dies the moment the trigger endpoint returns 202.
+builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.PatternAnalysisOrchestrator>();
+
+// Phase 14.0 — Live archetype authoring. Scoped (uses AppDbContext + MavenClient
+// directly, called synchronously from the propose endpoint — a single LLM
+// call plus one compile+test pass, same latency class as HarmonisationPipeline).
+builder.Services.AddHttpClient("anthropic-propose-archetype");
+builder.Services.AddScoped<Astra.Api.Llm.PatternAnalysis.ArchetypeAuthoringService>();
+
 // Phase 8.0.e — Pluggable migration strategies. Each implementation
 // is registered as IPlanStrategy; MigrationPlanner picks one by name
 // at plan-generation time. Order doesn't matter — name lookup keys
@@ -181,16 +193,38 @@ builder.Services.AddScoped<Astra.Api.Llm.Dependency.MigrationContextService>();
 // payload for the admin dashboard.
 builder.Services.AddScoped<Astra.Api.Llm.Dependency.PortfolioMetricsService>();
 
-// ─── Stage-5 scaffold provider + pipeline (Phase B.4) ────────────────
+// ─── Stage-5 scaffold provider + pipeline ────────────────────────────
+// Phase 13.0 — "anthropic" now does REAL per-routine customization
+// (previously the only implementation, MockScaffoldProvider, streamed a
+// matched archetype's static files unchanged regardless of which routine
+// triggered it). Same fallback posture as Llm:Provider above: missing key
+// falls back to mock with a warning rather than breaking a fresh clone.
 var scaffoldProvider = builder.Configuration.GetValue("Llm:ScaffoldProvider", "mock") ?? "mock";
 switch (scaffoldProvider.ToLowerInvariant())
 {
     case "mock":
         builder.Services.AddSingleton<IScaffoldProvider, MockScaffoldProvider>();
         break;
+    case "anthropic":
+    {
+        var scaffoldKey = builder.Configuration.GetValue<string>("Llm:Anthropic:ApiKey");
+        if (string.IsNullOrWhiteSpace(scaffoldKey))
+        {
+            Log.Warning(
+                "Llm:ScaffoldProvider=anthropic but Llm:Anthropic:ApiKey is empty. " +
+                "Falling back to MockScaffoldProvider. Set ANTHROPIC_API_KEY in .env to enable real scaffold generation.");
+            builder.Services.AddSingleton<IScaffoldProvider, MockScaffoldProvider>();
+        }
+        else
+        {
+            builder.Services.AddHttpClient("anthropic-scaffold-generate");
+            builder.Services.AddSingleton<IScaffoldProvider, AnthropicScaffoldProvider>();
+        }
+        break;
+    }
     default:
         throw new InvalidOperationException(
-            $"Unknown Llm:ScaffoldProvider '{scaffoldProvider}'. Valid values for Phase B.4: mock.");
+            $"Unknown Llm:ScaffoldProvider '{scaffoldProvider}'. Valid values: mock, anthropic.");
 }
 builder.Services.AddScoped<ScaffoldPipeline>();
 
@@ -243,6 +277,16 @@ builder.Services.AddScoped<Astra.Api.Validation.Vb6Client>();
 // the gfortran smoke path.
 builder.Services.AddHttpClient("csharp");
 builder.Services.AddScoped<Astra.Api.Validation.CsharpClient>();
+
+// ─── fpc / gpp sidecars (Phase 15.1.b/c) ─────────────────────────────
+// Both containers have run healthy since Phase 9.0.f/9.1.f but had no
+// consuming client at all — CrossRuntimeValidator fell through to the
+// gfortran smoke test for delphi/cpp sources regardless, reporting a
+// fake PASSED. Same shape as every other sidecar client above.
+builder.Services.AddHttpClient("fpc");
+builder.Services.AddScoped<Astra.Api.Validation.FpcClient>();
+builder.Services.AddHttpClient("gpp");
+builder.Services.AddScoped<Astra.Api.Validation.GppClient>();
 
 // ─── Property-test sidecar (Phase 9.3.b — 4th validation gate) ───────
 // Drives Hypothesis-driven falsifying-input search per ADR-029, per-claim
@@ -555,6 +599,95 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_doc_generation_runs_corpus_started
               ON doc_generation_runs (corpus_id, started_at);
             """);
+
+        // Phase 12.0 — Pattern analysis (bulk extraction + claim-kind
+        // clustering). Additive DDL so dev databases pick up without
+        // RecreateOnStartup. Column types mirror the EF model in
+        // AppDbContext.OnModelCreating.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS pattern_analysis_runs (
+                id                  uuid        PRIMARY KEY,
+                corpus_id           uuid        NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                source_version_id   uuid        NOT NULL,
+                stages_requested    varchar(128) NOT NULL,
+                state               varchar(32) NOT NULL,
+                metrics_json        jsonb       NULL,
+                summary             varchar(1024) NOT NULL,
+                error_summary       varchar(4000) NULL,
+                triggered_by        varchar(160) NULL,
+                started_at          timestamptz NOT NULL,
+                completed_at        timestamptz NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_pattern_analysis_runs_corpus_started
+              ON pattern_analysis_runs (corpus_id, started_at);
+
+            CREATE TABLE IF NOT EXISTS pattern_clusters (
+                id                        uuid        PRIMARY KEY,
+                pattern_analysis_run_id   uuid        NOT NULL REFERENCES pattern_analysis_runs(id) ON DELETE CASCADE,
+                corpus_id                 uuid        NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                claim_kind_signature      varchar(512) NOT NULL,
+                label                     varchar(256) NOT NULL,
+                suggested_archetype_name  varchar(128) NOT NULL,
+                rationale                 text        NOT NULL,
+                member_subroutine_ids     jsonb       NOT NULL,
+                member_count              integer     NOT NULL,
+                created_at                timestamptz NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_pattern_clusters_run ON pattern_clusters (pattern_analysis_run_id);
+            CREATE INDEX IF NOT EXISTS ix_pattern_clusters_corpus ON pattern_clusters (corpus_id);
+            """);
+
+        // Phase 14.0 — Live archetype authoring. Additive DDL so dev
+        // databases pick up without RecreateOnStartup. Column types mirror
+        // the EF model in AppDbContext.OnModelCreating.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS archetype_proposals (
+                id                     uuid        PRIMARY KEY,
+                pattern_cluster_id     uuid        NOT NULL REFERENCES pattern_clusters(id) ON DELETE CASCADE,
+                corpus_id              uuid        NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                target_stack           varchar(32) NOT NULL,
+                proposed_archetype_id  varchar(128) NOT NULL,
+                display_name           varchar(256) NOT NULL,
+                description            text        NOT NULL,
+                matches_json           jsonb       NOT NULL,
+                files_json             jsonb       NOT NULL,
+                state                  varchar(32) NOT NULL,
+                compile_log            text        NULL,
+                compile_error_count    integer     NULL,
+                test_count             integer     NULL,
+                test_failure_count     integer     NULL,
+                llm_call_id            uuid        NULL REFERENCES llm_calls(id) ON DELETE SET NULL,
+                generated_by           varchar(160) NULL,
+                approved_by            varchar(160) NULL,
+                rejected_reason        varchar(2000) NULL,
+                created_at             timestamptz NOT NULL,
+                verified_at            timestamptz NULL,
+                decided_at             timestamptz NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_archetype_proposals_cluster ON archetype_proposals (pattern_cluster_id);
+            CREATE INDEX IF NOT EXISTS ix_archetype_proposals_corpus_state ON archetype_proposals (corpus_id, state);
+            CREATE INDEX IF NOT EXISTS ix_archetype_proposals_state ON archetype_proposals (state);
+            """);
+
+        // Phase 15.0.a — source_schema was missing entirely: every
+        // live-authored archetype was hardcoded to compatibleSchemas =
+        // ["unibasic"] regardless of what corpus it was actually proposed
+        // from, which would make a java- (or any non-unibasic-) sourced
+        // archetype invisible to PickForSubroutine's new schema filter.
+        // Backfill existing PRODUCTION rows with "unibasic" — every
+        // proposal approved before this column existed really was
+        // proposed from a UniBasic corpus.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE archetype_proposals ADD COLUMN IF NOT EXISTS source_schema varchar(32) NOT NULL DEFAULT '';
+            UPDATE archetype_proposals SET source_schema = 'unibasic' WHERE source_schema = '';
+            """);
+
+        // Phase 14.0 — merge any already-approved (PRODUCTION) archetype
+        // proposals into the live in-memory registry, so archetypes
+        // authored inside the app survive a restart without ever having
+        // been written to disk.
+        var archetypeRegistry = scope.ServiceProvider.GetRequiredService<Astra.Api.Llm.Archetypes.ArchetypeRegistry>();
+        await archetypeRegistry.LoadFromDatabaseAsync(db, CancellationToken.None);
     }
     if (canConnect && seedDemo)
     {
@@ -713,6 +846,8 @@ app.MapNotificationEndpoints();
 app.MapEvidenceEndpoints();
 app.MapDevEndpoints();
 app.MapDocsEndpoints();
+app.MapPatternAnalysisEndpoints();
+app.MapArchetypeAuthoringEndpoints();
 
 app.MapGet("/", () => Results.Ok(new
 {

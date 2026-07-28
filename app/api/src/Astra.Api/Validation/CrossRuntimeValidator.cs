@@ -34,6 +34,9 @@ public sealed class CrossRuntimeValidator
     private readonly GfortranClient _gfortran;
     private readonly Vb6Client _vb6;
     private readonly CsharpClient _csharp;
+    private readonly GnuCobolClient _gnucobol;
+    private readonly FpcClient _fpc;
+    private readonly GppClient _gpp;
     private readonly ILogger<CrossRuntimeValidator> _log;
 
     public CrossRuntimeValidator(
@@ -44,6 +47,9 @@ public sealed class CrossRuntimeValidator
         GfortranClient gfortran,
         Vb6Client vb6,
         CsharpClient csharp,
+        GnuCobolClient gnucobol,
+        FpcClient fpc,
+        GppClient gpp,
         ILogger<CrossRuntimeValidator> log)
     {
         _db = db;
@@ -53,6 +59,9 @@ public sealed class CrossRuntimeValidator
         _gfortran = gfortran;
         _vb6 = vb6;
         _csharp = csharp;
+        _gnucobol = gnucobol;
+        _fpc = fpc;
+        _gpp = gpp;
         _log = log;
     }
 
@@ -105,6 +114,111 @@ public sealed class CrossRuntimeValidator
                 || string.Equals(sourceLanguage, "vbnet", StringComparison.OrdinalIgnoreCase))
             {
                 return await RunCsharpSmokeAsync(scaffold, run, actor, ct);
+            }
+
+            // ─── Phase 15.0.b — java source: honest "not wired" instead of the
+            // gfortran smoke fallback ──────────────────────────────────────
+            // The gfortran fallback below reports Status=PASSED ("gfortran
+            // and C# agree") for ANY unmapped source language, including
+            // java — a fixed 3+4 smoke check that has nothing to do with the
+            // scaffold being validated. That is a faked-green gate, not a
+            // real one. Source and target are both real Java here, so
+            // genuine equivalence (run the ORIGINAL jpetstore source's own
+            // build against the modernized scaffold, diff behavior) is
+            // possible in principle — but it needs the original project's
+            // real dependencies (Spring, MyBatis, ...) cached in the
+            // maven-sidecar's offline repo, which they are not today. Report
+            // that honestly instead of a misleading pass.
+            if (string.Equals(sourceLanguage, "java", StringComparison.OrdinalIgnoreCase))
+            {
+                run.Status = "SKIPPED";
+                run.ErrorCode = "equivalence.not_wired_for_java";
+                run.Summary = "Java-to-Java equivalence is not wired yet: it would need the " +
+                              "ORIGINAL source project's own build (Spring, MyBatis, and its other " +
+                              "real dependencies) available to the maven-sidecar's offline repo, " +
+                              "which it does not have cached today. The test-pack gate already " +
+                              "exercises the modernized scaffold against invariants drawn from the " +
+                              "signed spec (itself extracted from the original source), which is the " +
+                              "closest honest signal this platform currently has for this pairing.";
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                await _audit.LogAsync(
+                    "validation.completed", "scaffold", scaffold.Id, actor,
+                    payload: new { runId = run.Id, stage = run.Stage, status = run.Status },
+                    ct: ct);
+                return run;
+            }
+
+            // ─── Phase 15.1.a — cobol source: real per-routine harness when
+            // it applies, honest skip otherwise ──────────────────────────
+            // PayrollEquivalence already exists (Endpoints/ValidationEndpoints.cs,
+            // the deptpay-average preview route) but was wired to a fixed,
+            // scaffold-independent admin preview endpoint that the real
+            // "Run equivalence" button never calls — a cobol-sourced
+            // scaffold's actual gate still fell through to the gfortran
+            // smoke test below and reported a fake PASSED. Route it here
+            // for real when the scaffold's routine is the one PayrollEquivalence
+            // actually knows how to check; for any other cobol routine, say
+            // so honestly instead of running an unrelated Fortran check.
+            if (string.Equals(sourceLanguage, "cobol", StringComparison.OrdinalIgnoreCase))
+            {
+                var cobolRoutine = (scaffold.Spec?.Subroutine?.Name ?? "");
+                if (cobolRoutine.Contains("AVERAGE-SALARY", StringComparison.OrdinalIgnoreCase))
+                {
+                    return await RunCobolPayrollEquivalenceAsync(scaffold, run, actor, ct);
+                }
+
+                run.Status = "SKIPPED";
+                run.ErrorCode = "equivalence.not_wired_for_routine";
+                run.Summary = $"No per-routine equivalence harness exists yet for '{cobolRoutine}' — only " +
+                              "DEPTPAY's AVERAGE-SALARY paragraph has one today (PayrollEquivalence.cs). " +
+                              "Reporting that honestly rather than running the unrelated gfortran smoke check.";
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                await _audit.LogAsync(
+                    "validation.completed", "scaffold", scaffold.Id, actor,
+                    payload: new { runId = run.Id, stage = run.Stage, status = run.Status },
+                    ct: ct);
+                return run;
+            }
+
+            // ─── Phase 15.1.b — delphi source → fpc sidecar smoke ──────────
+            // No per-routine Delphi equivalence harness exists yet (unlike
+            // COBOL's PayrollEquivalence) — this is a SMOKE check only,
+            // same honesty level already established for vb6/csharp above:
+            // proves the fpc sidecar is reachable and a trivial Pascal
+            // program agrees with the C# reference, not full behavioral
+            // equivalence of the actual scaffold. Still strictly more
+            // honest than the previous behavior (silently running gfortran
+            // and reporting PASSED for a Delphi routine).
+            if (string.Equals(sourceLanguage, "delphi", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunDelphiSmokeAsync(scaffold, run, actor, ct);
+            }
+
+            // ─── Phase 15.1.c — cpp source → gpp sidecar smoke ─────────────
+            if (string.Equals(sourceLanguage, "cpp", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunCppSmokeAsync(scaffold, run, actor, ct);
+            }
+
+            // ─── Phase 15.1.d — php / openedge: no sidecar exists at all ───
+            if (string.Equals(sourceLanguage, "php", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(sourceLanguage, "openedge", StringComparison.OrdinalIgnoreCase))
+            {
+                run.Status = "SKIPPED";
+                run.ErrorCode = "equivalence.not_wired_for_language";
+                run.Summary = $"No equivalence runtime sidecar exists yet for '{sourceLanguage}' source " +
+                              "(unlike vb6/csharp/cobol/delphi/cpp, there is no reference interpreter wired " +
+                              "for this language). Reporting that honestly rather than running the unrelated " +
+                              "gfortran smoke check.";
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                await _audit.LogAsync(
+                    "validation.completed", "scaffold", scaffold.Id, actor,
+                    payload: new { runId = run.Id, stage = run.Stage, status = run.Status },
+                    ct: ct);
+                return run;
             }
 
             // ─── Sanity: is the gfortran sidecar reachable? ────────────────
@@ -398,6 +512,126 @@ public sealed class CrossRuntimeValidator
         return run;
     }
 
+    /// <summary>
+    /// Phase 15.1.a — real per-routine equivalence for DEPTPAY's
+    /// AVERAGE-SALARY paragraph, reusing <see cref="PayrollEquivalence"/>
+    /// (previously stranded behind the disconnected admin-only preview
+    /// endpoint). Mirrors <see cref="RunPerRoutineConsumeRollAsync"/>'s
+    /// shape exactly, just with the gnucobol sidecar + decimal comparison
+    /// instead of gfortran + float comparison.
+    /// </summary>
+    private async Task<ValidationRun> RunCobolPayrollEquivalenceAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        if (!await _gnucobol.PingAsync(ct))
+            throw new InvalidOperationException(
+                "gnucobol sidecar health probe failed (Validation:GnucobolEndpoint).");
+
+        var stdin = PayrollEquivalence.RenderStdin();
+        var cobol = await _gnucobol.CompileAndRunAsync(new GnuCobolClient.CompileAndRunRequest(
+            Sources: new[] { new GnuCobolClient.Source("avg_driver.cob", PayrollEquivalence.CobolDriverSource) },
+            Stdin: stdin,
+            TimeoutMs: 30_000), ct);
+
+        if (cobol.Compile.ExitCode != 0 || (cobol.Run?.ExitCode ?? -1) != 0)
+        {
+            throw new InvalidOperationException(
+                $"gnucobol sidecar failed (compile={cobol.Compile.ExitCode}, run={cobol.Run?.ExitCode}); log: {cobol.Compile.Log}");
+        }
+
+        var cobolLines = (cobol.Run?.Stdout ?? "")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim()).Where(l => l.Length > 0).ToArray();
+
+        var rowResults = new List<object>();
+        var allMatch = true;
+        for (int i = 0; i < PayrollEquivalence.CanonicalInputs.Length; i++)
+        {
+            var input = PayrollEquivalence.CanonicalInputs[i];
+            var csharp = PayrollEquivalence.EvaluateCSharp(input);
+            var raw = i < cobolLines.Length ? cobolLines[i] : "(missing)";
+            if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var cobolValue))
+            {
+                throw new InvalidOperationException($"Could not parse COBOL outcome line {i}: '{raw}'");
+            }
+
+            var match = cobolValue == csharp;
+            if (!match) allMatch = false;
+
+            rowResults.Add(new
+            {
+                input = new { total = input.Total, count = input.Count, label = input.ExpectedLabel },
+                cobol = cobolValue,
+                csharp,
+                match,
+            });
+        }
+
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== Per-routine equivalence: DEPTPAY.AVERAGE-SALARY ===");
+        transcript.AppendLine();
+        transcript.AppendLine("=== gnucobol sidecar — compile ===");
+        transcript.AppendLine($"exit {cobol.Compile.ExitCode} · {cobol.Compile.DurationMs}ms · {cobol.Compile.ErrorCount} errors · {cobol.Compile.WarningCount} warnings");
+        if (!string.IsNullOrWhiteSpace(cobol.Compile.Log)) transcript.AppendLine(cobol.Compile.Log);
+        transcript.AppendLine();
+        transcript.AppendLine("=== gnucobol sidecar — run ===");
+        transcript.AppendLine($"exit {cobol.Run?.ExitCode ?? -1} · {cobol.Run?.DurationMs ?? -1}ms · timedOut={cobol.Run?.TimedOut ?? false}");
+        transcript.AppendLine("stdin:");
+        transcript.AppendLine(stdin);
+        transcript.AppendLine("stdout:");
+        transcript.AppendLine(cobol.Run?.Stdout);
+        transcript.AppendLine();
+        transcript.AppendLine("=== row-by-row comparison ===");
+        foreach (var r in rowResults)
+            transcript.AppendLine(JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true }));
+        transcript.AppendLine();
+        transcript.AppendLine($"=== verdict === {(allMatch ? "PASSED" : "FAILED")} · {PayrollEquivalence.CanonicalInputs.Length} inputs");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "per-routine",
+            routine = "DEPTPAY.AVERAGE-SALARY",
+            inputCount = PayrollEquivalence.CanonicalInputs.Length,
+            matched = rowResults.Count(r => (bool)((dynamic)r).match),
+            mismatched = rowResults.Count(r => !(bool)((dynamic)r).match),
+            cobolCompileMs = cobol.Compile.DurationMs,
+            cobolRunMs = cobol.Run?.DurationMs ?? -1,
+            rows = rowResults,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+        if (allMatch)
+        {
+            run.Status = "PASSED";
+            run.Summary = $"Per-routine equivalence: DEPTPAY.AVERAGE-SALARY on {PayrollEquivalence.CanonicalInputs.Length} canonical inputs · GnuCOBOL and the modernized implementation agree row-for-row.";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = "equivalence.outputs_differ";
+            var diffs = rowResults.Count(r => !(bool)((dynamic)r).match);
+            run.Summary = $"Per-routine equivalence: DEPTPAY.AVERAGE-SALARY · {diffs} of {PayrollEquivalence.CanonicalInputs.Length} canonical inputs diverged. See log for the row diffs.";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new { runId = run.Id, stage = run.Stage, status = run.Status, routine = "DEPTPAY.AVERAGE-SALARY" },
+            ct: ct);
+
+        _log.LogInformation(
+            "Per-routine equivalence for scaffold {Scaffold} (DEPTPAY.AVERAGE-SALARY): {Status} ({Summary})",
+            scaffold.Id, run.Status, run.Summary);
+        return run;
+    }
+
     private sealed record FortranOutcome(int ResultCd, float NewLf, int RollStatus, string? GradeCd, bool EventEmitted, string? EventGrade, float? EventNewLf);
 
     private static bool NullableSinglesEqual(float? a, float? b)
@@ -637,6 +871,245 @@ public sealed class CrossRuntimeValidator
             run.Summary = match
                 ? $"csharp sidecar exit codes non-zero (compile={result.Compile.ExitCode}, run={result.Run?.ExitCode})."
                 : $"Outputs differ: sidecar={csharpSum} vs reference={expectedSum}";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        return run;
+    }
+
+    // ─── Phase 15.1.b — Delphi equivalence smoke ─────────────────────────
+    // Same honesty level as the vb6/csharp smoke checks above: no
+    // per-routine Delphi equivalence harness exists yet, so this proves
+    // the fpc sidecar is reachable and a trivial Pascal program agrees
+    // with the C# reference — not full behavioral equivalence of the
+    // actual scaffold. Strictly more honest than the prior behavior
+    // (silently running gfortran and reporting PASSED for Delphi source).
+    private async Task<ValidationRun> RunDelphiSmokeAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        if (!await _fpc.PingAsync(ct))
+            throw new InvalidOperationException(
+                "fpc sidecar health probe failed (Validation:FpcEndpoint).");
+
+        const string smokeSource = """
+            program Smoke;
+            {$APPTYPE CONSOLE}
+            var
+              a, b, total: Integer;
+            begin
+              ReadLn(a, b);
+              total := a + b;
+              WriteLn('{"sum":', total, '}');
+            end.
+            """;
+        const string stdinPayload = "3 4\n";
+        const int expectedSum = 3 + 4;
+
+        // NOTE: must be a .dpr file, not .pas — the fpc-sidecar treats
+        // .pas files as units included by an auto-generated driver
+        // program, and only picks up an actual `program` block from a
+        // .dpr file (verified directly against the sidecar: a .pas file
+        // with `program Smoke;` fails with "UNIT expected but PROGRAM
+        // found").
+        var fpc = await _fpc.CompileAndRunAsync(new FpcClient.CompileAndRunRequest(
+            Sources: new[] { new FpcClient.Source("Smoke.dpr", smokeSource) },
+            Stdin: stdinPayload,
+            TimeoutMs: 30_000), ct);
+
+        int fpcSum;
+        try
+        {
+            using var doc = JsonDocument.Parse((fpc.Run?.Stdout ?? "").Trim());
+            fpcSum = doc.RootElement.GetProperty("sum").GetInt32();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse fpc sidecar stdout as JSON: {ex.Message}; raw: {fpc.Run?.Stdout}");
+        }
+
+        var match = fpcSum == expectedSum;
+
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== fpc sidecar — compile (Free Pascal) ===");
+        transcript.AppendLine($"exit {fpc.Compile.ExitCode} · {fpc.Compile.DurationMs}ms · {fpc.Compile.ErrorCount} errors · {fpc.Compile.WarningCount} warnings");
+        transcript.AppendLine(fpc.Compile.Log);
+        transcript.AppendLine("=== fpc sidecar — run ===");
+        transcript.AppendLine($"exit {fpc.Run?.ExitCode ?? -1} · {fpc.Run?.DurationMs ?? -1}ms · timedOut={fpc.Run?.TimedOut ?? false}");
+        transcript.AppendLine($"stdin: {stdinPayload.Replace("\n", @"\n")}");
+        transcript.AppendLine($"stdout: {fpc.Run?.Stdout}");
+        if (!string.IsNullOrWhiteSpace(fpc.Run?.Stderr))
+            transcript.AppendLine($"stderr: {fpc.Run.Stderr}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== C# reference ===");
+        transcript.AppendLine($"computed: {expectedSum}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== equivalence verdict ===");
+        transcript.AppendLine($"fpc_sum={fpcSum} csharp_sum={expectedSum} match={match}");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "smoke",
+            sourceLanguage = "delphi",
+            runtime = "fpc",
+            fpcCompileExit = fpc.Compile.ExitCode,
+            fpcCompileMs = fpc.Compile.DurationMs,
+            fpcRunExit = fpc.Run?.ExitCode ?? -1,
+            fpcRunMs = fpc.Run?.DurationMs ?? -1,
+            fpcSum,
+            csharpSum = expectedSum,
+            match,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (match && fpc.Compile.ExitCode == 0 && (fpc.Run?.ExitCode ?? -1) == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = "Smoke equivalence: Free Pascal (fpc sidecar) and C# reference agree on canonical " +
+                          "input. No per-routine Delphi equivalence harness exists yet — this proves the " +
+                          "cross-runtime loop is wired, not full behavioral equivalence of this scaffold.";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = match ? "equivalence.runtime_error" : "equivalence.outputs_differ";
+            run.Summary = match
+                ? $"fpc sidecar exit codes non-zero (compile={fpc.Compile.ExitCode}, run={fpc.Run?.ExitCode})."
+                : $"Outputs differ: fpc={fpcSum} vs csharp={expectedSum}";
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new
+            {
+                runId = run.Id,
+                stage = run.Stage,
+                status = run.Status,
+                summary = run.Summary,
+                metrics = JsonDocument.Parse(run.MetricsJson),
+            },
+            ct: ct);
+
+        return run;
+    }
+
+    // ─── Phase 15.1.c — C++ equivalence smoke ────────────────────────────
+    // Same shape as RunDelphiSmokeAsync — no per-routine C++ harness
+    // exists yet, this is a smoke-only proof that the gpp sidecar is
+    // reachable and correct, not full equivalence of the actual scaffold.
+    private async Task<ValidationRun> RunCppSmokeAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        if (!await _gpp.PingAsync(ct))
+            throw new InvalidOperationException(
+                "gpp sidecar health probe failed (Validation:GppEndpoint).");
+
+        const string smokeSource = """
+            #include <iostream>
+            int main() {
+                int a, b;
+                std::cin >> a >> b;
+                std::cout << "{\"sum\":" << (a + b) << "}";
+                return 0;
+            }
+            """;
+        const string stdinPayload = "3 4\n";
+        const int expectedSum = 3 + 4;
+
+        var gpp = await _gpp.CompileAndRunAsync(new GppClient.CompileAndRunRequest(
+            Sources: new[] { new GppClient.Source("smoke.cpp", smokeSource) },
+            Stdin: stdinPayload,
+            TimeoutMs: 30_000), ct);
+
+        int gppSum;
+        try
+        {
+            using var doc = JsonDocument.Parse((gpp.Run?.Stdout ?? "").Trim());
+            gppSum = doc.RootElement.GetProperty("sum").GetInt32();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse gpp sidecar stdout as JSON: {ex.Message}; raw: {gpp.Run?.Stdout}");
+        }
+
+        var match = gppSum == expectedSum;
+
+        var transcript = new System.Text.StringBuilder();
+        transcript.AppendLine("=== gpp sidecar — compile (g++) ===");
+        transcript.AppendLine($"exit {gpp.Compile.ExitCode} · {gpp.Compile.DurationMs}ms · {gpp.Compile.ErrorCount} errors · {gpp.Compile.WarningCount} warnings");
+        transcript.AppendLine(gpp.Compile.Log);
+        transcript.AppendLine("=== gpp sidecar — run ===");
+        transcript.AppendLine($"exit {gpp.Run?.ExitCode ?? -1} · {gpp.Run?.DurationMs ?? -1}ms · timedOut={gpp.Run?.TimedOut ?? false}");
+        transcript.AppendLine($"stdin: {stdinPayload.Replace("\n", @"\n")}");
+        transcript.AppendLine($"stdout: {gpp.Run?.Stdout}");
+        if (!string.IsNullOrWhiteSpace(gpp.Run?.Stderr))
+            transcript.AppendLine($"stderr: {gpp.Run.Stderr}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== C# reference ===");
+        transcript.AppendLine($"computed: {expectedSum}");
+        transcript.AppendLine();
+        transcript.AppendLine("=== equivalence verdict ===");
+        transcript.AppendLine($"gpp_sum={gppSum} csharp_sum={expectedSum} match={match}");
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        var logUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, transcript.ToString(), "text/plain", ct);
+
+        run.LogBlobUri = logUri;
+        run.MetricsJson = JsonSerializer.Serialize(new
+        {
+            mode = "smoke",
+            sourceLanguage = "cpp",
+            runtime = "gpp",
+            gppCompileExit = gpp.Compile.ExitCode,
+            gppCompileMs = gpp.Compile.DurationMs,
+            gppRunExit = gpp.Run?.ExitCode ?? -1,
+            gppRunMs = gpp.Run?.DurationMs ?? -1,
+            gppSum,
+            csharpSum = expectedSum,
+            match,
+        });
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (match && gpp.Compile.ExitCode == 0 && (gpp.Run?.ExitCode ?? -1) == 0)
+        {
+            run.Status = "PASSED";
+            run.Summary = "Smoke equivalence: g++ (gpp sidecar) and C# reference agree on canonical input. " +
+                          "No per-routine C++ equivalence harness exists yet — this proves the cross-runtime " +
+                          "loop is wired, not full behavioral equivalence of this scaffold.";
+        }
+        else
+        {
+            run.Status = "FAILED";
+            run.ErrorCode = match ? "equivalence.runtime_error" : "equivalence.outputs_differ";
+            run.Summary = match
+                ? $"gpp sidecar exit codes non-zero (compile={gpp.Compile.ExitCode}, run={gpp.Run?.ExitCode})."
+                : $"Outputs differ: gpp={gppSum} vs csharp={expectedSum}";
         }
 
         await _db.SaveChangesAsync(ct);

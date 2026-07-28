@@ -31,6 +31,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<MigrationWave> MigrationWaves => Set<MigrationWave>();
     public DbSet<DocSection> DocSections => Set<DocSection>();
     public DbSet<DocGenerationRun> DocGenerationRuns => Set<DocGenerationRun>();
+    public DbSet<PatternAnalysisRun> PatternAnalysisRuns => Set<PatternAnalysisRun>();
+    public DbSet<PatternCluster> PatternClusters => Set<PatternCluster>();
+    public DbSet<ArchetypeProposal> ArchetypeProposals => Set<ArchetypeProposal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -561,6 +564,81 @@ public sealed class AppDbContext : DbContext
 
             b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.CorpusId, x.StartedAt });
+        });
+
+        modelBuilder.Entity<PatternAnalysisRun>(b =>
+        {
+            b.ToTable("pattern_analysis_runs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id").IsRequired();
+            b.Property(x => x.StagesRequested).HasColumnName("stages_requested").HasMaxLength(128).IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.MetricsJson).HasColumnName("metrics_json").HasColumnType("jsonb");
+            b.Property(x => x.Summary).HasColumnName("summary").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.ErrorSummary).HasColumnName("error_summary").HasMaxLength(4000);
+            b.Property(x => x.TriggeredBy).HasColumnName("triggered_by").HasMaxLength(160);
+            b.Property(x => x.StartedAt).HasColumnName("started_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+
+            b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.CorpusId, x.StartedAt });
+        });
+
+        modelBuilder.Entity<PatternCluster>(b =>
+        {
+            b.ToTable("pattern_clusters");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.PatternAnalysisRunId).HasColumnName("pattern_analysis_run_id").IsRequired();
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.ClaimKindSignature).HasColumnName("claim_kind_signature").HasMaxLength(512).IsRequired();
+            b.Property(x => x.Label).HasColumnName("label").HasMaxLength(256).IsRequired();
+            b.Property(x => x.SuggestedArchetypeName).HasColumnName("suggested_archetype_name").HasMaxLength(128).IsRequired();
+            b.Property(x => x.Rationale).HasColumnName("rationale").IsRequired();
+            b.Property(x => x.MemberSubroutineIdsJson).HasColumnName("member_subroutine_ids").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.MemberCount).HasColumnName("member_count");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            b.HasOne<PatternAnalysisRun>().WithMany()
+             .HasForeignKey(x => x.PatternAnalysisRunId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => x.PatternAnalysisRunId);
+            b.HasIndex(x => x.CorpusId);
+        });
+
+        modelBuilder.Entity<ArchetypeProposal>(b =>
+        {
+            b.ToTable("archetype_proposals");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.PatternClusterId).HasColumnName("pattern_cluster_id").IsRequired();
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.TargetStack).HasColumnName("target_stack").HasMaxLength(32).IsRequired();
+            b.Property(x => x.SourceSchema).HasColumnName("source_schema").HasMaxLength(32).IsRequired();
+            b.Property(x => x.ProposedArchetypeId).HasColumnName("proposed_archetype_id").HasMaxLength(128).IsRequired();
+            b.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+            b.Property(x => x.Description).HasColumnName("description").IsRequired();
+            b.Property(x => x.MatchesJson).HasColumnName("matches_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.FilesJson).HasColumnName("files_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.CompileLog).HasColumnName("compile_log");
+            b.Property(x => x.CompileErrorCount).HasColumnName("compile_error_count");
+            b.Property(x => x.TestCount).HasColumnName("test_count");
+            b.Property(x => x.TestFailureCount).HasColumnName("test_failure_count");
+            b.Property(x => x.LlmCallId).HasColumnName("llm_call_id");
+            b.Property(x => x.GeneratedBy).HasColumnName("generated_by").HasMaxLength(160);
+            b.Property(x => x.ApprovedBy).HasColumnName("approved_by").HasMaxLength(160);
+            b.Property(x => x.RejectedReason).HasColumnName("rejected_reason").HasMaxLength(2000);
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.VerifiedAt).HasColumnName("verified_at");
+            b.Property(x => x.DecidedAt).HasColumnName("decided_at");
+
+            b.HasOne<PatternCluster>().WithMany()
+             .HasForeignKey(x => x.PatternClusterId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => x.PatternClusterId);
+            b.HasIndex(x => new { x.CorpusId, x.State });
+            b.HasIndex(x => x.State);
         });
     }
 }

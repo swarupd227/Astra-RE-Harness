@@ -116,12 +116,39 @@ public static class ScaffoldEndpoints
                 return;
             }
 
+            // Phase 15.0.a — narrow to archetypes actually compatible with
+            // this spec's source schema BEFORE falling back to "any
+            // archetype for the stack". Without this, a schema with no
+            // compatible archetype (or whose routine name doesn't match one)
+            // would silently fall back to an unrelated language's archetype
+            // (e.g. a java-sourced routine resolving to canonical-abl-*).
+            var compatibleForTarget = anyForTarget
+                .Where(a => a.Manifest.CompatibleSchemas.Count == 0
+                    || string.IsNullOrEmpty(sourceLanguage)
+                    || a.Manifest.CompatibleSchemas.Any(s => string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (compatibleForTarget.Length == 0)
+            {
+                ctx.Response.StatusCode = 400;
+                await ctx.Response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        code = "scaffold.no_compatible_archetype",
+                        message = $"No archetype compatible with source language '{sourceLanguage}' is registered for target " +
+                                  $"'{chosenTarget}'. This language/target pairing needs an archetype authored — propose one from " +
+                                  "Pattern Analysis, or contact your Nous representative.",
+                    }
+                }, ct);
+                return;
+            }
+
             // Pick the archetype the scaffold pipeline will actually use.
-            // Falls back to the first archetype for the stack when the
-            // subroutine name doesn't match any anyOf clause — same
-            // behaviour as ArchetypeRegistry.PickForSubroutine.
-            var match = archetypes.PickForSubroutine(chosenTarget, subroutineName)
-                ?? anyForTarget[0];
+            // Falls back to the first schema-compatible archetype for the
+            // stack when the subroutine name doesn't match any anyOf clause —
+            // same behaviour as ArchetypeRegistry.PickForSubroutine.
+            var match = archetypes.PickForSubroutine(chosenTarget, subroutineName, sourceLanguage)
+                ?? compatibleForTarget[0];
 
             // Production archetypes are self-service. Anything else is gated.
             var status = match.Manifest.Status ?? "";
