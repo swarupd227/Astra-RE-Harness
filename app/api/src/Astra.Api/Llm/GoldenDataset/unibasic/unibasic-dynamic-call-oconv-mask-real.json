@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-dynamic-call-oconv-mask-real",
+  "schemaId": "unibasic",
+  "title": "[REAL — github.com/zelenko/pick] VZ.SALES.BR.pick: unnamed SUBROUTINE header, CALL @variable indirect dispatch, inline OCONV rounding mask",
+  "trapCategory": "call/dynamic-dispatch",
+  "difficulty": "hard",
+  "sourcePath": "zelenko/pick/VZ.SALES.BR.pick",
+  "sourceLines": "1-53",
+  "sourceContent": "          SUBROUTINE (RESULT,PN,SD,ED)\n** Version# 0.0004 - 10/13/2017 - 02:35pm - DEVOPS - eclipse\n*** V0.0004 Change - Custom Coding DSE328 - 10/13/2017 - DEVOPS - eclipse\n** Copied from CBP VZ.SALES Version# 0.0003[1] - 10/13/2017 - 12:37pm - DEVOPS - eclipse\n*** V0.0002 Change - Custom Coding DSB357 - 09/21/2017 - DEVOPS - eclipse\n          !PGM = \"VZ.SALES\"\n*** To calculate sales anywhere, NEED PRODUCT ID, START DATE, END DATE\n***\n\n        * Listing only these branches:\n          !BR$ = 1:VM:2:VM:3:VM:4:VM:5:VM:7:VM:8:VM:12:VM:13:VM:14:VM:16:VM:17:VM:19:VM:21:VM:22:VM:'PT':VM:60\n          !GET(ARG.)PROD.ID\n          !GET(ARG.)SD\n          !GET(ARG.)ED\n\n        * TEST = @DATE - 365 ;*    'MO/DA/':@YEAR4 -1\n        * SD = @DATE - 365\n        * ED = @DATE\n          @ID = PN\n\n          !RESULT = SUBR('DICT.PRD.SALES',1,6,SD,ED,1,'')\n          SUBRI = 'DICT.PRD.SALES'\n          CALL @SUBRI(RESULT,1,6,SD,ED,1,'')\n          RESULT = RESULT/100\"MR2\"\n\n        *   SUBROUTINE DICT.PRD.SALES (QTY,RANGE,ATTR,START.DATE,END.DATE,INC.DIR,SLS.UM)\n*---------ATTR Definition\n*         3  = Sales Qtys\n*         4  = Purchases Qtys\n*         5  = Transfers Qtys\n*         6  = Sales $\n*         7  = Purch $\n*         8  = Xfer $\n*         9  = Sales COGS$\n*        10  = Sales GP$\n*        11  = Sales GP%\n*        12  = Work Order Qtys\n*        13  = Rental Qtys\n*        14  = Work Order $\n*        15  = Rental $\n*---------Range Definition\n*         1  = User Defined\n*         2  = MTD\n*         3  = YTD\n*         4  = Fiscal MTD\n*         5  = Fiscal YTD\n*-------------------------------------------------------------------------*\n\n         ! PRINT \"RESULT: \": RESULT: ' ' : TEST  : ' | ';* : AMTS<1,1>\n\n          RETURN\n!DEVOPS~10/13/17~14:35\n",
+  "expectedClaims": [
+    {
+      "kind": "dynamicCallTarget",
+      "id": "DC-1",
+      "pattern": "(?i)(@SUBRI|CALL\\s+@|indirect|dynamic.*(dispatch|call)|not\\s+statically\\s+resolv)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(\\\"MR2\\\"|OCONV|mask|round(ing)?|scale|BigDecimal)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(RESULT|sales|SD.*ED|date\\s+range|/\\s*100)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL public UniBasic source, verbatim, from github.com/zelenko/pick (same attribution/license note as the ARRAY.PICK entry). The ONE real formal `SUBROUTINE (params)` header in the calibration corpus — confirms the header carries no name of its own (the module name comes from the filename). CALL @SUBRI(...) is genuine runtime-resolved dispatch (SUBRI is assigned a program name as a string, then called indirectly) — cannot be statically linked without dataflow analysis. RESULT/100\"MR2\" is an inline OCONV-style format mask applying rounding/scaling as part of the expression."
+}

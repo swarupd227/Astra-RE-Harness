@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-array-locate-insert-real",
+  "schemaId": "unibasic",
+  "title": "[REAL — github.com/zelenko/pick] ARRAY.PICK: angle-bracket multivalue fields, LOCATE-then-insert-if-missing, DCOUNT",
+  "trapCategory": "multivalue/dynamic-array",
+  "difficulty": "medium",
+  "sourcePath": "zelenko/pick/ARRAY.PICK",
+  "sourceLines": "1-30",
+  "sourceContent": "          PGM = \"VZ.ARRAY\"\n** Version# 0.0001[194] - 01/04/2017 - 04:07pm - ADMIN - system\n*** V0.0001 Change - Custom Coding DTE429 - 01/04/2017 - ADMIN - system\n          DIM A(5)\n          MATPARSE A FROM '1,2,3,4,5,6,7,8,9,10,11',','\n          FOR I=1 TO 5\n                PRINT \"(\":I:\")=\":A(I),\" \":\n          NEXT I\n          PRINT 'TOTAL INSERTED: ':INMAT()\n\n          DIM BA(2)\n          BA(1) ='THIS'\n          BA(1)<2> = '1-2'\n          PRINT BA(1)\n\n          BA(2) = 'THIS2'\n          BA(2)<2> = '2-2'\n          PRINT BA(2)\n\n          LOCATE 'THIS' IN BA(1) SETTING ID ELSE\n             BA(1) = INSERT(BA(1),ID;'THIS')\n          END\n          PRINT BA(1) : ' ID: ':ID\n          PRINT BA(2)<2>\n          BA(2)<20> = '20'\n          PRINT BA(2)\n          PRINT 'TOTAL: ' : DCOUNT(BA(1),@FM)\n          END\n!ADMIN~01/04/17~16:07\n",
+  "expectedClaims": [
+    {
+      "kind": "dynamicArrayUsage",
+      "id": "MV-1",
+      "pattern": "(?i)(angle.bracket|<2>|<20>|multivalue|dynamic\\s+array|List<|nested)"
+    },
+    {
+      "kind": "dynamicArrayUsage",
+      "id": "MV-2",
+      "pattern": "(?i)(LOCATE|INSERT|DCOUNT|@FM|find.or.not.found|position)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(insert.*if.*(missing|absent|not\\s+found)|LOCATE.*ELSE|already\\s+present|BA\\(1\\))"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL public UniBasic source, verbatim, from github.com/zelenko/pick (UniVerse-backed Eclipse ERP customization; no repo-level LICENSE stated — used here read-and-analyze/attributed for a feasibility demonstration, not redistributed as original work). Exercises the core multivalue idiom: angle-bracket addressing (BA(1)<2>), MATPARSE, LOCATE...SETTING...ELSE (find-or-not-found), INSERT-at-position, and DCOUNT — the central claim-taxonomy target of the whole schema."
+}

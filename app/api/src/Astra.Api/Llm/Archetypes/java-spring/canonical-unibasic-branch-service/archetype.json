@@ -1,0 +1,42 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-unibasic-branch-service",
+  "targetStack": "java-spring",
+  "displayName": "Acme user-branch service (UniBasic → Java 21 / Spring Boot 3, feasibility POC)",
+  "description": "Feasibility POC for a prospective client engagement: an equipment-finance ILS system, business logic in Rocket UniData/UniBasic, target Java 17+/PostgreSQL. Translates two REAL, public UniBasic routines (github.com/zelenko/pick — no repo-level LICENSE stated, used here read-and-analyze/attributed, not redistributed as original work) from a signed unibasic spec (targetStack=java-spring): add-branch-to-user.pick's CONVERT VM TO @FM / LOCATE / INSERT / CONVERT @FM TO VM round-trip collapses to a plain List<String>.contains/add once the field lives in a real collection (DynamicArrayOps); the OPEN 'INITIALS' TO USER + numbered READV/WRITEV,ID,9 access becomes an injected UserBranchRecordPort, with field 9's unresolved DICT name explicitly flagged rather than invented (UserBranchRecordPort, UserBranchService). Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj only). UniData/UniVerse have no free/scriptable runtime, so source-execution equivalence is NOT claimed — the golden score + this compiling, passing JUnit suite are the gates, the same honest posture as the OpenEdge ABL archetype.",
+  "compatibleSchemas": ["unibasic"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "add-branch-to-user" },
+      { "subroutineName": "ARRAY" },
+      { "subroutineName": "VZ.USER.BRANCH" }
+    ],
+    "fallback": "Used for unibasic routines centered on multivalue field manipulation (LOCATE/INSERT/CONVERT/angle-bracket access) against a hashed-file record."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "status": "production",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "No free/scriptable UniData or UniVerse runtime exists (Rocket's only free tier was a superseded 2-user dev/demo edition; Rocket's own MV BASIC tooling is a VS Code extension requiring a live licensed server, not a standalone interpreter) — equivalence is NOT claimed, same posture as OpenEdge ABL.",
+    "gatesActive": [
+      "golden-dataset extraction score (unibasic, target-neutral claims, mix of real public source + authored gap-fill entries)",
+      "maven-sidecar offline compile (mvn -o test-compile)",
+      "JUnit 5 suite offline (real assertions over the resolved List<String> semantics)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "UniData/UniVerse source-execution equivalence (not feasible without a licensed install)",
+      "property-test-sidecar (Hypothesis) — needs per-claim generatorHints on unibasic.schema.json",
+      "DICT-driven field-name resolution for fieldPositionAccess claims (needs the real client's data dictionary export)"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                                    "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/branch/SpecClaim.java",                               "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/branch/TargetMapping.java",                           "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/branch/DynamicArrayOps.java",                         "language": "java", "derivedFromClaimIds": ["MV-1","MV-2","INV-1"] },
+    { "path": "src/main/java/com/acme/branch/UserBranchRecordPort.java",                    "language": "java", "derivedFromClaimIds": ["RA-1","FP-1"] },
+    { "path": "src/main/java/com/acme/branch/UserBranchService.java",                       "language": "java", "derivedFromClaimIds": ["MV-1","RA-1","INV-1"] },
+    { "path": "src/test/java/com/acme/branch/DynamicArrayOpsTests.java",                    "language": "java", "derivedFromClaimIds": ["MV-1","MV-2","INV-1"] },
+    { "path": "src/test/java/com/acme/branch/UserBranchServiceTests.java",                  "language": "java", "derivedFromClaimIds": ["RA-1","FP-1","MV-1"] }
+  ]
+}

@@ -35,6 +35,7 @@ from parser_sidecar.vbnet_parser import parse_source as _vbnet_parse_v0
 from parser_sidecar.abl_parser import parse_source as _abl_parse_v0
 from parser_sidecar.java_parser import parse_source as _java_parse_v0
 from parser_sidecar.php_parser import parse_source as _php_parse_v0
+from parser_sidecar.unibasic_parser import parse_source as _unibasic_parse_v0
 
 # Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
 # Imported lazily so a missing/broken grammar binding doesn't take the
@@ -215,6 +216,31 @@ def _php_parse(filename: str, content: str):
         )
 
 
+def _unibasic_parse(filename: str, content: str):
+    """UniBasic (.pick/.b) structural parser — Rocket UniData/UniVerse's
+    procedural language. Calibrated against real, public UniBasic source
+    (github.com/zelenko/pick). One file = one cataloged program/routine
+    (see unibasic_parser's module docstring for why). On any unexpected
+    error it degrades to a single whole-file routine so an unparseable file
+    is still catalogued rather than dropped."""
+    try:
+        return _unibasic_parse_v0(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
+        log.warning("unibasic parser error on %s (%s); emitting whole-file routine", filename, e)
+        from parser_sidecar.unibasic_parser import ParseOutcome, SubroutineSummary
+        lines = (content or "").count("\n") + 1
+        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        return ParseOutcome(
+            line_count=lines,
+            subroutines=[SubroutineSummary(
+                name=f"{stem} (unparsed)", signature=f"{stem} (program)",
+                line_start=1, line_end=lines,
+                common_block_refs=tuple(), called_subroutines=tuple())],
+            warnings=[f"unibasic parser error: {e}; whole-file fallback"],
+            filename=filename,
+        )
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"astra-parser","msg":"%(message)s"}',
@@ -262,6 +288,7 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         is_abl = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and _looks_like_abl(filename)
         is_java = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and (not is_abl) and _looks_like_java(filename)
         is_php = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and (not is_abl) and (not is_java) and _looks_like_php(filename)
+        is_unibasic = (not is_cobol) and (not is_delphi) and (not is_cpp) and (not is_vb6) and (not is_csharp) and (not is_vbnet) and (not is_abl) and (not is_java) and (not is_php) and _looks_like_unibasic(filename)
         # fparser2 is the only parser that needs the process-wide lock
         # (global SymbolTable singleton); the COBOL / Delphi / C++ / VB6 paths
         # are purely local. We acquire the lock only for the Fortran path.
@@ -328,6 +355,13 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             outcome_warnings = php_outcome.warnings
             outcome_filename = php_outcome.filename
             language = "php"
+        elif is_unibasic:
+            unibasic_outcome = _unibasic_parse(filename=filename, content=request.content or "")
+            outcome_line_count = unibasic_outcome.line_count
+            outcome_subroutines = unibasic_outcome.subroutines
+            outcome_warnings = unibasic_outcome.warnings
+            outcome_filename = unibasic_outcome.filename
+            language = "unibasic"
         else:
             with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
@@ -492,6 +526,23 @@ def _looks_like_php(filename: str) -> bool:
     if not filename:
         return False
     return filename.lower().endswith(".php")
+
+
+def _looks_like_unibasic(filename: str) -> bool:
+    """Return True when the file path's extension marks it as UniBasic
+    (Rocket UniData/UniVerse) source.
+
+    `.pick` is the confirmed real-world convention (github.com/zelenko/pick,
+    the public calibration corpus); `.b` is a commonly-cited MultiValue
+    community convention for interchange/version-control purposes. Neither
+    is an inherent UniData concept — cataloged BASIC programs live as
+    records inside a hashed "BP" (BASIC Programs) file inside the database,
+    not as OS-level files; an extension is only meaningful once code is
+    exported to a filesystem/Git for tooling like this.
+    """
+    if not filename:
+        return False
+    return filename.lower().endswith((".pick", ".b"))
 
 
 def serve() -> None:

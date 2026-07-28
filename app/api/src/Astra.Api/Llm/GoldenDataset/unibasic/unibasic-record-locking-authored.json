@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-record-locking-authored",
+  "schemaId": "unibasic",
+  "title": "[AUTHORED — not exercised by the public sample] READU...LOCKED retry-or-fail pattern with explicit RELEASE",
+  "trapCategory": "record-locking",
+  "difficulty": "medium",
+  "sourcePath": "unibasic/authored/reserve-stock.pick",
+  "sourceLines": "1-16",
+  "sourceContent": "* reserve-stock.pick - reserve inventory under an exclusive lock\nPGM = 'VZ.RESERVE.STOCK'\nOPEN 'STOCK' TO STK ELSE\n   STOP\nEND\n\nREADU QTY.REC FROM STK, ITEM.ID LOCKED\n   PRINT 'Item locked by another user, retry later.'\n   RETURN\nEND ELSE\n   PRINT 'Item not found: ':ITEM.ID\n   RETURN\nEND\n\nON.HAND = QTY.REC<1>\nIF ON.HAND < REQUESTED THEN\n   RELEASE STK, ITEM.ID\n   PRINT 'Insufficient stock.'\n   RETURN\nEND\n\nQTY.REC<1> = ON.HAND - REQUESTED\nWRITE QTY.REC ON STK, ITEM.ID\nRELEASE STK, ITEM.ID\nRETURN\n",
+  "expectedClaims": [
+    {
+      "kind": "recordAccessSemantics",
+      "id": "RA-1",
+      "pattern": "(?i)(READU|LOCKED|RELEASE|record.lock|exclusive|PESSIMISTIC)"
+    },
+    {
+      "kind": "invariant",
+      "id": "INV-1",
+      "pattern": "(?i)(ON.HAND|sufficient|reserve|stock|never\\s+negative)"
+    },
+    {
+      "kind": "openQuestion",
+      "id": "Q-1",
+      "pattern": "(?i)(lock(ing)?\\s+semantics|SME|validate|retry|concurrency)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "AUTHORED — the small public calibration sample (github.com/zelenko/pick) does not exercise record locking, so this entry is written to represent a well-documented, universal UniBasic/MultiValue concept (READU...LOCKED / RELEASE) rather than derived from real client or public code. A genuine client engagement must validate the exact locking semantics against the client's real UniData source. READU with the LOCKED clause is the pessimistic-read-lock idiom; RELEASE explicitly drops it — maps to a JPA @Lock(PESSIMISTIC_WRITE) transaction in the Java target."
+}

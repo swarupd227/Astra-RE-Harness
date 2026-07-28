@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-sequential-export-authored",
+  "schemaId": "unibasic",
+  "title": "[AUTHORED — condensed from the real export.pick pattern, same repo] OPENSEQ/WRITESEQ tab-delimited export, distinct from hashed-file access",
+  "trapCategory": "file-io/sequential-export",
+  "difficulty": "medium",
+  "sourcePath": "unibasic/authored/condensed-from-export.pick",
+  "sourceLines": "1-16",
+  "sourceContent": "* condensed from zelenko/pick's export.pick CREATE1: paragraph\nPGM = 'VZ.EXPORT.SAMPLE'\nZ = CHAR(9)\nFILE.ID = 'product_general.txt'\nOPENSEQ 'MSG-OUT', FILE.ID TO OUT.FILE;\n   ELSE CREATE OUT.FILE ELSE PRINT 'ERR: cannot create export file'\nOPEN 'PRODUCT' TO KEYS ELSE STOP\n\nEXECUTE 'SELECT PRODUCT WITH PRICE_LINE # \"--11\"'\nLOOP\n   READNEXT ID ELSE EXIT\n   READV DESC FROM KEYS, ID, 1 ELSE DESC = ''\n   CONVERT VM TO ' ' IN DESC\n   LINE = ID:Z:DESC\n   WRITESEQ LINE TO OUT.FILE ELSE CONTINUE\nREPEAT\nCLOSESEQ OUT.FILE ON ERROR PRINT 'ERROR CLOSING SEQ FILE'\nRETURN\n",
+  "expectedClaims": [
+    {
+      "kind": "recordAccessSemantics",
+      "id": "RA-1",
+      "pattern": "(?i)(OPENSEQ|WRITESEQ|CLOSESEQ|sequential.file|flat\\s+file|different\\s+(access|model)|hashed)"
+    },
+    {
+      "kind": "dynamicArrayUsage",
+      "id": "MV-1",
+      "pattern": "(?i)(CONVERT\\s+VM|value.mark|multivalue\\s+to\\s+(space|flat)|delimit)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(WRITESEQ|export|file\\s+write|tab.delimited|CSV|TSV)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "AUTHORED — condensed from the real export.pick file's CREATE1: paragraph (same github.com/zelenko/pick repo, same attribution/license note as the other real entries) to keep this golden entry a clean single-claim example rather than the full 274-line file. Demonstrates the sequential-file-I/O access model (OPENSEQ/WRITESEQ/CLOSESEQ against a tab-delimited flat file) as genuinely distinct from the hashed-file READV/WRITEV world exercised in the other entries, plus a CONVERT VM TO ' ' flattening a multivalue field for export."
+}

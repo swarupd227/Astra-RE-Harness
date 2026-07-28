@@ -20,6 +20,7 @@ public static class SourceLanguageDetector
     public const string Openedge = "openedge";
     public const string Java = "java";
     public const string Php = "php";
+    public const string Unibasic = "unibasic";
 
     public static readonly string[] FortranExtensions =
     {
@@ -97,6 +98,17 @@ public static class SourceLanguageDetector
         ".php",
     };
 
+    public static readonly string[] UnibasicExtensions =
+    {
+        // Rocket UniData/UniVerse "Pick BASIC". Neither extension is an
+        // inherent UniData concept — cataloged BASIC programs live as
+        // records inside a hashed "BP" file, not OS-level files. .pick is
+        // the confirmed real-world interchange convention (calibrated
+        // against github.com/zelenko/pick); .b is a commonly-cited
+        // MultiValue community convention for the same purpose.
+        ".pick", ".b",
+    };
+
     /// <summary>Every extension we accept at ingest time.</summary>
     public static IEnumerable<string> AllowedExtensions =>
         FortranExtensions
@@ -108,7 +120,8 @@ public static class SourceLanguageDetector
             .Concat(VbnetExtensions)
             .Concat(OpenedgeExtensions)
             .Concat(JavaExtensions)
-            .Concat(PhpExtensions);
+            .Concat(PhpExtensions)
+            .Concat(UnibasicExtensions);
 
     /// <summary>
     /// Map a file extension (case-insensitive, with leading dot) to a
@@ -128,6 +141,7 @@ public static class SourceLanguageDetector
         if (OpenedgeExtensions.Contains(ext)) return Openedge;
         if (JavaExtensions.Contains(ext)) return Java;
         if (PhpExtensions.Contains(ext)) return Php;
+        if (UnibasicExtensions.Contains(ext)) return Unibasic;
         return null;
     }
 
@@ -147,9 +161,9 @@ public static class SourceLanguageDetector
     public static string SupportedLanguagesDescription() =>
         "Fortran (.f/.for/.f90), COBOL (.cob/.cbl/.cpy), Delphi (.pas/.dpr/.inc), " +
         "C++ (.cpp/.h/.hpp), VB6 (.bas/.cls/.frm), C# (.cs), VB.NET (.vb), " +
-        "OpenEdge ABL (.p/.w/.i), Java (.java), or PHP (.php)";
+        "OpenEdge ABL (.p/.w/.i), Java (.java), PHP (.php), or UniBasic (.pick/.b)";
 
     /// <summary>Just the language names — for "no source files found" copy.</summary>
     public static string SupportedLanguageNames() =>
-        "Fortran, COBOL, Delphi, C++, VB6, C#, VB.NET, OpenEdge ABL, Java, or PHP";
+        "Fortran, COBOL, Delphi, C++, VB6, C#, VB.NET, OpenEdge ABL, Java, PHP, or UniBasic";
 }

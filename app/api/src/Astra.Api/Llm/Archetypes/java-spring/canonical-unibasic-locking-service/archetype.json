@@ -1,0 +1,44 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-unibasic-locking-service",
+  "targetStack": "java-spring",
+  "displayName": "Acme stock-reservation service (UniBasic → Java 21 / Spring Boot 3, feasibility POC)",
+  "description": "Feasibility POC for a prospective client engagement: an equipment-finance ILS system, business logic in Rocket UniData/UniBasic, target Java 17+/PostgreSQL. Translates reserve-stock.pick, an AUTHORED representative sample (NOT sourced from a public repository) written to exercise the READU...LOCKED / RELEASE record-locking idiom that the small public calibration corpus (github.com/zelenko/pick) does not contain. From a signed unibasic spec (targetStack=java-spring): the three-way OPEN/READU outcome (found-and-locked / locked-by-another-user / not-found) becomes a sealed LockOutcome result type (LockOutcome, StockReservationService); the strictly-less-than stock guard and per-exit-path RELEASE become normal Java exceptions and transaction-boundary semantics rather than a manually-tracked release call. Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj only). UniData/UniVerse have no free/scriptable runtime, so source-execution equivalence is NOT claimed — the golden score + this compiling, passing JUnit suite are the gates, the same honest posture as the OpenEdge ABL and canonical-unibasic-branch-service archetypes. A genuine client engagement must validate the exact locking semantics against the client's real UniData source before this ships.",
+  "compatibleSchemas": ["unibasic"],
+  "matches": {
+    "anyOf": [
+      { "subroutineName": "reserve-stock" },
+      { "subroutineName": "VZ.RESERVE.STOCK" }
+    ],
+    "fallback": "Used for unibasic routines centered on an exclusive record-lock read-modify-write (READU...LOCKED / RELEASE) against a hashed file."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "status": "production",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "No free/scriptable UniData or UniVerse runtime exists — equivalence is NOT claimed, same posture as every other archetype in this platform.",
+    "gatesActive": [
+      "golden-dataset extraction score (unibasic-record-locking-authored entry)",
+      "maven-sidecar offline compile (mvn -o test-compile)",
+      "JUnit 5 suite offline (real assertions over the three-way lock outcome + strictly-less-than guard)"
+    ],
+    "gatesAvailableNotYetWired": [
+      "UniData/UniVerse source-execution equivalence (not feasible without a licensed install)",
+      "property-test-sidecar (Hypothesis) — needs per-claim generatorHints on unibasic.schema.json",
+      "Validation of the real locking semantics against the client's actual UniData source (this entry is authored, not client-derived)"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                                     "language": "xml",  "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/stock/SpecClaim.java",                                 "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/stock/TargetMapping.java",                             "language": "java", "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/acme/stock/StockRecord.java",                               "language": "java", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/main/java/com/acme/stock/LockOutcome.java",                               "language": "java", "derivedFromClaimIds": ["RA-1"] },
+    { "path": "src/main/java/com/acme/stock/StockRecordPort.java",                           "language": "java", "derivedFromClaimIds": ["RA-1"] },
+    { "path": "src/main/java/com/acme/stock/ItemLockedException.java",                       "language": "java", "derivedFromClaimIds": ["RA-1"] },
+    { "path": "src/main/java/com/acme/stock/ItemNotFoundException.java",                     "language": "java", "derivedFromClaimIds": ["RA-1"] },
+    { "path": "src/main/java/com/acme/stock/InsufficientStockException.java",                "language": "java", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/main/java/com/acme/stock/StockReservationService.java",                   "language": "java", "derivedFromClaimIds": ["RA-1","INV-1"] },
+    { "path": "src/test/java/com/acme/stock/StockReservationServiceTests.java",              "language": "java", "derivedFromClaimIds": ["RA-1","INV-1"] }
+  ]
+}

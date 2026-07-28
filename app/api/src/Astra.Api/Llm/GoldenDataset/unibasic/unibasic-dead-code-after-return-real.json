@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-dead-code-after-return-real",
+  "schemaId": "unibasic",
+  "title": "[REAL — github.com/zelenko/pick] UPS.pick: CSV-import GOSUB paragraph, DCOUNT-driven multivalue loop, and genuinely unreachable code after a paragraph RETURN",
+  "trapCategory": "edge/dead-code",
+  "difficulty": "medium",
+  "sourcePath": "zelenko/pick/UPS.pick",
+  "sourceLines": "1-108",
+  "sourceContent": "** Version# 0.0008[8] - 06/01/2016 - 09:54pm - DEVOPS - eclipse\n** Version# 0.0009[23] - 07/07/2016 - 04:54pm - DEVOPS - eclipse\n*** V0.0009 Change - Custom Coding DJY200 - 07/07/2016 - DEVOPS - eclipse\n*** V0.0008 Change - Custom Coding DJY200 - 07/07/2016 - DEVOPS - eclipse\n*-------------------------------------------------------------------------*\n*  This is used by the UPS user defined queue\n*  Parsing UPS transactions from CSV to VZUPS file\n*-------------------------------------------------------------------------*\n          OPEN 'VZUPS' TO UPS ELSE\n             STOP\n          END\n\n          OPEN 'MSG-IN' TO IN ELSE\n             STOP\n          END\n          MSG = ''\n          SEND.TO.SUPERUSER = 0\n\n          EXAMPLE.ID = 'OZLINK3P.csv'\n          GOSUB READCSV\n          EXAMPLE.ID = 'OZLINK1B.csv'\n          GOSUB READCSV\n\n          *** Look for multiple UPS files\n         !EXECUTE 'SELECT MSG-IN WITH @ID = \"2016]\"'\n         !LOOP\n         !   READNEXT EXAMPLE.ID ELSE EXIT\n         !   GOSUB READCSV\n         !REPEAT\n\n          USR.ID = 'DEVOPS'\n          GOSUB SEND.MSG\n\n          *** Notify Josh if Zero inserted\n          IF SEND.TO.SUPERUSER THEN\n             USR.ID = 'SUPERUSER'\n             GOSUB SEND.MSG\n          END\n\n          *** Remove old UPS records\n          FM = CHAR(254)\n          OLDUPS = OCONV(@DATE-31,\"D4/\")\n          COMMAND='SELECT VZUPS WITH INSERT.DATE <=':OLDUPS:FM\n          COMMAND := 'DELETE VZUPS'\n          EXECUTE COMMAND\n*------------------------------------------------------------------------*\nREADCSV:  *** Start CSV Processing\n          READ EXAMPLE FROM IN,EXAMPLE.ID ELSE EXAMPLE = 'NONE'\n          IN.COUNT = DCOUNT(EXAMPLE,AM)\n          EXAMPLE = CHANGE(EXAMPLE,'\",\"','|')\n          EXAMPLE = CHANGE(EXAMPLE,'\"','')\n\n          *** Start with Second line to end of document\n          FOR J = 2 TO IN.COUNT\n             COLUMN.COUNT = DCOUNT(EXAMPLE<J>,'|')\n             NEWID = FIELD(EXAMPLE<J>,'|',1)\n             REC = \"\"\n             I = 2\n            !REC<1> = OCONV(DATE(), 'D4/')\n             REC<1,1> = DATE()\n             REC<1,2> = TIME()\n\n             *** Loop through records in each line\n             FOR L = 2 TO COLUMN.COUNT\n                VALUE = FIELD(EXAMPLE<J>,'|',L)\n                REC<I> = VALUE\n                I+=1\n             NEXT L\n\n             WRITE REC ON UPS,NEWID\n          NEXT J\n\n          *** Delete processed CSV file\n          DELETE IN,EXAMPLE.ID\n\n          MSG := 'Records Added: ':IN.COUNT-1:' from ':EXAMPLE.ID: \"; \"\n          SEND.TO.SUPERUSER = (IN.COUNT-1 = 0)\n\n          RETURN\n*-------------------------------------------------------------------------*\n          PGM = 'VZ.UPS'\n          ERR.MSG = ''\n\n*-------------------------------------------------------------------------*\n          *** Phantom Process? Yes or NO\n          PHANTOM.PROC = ( @TTY = 'phantom' )\n          SEND.EMAILS  = PHANTOM.PROC\n\n*-------------------------------------------------------------------------*\nHALT:     IF ERR.MSG THEN\n             MSG = ERR.MSG;    GOSUB SEND.MSG\n          END\n\n          IF PHANTOM.PROC THEN\n             UT.PH.CLEANUP\n             STOP\n          END\n\n          RETURN\n\n*-------------------------------------------------------------------------*\nSEND.MSG:       *** Sends message to user\n*-------------------------------------------------------------------------*\n             SEND.MESSAGE 'Phantom', USR.ID, MSG\n          RETURN\n*-------------------------------------------------------------------------*\n!DEVOPS~07/07/16~16:54\n",
+  "expectedClaims": [
+    {
+      "kind": "dynamicArrayUsage",
+      "id": "MV-1",
+      "pattern": "(?i)(DCOUNT|EXAMPLE<J>|EXAMPLE<I>|AM\\b|multivalue|angle.bracket)"
+    },
+    {
+      "kind": "edgeCase",
+      "id": "EC-1",
+      "pattern": "(?i)(dead\\s+code|unreachable|after\\s+(a\\s+|the\\s+)?RETURN|never\\s+reached|SME)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(WRITE\\s+REC|DELETE\\s+IN|WRITE.*UPS|sideEffect|file\\s+write)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL public UniBasic source, verbatim, from github.com/zelenko/pick (same attribution/license note as the ARRAY.PICK entry). `PGM = 'VZ.UPS'` reappears at line 81, AFTER the READCSV paragraph's own RETURN at line 79 — since GOSUB/RETURN never falls through to it in normal execution, that line (and the block following it, down to the next label) is genuinely dead code in this file's actual control flow. A real, distinctive trap for the edgeCase claim kind: flag it for SME confirmation rather than silently porting it as live logic. Also exercises DCOUNT(EXAMPLE,AM) and EXAMPLE<J> multivalue CSV-row iteration, and real file side effects (WRITE REC ON UPS,NEWID; DELETE IN,EXAMPLE.ID)."
+}

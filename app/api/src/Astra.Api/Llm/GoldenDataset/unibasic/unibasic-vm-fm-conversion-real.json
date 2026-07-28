@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-vm-fm-conversion-real",
+  "schemaId": "unibasic",
+  "title": "[REAL — github.com/zelenko/pick] add-branch-to-user.pick: VM<->@FM mark conversion, numbered-field READV/WRITEV, OPEN...ELSE guard",
+  "trapCategory": "multivalue/mark-conversion",
+  "difficulty": "hard",
+  "sourcePath": "zelenko/pick/add-branch-to-user.pick",
+  "sourceLines": "1-43",
+  "sourceContent": "          PGM = 'VZ.USER.BRANCH'\n*** Add new branch to user IF user does not have it\n*-------------------------------------------------------------------------*\n          GET(ARG.)NEW\n          IF NEW = '0' THEN\n             PRINT 'Specify which branch to add.'\n             END\n          ELSE\n             GOSUB DOIT\n          END\n          RETURN\n\n*-------------------------------------------------------------------------*\nDOIT:     *** Check if Branch assigned, if not, then assign it to user.\n          OPEN 'INITIALS' TO USER ELSE STOP\n\n          CMD = 'SELECT INITIALS WITH NO.LOGON # \"1\"'\n          CMD:= ' AND MESSAGE.GROUP = \"\" AND HOME_BR # \"PT\"'\n         ! CMD:= ' AND @ID = \"TEST\"'\n\n          EXECUTE CMD\n\n          LOOP\n             READNEXT ID ELSE EXIT\n\n             READV BR FROM USER,ID,9 ELSE BR = ''\n             CONVERT VM TO @FM IN BR\n\n             LOCATE NEW IN BR SETTING J THEN\n                PRINT ID: ' already has \"':NEW:'\"'\n                END\n             ELSE\n                PRINT ID: ' - inserting branch \"': NEW : '\"'\n                BR = INSERT(BR,J;NEW)\n                CONVERT @FM TO @VM IN BR\n                WRITEV BR ON USER,ID,9\n             END\n\n          REPEAT\n          RETURN\n*-------------------------------------------------------------------------*\n!ZELENKO~08/24/17~13:03\n",
+  "expectedClaims": [
+    {
+      "kind": "dynamicArrayUsage",
+      "id": "MV-1",
+      "pattern": "(?i)(CONVERT|VM|@FM|value.mark|field.mark|re.delimit|round.trip)"
+    },
+    {
+      "kind": "fieldPositionAccess",
+      "id": "FP-1",
+      "pattern": "(?i)(field\\s*9|position\\s*9|READV|WRITEV|DICT|numbered|bare\\s+number)"
+    },
+    {
+      "kind": "recordAccessSemantics",
+      "id": "RA-1",
+      "pattern": "(?i)(OPEN\\s+'INITIALS'|OPEN\\s*\\.\\.\\.\\s*ELSE|hashed.file|not.found\\s+guard|STOP)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL public UniBasic source, verbatim, from github.com/zelenko/pick (same attribution/license note as the ARRAY.PICK entry). The CONVERT VM TO @FM ... CONVERT @FM TO VM round-trip around the LOCATE/INSERT call is the clearest real evidence of why dynamicArrayUsage needs an explicit Java collection-shape decision — the round-trip becomes unnecessary once the data lives in a real List. Field 9 (branch codes on the INITIALS file) is read/written by bare number with no semantic name in source."
+}

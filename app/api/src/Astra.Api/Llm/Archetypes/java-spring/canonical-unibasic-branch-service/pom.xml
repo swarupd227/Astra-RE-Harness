@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.acme</groupId>
+    <artifactId>demo-branch-service</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>Acme User-Branch Service (UniBasic -&gt; Java 21 / Spring Boot 3 feasibility POC)</name>
+    <description>
+      Feasibility POC for a prospective client engagement: equipment-finance
+      ILS system, business logic in Rocket UniData/UniBasic, target Java 17+.
+      Translates two REAL, public UniBasic routines (github.com/zelenko/pick —
+      no repo-level LICENSE stated, used here read-and-analyze/attributed, not
+      redistributed) from a signed unibasic spec (spec/v1, schemaId=unibasic,
+      targetStack=java-spring):
+
+        - add-branch-to-user.pick: the CONVERT VM TO @FM / LOCATE / INSERT /
+          CONVERT @FM TO VM round-trip becomes a plain List&lt;String&gt;
+          add-if-absent (the mark-conversion dance is unnecessary once the
+          data lives in a real collection) plus a READV/WRITEV-by-bare-number
+          field access made explicit as a named property with a citation back
+          to the unresolved DICT position.
+        - ARRAY.PICK: the same LOCATE-then-insert-if-missing idiom in
+          isolation, demonstrating the resolved List shape independent of
+          the file-access wrapper.
+
+      Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj
+      only). UniData/UniVerse have no free/scriptable runtime (Rocket's only
+      free tier was a superseded 2-user dev/demo edition; Rocket's own MV
+      BASIC tooling is a VS Code extension that talks to a live licensed
+      server, not a standalone interpreter) — so source-execution equivalence
+      is NOT claimed here. The golden score + this compiling, passing JUnit
+      suite are the gates, same honest posture as the OpenEdge ABL archetype.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.2</junit.version>
+        <assertj.version>3.25.3</assertj.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- Plugins pinned to the maven-sidecar's baked OFFLINE cache
+             (compiler 3.13.0 / resources 3.3.1 / surefire 3.2.5). -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

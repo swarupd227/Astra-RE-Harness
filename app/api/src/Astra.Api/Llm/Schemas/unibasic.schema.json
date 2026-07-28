@@ -1,0 +1,202 @@
+{
+  "$schema": "https://astra.nous.ai/spec-schema/v1",
+  "schemaVersion": "1.0",
+  "id": "unibasic",
+  "displayName": "UniBasic (Rocket UniData / UniVerse) → Java 21 · Spring Boot 3",
+  "description": "Feasibility POC for a real prospective engagement (equipment-finance system, 50-year-old system, business logic in UniData/UniBasic, migrate to Java 17+/PostgreSQL). UniData is the MultiValue database PLATFORM (from Rocket Software); UniBasic is the procedural language that runs INSIDE it — comparable to 'PL/SQL inside Oracle', except UniBasic is a full general-purpose BASIC (drives terminal screens and batch jobs too, not just stored procedures). Calibrated against six real, public UniBasic/Pick-BASIC source files (github.com/zelenko/pick — a UniVerse-backed Eclipse ERP customization; UniVerse is Rocket's sibling MultiValue database, whose BASIC dialect is near-identical to UniData's — a documented, minor dialect delta this schema flags rather than papers over). The claim taxonomy centers on the one thing that has no relational/OO equivalent: a MultiValue 'attribute' can itself hold multiple values and sub-values (field-mark/value-mark/sub-value-mark delimited), addressed with angle-bracket syntax (x<2>, x<1,3>) — every such usage needs an explicit List/nested-list/record shape decision on the Java side, the same category of problem this platform already solved for ABL temp-tables and PHP arrays, but more pervasive here since MultiValue IS the storage model, not an occasional structure. IMPORTANT — no source-execution equivalence: Rocket's only free UniData tier was a 2-user 'Personal Edition' of a since-superseded major version (dev/demo-only, not a scriptable CI runtime), and Rocket's own 'Rocket MV BASIC' tooling is a VS Code editing/debugging extension that talks to a live licensed server, not a standalone interpreter. Verification rests on golden-dataset extraction scoring plus compile+test of the generated Java — exactly the same honest gate structure already shipped for OpenEdge ABL.",
+  "supportedSourceExtensions": [".pick", ".b"],
+  "compatibleTargetStacks": ["java-spring"],
+  "claimKinds": [
+    {
+      "id": "invariant",
+      "label": "Invariant",
+      "idPrefix": "INV",
+      "specJsonField": "invariants",
+      "textField": "claim",
+      "displayTone": "signed",
+      "description": "Behavioural invariants the routine must preserve across all valid inputs — the business rules a reviewer signs off on and the Java target must uphold.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "claim", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true },
+        { "name": "generatorHints", "kind": "object", "required": false }
+      ]
+    },
+    {
+      "id": "dynamicArrayUsage",
+      "label": "MultiValue dynamic-array usage",
+      "idPrefix": "MV",
+      "specJsonField": "dynamic_array_usages",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Angle-bracket multivalue addressing (x<N> = value N, x<N,M> = sub-value M of value N), MATPARSE (split a delimited string into a dynamic array), LOCATE ... SETTING ... (find a value's position, or the ELSE branch when absent), INSERT/DELETE at a located position, DCOUNT (count values/sub-values), and CONVERT a TO b IN x (re-delimiting between value-mark, field-mark, and arbitrary-character representations of the same multivalue string — observed in the real calibration corpus swapping VM for @FM so LOCATE/INSERT could operate on it, then back before writing). Each needs an explicit Java shape decision: List<T>, a nested List<List<T>>, or a fixed-shape record — and the CONVERT round-trip becomes free/implicit once the data lives in a real collection.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "expression", "kind": "string", "required": false, "doc": "The MultiValue expression, e.g. 'BR<J>' or 'CONVERT VM TO @FM IN BR'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "java_shape", "kind": "enum:list|nested-list|record|map|unknown", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "fieldPositionAccess",
+      "label": "Numbered field-position access",
+      "idPrefix": "FP",
+      "specJsonField": "field_position_accesses",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "READV/WRITEV (and record-level READ/WRITE combined with a numeric subscript) address a record's attribute by BARE NUMBER (e.g. 'READV WRITER FROM OQ,ID,9' — field 9, no name). This is a real, pervasive fragility in MultiValue business code: the semantic meaning of 'field 9' lives only in the database's DICT (data dictionary) definitions or in institutional memory — NOT recoverable from the source file alone. Every occurrence is captured as-numbered and flagged as needing the client's actual DICT export to resolve to a named Java property; do not invent a business name for a bare field number.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "file_or_table", "kind": "string", "required": false, "doc": "The open file/table handle this position is read from, e.g. 'OQ' (opened from ORDER.QUEUE)." },
+        { "name": "field_number", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "recordAccessSemantics",
+      "label": "Record / file access semantics",
+      "idPrefix": "RA",
+      "specJsonField": "record_access_semantics",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "OPEN 'FILE' TO HANDLE ELSE ... (hashed MultiValue file open with an ELSE-clause guard, structurally identical to a not-found guard in other languages), the FIND/READNEXT SELECT-list cursor pattern (EXECUTE a SELECT, then LOOP / READNEXT id ELSE EXIT / REPEAT), versus OPENSEQ/WRITESEQ/CLOSESEQ (genuine sequential OS-file I/O, e.g. a flat CSV/TSV export — a DIFFERENT access model from the hashed-file READV/WRITEV world and must not be conflated with it). The hashed-file cursor pattern maps to a Spring Data query returning a List/Stream; sequential file I/O maps to plain Java I/O or a batch export job.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "access_kind", "kind": "enum:hashed-file-open|select-cursor|sequential-file-io|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "java_equivalent", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "dynamicCallTarget",
+      "label": "Dynamic / indirect call target",
+      "idPrefix": "DC",
+      "specJsonField": "dynamic_call_targets",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "CALL @variable(...) (the call target is held in a variable, resolved at runtime — observed in the real calibration corpus as e.g. 'SUBRI = \"DICT.PRD.SALES\"; CALL @SUBRI(...)') and SUBR('name', args...) (a function-call-style invocation of another cataloged program that returns a value). Both are real inter-program call mechanisms with NO static target in the @variable case — captured as-written (the variable name, or the literal SUBR target), flagged as needing either dataflow analysis or a Java Strategy/registry-lookup pattern rather than a direct method call.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "call_form", "kind": "enum:call-indirect|call-direct|subr-function|unknown", "required": true },
+        { "name": "target_as_written", "kind": "string", "required": true, "doc": "The literal token after CALL/SUBR, e.g. '@SUBRI' or 'VZ.GET.VALUE'." },
+        { "name": "statically_resolvable", "kind": "enum:yes|no|unknown", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "dynamicQueryExecution",
+      "label": "Dynamically-built query execution",
+      "idPrefix": "DQ",
+      "specJsonField": "dynamic_query_executions",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "A TCL SELECT ... WITH ... command built via string concatenation, then run via EXECUTE (observed in the real calibration corpus building the WHERE-equivalent by string-concatenating field values directly into the command text). This is dynamic-SQL-shaped: a real injection-risk-equivalent pattern in the source that a Java target must NOT reproduce literally — it should become a parameterized Spring Data query / JPA Criteria query instead. Flag the built command's filter conditions as the invariant to preserve, not the string-concatenation mechanism itself.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "command_template", "kind": "string", "required": false, "doc": "The SELECT/filter shape being built, e.g. 'SELECT ORDER.QUEUE WITH STAT = \"O\" AND ORDER.DATE = <today>'." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "java_equivalent", "kind": "string", "required": true, "doc": "e.g. 'a parameterized Spring Data @Query / JPA Criteria predicate'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "sideEffect",
+      "label": "Side effect",
+      "idPrefix": "SE",
+      "specJsonField": "side_effects",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Externally-visible state mutations: WRITE/WRITEV/WRITESEQ (record or field write), DELETE, SEND.MESSAGE (inter-user notification via the MultiValue 'Phantom'/messaging subsystem — no direct Java web-app equivalent, needs an explicit notification-port adapter, the same treatment as ABL's SEND.MESSAGE or PHP's mail()), and sequential-file create/append.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "edgeCase",
+      "label": "Edge case",
+      "idPrefix": "EC",
+      "specJsonField": "edge_cases",
+      "textField": "description",
+      "displayTone": "scaffolded",
+      "description": "Boundary/semantic conditions specific to UniBasic → Java: OCONV/ICONV inline format-mask conversion (e.g. 'RESULT/100\"MR2\"' — a rounding/scaling mask applied as part of an expression, observed in the real calibration corpus) needing an explicit BigDecimal rounding-mode decision; a missing record leaving a read variable as an empty string via the ELSE branch (not a null — the guard IS the null-check, must not be dropped); GOSUB-paragraph code appearing AFTER a RETURN statement that is genuinely unreachable in execution (observed once in the real calibration corpus) — flag as dead code to confirm with the SME, not to silently port.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "citations", "kind": "citation[]", "required": true },
+        { "name": "behavior", "kind": "string", "required": true },
+        { "name": "confidence", "kind": "enum:high|medium|low", "required": true }
+      ]
+    },
+    {
+      "id": "openQuestion",
+      "label": "Open question",
+      "idPrefix": "Q",
+      "specJsonField": "open_questions",
+      "textField": "question",
+      "displayTone": "draft",
+      "description": "Ambiguities needing SME/client resolution: the DICT (data-dictionary) definitions needed to name every numbered field position; GOSUB-paragraph → Java method extraction granularity (one method per paragraph, or inline); record-locking semantics (READU/LOCK/RELEASE) — not exercised by this small public calibration sample, a documented gap the real client engagement must validate against actual UniData source; whether this specific shop's '!' comment-prefix convention (seen throughout the calibration corpus, both for commented-out code and a trailing check-in stamp) is universal to this dialect or a local convention; and whether terminal-screen (FORM/paging) logic co-located in the same program needs separate re-platforming (same posture as ABL's FRAME/DISPLAY UI carve-out).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "question", "kind": "string", "required": true },
+        { "name": "status", "kind": "enum:unresolved|resolved", "required": true }
+      ]
+    }
+  ],
+  "topLevelFields": [
+    { "name": "summary", "kind": "string", "required": true },
+    { "name": "inputs", "kind": "io[]", "required": true },
+    { "name": "outputs", "kind": "io[]", "required": true },
+    { "name": "source_path", "kind": "string", "required": false },
+    { "name": "source_lines", "kind": "string", "required": false },
+    { "name": "routine", "kind": "string", "required": false },
+    { "name": "enclosing_type", "kind": "string", "required": false, "doc": "The cataloged program/routine name (from the filename convention, per unibasic_parser's design — SUBROUTINE headers carry no name of their own)." },
+    { "name": "target_archetype_hint", "kind": "enum:SpringService|SpringBatch", "required": false },
+    { "name": "metadata", "kind": "object", "required": false }
+  ],
+  "ioFieldShape": {
+    "fields": ["id", "name", "type", "semantic", "direction", "citations"],
+    "directionEnum": ["in", "output", "input-output", "return"],
+    "directionDescription": "UniBasic SUBROUTINE parameters carry no IN/OUT keyword — direction is inferred from usage (read-only vs written-to before RETURN) and must be stated explicitly, since the source alone doesn't declare it."
+  },
+  "citationShape": {
+    "fields": ["lines"],
+    "aliases": { "lines": ["lines", "line_range"] }
+  },
+  "promptHints": {
+    "preferredClaimTypes": [
+      "invariant",
+      "dynamicArrayUsage",
+      "fieldPositionAccess",
+      "recordAccessSemantics",
+      "dynamicCallTarget",
+      "dynamicQueryExecution",
+      "sideEffect",
+      "edgeCase",
+      "openQuestion"
+    ],
+    "minimumClaimsPerKind": {
+      "invariant": 1,
+      "dynamicArrayUsage": 0,
+      "fieldPositionAccess": 0,
+      "recordAccessSemantics": 0,
+      "dynamicCallTarget": 0,
+      "dynamicQueryExecution": 0,
+      "sideEffect": 0,
+      "edgeCase": 1,
+      "openQuestion": 0
+    },
+    "emphasis": "Every angle-bracket <N> / <N,M> multivalue access, MATPARSE, LOCATE, INSERT/DELETE-at-position, DCOUNT, and CONVERT-mark-conversion is a dynamicArrayUsage claim — resolve the Java shape (List/nested-list/record). Every READV/WRITEV by bare number is a fieldPositionAccess claim — capture the number, do NOT invent a business name for it. Every OPEN...ELSE, SELECT/READNEXT/REPEAT cursor loop, and OPENSEQ/WRITESEQ is a recordAccessSemantics claim — distinguish hashed-file from sequential-file access. Every CALL @var(...) or SUBR('name',...) is a dynamicCallTarget claim — flag static-resolvability honestly. Every EXECUTE of a built SELECT string is a dynamicQueryExecution claim. OCONV/ICONV inline masks, ELSE-branch empty-string-not-null reads, and any code after a RETURN are edgeCase claims. DICT field-name resolution, record-locking (unexercised in this corpus), and the shop's own comment conventions are openQuestions."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "calibratedAgainst": [
+    "Public UniVerse/UniBasic source: github.com/zelenko/pick (Eclipse ERP customization) — 6 real files",
+    "Prospective client: equipment-finance ILS system (UniData, 50-year-old, terminal + web front end)"
+  ]
+}

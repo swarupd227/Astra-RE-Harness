@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.acme</groupId>
+    <artifactId>demo-stock-reservation-service</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>Acme Stock-Reservation Service (UniBasic -&gt; Java 21 / Spring Boot 3 feasibility POC)</name>
+    <description>
+      Feasibility POC for a prospective client engagement: equipment-finance
+      ILS system, business logic in Rocket UniData/UniBasic, target Java 17+.
+
+      Translates reserve-stock.pick, an AUTHORED representative sample (NOT
+      sourced from a public repository) written to exercise the
+      READU...LOCKED / RELEASE record-locking idiom, which the small public
+      calibration corpus (github.com/zelenko/pick) does not contain. From a
+      signed unibasic spec (spec/v1, schemaId=unibasic, targetStack=java-spring):
+
+        - The three-way OPEN/READU outcome (found-and-locked / locked-by-
+          another-user / not-found) becomes a sealed LockOutcome result type
+          rather than nulls or booleans, so every caller must handle all
+          three branches explicitly.
+        - Explicit RELEASE-on-every-exit-path is replaced by normal Java
+          transaction-boundary semantics (the port's save() implies commit;
+          throwing a domain exception implies rollback) rather than a
+          manually-tracked release call.
+
+      Builds OFFLINE through the maven-sidecar (pinned plugins + junit/assertj
+      only). UniData/UniVerse have no free/scriptable runtime, so
+      source-execution equivalence is NOT claimed here — same honest posture
+      as every other archetype in this platform. A genuine client engagement
+      must validate the exact locking semantics against the client's real
+      UniData source before this ships.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.2</junit.version>
+        <assertj.version>3.25.3</assertj.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- Plugins pinned to the maven-sidecar's baked OFFLINE cache
+             (compiler 3.13.0 / resources 3.3.1 / surefire 3.2.5). -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

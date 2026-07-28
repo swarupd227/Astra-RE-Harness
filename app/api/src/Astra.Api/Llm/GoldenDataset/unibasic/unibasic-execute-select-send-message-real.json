@@ -1,0 +1,29 @@
+{
+  "entryId": "unibasic-execute-select-send-message-real",
+  "schemaId": "unibasic",
+  "title": "[REAL — github.com/zelenko/pick] PO.WITH.NO.COGS.pick: dynamically-built SELECT + EXECUTE, SELECT/READNEXT/REPEAT cursor, SEND.MESSAGE side effect via internal GOSUB paragraph",
+  "trapCategory": "query/dynamic-execute",
+  "difficulty": "hard",
+  "sourcePath": "zelenko/pick/PO.WITH.NO.COGS.pick",
+  "sourceLines": "1-58",
+  "sourceContent": "PGM ='VZ.PO.NO.COGS'\n** Version# 0.0002[30] - 10/16/2017 - 07:58pm - DEVOPS - eclipse\n*** V0.0002 Change - Custom Coding DYI711 - 10/16/2017 - DEVOPS - eclipse\n*** V0.0001 Change - Custom Coding DYI711 - 10/16/2017 - DEVOPS - eclipse\n          !PRINT 'D ':OCONV(DATE(),\"D4/\")\nOPEN 'ORDER.QUEUE' TO OQ ELSE\n          STOP\n   END\n\nCMD = 'SELECT ORDER.QUEUE WITH @ID = \"P]\" AND STAT = \"O\" AND ORDER.DATE = \"':OCONV(DATE(),\"D4/\"):'\" AND PROD.PO.UNITCOST = \"0.00\"'\nEXECUTE CMD\n\n!PRINTER.ON 'HOLD','PO WITH NO COGS ': TIME(),'JURISDICTIONS':VM:'LINE 2'\n\nLOOP\n          READNEXT ID ELSE EXIT\n          READV WRITER FROM OQ,ID,9 ELSE WRITER = ''\n          @ID = FIELD(ID,'.',1)\n          !DATES = FIELD(ID,'.',2)\n          !LINES = SUBR('DICT.GET.LEDGER.VALUE', 'LI.DESC')\n          !SUBRI = 'DICT.GET.LEDGER.VALUE'\n          !CALL @SUBRI(LINES,'LI.DESC')\n          !LCOUNT7 = DCOUNT(LINES,VM)\n          !PRICES = SUBR('DICT.GET.LEDGER.VALUE', 'LI.UNIT')\n          !PRINT @ID: ' ': WRITER: ' ': OCONV(DATES,'D4/'): ' '\n\n\n          !PRINT @ID:' WRITER: ':WRITER\n          NAME = SUBR('VZ.GET.VALUE','INITIALS',WRITER,3)\n          MSG = NAME:' created a PO with zero cost: ':@ID\n\n          USR.ID = 'DEVOPS'\n             GOSUB SEND.MSG\n\n          USR.ID = 'JOHN'\n             GOSUB SEND.MSG\n\n          USR.ID = WRITER\n             GOSUB SEND.MSG\n\n          !FOR I=1 TO LCOUNT7\n\n          !   PRINT I:'   ':' - ':LINES<1,I>\n          !NEXT I\nREPEAT\n\n!PRINTER.OFF DOC.ID\nRETURN\n\n\n*-------------------------------------------------------------------------*\nSEND.MSG:       *** Sends message to user\n*-------------------------------------------------------------------------*\n             SEND.MESSAGE 'Phantom', USR.ID, MSG\n          RETURN\n*-------------------------------------------------------------------------*\n!DEVOPS~10/16/17~19:58\n",
+  "expectedClaims": [
+    {
+      "kind": "dynamicQueryExecution",
+      "id": "DQ-1",
+      "pattern": "(?i)(EXECUTE|SELECT\\s+ORDER\\.QUEUE|string.built|concatenat|parameteriz)"
+    },
+    {
+      "kind": "recordAccessSemantics",
+      "id": "RA-1",
+      "pattern": "(?i)(READNEXT|REPEAT|LOOP|select.cursor|cursor)"
+    },
+    {
+      "kind": "sideEffect",
+      "id": "SE-1",
+      "pattern": "(?i)(SEND\\.MESSAGE|SEND\\.MSG|Phantom|notif|inter.user)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "REAL public UniBasic source, verbatim, from github.com/zelenko/pick (same attribution/license note as the ARRAY.PICK entry). CMD is built via string concatenation (embedding the current date and a hardcoded unit-cost filter) then run via EXECUTE — the dynamic-SQL-shaped pattern the schema's dynamicQueryExecution claim targets. The LOOP/READNEXT/REPEAT is the canonical SELECT-list cursor. SEND.MSG (an internal GOSUB paragraph, NOT a separate routine) sends a real inter-user notification via SEND.MESSAGE — no Java equivalent, needs an explicit port."
+}
