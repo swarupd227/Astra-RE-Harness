@@ -91,6 +91,14 @@ public sealed class ScaffoldPipeline
             targetPlatform = targetStack,
         });
 
+        // Phase 16.0 — in-place modernization schemas (see
+        // AnthropicScaffoldProvider.GenerateInPlaceAsync) transform the
+        // routine's own file instead of an archetype, so the pipeline
+        // always has the original text on hand to pass through.
+        var originalSourceText = spec.Subroutine?.SourceFile?.BlobUri is { Length: > 0 } sourceBlobUri
+            ? await _blob.GetTextAsync(sourceBlobUri, ct)
+            : "";
+
         var req = new ScaffoldRequest(
             spec.Id,
             spec.Subroutine?.Name ?? "",
@@ -99,7 +107,8 @@ public sealed class ScaffoldPipeline
             targetStack,
             PromptTemplateId,
             PromptTemplateVersion,
-            spec.Subroutine?.SourceLanguage ?? "");
+            spec.Subroutine?.SourceLanguage ?? "",
+            originalSourceText);
 
         object? finalPayload = null;
         await foreach (var evt in _provider.GenerateAsync(req, ct))

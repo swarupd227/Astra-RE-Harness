@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Astra.Api.Llm.Archetypes;
 using Astra.Api.Llm.Prompts;
+using Astra.Api.Llm.Schemas;
 using Microsoft.Extensions.Options;
 
 namespace Astra.Api.Llm;
@@ -33,6 +34,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
 
     private readonly ArchetypeRegistry _archetypes;
     private readonly PromptLibrary _prompts;
+    private readonly SpecSchemaProvider _schemas;
     private readonly AnthropicOptions _opts;
     private readonly HttpClient _http;
     private readonly ILogger<AnthropicScaffoldProvider> _logger;
@@ -40,12 +42,14 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     public AnthropicScaffoldProvider(
         ArchetypeRegistry archetypes,
         PromptLibrary prompts,
+        SpecSchemaProvider schemas,
         IOptions<AnthropicOptions> opts,
         IHttpClientFactory httpFactory,
         ILogger<AnthropicScaffoldProvider> logger)
     {
         _archetypes = archetypes;
         _prompts = prompts;
+        _schemas = schemas;
         _opts = opts.Value;
         _http = httpFactory.CreateClient("anthropic-scaffold-generate");
         _http.Timeout = TimeSpan.FromMinutes(10);
@@ -61,6 +65,17 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         ScaffoldRequest request,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        // Phase 16.0 — schemas flagged inPlaceModernization (same source
+        // and target language, e.g. Java 11→21) transform the routine's
+        // own file instead of substituting an unrelated archetype. Every
+        // other schema keeps the existing archetype-based path untouched.
+        if (_schemas.GetById(request.SourceSchema)?.InPlaceModernization == true)
+        {
+            await foreach (var evt in GenerateInPlaceAsync(request, ct))
+                yield return evt;
+            yield break;
+        }
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         yield return Stage("priming", 1, "Loading matched archetype");
@@ -190,6 +205,184 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         _logger.LogInformation(
             "Real scaffold generation for spec {Spec}: {Files} files, archetype {Archetype}, {In}/{Out} tokens",
             request.SpecId, generatedFiles.Count, archetype.Manifest.Id, inputTokens, outputTokens);
+    }
+
+    /// <summary>
+    /// Phase 16.0 — in-place modernization. No archetype: the reference
+    /// IS the routine's own file. Sends the original source text plus
+    /// the signed spec's upgrade-action claims (jakarta renames, removed/
+    /// deprecated API usages, Spring Boot upgrades, library bumps,
+    /// modernization opportunities) and asks for a transformed version
+    /// of the SAME file, changing only what a claim actually calls for.
+    /// </summary>
+    private async IAsyncEnumerable<ExtractionEvent> GenerateInPlaceAsync(
+        ScaffoldRequest request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        yield return Stage("priming", 1, "Loading original source file");
+
+        if (string.IsNullOrWhiteSpace(request.OriginalSourceText))
+        {
+            yield return new("error", new
+            {
+                code = "provider.no_source_text",
+                message = $"In-place modernization requires the original file's text, but none was available for '{request.SourcePath}'.",
+                retryable = false,
+            });
+            yield break;
+        }
+
+        yield return new("provider_info", new
+        {
+            name = Info.Name,
+            model = Info.Model,
+            configVersion = Info.ConfigVersion,
+            promptTemplateId = "inplace-transform",
+            targetPlatform = request.TargetPlatform,
+            mode = "in-place",
+        });
+
+        yield return Stage("streaming", 2,
+            $"Modernizing {request.SourcePath} in place for {request.SubroutineName}");
+
+        var loaded = _prompts.GetLatest(request.SourceSchema, request.TargetPlatform, "inplace-transform")
+            ?? throw new InvalidOperationException(
+                $"No inplace-transform prompt registered ({request.SourceSchema}/{request.TargetPlatform}/inplace-transform).");
+
+        var rendered = _prompts.Render(loaded, new Dictionary<string, string?>
+        {
+            ["subroutineName"] = request.SubroutineName,
+            ["sourcePath"] = request.SourcePath,
+            ["originalSourceText"] = request.OriginalSourceText,
+            ["signedSpecJson"] = request.SignedSpecJson,
+        });
+
+        string? rawJson = null;
+        int inputTokens = 0, outputTokens = 0;
+        string? transportError = null;
+        try
+        {
+            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(rendered.System, rendered.User, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "In-place scaffold generation failed for spec {Spec}", request.SpecId);
+            transportError = ex.Message;
+        }
+
+        if (transportError is not null || rawJson is null)
+        {
+            yield return new("error", new
+            {
+                code = "provider.scaffold_generation_failed",
+                message = transportError ?? "No response",
+                retryable = true,
+            });
+            yield break;
+        }
+
+        yield return Stage("validating", 3, "Parsing modernized file");
+
+        var generatedFiles = ParseInPlaceFiles(rawJson);
+        if (generatedFiles.Count == 0)
+        {
+            yield return new("error", new
+            {
+                code = "provider.no_files_generated",
+                message = "The model's response did not contain a parseable files array.",
+                retryable = true,
+            });
+            yield break;
+        }
+
+        yield return Stage("committing", 4, "Persisting modernized file + commit metadata");
+
+        foreach (var file in generatedFiles)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return new("file_started", new
+            {
+                path = file.Path,
+                language = file.Language,
+                derivedFrom = file.DerivedFromClaimIds,
+            });
+
+            await foreach (var chunk in StreamFileChunks(file.Content, ct))
+            {
+                yield return new("file_chunk", new { path = file.Path, content = chunk });
+            }
+
+            yield return new("file_done", new
+            {
+                path = file.Path,
+                lineCount = file.LineCount,
+                todoCount = file.TodoCount,
+                derivedFrom = file.DerivedFromClaimIds,
+            });
+        }
+
+        var fileObjects = generatedFiles.Select(f => (object?)new Dictionary<string, object?>
+        {
+            ["path"] = f.Path,
+            ["language"] = f.Language,
+            ["content"] = f.Content,
+            ["lineCount"] = f.LineCount,
+            ["todoCount"] = f.TodoCount,
+            ["derivedFromClaimIds"] = f.DerivedFromClaimIds,
+        }).ToList();
+
+        sw.Stop();
+        yield return new("__final__", new Dictionary<string, object?>
+        {
+            ["files"] = fileObjects,
+            ["inputTokens"] = inputTokens,
+            ["outputTokens"] = outputTokens,
+            ["latencyMs"] = sw.ElapsedMilliseconds,
+            ["archetypeId"] = $"in-place:{request.SourceSchema}",
+        });
+
+        _logger.LogInformation(
+            "In-place scaffold generation for spec {Spec}: {Files} files, schema {Schema}, {In}/{Out} tokens",
+            request.SpecId, generatedFiles.Count, request.SourceSchema, inputTokens, outputTokens);
+    }
+
+    /// <summary>
+    /// Parse the in-place model's files array. Unlike <see cref="ParseFiles"/>
+    /// there's no archetype to fall back on for claim provenance, so each
+    /// file object carries its own <c>derivedFromClaimIds</c> directly.
+    /// </summary>
+    private static List<GeneratedFile> ParseInPlaceFiles(string rawJson)
+    {
+        var result = new List<GeneratedFile>();
+
+        var json = ExtractFirstJsonObject(rawJson);
+        if (json is null) return result;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("files", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var path = ReadString(item, "path", "");
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                var language = ReadString(item, "language", "java");
+                var content = ReadString(item, "content", "");
+                var claims = item.TryGetProperty("derivedFromClaimIds", out var c) && c.ValueKind == JsonValueKind.Array
+                    ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                    : Array.Empty<string>();
+                result.Add(new GeneratedFile(path, language, content, claims));
+            }
+        }
+        catch
+        {
+            // Leave whatever parsed successfully before the failure.
+        }
+        return result;
     }
 
     private async Task<(string RawJson, int InputTokens, int OutputTokens)> CallAnthropicAsync(

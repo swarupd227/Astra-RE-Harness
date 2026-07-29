@@ -25,7 +25,8 @@ public sealed record ScaffoldRequest(
     string TargetPlatform,
     string PromptTemplateId,
     string PromptTemplateVersion,
-    string SourceSchema = "");
+    string SourceSchema = "",
+    string OriginalSourceText = "");
 
 public sealed record ScaffoldFile(
     string Path,

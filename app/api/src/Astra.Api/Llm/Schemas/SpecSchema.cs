@@ -38,6 +38,17 @@ public sealed class SpecSchema
     public List<string>? CalibratedAgainst { get; set; }
     public string? Status { get; set; }
     public string? PlatformReadiness { get; set; }
+
+    /// <summary>
+    /// Phase 16.0. True when source and target are the same language (a
+    /// modernization, not a cross-language migration) and the claim
+    /// taxonomy already expresses "at this location, change X to Y"
+    /// upgrade actions rather than idiom-translation gaps. Scaffold
+    /// generation for these schemas anchors on the routine's OWN source
+    /// file instead of an unrelated archetype — see
+    /// <c>AnthropicScaffoldProvider.GenerateInPlaceAsync</c>.
+    /// </summary>
+    public bool InPlaceModernization { get; set; }
 }
 
 public sealed class ClaimKindDefinition
