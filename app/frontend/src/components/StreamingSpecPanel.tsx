@@ -153,8 +153,8 @@ function Section({
 
 function ParamList({
   items,
-  onCite,
-  active,
+  onCite: _onCite,
+  active: _active,
 }: {
   items: { id: string; name: string; type: string; semantic: string }[];
   onCite?: (lines: string) => void;

@@ -222,7 +222,7 @@ function ActiveItem({
   badge?: number;
 }) {
   const Icon = item.icon;
-  const inner = ({ isActive }: { isActive: boolean }) => (
+  const inner = () => (
     <>
       <Icon size={15} className="shrink-0" />
       {!collapsed && <span className="flex-1 truncate">{item.label}</span>}

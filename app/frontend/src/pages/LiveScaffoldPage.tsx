@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Cog, X } from 'lucide-react';
-import { api, type SpecResponse } from '@/lib/api';
+import { api } from '@/lib/api';
 import {
   streamScaffold,
   type ProviderInfo,
@@ -306,6 +306,7 @@ function StagePill({ stage }: { stage: string | null }) {
 }
 
 function useResolveSubroutineId(specId: string): string | null {
+  void specId;
   // The spec is referenced by spec-id in URL; we need the subroutine id for the back link.
   // Cheap approach: piggy-back on the existing my-reviews payload.
   const { data } = useQuery({ queryKey: ['my-reviews'], queryFn: () => fetch('').then(() => null), enabled: false });

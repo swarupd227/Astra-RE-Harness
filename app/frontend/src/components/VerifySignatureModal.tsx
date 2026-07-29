@@ -43,8 +43,8 @@ export function VerifySignatureModal({
 }) {
   const [steps, setSteps] = useState<Step[]>(buildInitialSteps());
   const [overall, setOverall] = useState<'pending' | 'running' | 'ok' | 'fail'>('pending');
-  const [manifest, setManifest] = useState<SignedManifest | null>(null);
-  const [pubKey, setPubKey] = useState<PublicKeyResponse | null>(null);
+  const [, setManifest] = useState<SignedManifest | null>(null);
+  const [, setPubKey] = useState<PublicKeyResponse | null>(null);
 
   // Reset on open so re-opening replays cleanly.
   useEffect(() => {
@@ -102,7 +102,7 @@ export function VerifySignatureModal({
 
     // 3. canonical-hash integrity
     setStep('hash', { state: 'running' });
-    let canonicalBytes: Uint8Array | null = null;
+    let canonicalBytes: Uint8Array<ArrayBuffer> | null = null;
     if (mani.specCanonical && mani.specCanonical.length > 0) {
       canonicalBytes = new TextEncoder().encode(mani.specCanonical);
       const digest = await crypto.subtle.digest('SHA-256', canonicalBytes);
@@ -280,12 +280,12 @@ openssl dgst -sha256 -verify astra.pub.pem -signature signature.bin canonical.js
 }
 
 function buildInitialSteps(): Step[] {
-  return [
+  return ([
     { id: '1', label: 'Fetch public key', state: 'pending' },
     { id: '2', label: 'Fetch signed manifest', state: 'pending' },
     { id: '3', label: 'Verify canonical-JSON hash integrity', state: 'pending' },
     { id: '4', label: 'Verify RS256 signature', state: 'pending' },
-  ].map((s, i) => ({ ...s, id: ['key', 'manifest', 'hash', 'verify'][i] }));
+  ] as Step[]).map((s, i) => ({ ...s, id: ['key', 'manifest', 'hash', 'verify'][i] }));
 }
 
 function StepIcon({ state }: { state: Step['state'] }) {

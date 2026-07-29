@@ -100,7 +100,7 @@ export function CommentsThread({
 
       <CommentComposer
         placeholder="Comment on this claim. Type @engineer or @sme to dispatch a notification."
-        onSubmit={(body) => post.mutateAsync({ body })}
+        onSubmit={async (body) => { await post.mutateAsync({ body }); }}
         busy={post.isPending}
         error={post.error?.message ?? null}
         autoFocus={false}

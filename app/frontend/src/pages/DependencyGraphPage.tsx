@@ -5,7 +5,6 @@ import cytoscape from 'cytoscape';
 // @ts-expect-error — no bundled types for cytoscape-fcose
 import fcose from 'cytoscape-fcose';
 import { ZoomIn, ZoomOut, Maximize2, X } from 'lucide-react';
-import { clsx } from 'clsx';
 import { api } from '@/lib/api';
 import { CardBody, Card } from '@/components/Card';
 import { ErrorBlock } from '@/components/ErrorBlock';

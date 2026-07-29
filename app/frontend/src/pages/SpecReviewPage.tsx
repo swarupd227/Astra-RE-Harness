@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
 import { api, ApiError, claimPathFor, commentsApi, type ClaimReview, type SpecClaim } from '@/lib/api';
 import { CommentsThread } from '@/components/CommentsThread';
@@ -22,7 +22,6 @@ type Section = { key: string; label: string; claims: SpecClaim[] };
 
 export function SpecReviewPage() {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const sub = useQuery({ queryKey: ['subroutine', id], queryFn: () => api.getSubroutine(id), enabled: !!id });

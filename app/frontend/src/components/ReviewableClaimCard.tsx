@@ -49,7 +49,6 @@ export function ReviewableClaimCard({
     setEditing({ kind: 'edit' });
   };
   const startReject = () => { setDraft(review?.reason ?? ''); setEditing({ kind: 'reject' }); };
-  const startQuestion = () => { setDraft(review?.reason ?? ''); setEditing({ kind: 'question' }); };
   const cancelEdit = () => { setEditing(null); setDraft(''); };
   const submit = async () => {
     if (!editing) return;

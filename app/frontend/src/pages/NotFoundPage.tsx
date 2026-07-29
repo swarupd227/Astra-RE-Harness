@@ -9,7 +9,7 @@ export function NotFoundPage() {
         This screen lands in a later phase of the development plan.
       </p>
       <div className="mt-6">
-        <Button variant="secondary" asChild={false}>
+        <Button variant="secondary">
           <Link to="/">Back to Health</Link>
         </Button>
       </div>

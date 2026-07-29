@@ -13,7 +13,7 @@ export function Tooltip({
 }: {
   content: ReactNode;
   children: ReactNode;
-  side?: 'top' | 'bottom';
+  side?: 'top' | 'bottom' | 'right';
   className?: string;
 }) {
   const id = useId();
@@ -33,8 +33,10 @@ export function Tooltip({
           id={id}
           role="tooltip"
           className={clsx(
-            'pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md border border-border-subtle bg-ink-primary px-2 py-1 text-caption text-ink-inverse shadow-e2 motion-safe:animate-fade-in',
-            side === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5',
+            'pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border-subtle bg-ink-primary px-2 py-1 text-caption text-ink-inverse shadow-e2 motion-safe:animate-fade-in',
+            side === 'bottom' && 'left-1/2 top-full mt-1.5 -translate-x-1/2',
+            side === 'top' && 'left-1/2 bottom-full mb-1.5 -translate-x-1/2',
+            side === 'right' && 'left-full top-1/2 ml-1.5 -translate-y-1/2',
           )}
         >
           {content}

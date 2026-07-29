@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Database, FileCode, FileSearch, Search } from 'lucide-react';
+import { ChevronRight, Database, FileCode, Search } from 'lucide-react';
 import { api, type SubroutineSearchHit } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';

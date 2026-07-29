@@ -231,29 +231,6 @@ function PortfolioRow({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: 'success' | 'failed' | 'neutral';
-}) {
-  const colour =
-    tone === 'success' ? 'text-status-review' :
-    tone === 'failed'  ? 'text-status-failed' :
-    'text-ink-primary';
-  return (
-    <Card>
-      <CardBody>
-        <div className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</div>
-        <div className={clsx('mt-1 text-display font-semibold', colour)}>{value}</div>
-      </CardBody>
-    </Card>
-  );
-}
-
 // ── Healthy-vs-drifted stacked bar by corpus ─────────────────────────
 //
 // Tucked into the KPI row's last column so the admin sees at a glance

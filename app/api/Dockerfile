@@ -22,11 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Restore (cached layer) — copy csproj first
-COPY src/Astra.Api/Astra.Api.csproj src/Astra.Api/
-RUN dotnet restore src/Astra.Api/Astra.Api.csproj
+COPY src/Astra.Api/Astra.Api.csproj Astra.Api/
+RUN dotnet restore Astra.Api/Astra.Api.csproj
 
 # Copy the rest
-COPY src/. src/
+COPY src/. .
 
 # ─── dev: dotnet watch run, source bind-mounted at /src ───────────────
 FROM sdk AS dev

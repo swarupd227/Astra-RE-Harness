@@ -62,6 +62,8 @@ export type WhoamiResponse = {
   isBypass: boolean;
   bypassEnabled: boolean;
   defaultPersona: string;
+  llmProvider: string;
+  llmModel: string;
 };
 
 // ─── Signature Health (value-add #8: drift detection) ───────────────

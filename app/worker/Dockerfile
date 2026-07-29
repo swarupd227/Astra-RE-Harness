@@ -3,10 +3,10 @@ ARG DOTNET_VERSION=8.0
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS sdk
 WORKDIR /src
 
-COPY src/Astra.Worker/Astra.Worker.csproj src/Astra.Worker/
-RUN dotnet restore src/Astra.Worker/Astra.Worker.csproj
+COPY src/Astra.Worker/Astra.Worker.csproj Astra.Worker/
+RUN dotnet restore Astra.Worker/Astra.Worker.csproj
 
-COPY src/. src/
+COPY src/. .
 
 # ─── dev: dotnet watch run ────────────────────────────────────────────
 FROM sdk AS dev

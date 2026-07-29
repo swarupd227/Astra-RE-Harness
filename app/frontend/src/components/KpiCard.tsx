@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 type Accent = 'indigo' | 'emerald' | 'amber' | 'teal' | 'violet' | 'rose' | 'orange' | 'slate';
 
@@ -37,7 +38,7 @@ export function KpiCard({
   hint?: ReactNode;
   /** Optional "target ≥80%" pill rendered on the right of the hint row. */
   target?: ReactNode;
-  icon?: ComponentType<{ size?: number; className?: string }>;
+  icon?: LucideIcon;
   accent?: Accent;
   alert?: boolean;
   className?: string;

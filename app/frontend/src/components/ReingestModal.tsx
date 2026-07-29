@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, FileCode, GitBranch, RefreshCw, Upload, X } from 'lucide-react';
+import { CheckCircle2, FileCode, GitBranch, RefreshCw, Upload, X } from 'lucide-react';
 import { ApiError, api, type ReingestResult } from '@/lib/api';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
