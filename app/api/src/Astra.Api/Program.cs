@@ -9,6 +9,7 @@ using Astra.Api.Persistence;
 using Astra.Api.Persistence.Seed;
 using Astra.Api.Signing;
 using Astra.Api.Storage;
+using Azure.Storage.Blobs;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Minio;
@@ -48,22 +49,34 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Progr
 // ─── FluentValidation ─────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
-// ─── MinIO blob storage ───────────────────────────────────────────────
+// ─── Blob storage: MinIO (default, local dev) or native Azure Blob
+// Storage (Storage__Provider=azureblob — added after MinIO-on-Azure-Files
+// proved unreliable; see AzureBlobStorageClient's doc comment). ─────────
 builder.Services.AddSingleton<StorageOptions>(sp =>
     builder.Configuration.GetSection("Storage").Get<StorageOptions>()
         ?? throw new InvalidOperationException("Storage section missing."));
 
-builder.Services.AddSingleton<IMinioClient>(sp =>
+var storageProvider = builder.Configuration["Storage:Provider"] ?? "minio";
+if (string.Equals(storageProvider, "azureblob", StringComparison.OrdinalIgnoreCase))
 {
-    var opts = sp.GetRequiredService<StorageOptions>();
-    var endpointUri = new Uri(opts.Endpoint);
-    return new MinioClient()
-        .WithEndpoint(endpointUri.Host, endpointUri.Port)
-        .WithCredentials(opts.AccessKey, opts.SecretKey)
-        .WithSSL(endpointUri.Scheme == "https")
-        .Build();
-});
-builder.Services.AddSingleton<IBlobClient, MinioBlobClient>();
+    builder.Services.AddSingleton(sp =>
+        new BlobServiceClient(sp.GetRequiredService<StorageOptions>().AzureBlobConnectionString));
+    builder.Services.AddSingleton<IBlobClient, AzureBlobStorageClient>();
+}
+else
+{
+    builder.Services.AddSingleton<IMinioClient>(sp =>
+    {
+        var opts = sp.GetRequiredService<StorageOptions>();
+        var endpointUri = new Uri(opts.Endpoint);
+        return new MinioClient()
+            .WithEndpoint(endpointUri.Host, endpointUri.Port)
+            .WithCredentials(opts.AccessKey, opts.SecretKey)
+            .WithSSL(endpointUri.Scheme == "https")
+            .Build();
+    });
+    builder.Services.AddSingleton<IBlobClient, MinioBlobClient>();
+}
 
 // ─── Dev-persona auth shim (Phase A; OIDC replaces this in Phase C) ───
 builder.Services.Configure<DevPersonaOptions>(builder.Configuration.GetSection("Auth"));
