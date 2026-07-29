@@ -49,9 +49,20 @@ WORKDIR /app
 # pandoc: mkdocs zip (no-op), docx, and pdf (--pdf-engine=weasyprint) formats.
 # weasyprint: HTML→PDF renderer; avoids a TeX distribution (~200 MB total).
 # Both packages are in Debian Bookworm apt repos.
+#
+# libssl3 / libcurl4 / ca-certificates: LibGit2Sharp's bundled native
+# libgit2 binary links against these at runtime. The dev/build stages
+# derive from the full dotnet/sdk image, which ships them by default —
+# git-URL ingest has always worked locally. This slim aspnet runtime
+# image doesn't include them, which crashed the process with SIGSEGV
+# (exit code 139) the instant anything touched a LibGit2Sharp type,
+# before the app even printed its startup banner.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     weasyprint \
+    libssl3 \
+    libcurl4 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app .
