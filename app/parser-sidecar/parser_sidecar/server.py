@@ -563,7 +563,7 @@ def serve() -> None:
     health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
-    server.add_insecure_port(f"[::]:{port}")
+    server.add_insecure_port(f"0.0.0.0:{port}")
     server.start()
     log.info("Parser sidecar listening on :%s (version %s)", port, __version__)
 
