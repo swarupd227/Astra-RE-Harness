@@ -18,8 +18,11 @@ namespace Astra.Api.Endpoints;
 /// </summary>
 public static class IngestEndpoints
 {
-    private const long MaxUploadBytes = 32L * 1024 * 1024;   // 32 MiB per multipart body
-    private const int MaxFilesPerCorpus = 500;
+    // Keep in sync with the Kestrel/FormOptions ceiling in Program.cs
+    // (640 MiB) — the transport limit must stay ABOVE this value or big
+    // uploads die with a bare 413 before this friendly check runs.
+    private const long MaxUploadBytes = 600L * 1024 * 1024;  // 600 MiB per multipart body
+    private const int MaxFilesPerCorpus = 20_000;
     private const int MaxFileBytes = 8 * 1024 * 1024;        // 8 MiB per individual file
 
     // Phase 5.2 — extension catalog now lives in

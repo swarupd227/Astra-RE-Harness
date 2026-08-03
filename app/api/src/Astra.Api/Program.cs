@@ -30,6 +30,19 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ─── Request body limits ──────────────────────────────────────────────
+// The ingest upload cap (IngestEndpoints.MaxUploadBytes, 600 MiB) is the
+// business rule; these two transport-layer limits must sit ABOVE it or
+// they reject big uploads with a bare 413/400 before the endpoint can
+// return its friendly ingest.upload_too_large error. 640 MiB leaves
+// headroom for multipart boundary/header overhead.
+const long RequestBodyCeiling = 640L * 1024 * 1024;
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = RequestBodyCeiling);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = RequestBodyCeiling;
+});
+
 // ─── Logging (Serilog) ────────────────────────────────────────────────
 builder.Host.UseSerilog((ctx, services, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
