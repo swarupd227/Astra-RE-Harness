@@ -143,6 +143,13 @@ switch (llmProvider)
         throw new InvalidOperationException(
             $"Unknown Llm:Provider '{llmProvider}'. Valid values: mock, fail-mock, anthropic.");
 }
+// Task #178 — runtime LLM key management. Remember the boot-time key so a
+// database override can be reverted, and make sure the plain HttpClient
+// factory exists even when the provider booted in mock fallback (the
+// settings test endpoint needs it regardless).
+builder.Services.AddSingleton(new LlmKeyState(
+    builder.Configuration.GetValue<string>("Llm:Anthropic:ApiKey") ?? ""));
+builder.Services.AddHttpClient();
 // Phase 7.0 — structured cross-routine context builder. Used by
 // ExtractionPipeline to attach a neighbourhood to every ExtractionRequest.
 builder.Services.AddScoped<Astra.Api.Llm.NeighbourhoodBuilder>();
@@ -845,6 +852,10 @@ app.UseMiddleware<DevPersonaMiddleware>();
 app.MapHealthEndpoints();
 app.MapWhoamiEndpoint();
 app.MapSystemStatsEndpoint();
+// Task #178 — apply any UI-stored LLM key before serving, then expose the
+// settings surface itself.
+await LlmSettingsEndpoints.ApplyStoredLlmKeyAsync(app);
+app.MapLlmSettingsEndpoints();
 app.MapCorpusEndpoints();
 app.MapIngestEndpoints();
 app.MapSubroutineEndpoints();

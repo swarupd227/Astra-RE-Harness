@@ -845,11 +845,41 @@ export type SpecResponse = {
   } | null;
 };
 
+// Task #178 — LLM key management. The key value itself never round-trips;
+// the API only ever returns a masked hint.
+export type LlmSettings = {
+  configuredProvider: string;
+  activeProvider: string;
+  model: string;
+  baseUrl: string;
+  keyConfigured: boolean;
+  keySource: 'database' | 'environment' | 'none';
+  keyHint: string;
+  requiresRestart: boolean;
+};
+export type LlmTestResult = {
+  ok: boolean;
+  latencyMs: number;
+  endpoint: string;
+  models?: string[];
+  error?: string;
+};
+
 export const api = {
   health: () => apiFetch<HealthResponse>('/health'),
   readiness: () => apiFetch<ReadinessResponse>('/health/ready'),
   whoami: () => apiFetch<WhoamiResponse>('/api/v1/whoami'),
   systemStats: () => apiFetch<SystemStats>('/api/v1/system/stats'),
+
+  // Task #178 — LLM key setup + test connection (admin-only writes)
+  getLlmSettings: () => apiFetch<LlmSettings>('/api/v1/settings/llm'),
+  setLlmKey: (apiKey: string) =>
+    apiFetch<LlmSettings>('/api/v1/settings/llm/key', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
+  clearLlmKey: () => apiFetch<LlmSettings>('/api/v1/settings/llm/key', { method: 'DELETE' }),
+  testLlmConnection: () => apiFetch<LlmTestResult>('/api/v1/settings/llm/test', { method: 'POST' }),
 
   // Phase #4 / value-add #1: provider trust signals
   getProviderSettings: () => apiFetch<ProviderSettings>('/api/v1/providers/settings'),

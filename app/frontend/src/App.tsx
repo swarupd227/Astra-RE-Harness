@@ -31,6 +31,7 @@ import { PortfolioDashboardPage } from '@/pages/PortfolioDashboardPage';
 import { LanguagesPage } from '@/pages/LanguagesPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ValidationPolicyPage } from '@/pages/ValidationPolicyPage';
+import { LlmSettingsPage } from '@/pages/LlmSettingsPage';
 import { SignatureHealthPage } from '@/pages/SignatureHealthPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { DocsPage } from '@/pages/DocsPage';
@@ -250,6 +251,7 @@ export function App() {
             <Route path="/platform/languages" element={<LanguagesPage />} />
             <Route path="/platform/roles" element={<RolesPage />} />
             <Route path="/platform/validation" element={<ValidationPolicyPage />} />
+            <Route path="/platform/llm" element={<LlmSettingsPage />} />
             <Route path="/platform/signatures" element={<SignatureHealthPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
