@@ -269,7 +269,9 @@ public sealed class PatternAnalysisOrchestrator
         }
 
         var specIdBySubroutine = specs.ToDictionary(s => s.SubroutineId, s => s.Id);
-        var clusters = ParseClusters(llmResult.RawJson, runId, corpusId, nameById, specIdBySubroutine, signatureBySubroutine);
+        var clusters = ParseClusters(
+            llmResult.RawJson, runId, corpusId, nameById, specIdBySubroutine, signatureBySubroutine,
+            digests.Select(d => d.SubroutineId).ToList());
 
         // Safety net: any subroutine the LLM didn't place gets its own
         // singleton cluster rather than silently vanishing from the report.
@@ -343,9 +345,13 @@ public sealed class PatternAnalysisOrchestrator
         foreach (var tier in tiers)
         {
             tierName = tier.Name;
-            var entries = digests.Select(d => new
+            // Entries carry a compact integer index `n` instead of the GUID;
+            // the model references routines by `n` in its output, which cuts
+            // the response to ~1/10th the tokens of 450 GUID strings (the
+            // full-GUID output ran past the HTTP timeout on EnvestNet).
+            var entries = digests.Select((d, i) => new
             {
-                subroutineId = d.SubroutineId,
+                n = i,
                 subroutineName = d.Name,
                 claimKindSignature = d.Signature,
                 purpose = d.Purpose is null ? null : Truncate(d.Purpose, tier.PurposeChars),
@@ -476,7 +482,8 @@ public sealed class PatternAnalysisOrchestrator
         string rawJson, Guid runId, Guid corpusId,
         Dictionary<Guid, string> nameById,
         Dictionary<Guid, Guid> specIdBySubroutine,
-        Dictionary<Guid, string> signatureBySubroutine)
+        Dictionary<Guid, string> signatureBySubroutine,
+        IReadOnlyList<Guid> subroutineIdByIndex)
     {
         var clusters = new List<PatternCluster>();
         var json = ExtractFirstJsonObject(rawJson);
@@ -505,7 +512,23 @@ public sealed class PatternAnalysisOrchestrator
             {
                 if (item.ValueKind != JsonValueKind.Object) continue;
                 var memberIds = new List<Guid>();
-                if (item.TryGetProperty("memberSubroutineIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
+                // Preferred shape: "members" — integer indexes into the input
+                // entry list (see BuildEntriesJson's `n`).
+                if (item.TryGetProperty("members", out var idxArr) && idxArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in idxArr.EnumerateArray())
+                    {
+                        if (el.ValueKind == JsonValueKind.Number
+                            && el.TryGetInt32(out var idx)
+                            && idx >= 0 && idx < subroutineIdByIndex.Count)
+                        {
+                            memberIds.Add(subroutineIdByIndex[idx]);
+                        }
+                    }
+                }
+                // Legacy shape: full GUID strings (the mock stub still emits this).
+                if (memberIds.Count == 0
+                    && item.TryGetProperty("memberSubroutineIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var idEl in ids.EnumerateArray())
                     {

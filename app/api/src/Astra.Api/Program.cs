@@ -204,6 +204,10 @@ builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.PatternAnalysisOrche
 // directly, called synchronously from the propose endpoint — a single LLM
 // call plus one compile+test pass, same latency class as HarmonisationPipeline).
 builder.Services.AddHttpClient("anthropic-propose-archetype");
+// The whole-corpus clustering call generates a large structured response;
+// big corpora ran past the default HttpClient timeout (EnvestNet hit the
+// 600s cap mid-generation), so give this one explicit headroom.
+builder.Services.AddHttpClient("anthropic-cluster-patterns", c => c.Timeout = TimeSpan.FromMinutes(30));
 builder.Services.AddScoped<Astra.Api.Llm.PatternAnalysis.ArchetypeAuthoringService>();
 
 // Phase 8.0.e — Pluggable migration strategies. Each implementation

@@ -54,7 +54,9 @@ How to judge whether two routines belong in the same cluster:
   hard boundary — split a bucket if the specifics diverge, or merge two
   buckets if they're clearly the same real-world idiom.
 
-Output schema — emit a single JSON object with no surrounding prose:
+Output schema — emit a single JSON object with no surrounding prose.
+Reference routines by their integer `n` from the input (NOT by name or
+id) — keep the output compact:
 ```json
 {
   "summary": "<1-2 sentence overall verdict, e.g. '9 routines resolved into 4 clusters: 2 core patterns covering 6 routines, 3 singletons.'>",
@@ -63,18 +65,20 @@ Output schema — emit a single JSON object with no surrounding prose:
       "label": "<short human-readable pattern name, e.g. 'Multivalue list check-then-insert'>",
       "suggestedArchetypeName": "<kebab-case id suggestion, e.g. 'canonical-unibasic-list-insert-service'>",
       "rationale": "<why these routines share this pattern (or, for a singleton, why it stands alone). Cite routine names.>",
-      "memberSubroutineIds": ["<subroutineId-1>", "<subroutineId-2>", ...]
+      "members": [<n-1>, <n-2>, ...]
     }
   ]
 }
 ```
 
 Coverage targets:
-- EVERY subroutine id listed in the input must appear in exactly one
-  cluster's memberSubroutineIds. Do not drop any.
+- EVERY routine's `n` from the input must appear in exactly one
+  cluster's `members`. Do not drop any.
 - Prefer a small number of clusters covering most routines, plus a
   handful of singletons, over a large number of near-identical clusters —
   but do not merge routines that are only superficially similar.
+- Keep each `rationale` to at most 2 sentences — with hundreds of
+  routines the output must stay well under the token ceiling.
 
 # User
 
@@ -83,13 +87,15 @@ Source version: {{sourceVersionId}}
 Subroutine count: {{subroutineCount}}
 
 The following are every subroutine in this corpus's latest version with
-an extracted spec, one JSON object per line-item: `subroutineId`,
-`subroutineName`, `claimKindSignature` (the deterministic hint — sorted
-claim kinds present), `purpose` (the routine's extracted purpose, when
-available), `claimCounts` (how many claims of each kind the spec holds),
-and — when the corpus is small enough to afford it — `claims` (per-kind
-excerpts of the claim texts, truncated; treat them as representative
-samples of the routine's behaviour, not the exhaustive list).
+an extracted spec, one JSON object per line-item: `n` (the routine's
+integer index — use it to reference the routine in your `members`
+output), `subroutineName`, `claimKindSignature` (the deterministic hint
+— sorted claim kinds present), `purpose` (the routine's extracted
+purpose, when available), `claimCounts` (how many claims of each kind
+the spec holds), and — when the corpus is small enough to afford it —
+`claims` (per-kind excerpts of the claim texts, truncated; treat them as
+representative samples of the routine's behaviour, not the exhaustive
+list).
 
 ```json
 {{entriesJson}}
