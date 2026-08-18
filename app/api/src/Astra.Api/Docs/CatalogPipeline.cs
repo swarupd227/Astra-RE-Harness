@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Astra.Api.Llm;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +37,7 @@ public sealed class CatalogPipeline
     private readonly string _glossaryPrompt;
     private readonly string _interfacePrompt;
     private readonly string _businessRulesPrompt;
-    private readonly string _apiKey;
+    private readonly AnthropicOptions _anthropic;
     private readonly string _baseUrl;
     private readonly string _apiVersion;
     private readonly ILogger<CatalogPipeline> _logger;
@@ -44,6 +45,7 @@ public sealed class CatalogPipeline
     public CatalogPipeline(
         IServiceScopeFactory scopeFactory,
         IOptions<DocsOptions> docsOpts,
+        IOptions<AnthropicOptions> anthropicOpts,
         IConfiguration cfg,
         IWebHostEnvironment env,
         ILogger<CatalogPipeline> logger)
@@ -51,7 +53,9 @@ public sealed class CatalogPipeline
         _scopeFactory = scopeFactory;
         _docsOpts = docsOpts.Value;
         _logger = logger;
-        _apiKey = cfg.GetValue<string>("Llm:Anthropic:ApiKey") ?? "";
+        // Shared mutable instance — the settings UI (Task #178) can swap the
+        // key at runtime, so read ApiKey per call, never cache the string.
+        _anthropic = anthropicOpts.Value;
         _baseUrl = cfg.GetValue<string>("Llm:Anthropic:BaseUrl") ?? "https://api.anthropic.com";
         _apiVersion = cfg.GetValue<string>("Llm:Anthropic:ApiVersion") ?? "2023-06-01";
 
@@ -440,7 +444,7 @@ public sealed class CatalogPipeline
             Content = new StringContent(
                 JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json"),
         };
-        req.Headers.Add("x-api-key", _apiKey);
+        req.Headers.Add("x-api-key", _anthropic.ApiKey);
         req.Headers.Add("anthropic-version", _apiVersion);
 
         using var resp = await http.SendAsync(req, ct);
