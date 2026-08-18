@@ -95,90 +95,99 @@ public sealed class DocExportService
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var nav = new StringBuilder();
-            nav.AppendLine("nav:");
-
-            // Overview → docs/index.md
-            var overview = sections.FirstOrDefault(s => s.SectionKind == "overview");
-            WriteZipEntry(zip, "docs/index.md",
-                MarkdownWithStateWarning(overview?.RenderedMarkdown ?? $"# {corpus.Name}\n\n*(No overview generated yet.)*", overview?.State));
-            nav.AppendLine("  - Home: index.md");
-
-            // Modules → docs/modules/{slug}.md
-            var modules = sections.Where(s => s.SectionKind == "module").ToList();
-            if (modules.Count > 0)
-            {
-                nav.AppendLine("  - Modules:");
-                foreach (var m in modules.OrderBy(s => s.ModuleName))
-                {
-                    var slug = Slug(m.ModuleName ?? m.Id.ToString());
-                    var path = $"docs/modules/{slug}.md";
-                    WriteZipEntry(zip, path, MarkdownWithStateWarning(m.RenderedMarkdown, m.State));
-                    nav.AppendLine($"    - '{m.ModuleName ?? slug}': modules/{slug}.md");
-                }
-            }
-
-            // Routines → docs/routines/{slug}.md
-            var routines = sections.Where(s => s.SectionKind == "routine-summary").ToList();
-            if (routines.Count > 0)
-            {
-                nav.AppendLine("  - Routines:");
-                foreach (var r in routines.OrderBy(s => s.Subroutine?.Name ?? s.Id.ToString()))
-                {
-                    var name = r.Subroutine?.Name ?? r.Id.ToString("N")[..8];
-                    var slug = Slug(name);
-                    var path = $"docs/routines/{slug}.md";
-                    WriteZipEntry(zip, path, MarkdownWithStateWarning(r.RenderedMarkdown, r.State));
-                    nav.AppendLine($"    - '{name}': routines/{slug}.md");
-                }
-            }
-
-            // Reference catalog sections
-            var refSections = new (string Kind, string Label, string File)[]
-            {
-                ("data-dictionary", "Data Dictionary", "reference/data-dictionary.md"),
-                ("glossary",        "Glossary",        "reference/glossary.md"),
-                ("interface",       "Interfaces",      "reference/interfaces.md"),
-                ("business-rule",   "Business Rules",  "reference/business-rules.md"),
-            };
-
-            var anyRef = false;
-            foreach (var (kind, label, file) in refSections)
-            {
-                var s = sections.FirstOrDefault(x => x.SectionKind == kind);
-                if (s is null) continue;
-                WriteZipEntry(zip, $"docs/{file}", MarkdownWithStateWarning(s.RenderedMarkdown, s.State));
-                if (!anyRef) { nav.AppendLine("  - Reference:"); anyRef = true; }
-                nav.AppendLine($"    - '{label}': {file}");
-            }
-
-            // Diagrams → docs/diagrams/{slug}.md
-            var diagrams = sections.Where(s => s.SectionKind == "diagram").ToList();
-            if (diagrams.Count > 0)
-            {
-                nav.AppendLine("  - Diagrams:");
-                foreach (var d in diagrams.OrderBy(s => s.Scope).ThenBy(s => s.Subroutine?.Name ?? s.ModuleName))
-                {
-                    var name = d.Scope == "subroutine" && d.Subroutine?.Name is string sn
-                        ? $"{sn} — Sequence"
-                        : d.ModuleName is string mn
-                            ? $"{mn} — Dependency"
-                            : d.Id.ToString("N")[..8];
-                    var slug = Slug(name);
-                    var path = $"docs/diagrams/{slug}.md";
-                    WriteZipEntry(zip, path, MarkdownWithStateWarning(d.RenderedMarkdown, d.State));
-                    nav.AppendLine($"    - '{name}': diagrams/{slug}.md");
-                }
-            }
-
-            // mkdocs.yml
-            WriteZipEntry(zip, "mkdocs.yml", BuildMkDocsYml(corpus, nav.ToString()));
+            WriteMkDocsTree(zip, "", corpus, sections);
         }
 
         return new ExportResult(
             $"{Slug(corpus.Name)}-docs.zip",
             "application/zip",
             ms.ToArray());
+    }
+
+    /// <summary>
+    /// Writes the MkDocs-Material project tree into an existing archive under
+    /// <paramref name="prefix"/> — "" for the standalone docs zip, "docs/" when
+    /// embedded in the project-level artifact bundle (ProjectExportService).
+    /// Nav paths inside mkdocs.yml stay relative, so the tree works from
+    /// whatever directory it lands in.
+    /// </summary>
+    internal static void WriteMkDocsTree(ZipArchive zip, string prefix, Corpus corpus, IReadOnlyList<DocSection> sections)
+    {
+        var nav = new StringBuilder();
+        nav.AppendLine("nav:");
+
+        // Overview → docs/index.md
+        var overview = sections.FirstOrDefault(s => s.SectionKind == "overview");
+        WriteZipEntry(zip, $"{prefix}docs/index.md",
+            MarkdownWithStateWarning(overview?.RenderedMarkdown ?? $"# {corpus.Name}\n\n*(No overview generated yet.)*", overview?.State));
+        nav.AppendLine("  - Home: index.md");
+
+        // Modules → docs/modules/{slug}.md
+        var modules = sections.Where(s => s.SectionKind == "module").ToList();
+        if (modules.Count > 0)
+        {
+            nav.AppendLine("  - Modules:");
+            foreach (var m in modules.OrderBy(s => s.ModuleName))
+            {
+                var slug = Slug(m.ModuleName ?? m.Id.ToString());
+                WriteZipEntry(zip, $"{prefix}docs/modules/{slug}.md", MarkdownWithStateWarning(m.RenderedMarkdown, m.State));
+                nav.AppendLine($"    - '{m.ModuleName ?? slug}': modules/{slug}.md");
+            }
+        }
+
+        // Routines → docs/routines/{slug}.md
+        var routines = sections.Where(s => s.SectionKind == "routine-summary").ToList();
+        if (routines.Count > 0)
+        {
+            nav.AppendLine("  - Routines:");
+            foreach (var r in routines.OrderBy(s => s.Subroutine?.Name ?? s.Id.ToString()))
+            {
+                var name = r.Subroutine?.Name ?? r.Id.ToString("N")[..8];
+                var slug = Slug(name);
+                WriteZipEntry(zip, $"{prefix}docs/routines/{slug}.md", MarkdownWithStateWarning(r.RenderedMarkdown, r.State));
+                nav.AppendLine($"    - '{name}': routines/{slug}.md");
+            }
+        }
+
+        // Reference catalog sections
+        var refSections = new (string Kind, string Label, string File)[]
+        {
+            ("data-dictionary", "Data Dictionary", "reference/data-dictionary.md"),
+            ("glossary",        "Glossary",        "reference/glossary.md"),
+            ("interface",       "Interfaces",      "reference/interfaces.md"),
+            ("business-rule",   "Business Rules",  "reference/business-rules.md"),
+        };
+
+        var anyRef = false;
+        foreach (var (kind, label, file) in refSections)
+        {
+            var s = sections.FirstOrDefault(x => x.SectionKind == kind);
+            if (s is null) continue;
+            WriteZipEntry(zip, $"{prefix}docs/{file}", MarkdownWithStateWarning(s.RenderedMarkdown, s.State));
+            if (!anyRef) { nav.AppendLine("  - Reference:"); anyRef = true; }
+            nav.AppendLine($"    - '{label}': {file}");
+        }
+
+        // Diagrams → docs/diagrams/{slug}.md
+        var diagrams = sections.Where(s => s.SectionKind == "diagram").ToList();
+        if (diagrams.Count > 0)
+        {
+            nav.AppendLine("  - Diagrams:");
+            foreach (var d in diagrams.OrderBy(s => s.Scope).ThenBy(s => s.Subroutine?.Name ?? s.ModuleName))
+            {
+                var name = d.Scope == "subroutine" && d.Subroutine?.Name is string sn
+                    ? $"{sn} — Sequence"
+                    : d.ModuleName is string mn
+                        ? $"{mn} — Dependency"
+                        : d.Id.ToString("N")[..8];
+                var slug = Slug(name);
+                WriteZipEntry(zip, $"{prefix}docs/diagrams/{slug}.md", MarkdownWithStateWarning(d.RenderedMarkdown, d.State));
+                nav.AppendLine($"    - '{name}': diagrams/{slug}.md");
+            }
+        }
+
+        // mkdocs.yml
+        WriteZipEntry(zip, $"{prefix}mkdocs.yml", BuildMkDocsYml(corpus, nav.ToString()));
     }
 
     private static string BuildMkDocsYml(Corpus corpus, string navBlock)
@@ -224,7 +233,7 @@ markdown_extensions:
 """;
     }
 
-    private static void WriteZipEntry(ZipArchive zip, string path, string content)
+    internal static void WriteZipEntry(ZipArchive zip, string path, string content)
     {
         var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
         using var w = new StreamWriter(entry.Open(), Encoding.UTF8);
@@ -897,7 +906,7 @@ em {
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private static string Slug(string name) =>
+    internal static string Slug(string name) =>
         Regex.Replace(name.ToLowerInvariant().Replace(' ', '-'), @"[^a-z0-9\-]", "")
              .Trim('-');
 }

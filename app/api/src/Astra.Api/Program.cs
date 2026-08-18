@@ -357,6 +357,9 @@ builder.Services.AddScoped<DriftDetectionService>();
 // ─── Docs export (Phase 11.0.g) ───────────────────────────────────────
 builder.Services.AddScoped<DocExportService>();
 
+// ─── Project-level artifact bundle export ─────────────────────────────
+builder.Services.AddScoped<Astra.Api.Export.ProjectExportService>();
+
 // ─── OpenTelemetry ────────────────────────────────────────────────────
 var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "astra-api";
 builder.Services.AddOpenTelemetry()
@@ -372,7 +375,10 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
 builder.Services.AddCors(opt => opt.AddDefaultPolicy(p => p
     .WithOrigins(allowedOrigins)
     .AllowAnyHeader()
-    .AllowAnyMethod()));
+    .AllowAnyMethod()
+    // Without this the cross-origin frontend can't read download filenames,
+    // and file downloads silently fall back to hardcoded names.
+    .WithExposedHeaders("Content-Disposition", "X-Astra-Row-Count")));
 
 var app = builder.Build();
 
@@ -883,6 +889,7 @@ app.MapNotificationEndpoints();
 app.MapEvidenceEndpoints();
 app.MapDevEndpoints();
 app.MapDocsEndpoints();
+app.MapProjectExportEndpoints();
 app.MapPatternAnalysisEndpoints();
 app.MapArchetypeAuthoringEndpoints();
 

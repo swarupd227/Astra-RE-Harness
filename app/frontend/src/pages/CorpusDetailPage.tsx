@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BookOpen, Boxes, ChevronRight, FileCode, Folder, GitBranch, GitMerge, Layers, RefreshCw } from 'lucide-react';
-import { api } from '@/lib/api';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Download, FileCode, Folder, GitBranch, GitMerge, Layers, RefreshCw } from 'lucide-react';
+import { api, getPersona } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -14,12 +14,36 @@ export function CorpusDetailPage() {
   const navigate = useNavigate();
   const { id = '' } = useParams();
   const qc = useQueryClient();
+  const persona = getPersona();
   const [reingestOpen, setReingestOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const corpus = useQuery({
     queryKey: ['corpus', id],
     queryFn: () => api.getCorpus(id),
     enabled: !!id,
   });
+
+  const handleExport = async (includeSources: boolean) => {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { blob, filename } = await api.exportProjectBundle(id, includeSources);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError((err as Error).message ?? 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (corpus.isPending) {
     return (
@@ -83,8 +107,30 @@ export function CorpusDetailPage() {
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Re-sync
           </Button>
+          {persona === 'admin' && (
+            <div className="relative">
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) handleExport(e.target.value === 'with-sources'); }}
+                disabled={exporting}
+                aria-label="Export project artifacts"
+                data-testid="export-project"
+                className="appearance-none cursor-pointer rounded border border-border-subtle bg-raised py-1.5 pl-8 pr-7 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">{exporting ? 'Exporting…' : 'Export…'}</option>
+                <option value="artifacts">Artifacts (.zip)</option>
+                <option value="with-sources">Artifacts + sources (.zip)</option>
+              </select>
+              <Download className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-tertiary" />
+            </div>
+          )}
         </div>
       </header>
+
+      {exportError && (
+        <p className="text-xs text-rose-600" data-testid="export-project-error">{exportError}</p>
+      )}
 
       <ReingestModal
         open={reingestOpen}

@@ -140,7 +140,9 @@ public static class MigrationPlanEndpoints
         return app;
     }
 
-    private static async Task<object> BuildDetailAsync(AppDbContext db, MigrationPlan plan, CancellationToken ct)
+    // Internal so ProjectExportService can bundle the plan JSON with the
+    // exact shape (incl. live counts) the live endpoint serves.
+    internal static async Task<object> BuildDetailAsync(AppDbContext db, MigrationPlan plan, CancellationToken ct)
     {
         var waves = await db.MigrationWaves.AsNoTracking()
             .Where(w => w.MigrationPlanId == plan.Id)

@@ -99,7 +99,9 @@ public static class PatternAnalysisEndpoints
         return app;
     }
 
-    private static object RenderRun(PatternAnalysisRun r) => new
+    // RenderRun/RenderCluster are internal so ProjectExportService can bundle
+    // pattern-analysis JSON with the exact shape the live endpoint serves.
+    internal static object RenderRun(PatternAnalysisRun r) => new
     {
         id = r.Id,
         corpusId = r.CorpusId,
@@ -116,7 +118,7 @@ public static class PatternAnalysisEndpoints
         completedAt = r.CompletedAt,
     };
 
-    private static object RenderCluster(PatternCluster c) => new
+    internal static object RenderCluster(PatternCluster c) => new
     {
         id = c.Id,
         patternAnalysisRunId = c.PatternAnalysisRunId,

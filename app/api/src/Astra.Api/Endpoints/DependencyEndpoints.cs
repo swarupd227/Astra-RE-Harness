@@ -125,7 +125,9 @@ public static class DependencyEndpoints
         sharedBlockNames = r.SharedBlockNames,
     };
 
-    private static object RenderGraph(DependencyGraph g) => new
+    // Internal so ProjectExportService can bundle the graph JSON with the
+    // exact shape the live endpoint serves.
+    internal static object RenderGraph(DependencyGraph g) => new
     {
         corpusId = g.CorpusId,
         sourceVersionId = g.SourceVersionId,

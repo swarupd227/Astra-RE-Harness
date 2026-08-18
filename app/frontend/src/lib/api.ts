@@ -1374,6 +1374,27 @@ export const api = {
     const blob = await res.blob();
     return { blob, filename };
   },
+
+  // Project-level artifact bundle export: docs + dependency graph +
+  // migration plan + pattern analysis, plus (includeSources) the original
+  // source tree, latest scaffold packages, and validation logs.
+  exportProjectBundle: async (corpusId: string, includeSources: boolean): Promise<{ blob: Blob; filename: string }> => {
+    const headers = new Headers();
+    headers.set('X-Dev-Persona', getPersona());
+    const res = await fetch(
+      `${API_BASE}/api/v1/corpora/${encodeURIComponent(corpusId)}/export?includeSources=${includeSources}`,
+      { headers }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new ApiError(res.status, 'project.export.failed', `Export failed (${res.status}): ${text}`);
+    }
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] ?? 'project-artifacts.zip';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
 };
 
 // ─── Validation types ─────────────────────────────────────────────────
