@@ -851,6 +851,53 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ─── Orphaned-run cleanup ─────────────────────────────────────────────
+// Docs, pattern-analysis, and harmonisation runs execute as in-process
+// fire-and-forget tasks; a container restart kills them mid-flight and
+// leaves QUEUED/RUNNING rows that display as in-progress forever. Mark
+// them FAILED at boot. (Single-instance App Service deploy — no risk of
+// clobbering another instance's live run.)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        if (await db.Database.CanConnectAsync())
+        {
+            var bootTime = DateTimeOffset.UtcNow;
+            const string orphanNote = "Orphaned: the API restarted while this run was in flight.";
+            var patternRuns = await db.PatternAnalysisRuns
+                .Where(r => r.State == "QUEUED" || r.State == "RUNNING")
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(r => r.State, "FAILED")
+                    .SetProperty(r => r.ErrorSummary, orphanNote)
+                    .SetProperty(r => r.CompletedAt, bootTime));
+            var docRuns = await db.DocGenerationRuns
+                .Where(r => r.State == "QUEUED" || r.State == "RUNNING")
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(r => r.State, "FAILED")
+                    .SetProperty(r => r.ErrorSummary, orphanNote)
+                    .SetProperty(r => r.CompletedAt, bootTime));
+            var harmonisationRuns = await db.HarmonisationRuns
+                .Where(r => r.Status == "RUNNING")
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(r => r.Status, "FAILED")
+                    .SetProperty(r => r.ErrorMessage, orphanNote)
+                    .SetProperty(r => r.CompletedAt, bootTime));
+            if (patternRuns + docRuns + harmonisationRuns > 0)
+            {
+                Log.Information(
+                    "Orphaned-run cleanup: marked FAILED — {Pattern} pattern-analysis, {Docs} docs, {Harm} harmonisation run(s)",
+                    patternRuns, docRuns, harmonisationRuns);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Orphaned-run cleanup failed; stale RUNNING rows may remain");
+    }
+}
+
 app.UseSerilogRequestLogging();
 app.UseCors();
 app.UseMiddleware<DevPersonaMiddleware>();

@@ -19,6 +19,12 @@ notes: |
   may split a bucket (same claim kinds, different real idiom) or merge
   across buckets (same idiom, one routine happens to have an extra edge
   case the other lacks).
+
+  Input format: each entry carries a compact per-routine DIGEST (purpose,
+  claim counts, truncated claim excerpts), not the full spec/v1 JSON —
+  full specs scaled past the 200k-token context at ~450 routines
+  (EnvestNet). The orchestrator degrades excerpt size in tiers to stay
+  inside a fixed prompt budget.
 ---
 
 # System
@@ -79,8 +85,11 @@ Subroutine count: {{subroutineCount}}
 The following are every subroutine in this corpus's latest version with
 an extracted spec, one JSON object per line-item: `subroutineId`,
 `subroutineName`, `claimKindSignature` (the deterministic hint — sorted
-claim kinds present), and `spec` (the full extracted spec/v1 JSON for
-that routine).
+claim kinds present), `purpose` (the routine's extracted purpose, when
+available), `claimCounts` (how many claims of each kind the spec holds),
+and — when the corpus is small enough to afford it — `claims` (per-kind
+excerpts of the claim texts, truncated; treat them as representative
+samples of the routine's behaviour, not the exhaustive list).
 
 ```json
 {{entriesJson}}

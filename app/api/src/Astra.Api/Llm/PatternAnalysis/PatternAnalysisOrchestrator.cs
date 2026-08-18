@@ -228,21 +228,23 @@ public sealed class PatternAnalysisOrchestrator
             return new ClusterStageResult(0, 0, 0, 0);
 
         var signatureBySubroutine = new Dictionary<Guid, string>();
-        var entries = new List<object>();
+        var digests = new List<RoutineDigest>();
         foreach (var spec in specs)
         {
             var buckets = Validation.ClaimKindBucketer.Bucket(spec.SpecJson.RootElement);
             var signature = Validation.ClaimKindBucketer.Signature(buckets);
             signatureBySubroutine[spec.SubroutineId] = signature;
-            entries.Add(new
-            {
-                subroutineId = spec.SubroutineId,
-                subroutineName = nameById.TryGetValue(spec.SubroutineId, out var n) ? n : "(unknown)",
-                claimKindSignature = signature,
-                spec = spec.SpecJson.RootElement,
-            });
+            digests.Add(new RoutineDigest(
+                spec.SubroutineId,
+                nameById.TryGetValue(spec.SubroutineId, out var n) ? n : "(unknown)",
+                signature,
+                ReadSpecPurpose(spec.SpecJson.RootElement),
+                buckets));
         }
-        var entriesJson = JsonSerializer.Serialize(entries, JsonOpts);
+        var (entriesJson, digestTier) = BuildEntriesJson(digests);
+        _logger.LogInformation(
+            "Pattern clustering digest: corpus={CorpusId} routines={Count} tier={Tier} chars={Chars}",
+            corpusId, digests.Count, digestTier, entriesJson.Length);
 
         var loaded = prompts.GetLatest("common", "dotnet8", "cluster-patterns")
             ?? throw new InvalidOperationException(
@@ -301,6 +303,85 @@ public sealed class PatternAnalysisOrchestrator
         await db.SaveChangesAsync(ct);
 
         return new ClusterStageResult(specs.Count, clusters.Count, llmResult.InputTokens, llmResult.OutputTokens);
+    }
+
+    // ── Clustering-input digest ─────────────────────────────────────────
+    // Embedding every routine's full spec/v1 JSON in the single clustering
+    // prompt scaled linearly with corpus size and blew the 200k-token
+    // context on large corpora (EnvestNet: 450 routines ≈ 1.7M tokens →
+    // Anthropic 400 "prompt is too long"). The clustering judge needs each
+    // routine's claim FLAVOUR, not the whole spec, so send a compact digest
+    // instead — sized to a budget by degrading through tiers: claim
+    // excerpts → shorter excerpts → per-kind counts only. The largest tier
+    // that fits wins.
+    private const int MaxEntriesJsonChars = 450_000; // ≈150k tokens at ~3 chars/token
+
+    private static readonly JsonSerializerOptions DigestJsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private sealed record RoutineDigest(
+        Guid SubroutineId,
+        string Name,
+        string Signature,
+        string? Purpose,
+        Dictionary<string, List<string>> Buckets);
+
+    private static (string Json, string Tier) BuildEntriesJson(IReadOnlyList<RoutineDigest> digests)
+    {
+        var tiers = new (string Name, int ClaimsPerKind, int ClaimChars, int PurposeChars)[]
+        {
+            ("excerpts", 4, 200, 300),
+            ("short-excerpts", 2, 110, 160),
+            ("counts-only", 0, 0, 110),
+        };
+
+        var json = "";
+        var tierName = "";
+        foreach (var tier in tiers)
+        {
+            tierName = tier.Name;
+            var entries = digests.Select(d => new
+            {
+                subroutineId = d.SubroutineId,
+                subroutineName = d.Name,
+                claimKindSignature = d.Signature,
+                purpose = d.Purpose is null ? null : Truncate(d.Purpose, tier.PurposeChars),
+                claimCounts = d.Buckets.Where(kv => kv.Value.Count > 0)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value.Count),
+                claims = tier.ClaimsPerKind == 0
+                    ? null
+                    : d.Buckets.Where(kv => kv.Value.Count > 0)
+                        .ToDictionary(
+                            kv => kv.Key,
+                            kv => kv.Value.Take(tier.ClaimsPerKind)
+                                .Select(text => Truncate(text, tier.ClaimChars))
+                                .ToList()),
+            });
+            json = JsonSerializer.Serialize(entries, DigestJsonOpts);
+            if (json.Length <= MaxEntriesJsonChars) return (json, tierName);
+        }
+
+        // counts-only is ~100 bytes per routine; if a pathological corpus
+        // still exceeds the budget, send it anyway rather than refusing.
+        return (json, tierName);
+    }
+
+    private static string? ReadSpecPurpose(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return null;
+        foreach (var key in new[] { "purpose", "summary", "description" })
+        {
+            if (root.TryGetProperty(key, out var v)
+                && v.ValueKind == JsonValueKind.String
+                && v.GetString() is { Length: > 0 } s)
+            {
+                return s;
+            }
+        }
+        return null;
     }
 
     private async Task<ClusterLlmResult> CallAnthropicAsync(
