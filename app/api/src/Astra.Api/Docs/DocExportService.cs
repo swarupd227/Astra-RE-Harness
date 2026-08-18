@@ -116,6 +116,19 @@ public sealed class DocExportService
         var nav = new StringBuilder();
         nav.AppendLine("nav:");
 
+        // Same-named routines in different files (MINPACK's ex/ vs examples/
+        // trees, or every example defining an `fcn`) slug to the same path.
+        // ZipArchive would happily write duplicate entries, which extractors
+        // reject or silently overwrite — so suffix collisions with -2, -3, …
+        var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string Unique(string dir, string slug)
+        {
+            var candidate = slug;
+            var i = 2;
+            while (!usedPaths.Add($"{dir}/{candidate}.md")) candidate = $"{slug}-{i++}";
+            return candidate;
+        }
+
         // Overview → docs/index.md
         var overview = sections.FirstOrDefault(s => s.SectionKind == "overview");
         WriteZipEntry(zip, $"{prefix}docs/index.md",
@@ -129,7 +142,7 @@ public sealed class DocExportService
             nav.AppendLine("  - Modules:");
             foreach (var m in modules.OrderBy(s => s.ModuleName))
             {
-                var slug = Slug(m.ModuleName ?? m.Id.ToString());
+                var slug = Unique("modules", Slug(m.ModuleName ?? m.Id.ToString()));
                 WriteZipEntry(zip, $"{prefix}docs/modules/{slug}.md", MarkdownWithStateWarning(m.RenderedMarkdown, m.State));
                 nav.AppendLine($"    - '{m.ModuleName ?? slug}': modules/{slug}.md");
             }
@@ -143,7 +156,7 @@ public sealed class DocExportService
             foreach (var r in routines.OrderBy(s => s.Subroutine?.Name ?? s.Id.ToString()))
             {
                 var name = r.Subroutine?.Name ?? r.Id.ToString("N")[..8];
-                var slug = Slug(name);
+                var slug = Unique("routines", Slug(name));
                 WriteZipEntry(zip, $"{prefix}docs/routines/{slug}.md", MarkdownWithStateWarning(r.RenderedMarkdown, r.State));
                 nav.AppendLine($"    - '{name}': routines/{slug}.md");
             }
@@ -180,7 +193,7 @@ public sealed class DocExportService
                     : d.ModuleName is string mn
                         ? $"{mn} — Dependency"
                         : d.Id.ToString("N")[..8];
-                var slug = Slug(name);
+                var slug = Unique("diagrams", Slug(name));
                 WriteZipEntry(zip, $"{prefix}docs/diagrams/{slug}.md", MarkdownWithStateWarning(d.RenderedMarkdown, d.State));
                 nav.AppendLine($"    - '{name}': diagrams/{slug}.md");
             }
