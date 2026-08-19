@@ -148,17 +148,26 @@ public sealed class DocExportService
             }
         }
 
-        // Routines → docs/routines/{slug}.md
+        // Routines → docs/routines/{slug}.md — full page per substantive
+        // routine; bean-style accessors collapse into one table page so a
+        // 450-routine corpus isn't 150 pages of getter boilerplate.
         var routines = sections.Where(s => s.SectionKind == "routine-summary").ToList();
+        var accessors = routines.Where(IsTrivialAccessor).ToList();
         if (routines.Count > 0)
         {
             nav.AppendLine("  - Routines:");
-            foreach (var r in routines.OrderBy(s => s.Subroutine?.Name ?? s.Id.ToString()))
+            foreach (var r in routines.Where(s => !IsTrivialAccessor(s)).OrderBy(s => s.Subroutine?.Name ?? s.Id.ToString()))
             {
                 var name = r.Subroutine?.Name ?? r.Id.ToString("N")[..8];
                 var slug = Unique("routines", Slug(name));
                 WriteZipEntry(zip, $"{prefix}docs/routines/{slug}.md", MarkdownWithStateWarning(r.RenderedMarkdown, r.State));
                 nav.AppendLine($"    - '{name}': routines/{slug}.md");
+            }
+            if (accessors.Count > 0)
+            {
+                WriteZipEntry(zip, $"{prefix}docs/routines/accessors.md",
+                    "# Property Accessors\n\n" + AccessorTable(accessors));
+                nav.AppendLine($"    - 'Property accessors ({accessors.Count})': routines/accessors.md");
             }
         }
 
@@ -174,9 +183,12 @@ public sealed class DocExportService
         var anyRef = false;
         foreach (var (kind, label, file) in refSections)
         {
-            var s = sections.FirstOrDefault(x => x.SectionKind == kind);
-            if (s is null) continue;
-            WriteZipEntry(zip, $"{prefix}docs/{file}", MarkdownWithStateWarning(s.RenderedMarkdown, s.State));
+            // A corpus can hold MANY sections of one reference kind
+            // (EnvestNet: 31 business-rule sections). Ship them all —
+            // taking only the first silently dropped 30 of 31 rules.
+            var kindSections = sections.Where(x => x.SectionKind == kind).ToList();
+            if (kindSections.Count == 0) continue;
+            WriteZipEntry(zip, $"{prefix}docs/{file}", CombineReferenceKind(kindSections));
             if (!anyRef) { nav.AppendLine("  - Reference:"); anyRef = true; }
             nav.AppendLine($"    - '{label}': {file}");
         }
@@ -339,7 +351,16 @@ markdown_extensions:
                 .Where(s => s.SectionKind == kind)
                 .OrderBy(s => s.Subroutine?.Name ?? s.ModuleName ?? s.Id.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (kindSections.Count == 0) continue;
+
+            // Collapse bean-style accessors out of the routine chapter —
+            // they get a one-line-per-family table at the chapter's end.
+            var accessorRows = kind == "routine-summary"
+                ? kindSections.Where(IsTrivialAccessor).ToList()
+                : new List<DocSection>();
+            if (accessorRows.Count > 0)
+                kindSections = kindSections.Where(s => !IsTrivialAccessor(s)).ToList();
+
+            if (kindSections.Count == 0 && accessorRows.Count == 0) continue;
 
             sb.AppendLine($"# {chapterTitle}");
             sb.AppendLine();
@@ -363,8 +384,85 @@ markdown_extensions:
                 sb.AppendLine(NormalizeHeadings(content));
                 sb.AppendLine();
             }
+
+            if (accessorRows.Count > 0)
+            {
+                sb.AppendLine("## Property Accessors");
+                sb.AppendLine();
+                sb.AppendLine(AccessorTable(accessorRows));
+                sb.AppendLine();
+            }
         }
 
+        return sb.ToString();
+    }
+
+    // ── Trivial-accessor collapsing ─────────────────────────────────────
+    // Bean-style corpora (EnvestNet: 450 routines, a third of them getters
+    // and setters) drown the routine reference in boilerplate — a full
+    // formal page per one-line accessor is what readers flag as poor
+    // quality. Anything with a get/set/is name and a body of five lines or
+    // fewer collapses into a one-line-per-family table; everything else
+    // keeps its full page.
+
+    private static readonly Regex AccessorNameRegex =
+        new(@"^(get|set|is)[A-Z_]", RegexOptions.Compiled);
+
+    private static bool IsTrivialAccessor(DocSection s) =>
+        s.SectionKind == "routine-summary"
+        && s.Subroutine is { } sub
+        && AccessorNameRegex.IsMatch(sub.Name)
+        && sub.LineEnd - sub.LineStart <= 4;
+
+    private static string AccessorTable(IReadOnlyList<DocSection> accessors)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            $"{accessors.Count} bean-style accessors (get/set/is, five lines or fewer) are summarised " +
+            "one line per family below; they carry no behaviour beyond field access. " +
+            "Full evidence-cited specs remain available for each in the review UI.");
+        sb.AppendLine();
+        sb.AppendLine("| Routine | Summary |");
+        sb.AppendLine("|---|---|");
+        foreach (var family in accessors
+                     .GroupBy(a => a.Subroutine!.Name)
+                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var label = family.Count() > 1 ? $"`{family.Key}` ×{family.Count()}" : $"`{family.Key}`";
+            sb.AppendLine($"| {label} | {FirstSentence(family.First().RenderedMarkdown)} |");
+        }
+        return sb.ToString();
+    }
+
+    private static string FirstSentence(string? markdown, int max = 180)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return "";
+        var line = markdown.Replace("\r\n", "\n").Split('\n')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Length > 0 && !l.StartsWith('#') && !l.StartsWith('>') && !l.StartsWith("!!!"));
+        if (line is null) return "";
+        var dot = line.IndexOf(". ", StringComparison.Ordinal);
+        var sentence = dot > 0 ? line[..(dot + 1)] : line;
+        if (sentence.Length > max) sentence = sentence[..max] + "…";
+        return sentence.Replace("|", "\\|");
+    }
+
+    /// <summary>
+    /// Joins every section of one reference kind (business rules, glossary,
+    /// interfaces, data dictionary) into a single page, with one shared
+    /// state banner instead of one per entry.
+    /// </summary>
+    private static string CombineReferenceKind(IReadOnlyList<DocSection> kindSections)
+    {
+        var sb = new StringBuilder();
+        if (kindSections.Any(s => s.State == "STALE"))
+            sb.AppendLine("!!! warning \"Out of date\"\n    One or more entries were signed against an older source version.\n");
+        else if (kindSections.Any(s => s.State == "DRAFT"))
+            sb.AppendLine("!!! note \"Draft\"\n    One or more entries have not yet been reviewed and signed off.\n");
+        foreach (var s in kindSections.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id))
+        {
+            sb.AppendLine(s.RenderedMarkdown ?? "");
+        }
         return sb.ToString();
     }
 
