@@ -72,12 +72,36 @@ public sealed class CatalogPipeline
         {
             var routines = await LoadRoutineSummariesAsync(db, corpusId, sourceVersionId, ct);
             var commonBlocks = await LoadCommonBlocksAsync(db, corpusId, sourceVersionId, ct);
-            return JsonSerializer.Serialize(new
+            var corpusName = await GetCorpusNameAsync(db, corpusId, ct);
+
+            // Full rows for a 450-routine corpus overflow the call budget
+            // (the name+summary stages succeeded on EnvestNet while this one
+            // failed every run). Send truncated fields; fall back to
+            // name+summary only if the payload is still oversized.
+            var compact = routines.Select(r => new
             {
-                corpus_name = await GetCorpusNameAsync(db, corpusId, ct),
-                routine_summaries = routines,
+                r.name,
+                summary = Truncate(r.summary, 280),
+                inputs = CapList(r.inputs, 8, 100),
+                outputs = CapList(r.outputs, 8, 100),
+                side_effects = CapList(r.sideEffects, 6, 100),
+            }).ToList();
+            var json = JsonSerializer.Serialize(new
+            {
+                corpus_name = corpusName,
+                routine_summaries = compact,
                 common_blocks = commonBlocks,
-            }, new JsonSerializerOptions { WriteIndented = true });
+            });
+            if (json.Length > MaxCatalogInputChars)
+            {
+                json = JsonSerializer.Serialize(new
+                {
+                    corpus_name = corpusName,
+                    routine_summaries = routines.Select(r => new { r.name, summary = Truncate(r.summary, 200) }),
+                    common_blocks = commonBlocks,
+                });
+            }
+            return json;
         }, runId, corpusId, sourceVersionId, force, ct);
 
     public Task<StageOutcome> RunGlossaryAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
@@ -438,7 +462,9 @@ public sealed class CatalogPipeline
         };
 
         var http = httpFactory.CreateClient("docs-summary");
-        http.Timeout = TimeSpan.FromMinutes(3);
+        // 3 minutes proved too tight for large corpora: EnvestNet's
+        // data-dictionary call timed out at exactly 180s on every run.
+        http.Timeout = TimeSpan.FromMinutes(15);
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/messages")
         {
             Content = new StringContent(
@@ -500,6 +526,17 @@ public sealed class CatalogPipeline
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+
+    // Catalog user-message budget: ≈150k tokens at ~3 chars/token, leaving
+    // room for the system prompt and the 16k structured output.
+    private const int MaxCatalogInputChars = 450_000;
+
+    private static List<string> CapList(List<string> items, int maxItems, int maxChars)
+    {
+        var capped = items.Take(maxItems).Select(s => Truncate(s, maxChars)).ToList();
+        if (items.Count > maxItems) capped.Add($"(+{items.Count - maxItems} more)");
+        return capped;
+    }
 
     private static string RenderCatalogEntryMarkdown(string sectionKind, JsonElement entry)
     {

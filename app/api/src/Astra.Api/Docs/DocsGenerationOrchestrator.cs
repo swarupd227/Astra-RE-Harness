@@ -100,6 +100,10 @@ public sealed class DocsGenerationOrchestrator
     private async Task RunPipelineAsync(Guid runId, Guid corpusId, Guid sourceVersionId, GenerateOptions opts)
     {
         var allStageMetrics = new Dictionary<string, object?>();
+        // Stages that produced NOTHING and recorded at least one failure —
+        // the run must not report clean success over them (EnvestNet's
+        // data-dictionary failed silently on every run this way).
+        var failedStages = new List<string>();
         _runLogger.Log(runId, $"Run started — {opts.Stages.Count} stage(s): {string.Join(", ", opts.Stages)}");
         try
         {
@@ -116,6 +120,7 @@ public sealed class DocsGenerationOrchestrator
                             runId, corpusId, sourceVersionId,
                             new RoutineSummaryPipeline.GenerateOptions(opts.Take, opts.Force), ct);
                         allStageMetrics["routine-summary"] = ParseMetrics(r.MetricsJson);
+                        if (r.Succeeded == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  routine-summary: {r.Succeeded} succeeded, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
@@ -124,6 +129,7 @@ public sealed class DocsGenerationOrchestrator
                         var (succ, fail) = await _rollupPipeline.RunModuleStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["module"] = new { sections = succ, failed = fail };
+                        if (succ == 0 && fail > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  module: {succ} sections, {fail} failed");
                         break;
                     }
@@ -132,6 +138,7 @@ public sealed class DocsGenerationOrchestrator
                         var (succ, fail) = await _rollupPipeline.RunOverviewStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["overview"] = new { sections = succ, failed = fail };
+                        if (succ == 0 && fail > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  overview: {succ} sections, {fail} failed");
                         break;
                     }
@@ -140,6 +147,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunDataDictionaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["data-dictionary"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  data-dictionary: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
@@ -148,6 +156,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunGlossaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["glossary"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  glossary: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
@@ -156,6 +165,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunInterfaceAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["interface"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  interface: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
@@ -164,6 +174,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunBusinessRulesAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["business-rules"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  business-rules: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
@@ -172,6 +183,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _diagramPipeline.RunSequenceStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["sequence-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
+                        if (r.Diagrams == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  sequence-diagram: {r.Diagrams} diagrams, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
@@ -180,6 +192,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _diagramPipeline.RunDependencyStageAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["dependency-diagram"] = new { diagrams = r.Diagrams, failed = r.Failed, skipped = r.Skipped };
+                        if (r.Diagrams == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  dependency-diagram: {r.Diagrams} diagrams, {r.Failed} failed, {r.Skipped} skipped");
                         break;
                     }
@@ -187,8 +200,20 @@ public sealed class DocsGenerationOrchestrator
                 await UpdateAsync(runId, "RUNNING", $"Completed stage: {stage}", allStageMetrics);
             }
 
-            _runLogger.Log(runId, $"✓ All {opts.Stages.Count} stage(s) complete.");
-            await UpdateAsync(runId, "SUCCEEDED", $"All {opts.Stages.Count} stage(s) complete", allStageMetrics, completed: true);
+            if (failedStages.Count == 0)
+            {
+                _runLogger.Log(runId, $"✓ All {opts.Stages.Count} stage(s) complete.");
+                await UpdateAsync(runId, "SUCCEEDED", $"All {opts.Stages.Count} stage(s) complete", allStageMetrics, completed: true);
+            }
+            else
+            {
+                var state = failedStages.Count == opts.Stages.Count ? "FAILED" : "PARTIAL";
+                var summary =
+                    $"{opts.Stages.Count - failedStages.Count} of {opts.Stages.Count} stage(s) complete; " +
+                    $"failed: {string.Join(", ", failedStages)}";
+                _runLogger.Log(runId, $"✗ {summary}");
+                await UpdateAsync(runId, state, summary, allStageMetrics, completed: true);
+            }
             _runLogger.Complete(runId);
         }
         catch (Exception ex)
