@@ -74,12 +74,22 @@ public sealed class DependencyGraphBuilder
             .GroupBy(sc => sc.SpecId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        // 4. Name → Subroutine lookup for callee resolution. Case-
+        // 4. Name → Subroutine lookups for callee resolution. Case-
         //    insensitive because COBOL is case-flexible and the parser
-        //    upper-cases names.
+        //    upper-cases names. Qualified-name parsers need a second
+        //    index: the C# parser stores routine names as "Class.Method"
+        //    but records CALLS as bare method names, so exact matching
+        //    alone yields zero call edges on .NET corpora. Bare names
+        //    resolve only when unambiguous corpus-wide — a name owned by
+        //    several classes (Save, GetId, Up) is skipped rather than
+        //    guessed, so no edge is ever fabricated.
         var byName = subs
             .GroupBy(s => s.Name.ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First());
+        var byBareName = subs
+            .GroupBy(s => BareName(s.Name), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         // 5. Build call edges + collect external callees.
         var callEdges = new List<GraphEdge>();
@@ -90,12 +100,24 @@ public sealed class DependencyGraphBuilder
         {
             var calls = ReadNameList(sub.CalledSubroutines);
             int resolvedCount = 0;
+            // Two raw spellings can resolve to one target ("Save" and
+            // "OrderService.Save") — dedupe per caller so counts stay honest.
+            var resolvedTargets = new HashSet<Guid>();
             foreach (var rawCall in calls.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var nameUp = rawCall.ToUpperInvariant();
-                if (byName.TryGetValue(nameUp, out var target))
+                if (!byName.TryGetValue(rawCall.ToUpperInvariant(), out var target))
+                {
+                    // Fall back through the name-format mismatches: a
+                    // qualified call against bare routine names, then a bare
+                    // call against unambiguous qualified routine names.
+                    var bare = BareName(rawCall);
+                    if (!byName.TryGetValue(bare.ToUpperInvariant(), out target))
+                        byBareName.TryGetValue(bare, out target);
+                }
+                if (target is not null)
                 {
                     if (target.Id == sub.Id) continue; // skip self-recursion edges
+                    if (!resolvedTargets.Add(target.Id)) continue;
                     callEdges.Add(new GraphEdge(sub.Id, target.Id, "call", null));
                     callerCount[target.Id] = callerCount.GetValueOrDefault(target.Id) + 1;
                     resolvedCount++;
@@ -292,6 +314,14 @@ public sealed class DependencyGraphBuilder
         if (spec is not null && spec.State == "SIGNED") return "SIGNED";
         if (spec is not null) return spec.State; // DRAFT / IN_REVIEW / etc.
         return sub.State; // PARSED / EXTRACTING / etc.
+    }
+
+    /// <summary>Last dot-segment of a possibly-qualified routine name
+    /// ("OrderService.Save" → "Save"; bare names pass through).</summary>
+    private static string BareName(string name)
+    {
+        var idx = name.LastIndexOf('.');
+        return idx >= 0 && idx < name.Length - 1 ? name[(idx + 1)..] : name;
     }
 
     private static IReadOnlyList<string> ReadNameList(JsonDocument? doc)

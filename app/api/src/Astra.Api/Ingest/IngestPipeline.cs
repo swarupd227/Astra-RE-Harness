@@ -204,10 +204,22 @@ public sealed class IngestPipeline
 
                 // Phase 5.2 — detect source language from the file's
                 // extension and persist it on every parsed subroutine.
-                // Default fortran-f77 keeps pre-Phase-5.2 callers valid.
-                var sourceLanguage =
-                    SourceLanguageDetector.FromFilename(fileRow.RelativePath)
-                    ?? SourceLanguageDetector.Fortran;
+                // No silent default: the old fortran-f77 fallback stamped a
+                // whole .NET corpus as Fortran (Adv-Connect), which then
+                // routed extraction prompts for the wrong language. Upstream
+                // extension filters should make null impossible — if it
+                // happens anyway, skip the file's routines and say so.
+                var sourceLanguage = SourceLanguageDetector.FromFilename(fileRow.RelativePath);
+                if (sourceLanguage is null)
+                {
+                    warnings.Add(
+                        $"{fileRow.RelativePath}: no language mapping for this extension — " +
+                        $"routines skipped. Supported: {SourceLanguageDetector.SupportedLanguagesDescription()}");
+                    _logger.LogWarning(
+                        "Ingest: no language mapping for {Path}; skipping its {Count} routine(s)",
+                        fileRow.RelativePath, outcome.Subroutines.Count);
+                    continue;
+                }
 
                 foreach (var sub in outcome.Subroutines)
                 {
