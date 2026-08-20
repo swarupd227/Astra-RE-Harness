@@ -184,6 +184,9 @@ export function PatternAnalysisPage() {
   const persona = getPersona();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  // Full re-extraction re-runs the LLM over every routine in the corpus —
+  // hours and real money on a large one. Arm it with a second click.
+  const [confirmForce, setConfirmForce] = useState(false);
 
   const corpus = useQuery({
     queryKey: ['corpus', id],
@@ -203,10 +206,14 @@ export function PatternAnalysisPage() {
     enabled: !!id,
   });
 
+  // Incremental by default: extract only routines that have never been
+  // extracted, then re-cluster. Forcing re-extracts routines that already
+  // have specs, which is only wanted after an extract-prompt change.
   const runMutation = useMutation({
-    mutationFn: () => api.runPatternAnalysis(id, { force: true }),
+    mutationFn: (force: boolean) => api.runPatternAnalysis(id, { force }),
     onSuccess: (result) => {
       setRunError(null);
+      setConfirmForce(false);
       setActiveRunId(result.runId);
     },
   });
@@ -292,15 +299,31 @@ export function PatternAnalysisPage() {
         </div>
 
         {persona === 'admin' && (
-          <Button
-            variant="secondary"
-            onClick={() => runMutation.mutate()}
-            disabled={isRunning}
-            data-testid="run-pattern-analysis"
-          >
-            {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {lastRun ? 'Re-run analysis' : 'Run analysis'}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => runMutation.mutate(false)}
+              disabled={isRunning}
+              data-testid="run-pattern-analysis"
+              title="Extracts any routine that has no spec yet, then re-groups the corpus. Routines already extracted are reused."
+            >
+              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {lastRun ? 'Re-run analysis' : 'Run analysis'}
+            </Button>
+            {lastRun && (
+              <button
+                type="button"
+                onClick={() => (confirmForce ? runMutation.mutate(true) : setConfirmForce(true))}
+                onBlur={() => setConfirmForce(false)}
+                disabled={isRunning}
+                data-testid="force-pattern-analysis"
+                title="Discards every existing spec and re-runs the LLM over the whole corpus. Hours on a large project — only needed after an extraction-prompt change."
+                className="rounded border border-border-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {confirmForce ? 'Confirm full re-extraction' : 'Re-extract all specs…'}
+              </button>
+            )}
+          </div>
         )}
       </header>
 
