@@ -202,10 +202,17 @@ export function DependencyGraphPage() {
         animate: true,
         animationDuration: 600,
         randomize: true,
-        idealEdgeLength: 95,
-        nodeRepulsion: 7000,
+        // Small corpora (few edges, many disconnected nodes) pack into a
+        // tight grid where the long routine labels overlap — spread them
+        // much wider. Disconnected (degree-0) nodes are placed by fcose's
+        // tiling pass, so the tiling padding is what actually separates
+        // them, not repulsion. Large graphs keep the denser defaults.
+        idealEdgeLength: graph.data.nodes.length <= 30 ? 190 : 95,
+        nodeRepulsion: graph.data.nodes.length <= 30 ? 50000 : 7000,
         padding: 24,
-        nodeSeparation: 80,
+        nodeSeparation: graph.data.nodes.length <= 30 ? 240 : 80,
+        tilingPaddingVertical: graph.data.nodes.length <= 30 ? 90 : 10,
+        tilingPaddingHorizontal: graph.data.nodes.length <= 30 ? 130 : 10,
       } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.25,
       minZoom: 0.25,
