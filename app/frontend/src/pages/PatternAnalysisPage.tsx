@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Boxes, ChevronDown, ChevronRight, Loader2, Play, Wand2, XCircle } from 'lucide-react';
-import { api, getPersona } from '@/lib/api';
+import { api, getPersona, API_BASE } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -187,6 +187,7 @@ export function PatternAnalysisPage() {
   // Full re-extraction re-runs the LLM over every routine in the corpus —
   // hours and real money on a large one. Arm it with a second click.
   const [confirmForce, setConfirmForce] = useState(false);
+  const [logLines, setLogLines] = useState<string[]>([]);
 
   const corpus = useQuery({
     queryKey: ['corpus', id],
@@ -214,9 +215,27 @@ export function PatternAnalysisPage() {
     onSuccess: (result) => {
       setRunError(null);
       setConfirmForce(false);
+      setLogLines([]);
       setActiveRunId(result.runId);
     },
   });
+
+  // Per-routine progress while a run is in flight. Without this the page
+  // showed one unchanging line for the whole run, so a working pass and a
+  // hung one looked identical.
+  useEffect(() => {
+    if (!activeRunId) return;
+    const es = new EventSource(`${API_BASE}/api/v1/pattern-analysis/runs/${activeRunId}/logs`);
+    es.onmessage = (e: MessageEvent) => {
+      try {
+        const { message } = JSON.parse(e.data) as { message: string };
+        setLogLines((prev) => [...prev.slice(-400), message]);
+      } catch { /* ignore malformed events */ }
+    };
+    es.addEventListener('done', () => es.close());
+    es.onerror = () => es.close();
+    return () => es.close();
+  }, [activeRunId]);
 
   const runStatus = useQuery({
     queryKey: ['pattern-analysis-run', activeRunId],
@@ -351,6 +370,16 @@ export function PatternAnalysisPage() {
               </p>
             </div>
           </CardBody>
+          {logLines.length > 0 && (
+            <div
+              className="max-h-48 overflow-y-auto border-t border-border-subtle bg-sunken px-4 py-2 font-mono text-[11px] leading-relaxed text-ink-tertiary"
+              data-testid="pattern-analysis-log"
+            >
+              {logLines.map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap">{line}</div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 

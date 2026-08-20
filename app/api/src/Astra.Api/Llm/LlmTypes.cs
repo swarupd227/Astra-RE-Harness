@@ -11,6 +11,15 @@ public sealed record ProviderInfo(
     string Model,
     string ConfigVersion);  // ZDR/no-train snapshot identity
 
+/// <summary>
+/// Per-call tuning for a bulk extraction pass. Interactive extraction
+/// passes null and keeps the configured defaults.
+/// </summary>
+public sealed record ExtractionTuning(
+    string? ModelOverride = null,
+    int? MaxOutputTokensOverride = null,
+    bool BulkMode = false);
+
 public sealed record ExtractionRequest(
     Guid SubroutineId,
     string SubroutineName,
@@ -29,7 +38,16 @@ public sealed record ExtractionRequest(
     // populated value enables the "## Neighbourhood" block in the
     // prompt and is what lets the extract surface cross-file
     // dependencies without RAG or 200k stuffing.
-    Neighbourhood? Neighbourhood = null);
+    Neighbourhood? Neighbourhood = null,
+    // Bulk-run tuning. Wall-clock on a bulk pass is dominated by output
+    // generation, so the lever that matters is routing trivial routines
+    // (one-line accessors and the like) to a faster model. Null means
+    // "use the configured default".
+    string? ModelOverride = null,
+    int? MaxOutputTokensOverride = null,
+    // True when nobody is watching a live stream: skips the deliberate
+    // pacing delays that exist to make the interactive UI readable.
+    bool BulkMode = false);
 
 public sealed record ExtractionResult(
     string SpecJson,

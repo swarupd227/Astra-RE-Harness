@@ -70,7 +70,8 @@ public sealed class ExtractionPipeline
 
     public async IAsyncEnumerable<ExtractionEvent> RunAsync(
         Guid subroutineId,
-        [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct,
+        ExtractionTuning? tuning = null)
     {
         // 1. Load context
         var sub = await _db.Subroutines
@@ -167,7 +168,10 @@ public sealed class ExtractionPipeline
             promptVersion,
             SourceLanguage: sourceLanguage,
             TargetStack: defaultTargetStack,
-            Neighbourhood: neighbourhood);
+            Neighbourhood: neighbourhood,
+            ModelOverride: tuning?.ModelOverride,
+            MaxOutputTokensOverride: tuning?.MaxOutputTokensOverride,
+            BulkMode: tuning?.BulkMode ?? false);
 
         object? finalPayload = null;
         var providerEmittedError = false;

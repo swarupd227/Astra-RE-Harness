@@ -152,6 +152,9 @@ builder.Services.AddSingleton(new LlmKeyState(
 builder.Services.AddHttpClient();
 // Phase 7.0 — structured cross-routine context builder. Used by
 // ExtractionPipeline to attach a neighbourhood to every ExtractionRequest.
+// Backs the per-source-version routine index the neighbourhood
+// builder reuses across a bulk extraction pass.
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<Astra.Api.Llm.NeighbourhoodBuilder>();
 builder.Services.AddScoped<ExtractionPipeline>();
 
@@ -893,6 +896,23 @@ using (var scope = app.Services.CreateScope())
                 Log.Information(
                     "Orphaned-run cleanup: marked FAILED — {Pattern} pattern-analysis, {Docs} docs, {Harm} harmonisation run(s)",
                     patternRuns, docRuns, harmonisationRuns);
+            }
+
+            // A routine interrupted mid-extraction stays EXTRACTING, and the
+            // pipeline's state guard accepts only PARSED/DRAFT — so without
+            // this it can never be extracted again, by any run, forced or
+            // not. Restore it to whichever state it came from.
+            var revivedDraft = await db.Subroutines
+                .Where(s => s.State == "EXTRACTING" && db.Specs.Any(sp => sp.SubroutineId == s.Id))
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.State, "DRAFT"));
+            var revivedParsed = await db.Subroutines
+                .Where(s => s.State == "EXTRACTING")
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.State, "PARSED"));
+            if (revivedDraft + revivedParsed > 0)
+            {
+                Log.Information(
+                    "Stranded-extraction cleanup: {Draft} routine(s) → DRAFT, {Parsed} → PARSED",
+                    revivedDraft, revivedParsed);
             }
         }
     }

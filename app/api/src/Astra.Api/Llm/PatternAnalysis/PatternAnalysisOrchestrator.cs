@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -29,22 +30,63 @@ namespace Astra.Api.Llm.PatternAnalysis;
 /// </summary>
 public sealed class PatternAnalysisOrchestrator
 {
-    private const int MaxExtractConcurrency = 4;
+    /// <summary>Attempts per routine before giving up. Attempt 1 may use
+    /// the trivial-tier model; later attempts always use the default one,
+    /// so a weaker model's malformed output self-corrects.</summary>
+    private const int MaxAttempts = 3;
+
+    /// <summary>Write a progress row every N completions — often enough to
+    /// watch, rare enough not to hammer Postgres from 8 threads.</summary>
+    private const int ProgressUpdateEvery = 10;
+
+    /// <summary>Output ceiling for trivial routines. A one-line accessor
+    /// that wants more than this has gone wrong, and capping it bounds the
+    /// damage rather than letting it generate for 80 seconds.</summary>
+    private const int TrivialMaxOutputTokens = 4096;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    // Qualified ("OrderService.getId") and bare ("GET_ID") accessor shapes.
+    private static readonly Regex AccessorNameRegex =
+        new(@"(^|\.)(get|set|is|has)[A-Z_]", RegexOptions.Compiled);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PatternAnalysisOrchestrator> _logger;
+    private readonly Astra.Api.Docs.DocRunLogger _runLogger;
+    private readonly int _maxConcurrency;
+    private readonly string _trivialModel;
 
     public PatternAnalysisOrchestrator(
         IServiceScopeFactory scopeFactory,
-        ILogger<PatternAnalysisOrchestrator> logger)
+        ILogger<PatternAnalysisOrchestrator> logger,
+        Astra.Api.Docs.DocRunLogger runLogger,
+        IConfiguration cfg)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _runLogger = runLogger;
+        // Was a hard-coded 4. Wall-clock on a bulk pass is linear in this.
+        _maxConcurrency = Math.Clamp(cfg.GetValue("Llm:BulkExtractConcurrency", 8), 1, 32);
+        // Trivial routines are the bulk of a bean-style corpus and their
+        // specs are short; a fast small model turns 80s of generation into
+        // a few. Set to the default model to disable tiering entirely.
+        _trivialModel = cfg.GetValue<string>("Llm:Anthropic:TrivialModel")
+                        ?? "claude-haiku-4-5-20251001";
+    }
+
+    /// <summary>
+    /// Short accessor-shaped members get the cheap tier. Deliberately
+    /// conservative: anything that isn't obviously boilerplate keeps the
+    /// full treatment, because a wrong call here costs spec quality.
+    /// </summary>
+    private static bool IsTrivial(Subroutine s)
+    {
+        var loc = s.LineEnd - s.LineStart + 1;
+        if (loc <= 3) return true;
+        return loc <= 8 && AccessorNameRegex.IsMatch(s.Name);
     }
 
     public async Task<Guid> StartAsync(Guid corpusId, bool force, string? triggeredBy, CancellationToken ct)
@@ -107,10 +149,14 @@ public sealed class PatternAnalysisOrchestrator
             await UpdateAsync(runId, state, summary,
                 new Dictionary<string, object?> { ["extract"] = extractResult, ["cluster"] = clusterResult },
                 completed: true);
+            _runLogger.Log(runId, summary);
+            _runLogger.Complete(runId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Pattern analysis run {RunId} crashed", runId);
+            _runLogger.Log(runId, $"Run failed: {ex.Message}");
+            _runLogger.Complete(runId);
             await FailAsync(runId, ex.Message);
         }
     }
@@ -146,42 +192,141 @@ public sealed class PatternAnalysisOrchestrator
         if (todo.Count == 0)
             return new ExtractStageResult(0, 0, skipped);
 
-        var sem = new SemaphoreSlim(MaxExtractConcurrency);
-        var results = await Task.WhenAll(todo.Select(sub => ExtractOneAsync(sub, sem, ct)));
+        var trivialCount = todo.Count(IsTrivial);
+        _runLogger.Log(runId,
+            $"Extracting {todo.Count} routine(s) at concurrency {_maxConcurrency} " +
+            $"— {trivialCount} trivial → {_trivialModel}, {todo.Count - trivialCount} full-tier. " +
+            $"{skipped} already extracted.");
+
+        var sem = new SemaphoreSlim(_maxConcurrency);
+        var completed = 0;
+        var failedCount = 0;
+        var results = await Task.WhenAll(todo.Select(async sub =>
+        {
+            var ok = await ExtractOneAsync(runId, sub, sem, ct);
+            if (!ok) Interlocked.Increment(ref failedCount);
+            var n = Interlocked.Increment(ref completed);
+            _runLogger.Log(runId, $"[{n}/{todo.Count}] {(ok ? "ok  " : "FAIL")} {sub.Name}");
+            // Progress is the difference between "slow" and "hung" to the
+            // person watching; the old run summary never moved for hours.
+            if (n % ProgressUpdateEvery == 0 || n == todo.Count)
+            {
+                await UpdateAsync(runId, "RUNNING",
+                    $"Stage 1/2: extracted {n}/{todo.Count} routine(s)" +
+                    $"{(Volatile.Read(ref failedCount) > 0 ? $", {Volatile.Read(ref failedCount)} failed" : "")}",
+                    null);
+            }
+            return ok;
+        }));
         var succeeded = results.Count(r => r);
         return new ExtractStageResult(succeeded, results.Length - succeeded, skipped);
     }
 
-    private async Task<bool> ExtractOneAsync(Subroutine sub, SemaphoreSlim sem, CancellationToken ct)
+    private async Task<bool> ExtractOneAsync(Guid runId, Subroutine sub, SemaphoreSlim sem, CancellationToken ct)
     {
         await sem.WaitAsync(ct);
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var pipeline = scope.ServiceProvider.GetRequiredService<ExtractionPipeline>();
-            var ok = false;
-            await foreach (var evt in pipeline.RunAsync(sub.Id, ct))
+            var trivial = IsTrivial(sub);
+            for (var attempt = 1; attempt <= MaxAttempts; attempt++)
             {
-                if (evt.Type == "done")
-                {
-                    ok = true;
-                }
-                else if (evt.Type == "error")
+                // Only the first attempt uses the cheap tier: if a smaller
+                // model returns malformed or truncated output, the retry
+                // escalates to the default model rather than repeating it.
+                var useTrivialTier = trivial && attempt == 1;
+                var tuning = new ExtractionTuning(
+                    ModelOverride: useTrivialTier ? _trivialModel : null,
+                    MaxOutputTokensOverride: useTrivialTier ? TrivialMaxOutputTokens : null,
+                    BulkMode: true);
+
+                var (ok, retryable, error) = await RunOnceAsync(sub, tuning, ct);
+                if (ok) return true;
+
+                // A failed attempt can leave the row parked in EXTRACTING,
+                // where the state guard would refuse it forever after.
+                await ResetIfStuckAsync(sub.Id, ct);
+
+                var lastAttempt = attempt == MaxAttempts;
+                if (lastAttempt || (!retryable && !useTrivialTier))
                 {
                     _logger.LogWarning(
-                        "Bulk extraction failed for {Sub}: {Err}", sub.Name, JsonSerializer.Serialize(evt.Data));
+                        "Bulk extraction failed for {Sub} after {Attempts} attempt(s): {Err}",
+                        sub.Name, attempt, error);
+                    return false;
                 }
+                // 2s, then 6s. Anthropic 429s clear inside this window.
+                await Task.Delay(TimeSpan.FromSeconds(attempt * attempt * 2), ct);
             }
-            return ok;
+            return false;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Bulk extraction threw for {Sub}", sub.Name);
+            await ResetIfStuckAsync(sub.Id, CancellationToken.None);
             return false;
         }
         finally
         {
             sem.Release();
+        }
+    }
+
+    private async Task<(bool Ok, bool Retryable, string? Error)> RunOnceAsync(
+        Subroutine sub, ExtractionTuning tuning, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var pipeline = scope.ServiceProvider.GetRequiredService<ExtractionPipeline>();
+        var ok = false;
+        var retryable = false;
+        string? error = null;
+        await foreach (var evt in pipeline.RunAsync(sub.Id, ct, tuning))
+        {
+            if (evt.Type == "done")
+            {
+                ok = true;
+            }
+            else if (evt.Type == "error")
+            {
+                error = JsonSerializer.Serialize(evt.Data);
+                retryable = ReadRetryableFlag(evt.Data);
+            }
+        }
+        return (ok, retryable, error);
+    }
+
+    /// <summary>The provider already classifies 429/5xx/transport as
+    /// retryable on the error event; nothing acted on it until now.</summary>
+    private static bool ReadRetryableFlag(object? data)
+    {
+        if (data is null) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(data));
+            return doc.RootElement.TryGetProperty("retryable", out var r)
+                   && r.ValueKind == JsonValueKind.True;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Return a routine parked in EXTRACTING to a state the pipeline will
+    /// accept again — DRAFT when a spec already exists, else PARSED.
+    /// </summary>
+    private async Task ResetIfStuckAsync(Guid subroutineId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = await db.Subroutines.FirstOrDefaultAsync(s => s.Id == subroutineId, ct);
+            if (row is null || row.State != "EXTRACTING") return;
+            var hasSpec = await db.Specs.AnyAsync(sp => sp.SubroutineId == subroutineId, ct);
+            row.State = hasSpec ? "DRAFT" : "PARSED";
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not clear EXTRACTING state for {Sub}", subroutineId);
         }
     }
 
@@ -393,8 +538,10 @@ public sealed class PatternAnalysisOrchestrator
     private async Task<ClusterLlmResult> CallAnthropicAsync(
         IHttpClientFactory httpFactory, AnthropicOptions opts, string systemPrompt, string userPrompt, CancellationToken ct)
     {
+        // Timeout comes from the named registration (30 min) — do not
+        // re-set it here: a 10-minute override was silently reinstating the
+        // 600s cap the registration exists to escape.
         var http = httpFactory.CreateClient("anthropic-cluster-patterns");
-        http.Timeout = TimeSpan.FromMinutes(10);
 
         var requestBody = new Dictionary<string, object?>
         {

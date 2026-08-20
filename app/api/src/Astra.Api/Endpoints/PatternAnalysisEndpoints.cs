@@ -27,10 +27,31 @@ public static class PatternAnalysisEndpoints
             Guid id,
             bool? force,
             PatternAnalysisOrchestrator orchestrator,
+            AppDbContext db,
             DevPersonaContext actor,
             CancellationToken ct) =>
         {
             if (actor.Persona != Persona.Admin) return Forbid();
+
+            // One run per corpus at a time. Without this, a second click
+            // starts a rival pass over the same routines; the two collide on
+            // each other's EXTRACTING rows and book the losses as failures.
+            var inFlight = await db.PatternAnalysisRuns.AsNoTracking()
+                .Where(r => r.CorpusId == id && (r.State == "QUEUED" || r.State == "RUNNING"))
+                .OrderByDescending(r => r.StartedAt)
+                .FirstOrDefaultAsync(ct);
+            if (inFlight is not null)
+            {
+                return Results.Accepted($"/api/v1/pattern-analysis/runs/{inFlight.Id}", new
+                {
+                    runId = inFlight.Id,
+                    statusUrl = $"/api/v1/pattern-analysis/runs/{inFlight.Id}",
+                    alreadyRunning = true,
+                    startedAt = inFlight.StartedAt,
+                    summary = inFlight.Summary,
+                });
+            }
+
             try
             {
                 var runId = await orchestrator.StartAsync(id, force ?? false, actor.DisplayName, ct);
@@ -47,6 +68,29 @@ public static class PatternAnalysisEndpoints
                     error = new { code = "pattern_analysis.precondition_failed", message = ex.Message },
                 });
             }
+        });
+
+        // SSE stream of per-routine progress for an active run — same shape
+        // as the docs generator's log stream, sharing its channel bus.
+        app.MapGet("/api/v1/pattern-analysis/runs/{runId:guid}/logs", async (
+            Guid runId,
+            Astra.Api.Docs.DocRunLogger logger,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            ctx.Response.ContentType = "text/event-stream";
+            ctx.Response.Headers["Cache-Control"] = "no-cache";
+            ctx.Response.Headers["X-Accel-Buffering"] = "no";
+            await ctx.Response.Body.FlushAsync(ct);
+
+            await foreach (var line in logger.SubscribeAsync(runId, ct))
+            {
+                var json = JsonSerializer.Serialize(new { message = line });
+                await ctx.Response.WriteAsync($"data: {json}\n\n", ct);
+                await ctx.Response.Body.FlushAsync(ct);
+            }
+            await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
+            await ctx.Response.Body.FlushAsync(ct);
         });
 
         app.MapGet("/api/v1/pattern-analysis/runs/{runId:guid}", async (

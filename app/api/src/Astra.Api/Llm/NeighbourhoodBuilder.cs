@@ -2,6 +2,7 @@ using System.Text.Json;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Astra.Api.Llm;
 
@@ -34,13 +35,61 @@ public sealed class NeighbourhoodBuilder
     /// </summary>
     public const int MaxEntriesPerSection = 12;
 
+    /// <summary>
+    /// How long a source version's routine index is reused. Everything in
+    /// it is version-invariant except the spec summaries, which grow as a
+    /// bulk run progresses — so this is short enough that later routines
+    /// still see earlier ones' specs, and long enough that a 450-routine
+    /// pass does ~15 index builds instead of 450.
+    /// </summary>
+    private static readonly TimeSpan IndexTtl = TimeSpan.FromMinutes(2);
+
     private readonly AppDbContext _db;
     private readonly ILogger<NeighbourhoodBuilder> _log;
+    private readonly IMemoryCache _cache;
 
-    public NeighbourhoodBuilder(AppDbContext db, ILogger<NeighbourhoodBuilder> log)
+    public NeighbourhoodBuilder(AppDbContext db, ILogger<NeighbourhoodBuilder> log, IMemoryCache cache)
     {
         _db = db;
         _log = log;
+        _cache = cache;
+    }
+
+    /// <summary>Every routine in one source version, plus its latest spec —
+    /// the part of a neighbourhood build that does not depend on which
+    /// routine is being extracted.</summary>
+    private sealed record VersionIndex(
+        List<Subroutine> All,
+        Dictionary<Guid, Spec> LatestSpecBySubId);
+
+    private async Task<VersionIndex> GetVersionIndexAsync(Guid versionId, CancellationToken ct)
+    {
+        if (_cache.TryGetValue<VersionIndex>(("nbhd", versionId), out var cached) && cached is not null)
+            return cached;
+
+        var all = await _db.Subroutines
+            .AsNoTracking()
+            .Include(s => s.SourceFile)
+            .Where(s => s.SourceFile!.SourceVersionId == versionId)
+            .ToListAsync(ct);
+
+        var ids = all.Select(s => s.Id).ToList();
+        var specs = await _db.Specs
+            .AsNoTracking()
+            .Where(sp => ids.Contains(sp.SubroutineId))
+            .OrderByDescending(sp => sp.UpdatedAt)
+            .ToListAsync(ct);
+        var latestSpecBySubId = specs
+            .GroupBy(sp => sp.SubroutineId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var index = new VersionIndex(all, latestSpecBySubId);
+        _cache.Set(("nbhd", versionId), index, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = IndexTtl,
+            Size = 1,
+        });
+        return index;
     }
 
     public async Task<Neighbourhood> BuildForSubroutineAsync(
@@ -63,31 +112,18 @@ public sealed class NeighbourhoodBuilder
         }
         var versionId = self.SourceFile.SourceVersionId;
 
-        // ── Pull every routine in the same version once. The corpora
-        // we work with are <2_000 routines; a single in-memory pass is
-        // far cheaper than N round-trips to resolve each name.
-        var siblings = await _db.Subroutines
-            .AsNoTracking()
-            .Include(s => s.SourceFile)
-            .Where(s => s.SourceFile!.SourceVersionId == versionId
-                     && s.Id != subroutineId)
-            .ToListAsync(ct);
+        // ── The routine set and its specs are the same for every routine
+        // in this version, so they are built once and reused. Rebuilding
+        // them per routine made a bulk pass quadratic: on a 450-routine
+        // corpus, ~202k row materialisations and ~101k spec documents
+        // parsed to consume a few dozen. Deriving the per-routine views
+        // below is pure in-memory work over the shared index.
+        var index = await GetVersionIndexAsync(versionId, ct);
+        var siblings = index.All.Where(s => s.Id != subroutineId).ToList();
         var byNameUpper = siblings
             .GroupBy(s => s.Name.ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First());
-
-        // ── Pre-fetch any existing specs for those siblings. Used to
-        // attach a "what this callee does in plain English" summary
-        // when available. We take only the latest spec per subroutine.
-        var siblingIds = siblings.Select(s => s.Id).ToList();
-        var specs = await _db.Specs
-            .AsNoTracking()
-            .Where(sp => siblingIds.Contains(sp.SubroutineId))
-            .OrderByDescending(sp => sp.UpdatedAt)
-            .ToListAsync(ct);
-        var latestSpecBySubId = specs
-            .GroupBy(sp => sp.SubroutineId)
-            .ToDictionary(g => g.Key, g => g.First());
+        var latestSpecBySubId = index.LatestSpecBySubId;
 
         // ── Callees: names the parser saw this routine CALL.
         var calleeNames = ReadNameList(self.CalledSubroutines);

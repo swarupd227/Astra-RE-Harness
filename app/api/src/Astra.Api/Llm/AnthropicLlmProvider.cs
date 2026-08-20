@@ -58,12 +58,19 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         [EnumeratorCancellation] CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
+        // Per-request overrides: a bulk pass tiers trivial routines to a
+        // faster model, and skips the pacing delays nobody is watching.
+        var model = string.IsNullOrWhiteSpace(request.ModelOverride) ? _opts.Model : request.ModelOverride!;
+        var maxOutputTokens = request.MaxOutputTokensOverride is > 0
+            ? request.MaxOutputTokensOverride.Value
+            : _opts.MaxOutputTokens;
+        var paced = !request.BulkMode;
 
         yield return Stage("priming", 1, "Preparing prompt + provider config");
-        await Task.Delay(120, ct);
+        if (paced) await Task.Delay(120, ct);
 
         yield return Stage("loading_source", 2, $"Reading {request.SourcePath}");
-        await Task.Delay(120, ct);
+        if (paced) await Task.Delay(120, ct);
 
         yield return Stage("streaming", 3, "Streaming behavioural spec from Claude");
 
@@ -108,8 +115,8 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         // (array form), not bare strings.
         var requestBody = new Dictionary<string, object?>
         {
-            ["model"] = _opts.Model,
-            ["max_tokens"] = _opts.MaxOutputTokens,
+            ["model"] = model,
+            ["max_tokens"] = maxOutputTokens,
             ["stream"] = true,
             ["system"] = new[]
             {
@@ -271,19 +278,19 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         // Phase 10.2.b — also feeds the error-code split below so the
         // user sees `provider.output_truncated` instead of the cryptic
         // `provider.malformed_json` when this is the cause.
-        var outputNearCap = _opts.MaxOutputTokens > 0
-            && outputTokens >= (int)(_opts.MaxOutputTokens * 0.95);
+        var outputNearCap = maxOutputTokens > 0
+            && outputTokens >= (int)(maxOutputTokens * 0.95);
         if (outputNearCap)
         {
             _logger.LogWarning(
                 "Anthropic output near cap: {Output}/{Cap} tokens (sourceLanguage={SourceLanguage}, targetStack={TargetStack}). " +
                 "If the parse fails, this is almost certainly the cause — bump Llm:Anthropic:MaxOutputTokens.",
-                outputTokens, _opts.MaxOutputTokens, request.SourceLanguage, request.TargetStack);
+                outputTokens, maxOutputTokens, request.SourceLanguage, request.TargetStack);
         }
 
         // ── Parse buffered text → spec JSON ─────────────────────────────
         yield return Stage("validating", 4, "Schema + citation post-validation");
-        await Task.Delay(120, ct);
+        if (paced) await Task.Delay(120, ct);
 
         var rawText = textBuffer.ToString();
         var specJsonText = ExtractJsonObject(rawText);
@@ -311,7 +318,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                 {
                     code = "provider.output_truncated",
                     message =
-                        $"The model ran out of output budget after {outputTokens:N0} of {_opts.MaxOutputTokens:N0} tokens " +
+                        $"The model ran out of output budget after {outputTokens:N0} of {maxOutputTokens:N0} tokens " +
                         "and the partial JSON could not be parsed. " +
                         "Raise Llm:Anthropic:MaxOutputTokens, pick a lighter target paradigm (e.g. minapi instead of blazor), " +
                         "or split this routine into smaller pieces, then retry.",
@@ -335,7 +342,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         // Emit patches + citation pulses in spec-section order so the
         // StreamingSpecPanel populates section by section, matching the mock.
         var root = specDoc.RootElement;
-        await foreach (var evt in EmitPatchesAndPulsesAsync(root, ct))
+        await foreach (var evt in EmitPatchesAndPulsesAsync(root, paced, ct))
             yield return evt;
 
         yield return Stage("persisting", 5, "Writing draft spec to Postgres");
@@ -370,6 +377,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
 
     private static async IAsyncEnumerable<ExtractionEvent> EmitPatchesAndPulsesAsync(
         JsonElement root,
+        bool paced,
         [EnumeratorCancellation] CancellationToken ct)
     {
         // Header + scalars.
@@ -385,7 +393,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             if (root.TryGetProperty(sec, out var arr) && arr.ValueKind == JsonValueKind.Array)
                 yield return Patch("/" + sec, arr.Clone());
         }
-        await Task.Delay(150, ct);
+        if (paced) await Task.Delay(150, ct);
 
         // Per-claim emission with citation pulses.
         foreach (var sec in new[] { "invariants", "side_effects", "edge_cases" })
@@ -410,7 +418,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                         lines = linesEl.GetString() ?? "",
                     });
                 }
-                await Task.Delay(220, ct);
+                if (paced) await Task.Delay(220, ct);
             }
         }
 
@@ -421,7 +429,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             for (int i = 0; i < oq.GetArrayLength(); i++)
             {
                 yield return Patch($"/open_questions/{i}", oq[i].Clone());
-                await Task.Delay(150, ct);
+                if (paced) await Task.Delay(150, ct);
             }
         }
     }
