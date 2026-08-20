@@ -92,7 +92,7 @@ public sealed class BusinessPriorityStrategy : IPlanStrategy
         var sccs = graph.Sccs
             .Where(s => s.Members.All(m => ids.Contains(m)))
             .ToList();
-        // Stats not used by the wave-sorter; pass through empty.
+        // Stats and ModuleGraph not used by the wave-sorter; pass through.
         return new DependencyGraph(
             CorpusId: graph.CorpusId,
             SourceVersionId: graph.SourceVersionId,
@@ -100,6 +100,7 @@ public sealed class BusinessPriorityStrategy : IPlanStrategy
             Edges: edges,
             ExternalCallees: graph.ExternalCallees,
             Sccs: sccs,
+            ModuleGraph: graph.ModuleGraph,
             Stats: graph.Stats);
     }
 

@@ -395,8 +395,32 @@ export function DependencyGraphPage() {
               <li>leaves: {g.stats.leafCount}</li>
               <li>roots: {g.stats.rootCount}</li>
               <li>external callees: {g.stats.externalCalleeCount}</li>
+              <li>modules: {g.moduleGraph.stats.moduleCount}</li>
+              <li>module cycles: {g.moduleGraph.stats.cyclicGroupCount}</li>
             </ul>
           </div>
+
+          {g.moduleGraph.cycles.length > 0 && (
+            <div className="card p-4" data-testid="module-cycles">
+              <p className="label mb-2">Module cycles</p>
+              <ul className="space-y-2 font-mono text-[11px] text-ink-secondary">
+                {g.moduleGraph.cycles.map((c) => (
+                  <li key={c.id}>
+                    <span className="font-semibold text-ink-primary">{c.id}</span>
+                    <span className="text-ink-tertiary"> · {c.members.length} modules</span>
+                    <ul className="mt-1 space-y-0.5 pl-3">
+                      {c.members.map((m) => (
+                        <li key={m} className="truncate" title={m}>{m}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-ink-tertiary">
+                Modules in a cycle call each other both ways — they must be modernized together as one slice.
+              </p>
+            </div>
+          )}
 
           <div className="card p-4">
             <p className="label mb-2">Filters</p>

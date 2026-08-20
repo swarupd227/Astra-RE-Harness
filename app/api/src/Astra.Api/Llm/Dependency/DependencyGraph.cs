@@ -27,6 +27,8 @@ public sealed record DependencyGraph(
     /// wave-planner treats each SCC as one super-node — the whole cycle
     /// migrates in a single wave.</summary>
     IReadOnlyList<StronglyConnectedComponent> Sccs,
+    /// <summary>Module-level rollup of the same graph — see <see cref="ModuleGraph"/>.</summary>
+    ModuleGraph ModuleGraph,
     GraphStats Stats);
 
 /// <summary>
@@ -76,3 +78,43 @@ public sealed record GraphStats(
     int ExternalCalleeCount,
     int LeafCount,
     int RootCount);
+
+/// <summary>
+/// Module-level rollup of the routine graph — module = source file
+/// (one class per file in Java, one program file in Fortran/COBOL/VB6).
+/// Call edges aggregate across module boundaries and the same Tarjan
+/// pass runs over the module graph, so cycles BETWEEN modules are
+/// first-class: "can module A be modernized without taking module B in
+/// the same slice?" Shared-storage coupling aggregates too but is
+/// deliberately excluded from cycle detection — co-access is coupling,
+/// not a directed dependency.
+/// </summary>
+public sealed record ModuleGraph(
+    IReadOnlyList<ModuleNode> Modules,
+    IReadOnlyList<ModuleEdge> CallEdges,
+    IReadOnlyList<ModuleEdge> SharedStorageEdges,
+    IReadOnlyList<ModuleCycle> Cycles,
+    ModuleGraphStats Stats);
+
+public sealed record ModuleNode(
+    string Path,
+    int RoutineCount,
+    /// <summary>Membership in a module-level cycle, if any. Matches
+    /// <see cref="ModuleCycle.Id"/>.</summary>
+    string? CycleId);
+
+public sealed record ModuleEdge(
+    string From,
+    string To,
+    /// <summary>Routine-level edges aggregated into this module edge.</summary>
+    int Count);
+
+public sealed record ModuleCycle(
+    string Id,
+    IReadOnlyList<string> Members);
+
+public sealed record ModuleGraphStats(
+    int ModuleCount,
+    int CrossModuleCallEdgeCount,
+    int CrossModuleSharedStorageEdgeCount,
+    int CyclicGroupCount);

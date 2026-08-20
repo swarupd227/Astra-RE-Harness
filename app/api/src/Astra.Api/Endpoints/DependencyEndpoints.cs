@@ -153,6 +153,25 @@ public static class DependencyEndpoints
         }),
         externalCallees = g.ExternalCallees,
         sccs = g.Sccs.Select(s => new { id = s.Id, members = s.Members }),
+        moduleGraph = new
+        {
+            modules = g.ModuleGraph.Modules.Select(m => new
+            {
+                path = m.Path,
+                routineCount = m.RoutineCount,
+                cycleId = m.CycleId,
+            }),
+            callEdges = g.ModuleGraph.CallEdges.Select(e => new { from = e.From, to = e.To, count = e.Count }),
+            sharedStorageEdges = g.ModuleGraph.SharedStorageEdges.Select(e => new { from = e.From, to = e.To, count = e.Count }),
+            cycles = g.ModuleGraph.Cycles.Select(c => new { id = c.Id, members = c.Members }),
+            stats = new
+            {
+                moduleCount = g.ModuleGraph.Stats.ModuleCount,
+                crossModuleCallEdgeCount = g.ModuleGraph.Stats.CrossModuleCallEdgeCount,
+                crossModuleSharedStorageEdgeCount = g.ModuleGraph.Stats.CrossModuleSharedStorageEdgeCount,
+                cyclicGroupCount = g.ModuleGraph.Stats.CyclicGroupCount,
+            },
+        },
         stats = new
         {
             nodeCount = g.Stats.NodeCount,

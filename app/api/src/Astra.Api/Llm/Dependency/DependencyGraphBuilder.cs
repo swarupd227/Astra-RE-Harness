@@ -160,6 +160,75 @@ public sealed class DependencyGraphBuilder
             foreach (var memberId in component) sccBySub[memberId] = id;
         }
 
+        // 7.5 Module-level rollup — module = source file. Aggregate the
+        //     routine edges across module boundaries and run the same
+        //     Tarjan pass over the module graph. Cycles BETWEEN modules
+        //     answer "can file A be modernized without file B in the
+        //     same slice?" for teams planning by file/class rather than
+        //     by routine.
+        var moduleBySub = subs.ToDictionary(
+            s => s.Id, s => s.SourceFile?.RelativePath ?? "(unknown)");
+        var modulePaths = moduleBySub.Values
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        var routinesPerModule = subs
+            .GroupBy(s => moduleBySub[s.Id], StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+
+        var moduleCallAgg = new Dictionary<(string From, string To), int>();
+        foreach (var e in callEdges)
+        {
+            var from = moduleBySub[e.From];
+            var to = moduleBySub[e.To];
+            if (from == to) continue;
+            moduleCallAgg[(from, to)] = moduleCallAgg.GetValueOrDefault((from, to)) + 1;
+        }
+        var moduleSharedAgg = new Dictionary<(string From, string To), int>();
+        foreach (var e in sharedStorageEdges)
+        {
+            var a = moduleBySub[e.From];
+            var b = moduleBySub[e.To];
+            if (a == b) continue;
+            // Co-access is undirected — normalise the pair's direction.
+            var key = string.CompareOrdinal(a, b) <= 0 ? (a, b) : (b, a);
+            moduleSharedAgg[key] = moduleSharedAgg.GetValueOrDefault(key) + 1;
+        }
+
+        var moduleComponents = TarjanScc.Compute(
+            modulePaths, moduleCallAgg.Keys.Select(k => (k.From, k.To)).ToList());
+        var cycleByModule = new Dictionary<string, string>(StringComparer.Ordinal);
+        var moduleCycles = new List<ModuleCycle>();
+        foreach (var component in moduleComponents)
+        {
+            if (component.Count == 1) continue;
+            var id = $"module-cycle-{moduleCycles.Count + 1}";
+            var members = component.OrderBy(m => m, StringComparer.Ordinal).ToList();
+            moduleCycles.Add(new ModuleCycle(id, members));
+            foreach (var m in members) cycleByModule[m] = id;
+        }
+
+        var moduleGraph = new ModuleGraph(
+            Modules: modulePaths
+                .Select(p => new ModuleNode(p, routinesPerModule[p], cycleByModule.GetValueOrDefault(p)))
+                .ToList(),
+            CallEdges: moduleCallAgg
+                .OrderBy(kv => kv.Key.From, StringComparer.Ordinal)
+                .ThenBy(kv => kv.Key.To, StringComparer.Ordinal)
+                .Select(kv => new ModuleEdge(kv.Key.From, kv.Key.To, kv.Value))
+                .ToList(),
+            SharedStorageEdges: moduleSharedAgg
+                .OrderBy(kv => kv.Key.From, StringComparer.Ordinal)
+                .ThenBy(kv => kv.Key.To, StringComparer.Ordinal)
+                .Select(kv => new ModuleEdge(kv.Key.From, kv.Key.To, kv.Value))
+                .ToList(),
+            Cycles: moduleCycles,
+            Stats: new ModuleGraphStats(
+                ModuleCount: modulePaths.Count,
+                CrossModuleCallEdgeCount: moduleCallAgg.Count,
+                CrossModuleSharedStorageEdgeCount: moduleSharedAgg.Count,
+                CyclicGroupCount: moduleCycles.Count));
+
         // 8. Compose nodes with state classification.
         var nodes = subs
             .OrderBy(s => s.Name, StringComparer.Ordinal)
@@ -208,6 +277,7 @@ public sealed class DependencyGraphBuilder
             Edges: allEdges,
             ExternalCallees: externalCallees.OrderBy(s => s, StringComparer.Ordinal).ToList(),
             Sccs: sccList,
+            ModuleGraph: moduleGraph,
             Stats: stats);
     }
 
@@ -252,23 +322,34 @@ internal static class TarjanScc
 {
     public static IReadOnlyList<IReadOnlyList<Guid>> Compute(
         IReadOnlyList<Guid> nodes,
-        IReadOnlyList<GraphEdge> edges)
+        IReadOnlyList<GraphEdge> edges) =>
+        Compute(nodes, edges
+            .Where(e => e.Type == "call")
+            .Select(e => (e.From, e.To))
+            .ToList());
+
+    /// <summary>
+    /// Generic form — also used for the module-level graph, whose node
+    /// identity is the source path rather than a subroutine id.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<T>> Compute<T>(
+        IReadOnlyList<T> nodes,
+        IReadOnlyList<(T From, T To)> edges) where T : notnull
     {
         // Adjacency list keyed by node id.
-        var adj = new Dictionary<Guid, List<Guid>>();
-        foreach (var n in nodes) adj[n] = new List<Guid>();
+        var adj = new Dictionary<T, List<T>>();
+        foreach (var n in nodes) adj[n] = new List<T>();
         foreach (var e in edges)
         {
-            if (e.Type != "call") continue;
-            if (adj.TryGetValue(e.From, out var outs)) outs.Add(e.To);
+            if (adj.ContainsKey(e.To) && adj.TryGetValue(e.From, out var outs)) outs.Add(e.To);
         }
 
         var index = 0;
-        var nodeIndex = new Dictionary<Guid, int>();
-        var nodeLowlink = new Dictionary<Guid, int>();
-        var onStack = new HashSet<Guid>();
-        var stack = new Stack<Guid>();
-        var result = new List<IReadOnlyList<Guid>>();
+        var nodeIndex = new Dictionary<T, int>();
+        var nodeLowlink = new Dictionary<T, int>();
+        var onStack = new HashSet<T>();
+        var stack = new Stack<T>();
+        var result = new List<IReadOnlyList<T>>();
 
         foreach (var v in nodes)
         {
@@ -277,7 +358,7 @@ internal static class TarjanScc
             // Each frame: (node, enumerator-state) — using indexed
             // iteration over adj[v] via a parallel stack of "next-
             // child-index-to-visit".
-            var callStack = new Stack<(Guid Node, int NextChild)>();
+            var callStack = new Stack<(T Node, int NextChild)>();
             nodeIndex[v] = index;
             nodeLowlink[v] = index;
             index++;
@@ -316,14 +397,14 @@ internal static class TarjanScc
                     callStack.Pop();
                     if (nodeLowlink[current] == nodeIndex[current])
                     {
-                        var component = new List<Guid>();
-                        Guid popped;
+                        var component = new List<T>();
+                        T popped;
                         do
                         {
                             popped = stack.Pop();
                             onStack.Remove(popped);
                             component.Add(popped);
-                        } while (popped != current);
+                        } while (!EqualityComparer<T>.Default.Equals(popped, current));
                         result.Add(component);
                     }
                     if (callStack.Count > 0)

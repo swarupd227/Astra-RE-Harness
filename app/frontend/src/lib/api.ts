@@ -371,6 +371,21 @@ export type DependencyGraphEdge = {
 
 export type DependencyGraphSCC = { id: string; members: string[] };
 
+export type ModuleGraphEdge = { from: string; to: string; count: number };
+
+export type ModuleGraph = {
+  modules: { path: string; routineCount: number; cycleId: string | null }[];
+  callEdges: ModuleGraphEdge[];
+  sharedStorageEdges: ModuleGraphEdge[];
+  cycles: { id: string; members: string[] }[];
+  stats: {
+    moduleCount: number;
+    crossModuleCallEdgeCount: number;
+    crossModuleSharedStorageEdgeCount: number;
+    cyclicGroupCount: number;
+  };
+};
+
 export type DependencyGraphResponse = {
   corpusId: string;
   sourceVersionId: string;
@@ -378,6 +393,7 @@ export type DependencyGraphResponse = {
   edges: DependencyGraphEdge[];
   externalCallees: string[];
   sccs: DependencyGraphSCC[];
+  moduleGraph: ModuleGraph;
   stats: {
     nodeCount: number;
     callEdgeCount: number;
