@@ -18,6 +18,8 @@ const KIND_ORDER = [
   'overview', 'module', 'routine-summary',
   'data-dictionary', 'glossary', 'interface', 'business-rules',
   'diagram', 'sequence-diagram', 'dependency-diagram',
+  // Phase B - requirements pack (as-is behaviour)
+  'capability-map', 'process-flow', 'functional-requirement', 'nfr',
 ];
 
 const KIND_LABELS: Record<string, string> = {
@@ -31,7 +33,13 @@ const KIND_LABELS: Record<string, string> = {
   'diagram':            'Diagrams',
   'sequence-diagram':   'Sequence Diagrams',
   'dependency-diagram': 'Dependency Diagrams',
+  'capability-map':        'Capability Map',
+  'process-flow':          'Process Flows',
+  'functional-requirement':'Functional Requirements',
+  'nfr':                   'Non-Functional',
 };
+
+const REQUIREMENTS_STAGES = ['capability-map', 'process-flow', 'functional-requirement', 'nfr'];
 
 const STATE_LABELS: Record<string, string> = {
   'SIGNED':    'Signed',
@@ -143,7 +151,7 @@ export function DocsPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => api.generateDocs(id, { force: true }),
+    mutationFn: (stages?: string[]) => api.generateDocs(id, { force: true, stages }),
     onSuccess: (result) => {
       setLogLines([]);
       setRunError(null);
@@ -281,7 +289,7 @@ export function DocsPage() {
               <>
                 <Button
                   variant="secondary"
-                  onClick={() => generateMutation.mutate()}
+                  onClick={() => generateMutation.mutate(undefined)}
                   disabled={isGenerating}
                   title={kindsWithData.length === 0 ? 'Generate documentation' : 'Regenerate documentation'}
                 >
@@ -289,6 +297,17 @@ export function DocsPage() {
                     ? <Loader2 className="h-4 w-4 animate-spin" />
                     : <Play className="h-4 w-4" />}
                   {kindsWithData.length === 0 ? 'Generate Docs' : 'Regenerate'}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => generateMutation.mutate(REQUIREMENTS_STAGES)}
+                  disabled={isGenerating}
+                  data-testid="generate-requirements"
+                  title="Generates the as-is requirements pack: capability map, process flows, numbered functional requirements with traceability, and non-functional characteristics. Synthesised from the docs already generated."
+                >
+                  <FileText className="h-4 w-4" />
+                  Requirements pack
                 </Button>
 
                 {/* Export dropdown */}
@@ -305,6 +324,8 @@ export function DocsPage() {
                     <option value="docx">Word document (.docx)</option>
                     <option value="pdf">PDF (.pdf)</option>
                     <option value="confluence">Confluence JSON (.json)</option>
+                    <option value="requirements-docx">Requirements pack (.docx)</option>
+                    <option value="requirements-pdf">Requirements pack (.pdf)</option>
                   </select>
                   <Download className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" />
                   <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-tertiary" />
@@ -415,7 +436,7 @@ export function DocsPage() {
               {persona === 'admin' && (
                 <Button
                   variant="primary"
-                  onClick={() => generateMutation.mutate()}
+                  onClick={() => generateMutation.mutate(undefined)}
                   disabled={generateMutation.isPending}
                 >
                   {generateMutation.isPending

@@ -178,6 +178,46 @@ public sealed class DocsGenerationOrchestrator
                         _runLogger.Log(runId, $"  business-rules: {r.Entries} entries, {r.Failed} failed");
                         break;
                     }
+                    // ── Phase B: requirements pack (AS-IS) ──────────
+                    // Opt-in via ?stages=... — these synthesise from the
+                    // docs already generated, so they are cheap, but they
+                    // are a different deliverable with a different reader.
+                    case "capability-map":
+                    {
+                        var r = await _catalogPipeline.RunCapabilityMapAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["capability-map"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
+                        _runLogger.Log(runId, $"  capability-map: {r.Entries} entries, {r.Failed} failed");
+                        break;
+                    }
+                    case "functional-requirement":
+                    {
+                        var r = await _catalogPipeline.RunFunctionalRequirementsAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["functional-requirement"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
+                        _runLogger.Log(runId, $"  functional-requirement: {r.Entries} entries, {r.Failed} failed");
+                        break;
+                    }
+                    case "process-flow":
+                    {
+                        var r = await _catalogPipeline.RunProcessFlowsAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["process-flow"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
+                        _runLogger.Log(runId, $"  process-flow: {r.Entries} entries, {r.Failed} failed");
+                        break;
+                    }
+                    case "nfr":
+                    {
+                        var r = await _catalogPipeline.RunNfrAsync(
+                            runId, corpusId, sourceVersionId, opts.Force, ct);
+                        allStageMetrics["nfr"] = new { entries = r.Entries, failed = r.Failed };
+                        if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
+                        _runLogger.Log(runId, $"  nfr: {r.Entries} entries, {r.Failed} failed");
+                        break;
+                    }
                     case "sequence-diagram":
                     {
                         var r = await _diagramPipeline.RunSequenceStageAsync(

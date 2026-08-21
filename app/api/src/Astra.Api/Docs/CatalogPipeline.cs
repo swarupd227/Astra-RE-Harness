@@ -37,6 +37,10 @@ public sealed class CatalogPipeline
     private readonly string _glossaryPrompt;
     private readonly string _interfacePrompt;
     private readonly string _businessRulesPrompt;
+    private readonly string _capabilityMapPrompt;
+    private readonly string _functionalPrompt;
+    private readonly string _processFlowPrompt;
+    private readonly string _nfrPrompt;
     private readonly AnthropicOptions _anthropic;
     private readonly string _baseUrl;
     private readonly string _apiVersion;
@@ -63,6 +67,13 @@ public sealed class CatalogPipeline
         _glossaryPrompt = LoadPrompt(env.ContentRootPath, "doc-glossary.v1.md");
         _interfacePrompt = LoadPrompt(env.ContentRootPath, "doc-interface.v1.md");
         _businessRulesPrompt = LoadPrompt(env.ContentRootPath, "doc-business-rules.v1.md");
+        // Phase B — requirements pack. Language-agnostic: these synthesise
+        // from already-extracted docs, not from source, so they live in
+        // their own folder rather than under a source-language one.
+        _capabilityMapPrompt = LoadPrompt(env.ContentRootPath, "req-capability-map.v1.md", "requirements");
+        _functionalPrompt = LoadPrompt(env.ContentRootPath, "req-functional.v1.md", "requirements");
+        _processFlowPrompt = LoadPrompt(env.ContentRootPath, "req-process-flow.v1.md", "requirements");
+        _nfrPrompt = LoadPrompt(env.ContentRootPath, "req-nfr.v1.md", "requirements");
     }
 
     public sealed record StageOutcome(int Entries, int Failed);
@@ -139,6 +150,94 @@ public sealed class CatalogPipeline
             }, new JsonSerializerOptions { WriteIndented = true });
         }, runId, corpusId, sourceVersionId, force, ct);
 
+    // ── Phase B: requirements pack (AS-IS) ───────────────────────────
+    // These four synthesise from artifacts the pipeline already produced
+    // — routine summaries, module rollups, business rules, interfaces —
+    // rather than re-reading source. Each is one call, so a whole pack
+    // costs minutes, not the hours a per-routine pass takes.
+
+    public Task<StageOutcome> RunCapabilityMapAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
+        RunCatalogAsync("capability-map", _capabilityMapPrompt, db =>
+            BuildRequirementsInputAsync(db, corpusId, sourceVersionId, ct,
+                includeRules: false, includeInterfaces: false, includeSideEffects: false),
+            runId, corpusId, sourceVersionId, force, ct);
+
+    public Task<StageOutcome> RunFunctionalRequirementsAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
+        RunCatalogAsync("functional-requirement", _functionalPrompt, db =>
+            BuildRequirementsInputAsync(db, corpusId, sourceVersionId, ct,
+                includeRules: true, includeInterfaces: false, includeSideEffects: false),
+            runId, corpusId, sourceVersionId, force, ct);
+
+    public Task<StageOutcome> RunProcessFlowsAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
+        RunCatalogAsync("process-flow", _processFlowPrompt, db =>
+            BuildRequirementsInputAsync(db, corpusId, sourceVersionId, ct,
+                includeRules: true, includeInterfaces: true, includeSideEffects: false),
+            runId, corpusId, sourceVersionId, force, ct);
+
+    public Task<StageOutcome> RunNfrAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
+        RunCatalogAsync("nfr", _nfrPrompt, db =>
+            BuildRequirementsInputAsync(db, corpusId, sourceVersionId, ct,
+                includeRules: false, includeInterfaces: true, includeSideEffects: true),
+            runId, corpusId, sourceVersionId, force, ct);
+
+    /// <summary>
+    /// Shared input builder for the requirements stages. Degrades the
+    /// routine list if the payload would overflow the call budget, the
+    /// same way the data dictionary does.
+    /// </summary>
+    private async Task<string> BuildRequirementsInputAsync(
+        AppDbContext db, Guid corpusId, Guid sourceVersionId, CancellationToken ct,
+        bool includeRules, bool includeInterfaces, bool includeSideEffects)
+    {
+        var corpusName = await GetCorpusNameAsync(db, corpusId, ct);
+        var modules = await LoadModuleSummariesAsync(db, corpusId, sourceVersionId, ct);
+        var routines = await LoadRoutineSummariesAsync(db, corpusId, sourceVersionId, ct);
+        var overview = await LoadOverviewMarkdownAsync(db, corpusId, sourceVersionId, ct);
+        var rules = includeRules
+            ? await LoadCatalogEntriesAsync(db, corpusId, sourceVersionId, "business-rule", ct)
+            : new List<string>();
+        var interfaces = includeInterfaces
+            ? await LoadCatalogEntriesAsync(db, corpusId, sourceVersionId, "interface", ct)
+            : new List<string>();
+
+        object BuildPayload(int summaryChars, bool withSideEffects) => new
+        {
+            corpus_name = corpusName,
+            system_overview = Truncate(overview ?? "", 6000),
+            module_summaries = modules,
+            business_rules = rules,
+            interfaces,
+            routine_summaries = routines.Select(r => withSideEffects
+                ? (object)new { r.name, summary = Truncate(r.summary, summaryChars), side_effects = CapList(r.sideEffects, 4, 90) }
+                : new { r.name, summary = Truncate(r.summary, summaryChars) }),
+        };
+
+        var json = JsonSerializer.Serialize(BuildPayload(280, includeSideEffects));
+        if (json.Length > MaxCatalogInputChars)
+            json = JsonSerializer.Serialize(BuildPayload(140, false));
+        return json;
+    }
+
+    /// <summary>Raw payload JSON of every catalog entry of one kind — the
+    /// evidence the requirements stages cite back to.</summary>
+    private static async Task<List<string>> LoadCatalogEntriesAsync(
+        AppDbContext db, Guid corpusId, Guid sourceVersionId, string kind, CancellationToken ct)
+    {
+        var rows = await db.DocSections.AsNoTracking()
+            .Where(s => s.CorpusId == corpusId && s.SourceVersionId == sourceVersionId && s.SectionKind == kind)
+            .OrderBy(s => s.CreatedAt)
+            .Select(s => s.PayloadJson)
+            .ToListAsync(ct);
+        return rows.Select(r => r.RootElement.GetRawText()).ToList();
+    }
+
+    private static async Task<string?> LoadOverviewMarkdownAsync(
+        AppDbContext db, Guid corpusId, Guid sourceVersionId, CancellationToken ct)
+        => await db.DocSections.AsNoTracking()
+            .Where(s => s.CorpusId == corpusId && s.SourceVersionId == sourceVersionId && s.SectionKind == "overview")
+            .Select(s => s.RenderedMarkdown)
+            .FirstOrDefaultAsync(ct);
+
     // ─────────────────────────────────────────────────────────────────
 
     private async Task<StageOutcome> RunCatalogAsync(
@@ -191,8 +290,9 @@ public sealed class CatalogPipeline
                 throw new InvalidOperationException($"Catalog {sectionKind}: expected JSON array, got {arr.ValueKind}");
 
             var entries = arr.EnumerateArray().ToList();
-            foreach (var entry in entries)
+            for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
             {
+                var entry = entries[entryIndex];
                 var entryJson = entry.GetRawText();
                 var section = new DocSection
                 {
@@ -203,7 +303,7 @@ public sealed class CatalogPipeline
                     Scope = "corpus",
                     State = "DRAFT",
                     PayloadJson = JsonDocument.Parse(entryJson),
-                    RenderedMarkdown = RenderCatalogEntryMarkdown(sectionKind, entry),
+                    RenderedMarkdown = RenderCatalogEntryMarkdown(sectionKind, entry, entryIndex + 1),
                     GenerationRunId = runId,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
@@ -401,12 +501,12 @@ public sealed class CatalogPipeline
         return name ?? "(unknown)";
     }
 
-    private string LoadPrompt(string contentRoot, string fileName)
+    private string LoadPrompt(string contentRoot, string fileName, string folder = "fortran-f77")
     {
         var candidates = new[]
         {
-            Path.Combine(contentRoot, "Llm", "Prompts", "fortran-f77", fileName),
-            Path.Combine(contentRoot, "..", "..", "Llm", "Prompts", "fortran-f77", fileName),
+            Path.Combine(contentRoot, "Llm", "Prompts", folder, fileName),
+            Path.Combine(contentRoot, "..", "..", "Llm", "Prompts", folder, fileName),
         };
         foreach (var c in candidates)
             if (File.Exists(c)) return StripFrontmatter(File.ReadAllText(Path.GetFullPath(c)));
@@ -538,7 +638,7 @@ public sealed class CatalogPipeline
         return capped;
     }
 
-    private static string RenderCatalogEntryMarkdown(string sectionKind, JsonElement entry)
+    private static string RenderCatalogEntryMarkdown(string sectionKind, JsonElement entry, int ordinal = 1)
     {
         var sb = new StringBuilder();
         switch (sectionKind)
@@ -585,11 +685,106 @@ public sealed class CatalogPipeline
                 sb.Append('\n');
                 break;
             }
+            // -- Phase B: requirements pack ---------------------------
+            case "capability-map":
+            {
+                sb.Append("### ").Append(Str(entry, "name", "(unnamed capability)")).Append("\n\n");
+                sb.Append(Str(entry, "description", "")).Append("\n\n");
+                var outcome = Str(entry, "businessOutcome", "");
+                if (outcome.Length > 0) sb.Append("**Business outcome:** ").Append(outcome).Append("\n\n");
+                var constraints = Str(entry, "notableConstraints", "");
+                if (constraints.Length > 0) sb.Append("**Must be preserved:** ").Append(constraints).Append("\n\n");
+                AppendTrace(sb, entry, "supportingRoutines", "Implemented by");
+                break;
+            }
+            case "functional-requirement":
+            {
+                sb.Append("### ").Append($"FR-{ordinal:000}").Append(" -- ")
+                  .Append(Str(entry, "statement", "(no statement)")).Append("\n\n");
+                var cap = Str(entry, "capability", "");
+                var pri = Str(entry, "priority", "");
+                if (cap.Length > 0 || pri.Length > 0)
+                {
+                    sb.Append('`');
+                    if (cap.Length > 0) sb.Append(cap);
+                    if (cap.Length > 0 && pri.Length > 0) sb.Append(" - ");
+                    if (pri.Length > 0) sb.Append(pri);
+                    sb.Append("`\n\n");
+                }
+                var detail = Str(entry, "detail", "");
+                if (detail.Length > 0) sb.Append(detail).Append("\n\n");
+                AppendBullets(sb, entry, "acceptanceCriteria", "Acceptance criteria");
+                AppendBullets(sb, entry, "sourceRules", "Derived from business rules");
+                AppendTrace(sb, entry, "sourceRoutines", "Traceability");
+                break;
+            }
+            case "process-flow":
+            {
+                sb.Append("### ").Append(Str(entry, "name", "(unnamed flow)")).Append("\n\n");
+                var actor = Str(entry, "actor", "");
+                var trigger = Str(entry, "trigger", "");
+                if (actor.Length > 0) sb.Append("**Actor:** ").Append(actor).Append("  \n");
+                if (trigger.Length > 0) sb.Append("**Trigger:** ").Append(trigger).Append("  \n");
+                if (actor.Length > 0 || trigger.Length > 0) sb.Append("\n");
+                if (entry.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+                {
+                    var stepNo = 1;
+                    foreach (var st in steps.EnumerateArray())
+                        if (st.ValueKind == JsonValueKind.String)
+                            sb.Append(stepNo++).Append(". ").Append(st.GetString()).Append("\n");
+                    sb.Append("\n");
+                }
+                AppendBullets(sb, entry, "gatingRules", "Gating rules as they behave today");
+                var flowOutcome = Str(entry, "outcome", "");
+                if (flowOutcome.Length > 0) sb.Append("**Outcome:** ").Append(flowOutcome).Append("\n\n");
+                AppendTrace(sb, entry, "supportingRoutines", "Traceability");
+                break;
+            }
+            case "nfr":
+            {
+                sb.Append("### ").Append($"NFR-{ordinal:000}").Append(" -- ")
+                  .Append(Str(entry, "statement", "(no statement)")).Append("\n\n");
+                var nfrCat = Str(entry, "category", "");
+                if (nfrCat.Length > 0) sb.Append('`').Append(nfrCat).Append("`\n\n");
+                var nfrDetail = Str(entry, "detail", "");
+                if (nfrDetail.Length > 0) sb.Append(nfrDetail).Append("\n\n");
+                var risk = Str(entry, "riskIfPreserved", "");
+                if (risk.Length > 0) sb.Append("**Risk if carried over unchanged:** ").Append(risk).Append("\n\n");
+                AppendTrace(sb, entry, "evidence", "Evidence");
+                break;
+            }
         }
         return sb.ToString();
     }
 
     // ─── Local row records ───────────────────────────────────────────
+    private static string Str(JsonElement e, string prop, string fallback) =>
+        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String
+            ? (v.GetString() ?? fallback)
+            : fallback;
+
+    private static void AppendBullets(StringBuilder sb, JsonElement entry, string prop, string heading)
+    {
+        if (!entry.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array) return;
+        var items = arr.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).ToList();
+        if (items.Count == 0) return;
+        sb.Append("**").Append(heading).Append("**\n\n");
+        foreach (var i in items) sb.Append("- ").Append(i.GetString()).Append("\n");
+        sb.Append("\n");
+    }
+
+    /// <summary>Traceability line - the audit link from a requirement back
+    /// to the evidence it was derived from.</summary>
+    private static void AppendTrace(StringBuilder sb, JsonElement entry, string prop, string label)
+    {
+        if (!entry.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array) return;
+        var names = arr.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String)
+            .Select(x => x.GetString()).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        if (names.Count == 0) return;
+        sb.Append("*").Append(label).Append(":* ")
+          .Append(string.Join(", ", names.Select(n => "`" + n + "`"))).Append("\n\n");
+    }
+
 
     private sealed record RoutineSummaryRow(
         string name, string summary, List<string> inputs, List<string> outputs,

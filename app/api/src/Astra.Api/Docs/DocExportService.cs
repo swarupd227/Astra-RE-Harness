@@ -82,9 +82,26 @@ public sealed class DocExportService
                 fileName: $"{Slug(corpus.Name)}-docs.docx",
                 ct,
                 referenceDocPath: DocxReferencePath),
+            "requirements-docx" => await RunPandocAsync(
+                CombineRequirementsMarkdown(corpus, sections),
+                outputExt: "docx",
+                pandocArgs: "--toc --toc-depth=2 --number-sections",
+                cssContent: null,
+                contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                fileName: $"{Slug(corpus.Name)}-requirements.docx",
+                ct,
+                referenceDocPath: DocxReferencePath),
+            "requirements-pdf" => await RunPandocAsync(
+                CombineRequirementsMarkdown(corpus, sections),
+                outputExt: "pdf",
+                pandocArgs: "--pdf-engine=weasyprint --toc --toc-depth=2 --number-sections",
+                cssContent: PdfStylesheet,
+                contentType: "application/pdf",
+                fileName: $"{Slug(corpus.Name)}-requirements.pdf",
+                ct),
             "confluence" => BuildConfluenceJson(corpus, sections),
             _ => throw new ArgumentException(
-                $"Unknown format '{format}'. Valid: mkdocs, pdf, docx, confluence"),
+                $"Unknown format '{format}'. Valid: mkdocs, pdf, docx, confluence, requirements-docx, requirements-pdf"),
         };
     }
 
@@ -191,6 +208,27 @@ public sealed class DocExportService
             WriteZipEntry(zip, $"{prefix}docs/{file}", CombineReferenceKind(kindSections));
             if (!anyRef) { nav.AppendLine("  - Reference:"); anyRef = true; }
             nav.AppendLine($"    - '{label}': {file}");
+        }
+
+        // Requirements pack → docs/requirements/*.md. Separate nav group
+        // because it addresses a different reader than the transition
+        // docs: a business analyst scoping a replacement, not an engineer
+        // maintaining the original.
+        var reqSections = new (string Kind, string Label, string File)[]
+        {
+            ("capability-map",         "Capability Map",         "requirements/capability-map.md"),
+            ("process-flow",           "Process Flows",          "requirements/process-flows.md"),
+            ("functional-requirement", "Functional Requirements", "requirements/functional-requirements.md"),
+            ("nfr",                    "Non-Functional Characteristics", "requirements/non-functional.md"),
+        };
+        var anyReq = false;
+        foreach (var (kind, label, file) in reqSections)
+        {
+            var kindSections = sections.Where(x => x.SectionKind == kind).ToList();
+            if (kindSections.Count == 0) continue;
+            WriteZipEntry(zip, prefix + "docs/" + file, CombineReferenceKind(kindSections));
+            if (!anyReq) { nav.AppendLine("  - Requirements:"); anyReq = true; }
+            nav.AppendLine("    - '" + label + "': " + file);
         }
 
         // Diagrams → docs/diagrams/{slug}.md
@@ -463,6 +501,84 @@ markdown_extensions:
         {
             sb.AppendLine(s.RenderedMarkdown ?? "");
         }
+        return sb.ToString();
+    }
+
+    // ── Requirements pack (Phase B) ──────────────────────────────────
+    // A different document from the transition docs: it states what the
+    // legacy system does today, in business language, so a replacement
+    // can be scoped and verified against it. Chapter order follows how a
+    // reader builds understanding — what the system does, how work flows
+    // through it, the specific behaviours, then the operational envelope.
+
+    private static readonly (string Kind, string ChapterTitle, string Intro)[] RequirementsChapters =
+    [
+        ("capability-map", "Business Capabilities",
+            "The distinct capabilities the system provides today, described in business terms. This chapter answers \"what does this system do for the business?\" and frames everything that follows."),
+        ("process-flow", "Business Process Flows",
+            "The end-to-end journeys the system supports, narrated as business process. Each flow records the gating rules exactly as they behave today, including the points where progression is blocked or a step is silently skipped."),
+        ("functional-requirement", "Functional Requirements",
+            "Numbered statements of current system behaviour, each with acceptance criteria that can be verified against the existing system and a traceability line back to the routines the behaviour was derived from. These describe the system as it is — where present behaviour is surprising, it is recorded as-is rather than corrected, so a replacement team can decide deliberately whether to preserve it."),
+        ("nfr", "Non-Functional Characteristics",
+            "The operational envelope the system exhibits today — performance, data integrity, concurrency, security, and error handling. Each entry names what a replacement inherits if the behaviour is carried over unchanged."),
+    ];
+
+    private static string CombineRequirementsMarkdown(Corpus corpus, IReadOnlyList<DocSection> sections)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("---");
+        sb.AppendLine($"title: \"{corpus.Name}\"");
+        sb.AppendLine("subtitle: \"Requirements Pack — Current-State Behaviour\"");
+        sb.AppendLine($"date: \"{DateTimeOffset.UtcNow:MMMM d, yyyy}\"");
+        sb.AppendLine("author: \"Astra RE Harness\"");
+        sb.AppendLine("---");
+        sb.AppendLine();
+
+        sb.AppendLine("# About This Document {.unnumbered}");
+        sb.AppendLine();
+        sb.AppendLine(
+            $"This pack documents what **{MdEscape(corpus.Name)}** does today. It is written for a " +
+            "business analyst, solution architect, or delivery team scoping a replacement, and it " +
+            "deliberately describes current behaviour rather than proposing a target design.");
+        sb.AppendLine();
+        sb.AppendLine(
+            "Every requirement is derived from specifications extracted directly from the source and " +
+            "carries a traceability line naming the routines it came from. Where the system's present " +
+            "behaviour is unexpected — an unvalidated input, a silent no-op, an ignored parameter — it " +
+            "is recorded as it is. Those are real requirements: a replacement must consciously decide " +
+            "whether to preserve or change them.");
+        sb.AppendLine();
+        sb.AppendLine("> Sections marked **Draft** have been generated but not yet reviewed and signed off.");
+        sb.AppendLine();
+
+        var any = false;
+        foreach (var (kind, chapterTitle, intro) in RequirementsChapters)
+        {
+            var kindSections = sections.Where(x => x.SectionKind == kind).OrderBy(x => x.CreatedAt).ToList();
+            if (kindSections.Count == 0) continue;
+            any = true;
+
+            sb.AppendLine($"# {chapterTitle}");
+            sb.AppendLine();
+            sb.AppendLine(intro);
+            sb.AppendLine();
+            foreach (var sec in kindSections)
+            {
+                sb.AppendLine(NormalizeHeadings(sec.RenderedMarkdown ?? ""));
+                sb.AppendLine();
+            }
+        }
+
+        if (!any)
+        {
+            sb.AppendLine("# No Requirements Generated {.unnumbered}");
+            sb.AppendLine();
+            sb.AppendLine(
+                "This project has no requirements sections yet. Generate them with the " +
+                "`capability-map`, `process-flow`, `functional-requirement` and `nfr` stages.");
+        }
+
         return sb.ToString();
     }
 
