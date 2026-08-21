@@ -65,11 +65,32 @@ public static class DocsEndpoints
                 ? Astra.Api.Docs.DocsGenerationOrchestrator.DefaultStages
                 : stages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            var runId = await orchestrator.StartAsync(
-                corpusId,
-                new Astra.Api.Docs.DocsGenerationOrchestrator.GenerateOptions(
-                    stagesList, take, force ?? false),
-                ct);
+            Guid runId;
+            try
+            {
+                runId = await orchestrator.StartAsync(
+                    corpusId,
+                    new Astra.Api.Docs.DocsGenerationOrchestrator.GenerateOptions(
+                        stagesList, take, force ?? false),
+                    ct);
+            }
+            catch (ArgumentException ex)
+            {
+                // An unknown stage name used to surface as an unhandled 500
+                // with no CORS headers, which reads in the browser as an
+                // opaque network failure rather than "you typed it wrong".
+                return Results.BadRequest(new
+                {
+                    error = new { code = "docs.generate.invalid_stage", message = ex.Message },
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    error = new { code = "docs.generate.precondition_failed", message = ex.Message },
+                });
+            }
             return Results.Accepted($"/api/v1/docs/runs/{runId}", new
             {
                 generationRunId = runId,

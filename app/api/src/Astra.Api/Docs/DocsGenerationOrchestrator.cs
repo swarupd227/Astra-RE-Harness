@@ -29,6 +29,10 @@ public sealed class DocsGenerationOrchestrator
         "routine-summary", "module", "overview",
         "data-dictionary", "glossary", "interface", "business-rules",
         "sequence-diagram", "dependency-diagram",
+        // Phase B requirements pack. Deliberately absent from DefaultStages:
+        // it is a separate deliverable for a different reader, requested
+        // explicitly rather than produced by every docs run.
+        "capability-map", "process-flow", "functional-requirement", "nfr",
     };
 
     private readonly IServiceScopeFactory _scopeFactory;
