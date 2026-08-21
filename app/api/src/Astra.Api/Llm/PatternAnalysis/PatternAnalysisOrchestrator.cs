@@ -239,14 +239,20 @@ public sealed class PatternAnalysisOrchestrator
                     MaxOutputTokensOverride: useTrivialTier ? TrivialMaxOutputTokens : null,
                     BulkMode: true);
 
-                var (ok, retryable, error) = await RunOnceAsync(sub, tuning, ct);
+                var (ok, retryable, code, error) = await RunOnceAsync(sub, tuning, ct);
                 if (ok) return true;
 
                 // A failed attempt can leave the row parked in EXTRACTING,
                 // where the state guard would refuse it forever after.
                 await ResetIfStuckAsync(sub.Id, ct);
 
-                var lastAttempt = attempt == MaxAttempts;
+                // Infrastructure failures (429, transport, dropped stream)
+                // clear on their own, so they get the full attempt budget.
+                // A model that generated for 80 seconds and produced
+                // unusable output will usually do it again — that gets one
+                // retry, not two, because each costs a full generation.
+                var attemptBudget = IsInfrastructureError(code) ? MaxAttempts : 2;
+                var lastAttempt = attempt >= attemptBudget;
                 if (lastAttempt || (!retryable && !useTrivialTier))
                 {
                     _logger.LogWarning(
@@ -271,13 +277,14 @@ public sealed class PatternAnalysisOrchestrator
         }
     }
 
-    private async Task<(bool Ok, bool Retryable, string? Error)> RunOnceAsync(
+    private async Task<(bool Ok, bool Retryable, string? Code, string? Error)> RunOnceAsync(
         Subroutine sub, ExtractionTuning tuning, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var pipeline = scope.ServiceProvider.GetRequiredService<ExtractionPipeline>();
         var ok = false;
         var retryable = false;
+        string? code = null;
         string? error = null;
         await foreach (var evt in pipeline.RunAsync(sub.Id, ct, tuning))
         {
@@ -288,25 +295,40 @@ public sealed class PatternAnalysisOrchestrator
             else if (evt.Type == "error")
             {
                 error = JsonSerializer.Serialize(evt.Data);
-                retryable = ReadRetryableFlag(evt.Data);
+                (retryable, code) = ReadError(evt.Data);
             }
         }
-        return (ok, retryable, error);
+        return (ok, retryable, code, error);
     }
 
     /// <summary>The provider already classifies 429/5xx/transport as
     /// retryable on the error event; nothing acted on it until now.</summary>
-    private static bool ReadRetryableFlag(object? data)
+    private static (bool Retryable, string? Code) ReadError(object? data)
     {
-        if (data is null) return false;
+        if (data is null) return (false, null);
         try
         {
             using var doc = JsonDocument.Parse(JsonSerializer.Serialize(data));
-            return doc.RootElement.TryGetProperty("retryable", out var r)
-                   && r.ValueKind == JsonValueKind.True;
+            var root = doc.RootElement;
+            var retryable = root.TryGetProperty("retryable", out var r)
+                            && r.ValueKind == JsonValueKind.True;
+            var code = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String
+                ? c.GetString()
+                : null;
+            return (retryable, code);
         }
-        catch { return false; }
+        catch { return (false, null); }
     }
+
+    /// <summary>
+    /// True for failures that come from the network or the service rather
+    /// than from what the model produced. Only these are worth the full
+    /// attempt budget — a bad generation repeats.
+    /// </summary>
+    private static bool IsInfrastructureError(string? code) => code is
+        "provider.transport" or
+        "provider.rate_limited" or
+        "provider.stream_error";
 
     /// <summary>
     /// Return a routine parked in EXTRACTING to a state the pipeline will
