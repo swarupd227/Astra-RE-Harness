@@ -134,7 +134,7 @@ function Section({
       <header className="mb-2 flex items-center gap-2">
         <h3
           className={clsx(
-            'font-mono text-caption uppercase tracking-wider',
+            'text-caption font-medium uppercase tracking-wider',
             tone === 'warning' ? 'text-status-scaffolded' : 'text-ink-tertiary',
           )}
         >

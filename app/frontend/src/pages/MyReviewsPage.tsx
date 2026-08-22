@@ -31,7 +31,7 @@ export function MyReviewsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Stage 4 · SME landing</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Stage 4 · SME landing</p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">My reviews</h1>
         <div className="mt-3 flex flex-wrap gap-2 font-mono text-caption">
           <CountChip n={r.counts.awaiting} label="awaiting" tone="draft" />
@@ -50,7 +50,7 @@ export function MyReviewsPage() {
 function Section({ title, items, emptyTitle, emptyDesc }: { title: string; items: MyReviewItem[]; emptyTitle: string; emptyDesc: string }) {
   return (
     <section>
-      <h2 className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+      <h2 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
         {title} <span className="ml-1 rounded-sm bg-sunken px-1.5 py-0.5 text-[10px] text-ink-secondary">{items.length}</span>
       </h2>
       {items.length === 0 ? (
@@ -69,7 +69,7 @@ function SignedGroup({ items }: { items: MyReviewItem[] }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 text-left font-mono text-caption uppercase tracking-wider text-ink-tertiary hover:text-ink-secondary"
+        className="flex w-full items-center gap-2 text-left text-caption font-medium uppercase tracking-wider text-ink-tertiary hover:text-ink-secondary"
       >
         <ChevronRight className={clsx('h-3.5 w-3.5 transition-transform', open && 'rotate-90')} />
         Signed

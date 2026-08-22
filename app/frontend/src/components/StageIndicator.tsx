@@ -40,7 +40,7 @@ export function StageIndicator({ currentStage }: { currentStage: string | null }
             </span>
             <span
               className={clsx(
-                'hidden font-mono text-[11px] uppercase tracking-wide xl:inline',
+                'hidden font-mono text-micro uppercase tracking-wide xl:inline',
                 state === 'active'
                   ? 'text-ink-primary'
                   : state === 'done'

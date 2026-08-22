@@ -54,7 +54,7 @@ export function SubroutineDetailPage() {
     <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
             <Link to={`/projects/${s.corpus.id}`} className="hover:text-ink-primary">
               {s.corpus.name}
             </Link>
@@ -93,7 +93,7 @@ export function SubroutineDetailPage() {
           data-testid={`extraction-help-${help.id}`}
         >
           <p className="flex flex-wrap items-baseline gap-2 text-body text-ink-secondary">
-            <span className={`font-mono text-caption uppercase tracking-wider ${help.labelTextClass}`}>
+            <span className={`text-caption font-medium uppercase tracking-wider ${help.labelTextClass}`}>
               {help.label}
             </span>
             <span className="text-ink-tertiary">·</span>
@@ -170,14 +170,14 @@ function Group({ title, items }: { title: string; items: string[] }) {
   if (!items || items.length === 0) {
     return (
       <div>
-        <h4 className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{title}</h4>
+        <h4 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{title}</h4>
         <p className="mt-1 text-caption text-ink-tertiary">—</p>
       </div>
     );
   }
   return (
     <div>
-      <h4 className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{title}</h4>
+      <h4 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{title}</h4>
       <ul className="mt-1.5 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <li key={item}>
@@ -195,7 +195,7 @@ function NextStepCard() {
   return (
     <Card className="border-accent/40 bg-accent-muted/40">
       <CardBody>
-        <p className="font-mono text-caption uppercase tracking-wider text-accent">Up next</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-accent">Up next</p>
         <p className="mt-2 text-body font-semibold text-ink-primary">
           Stage 3 — Live extraction
         </p>

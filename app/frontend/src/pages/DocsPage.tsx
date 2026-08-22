@@ -295,7 +295,7 @@ export function DocsPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div>
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 Documentation
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{c.name}</h1>

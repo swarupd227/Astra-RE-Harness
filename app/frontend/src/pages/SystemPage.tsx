@@ -20,7 +20,7 @@ export function SystemPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           System
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Status</h1>

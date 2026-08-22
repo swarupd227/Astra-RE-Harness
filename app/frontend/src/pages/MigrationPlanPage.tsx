@@ -149,7 +149,7 @@ export function MigrationPlanPage() {
             {pickerOpen && (
               <div className="space-y-3 border-t border-border-subtle pt-3">
                 <div className="space-y-1">
-                  <label className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                  <label className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                     Strategy
                   </label>
                   <select
@@ -178,7 +178,7 @@ export function MigrationPlanPage() {
                 </div>
                 {selectedStrategyDef && strategyHasFields(selectedStrategyDef) && (
                   <div className="space-y-1">
-                    <label className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                    <label className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                       Options (JSON)
                     </label>
                     <textarea

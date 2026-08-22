@@ -61,7 +61,7 @@ export function RolesPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="roles-page">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Phase #4 · Roles &amp; permissions
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Roles &amp; Permissions</h1>

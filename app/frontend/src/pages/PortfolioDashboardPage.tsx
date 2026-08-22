@@ -127,7 +127,7 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
   return (
     <Card data-testid="portfolio-corpora-table">
       <CardBody className="space-y-3">
-        <h2 className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <h2 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Per-corpus rollup
         </h2>
         {rows.length === 0 && (
@@ -137,7 +137,7 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
           <div className="overflow-x-auto">
             <table className="w-full text-body-sm">
               <thead>
-                <tr className="text-left font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                <tr className="text-left text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                   <th className="py-2">Name</th>
                   <th className="py-2">Plan</th>
                   <th className="py-2 text-right">Routines</th>
@@ -200,7 +200,7 @@ function LlmCostCard({
   return (
     <Card data-testid="portfolio-llm-totals">
       <CardBody className="space-y-2">
-        <h2 className="flex items-center gap-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <h2 className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           <Coins className="h-3.5 w-3.5" />
           LLM spend (platform-wide)
         </h2>
@@ -234,7 +234,7 @@ function RecentActivityCard({ activity }: { activity: PortfolioActivity[] }) {
   return (
     <Card data-testid="portfolio-recent-activity">
       <CardBody className="space-y-2">
-        <h2 className="flex items-center gap-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <h2 className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           <Activity className="h-3.5 w-3.5" />
           Recent activity ({activity.length})
         </h2>

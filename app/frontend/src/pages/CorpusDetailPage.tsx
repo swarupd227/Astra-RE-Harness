@@ -71,7 +71,7 @@ export function CorpusDetailPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
             Project
           </p>
           <h1 className="mt-2 text-display font-semibold text-ink-primary">{c.name}</h1>
@@ -196,7 +196,7 @@ function FileBlock({ file }: { file: NonNullable<ReturnType<typeof useFiles>>[nu
                   </Badge>
                   {sub.carriedForward && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-sm border border-status-signed/40 bg-[#DCE6F5]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-status-signed"
+                      className="inline-flex items-center gap-1 rounded-sm border border-status-signed/40 bg-[#DCE6F5]/40 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-status-signed"
                       title="Spec carried forward from a previous source version (file hash unchanged)"
                       data-testid={`carried-${sub.id}`}
                     >

@@ -116,7 +116,7 @@ export function NewCorpusPage() {
   return (
     <div className="mx-auto max-w-[820px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Phase C.1 · Stage 1 · Ingest
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Connect a new project</h1>

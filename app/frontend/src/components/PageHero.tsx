@@ -63,7 +63,7 @@ export function PageHero({
           {eyebrow && (
             <p
               className={clsx(
-                'font-mono text-caption uppercase tracking-wider',
+                'text-caption font-medium uppercase tracking-wider',
                 eyebrowToneClass[tone],
               )}
             >

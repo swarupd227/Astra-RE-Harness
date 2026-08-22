@@ -98,7 +98,7 @@ function Hero({
 
   return (
     <section>
-      <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Astra RE Harness</p>
+      <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Astra RE Harness</p>
       <h1 className="mt-2 max-w-4xl text-display font-semibold leading-tight text-ink-primary">
         {copy.title}
       </h1>
@@ -211,7 +211,7 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
               <span className={`flex h-6 w-6 items-center justify-center rounded-md ${ts.bg}`}>
                 <Icon className={`h-3.5 w-3.5 ${ts.icon}`} aria-hidden="true" />
               </span>
-              <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{k.label}</span>
+              <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{k.label}</span>
             </div>
             <span className={`mt-2 font-mono text-display font-semibold leading-none ${ts.value}`}>
               {k.value}

@@ -99,7 +99,7 @@ export function LanguagesPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="languages-page">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Phase #3a · Spec schemas
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Languages</h1>
@@ -204,7 +204,7 @@ function SchemaCard({
                   aria-label={`Enable ${schema.id}`}
                   data-testid={`schema-toggle-${schema.id}`}
                 />
-                <span className="font-mono text-[10px] uppercase tracking-wider">
+                <span className="font-mono text-micro uppercase tracking-wider">
                   enabled
                 </span>
               </label>

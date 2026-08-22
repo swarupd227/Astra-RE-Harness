@@ -376,7 +376,7 @@ export function CommentComposer({
 function PersonaPill({ persona, display }: { persona: string; display: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-sm bg-sunken px-1.5 py-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-ink-tertiary">{persona}</span>
+      <span className="font-mono text-micro uppercase tracking-wider text-ink-tertiary">{persona}</span>
       <span className="font-medium text-ink-primary">{display}</span>
     </span>
   );

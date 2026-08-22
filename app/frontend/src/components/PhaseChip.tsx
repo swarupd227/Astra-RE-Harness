@@ -23,7 +23,7 @@ export function PhaseChip({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        'inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-micro uppercase tracking-wide',
         meta.tone,
         active && 'ring-2 ring-accent/30 ring-offset-1',
         className,

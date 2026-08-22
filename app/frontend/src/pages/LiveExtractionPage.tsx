@@ -200,7 +200,7 @@ export function LiveExtractionPage() {
               <Sparkles className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 Stage 3 · Extraction in progress
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">

@@ -68,7 +68,7 @@ export function HarmonisationPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="harmonisation-page">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Phase 7.1 · Cross-routine consistency
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Harmonisation</h1>
@@ -84,7 +84,7 @@ export function HarmonisationPage() {
       <Card>
         <CardBody className="flex flex-wrap items-end justify-between gap-4">
           <label className="block">
-            <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
               Corpus
             </span>
             <select
@@ -121,7 +121,7 @@ export function HarmonisationPage() {
       )}
 
       <section data-testid="harmonisation-run-list">
-        <h2 className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <h2 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Recent runs
         </h2>
         {runs.isPending && <Skeleton className="h-24" />}

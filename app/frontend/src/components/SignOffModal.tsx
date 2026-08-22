@@ -89,7 +89,7 @@ export function SignOffModal({
             <div className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 text-status-review" aria-hidden="true" />
               <div>
-                <p className="font-mono text-caption uppercase tracking-wider text-status-review">
+                <p className="text-caption font-medium uppercase tracking-wider text-status-review">
                   Citation integrity
                 </p>
                 <p className="mt-1 text-caption text-ink-primary">
@@ -105,7 +105,7 @@ export function SignOffModal({
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 text-status-failed" aria-hidden="true" />
                 <div>
-                  <p className="font-mono text-caption uppercase tracking-wider text-status-failed">
+                  <p className="text-caption font-medium uppercase tracking-wider text-status-failed">
                     Preconditions unmet
                   </p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5 text-caption text-ink-primary">

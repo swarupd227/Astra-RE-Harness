@@ -208,7 +208,7 @@ export function VerifySignatureModal({
               <li key={s.id} className="rounded-md border border-border-subtle bg-canvas p-3">
                 <div className="flex items-center gap-2">
                   <StepIcon state={s.state} />
-                  <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{s.id}</span>
+                  <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{s.id}</span>
                   <span className="text-body font-medium text-ink-primary">{s.label}</span>
                 </div>
                 {s.detail && <p className="mt-1.5 pl-6 text-caption text-ink-secondary">{s.detail}</p>}

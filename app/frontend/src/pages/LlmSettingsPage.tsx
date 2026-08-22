@@ -78,7 +78,7 @@ export function LlmSettingsPage() {
   return (
     <div className="mx-auto max-w-[900px] space-y-6 p-6 lg:p-10 fadeup" data-testid="llm-settings-page">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Task #178 · Provider configuration
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">LLM Provider</h1>

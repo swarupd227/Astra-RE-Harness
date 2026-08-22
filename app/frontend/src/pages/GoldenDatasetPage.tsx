@@ -139,7 +139,7 @@ export function GoldenDatasetPage() {
       <Card data-testid="golden-aggregate-banner">
         <CardBody className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
               Aggregate score
             </p>
             <p className="mt-1 text-display font-semibold text-ink-primary">
@@ -657,7 +657,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
         {label}
       </span>
       <input
@@ -684,7 +684,7 @@ function TextArea({
 }) {
   return (
     <label className="block">
-      <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
         {label}
       </span>
       <textarea
@@ -713,7 +713,7 @@ function Filter({
 }) {
   return (
     <label className="flex items-center gap-2 text-body-sm">
-      <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
         {label}
       </span>
       <select

@@ -101,7 +101,7 @@ export function ScaffoldArtifactPage() {
               <Cog className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 Stage 5 · Scaffolded package
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
@@ -124,7 +124,7 @@ export function ScaffoldArtifactPage() {
               <Button variant="primary" size="md" onClick={onCommit} loading={committing}>
                 <GitCommit className="h-4 w-4" />
                 Commit to Git
-                <span className="ml-2 rounded-sm border border-white/30 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] uppercase">
+                <span className="ml-2 rounded-sm border border-white/30 bg-white/15 px-1.5 py-0.5 font-mono text-micro uppercase">
                   stub
                 </span>
               </Button>
@@ -186,7 +186,7 @@ export function ScaffoldArtifactPage() {
       <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,360px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         {/* File tree */}
         <div className="h-52 min-h-0 overflow-y-auto bg-raised lg:h-auto">
-          <div className="border-b border-border-subtle px-3 py-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+          <div className="border-b border-border-subtle px-3 py-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
             Package
           </div>
           <ScaffoldFileTree files={treeFiles} activePath={active?.path ?? null} onSelect={setActivePath} />

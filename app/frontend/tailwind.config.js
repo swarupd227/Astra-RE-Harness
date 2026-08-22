@@ -135,15 +135,20 @@ export default {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
       },
+      // Type scale, lifted one step across the board (Aug 2026 UX review).
+      // The previous scale — 13px body, 11px captions — was IDE density and
+      // was the single biggest reason the product read as a developer
+      // console rather than a business application. Names are unchanged so
+      // the lift applies everywhere at once without touching components.
       fontSize: {
-        'micro':   ['10px', '14px'],
-        'caption': ['11px', '16px'],
-        'body':    ['13px', '18px'],
-        'body-lg': ['15px', '22px'],
-        'h-sm':    ['13px', '18px'],
-        'h-md':    ['16px', '24px'],
-        'h-lg':    ['20px', '28px'],
-        'display': ['24px', '32px'],
+        'micro':   ['11px', '16px'],   // was 10/14 — badges, dense chips
+        'caption': ['13px', '18px'],   // was 11/16 — metadata, eyebrows
+        'body':    ['15px', '22px'],   // was 13/18 — default reading size
+        'body-lg': ['17px', '26px'],   // was 15/22 — lead paragraphs
+        'h-sm':    ['15px', '22px'],   // was 13/18
+        'h-md':    ['18px', '26px'],   // was 16/24
+        'h-lg':    ['24px', '32px'],   // was 20/28
+        'display': ['30px', '38px'],   // was 24/32 — page titles
       },
       borderRadius: {
         sm: '6px',

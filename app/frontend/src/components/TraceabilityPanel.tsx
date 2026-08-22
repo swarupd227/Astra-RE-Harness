@@ -39,7 +39,7 @@ export function TraceabilityPanel({
   return (
     <div className="space-y-4 p-5">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Derived from
         </p>
         <h3 className="mt-1 text-h-md font-semibold text-ink-primary">

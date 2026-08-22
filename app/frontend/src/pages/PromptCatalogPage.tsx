@@ -97,7 +97,7 @@ export function PromptCatalogPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="prompt-catalog-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
             Phase #3b · Prompt asset library
           </p>
           <h1 className="mt-1 text-display font-semibold text-ink-primary">Prompt Catalog</h1>

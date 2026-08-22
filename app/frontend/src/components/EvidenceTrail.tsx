@@ -58,7 +58,7 @@ export function EvidenceTrail({ specId }: { specId: string }) {
       <header className="border-b border-border-subtle px-5 py-3">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
-          <h2 className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+          <h2 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
             Evidence trail · {e.subroutine?.name ?? 'spec'}
           </h2>
         </div>
@@ -240,7 +240,7 @@ function ReviewBlock({ e }: { e: EvidenceResponse }) {
               return (
                 <span
                   key={k}
-                  className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-caption uppercase tracking-wider text-ink-secondary"
+                  className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 text-caption font-medium uppercase tracking-wider text-ink-secondary"
                 >
                   <span className="font-semibold text-ink-primary">{n}</span> {k}
                 </span>
@@ -370,7 +370,7 @@ function Block({
         <span className={`flex h-6 w-6 items-center justify-center rounded ${toneIcon[tone]}`}>
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
-        <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{label}</span>
+        <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
       </header>
       <dl className="space-y-1">{children}</dl>
     </div>
@@ -381,7 +381,7 @@ function BlockMissing({ label, hint }: { label: string; hint?: string }) {
   return (
     <div className="rounded-md border border-dashed border-border bg-sunken/40 p-3.5">
       <header className="mb-1 flex items-center gap-2">
-        <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{label}</span>
+        <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
         <span className="font-mono text-caption text-ink-tertiary italic">pending</span>
       </header>
       {hint && <p className="text-caption text-ink-tertiary">{hint}</p>}
@@ -392,7 +392,7 @@ function BlockMissing({ label, hint }: { label: string; hint?: string }) {
 function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="grid grid-cols-[120px_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{label}</dt>
+      <dt className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</dt>
       <dd className={'min-w-0 text-caption text-ink-primary ' + (mono ? 'font-mono' : '')}>{value}</dd>
     </div>
   );
@@ -401,7 +401,7 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
 function HashRow({ label, value, truncate = 22 }: { label: string; value: string; truncate?: number }) {
   return (
     <div className="grid grid-cols-[120px_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{label}</dt>
+      <dt className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</dt>
       <dd className="flex min-w-0 items-center gap-1.5">
         <code
           className="truncate rounded-sm bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-primary"
@@ -441,7 +441,7 @@ function PostureChip({ label, ok }: { label: string; ok?: boolean }) {
   return (
     <span
       className={
-        'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-caption uppercase tracking-wider ' +
+        'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-caption font-medium uppercase tracking-wider ' +
         (ok ? 'bg-status-review/15 text-status-review' : 'bg-sunken text-ink-tertiary')
       }
     >

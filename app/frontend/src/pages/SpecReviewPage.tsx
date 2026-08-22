@@ -244,7 +244,7 @@ export function SpecReviewPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Spec review · Stage 4</p>
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Spec review · Stage 4</p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
             </div>
             <Badge tone={signed ? 'signed' : inReview ? 'review' : 'draft'}>{sp.state}</Badge>
@@ -297,7 +297,7 @@ export function SpecReviewPage() {
           <div className="space-y-6 p-6">
             {sections.map((sec) => (
               <section key={sec.key}>
-                <h3 className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+                <h3 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                   {sec.label} <span className="ml-1 rounded-sm bg-sunken px-1.5 py-0.5 text-[10px] text-ink-secondary">{sec.claims.length}</span>
                 </h3>
                 <ul className="space-y-3">

@@ -101,7 +101,7 @@ export function AuditTrailPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Stage 4 · Append-only</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Stage 4 · Append-only</p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Audit trail</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
           The full provenance chain for this spec — source bytes, AST extraction, LLM call, SME review,
@@ -160,7 +160,7 @@ export function AuditTrailPage() {
           />
           {grouped.map(([date, events]) => (
             <li key={date}>
-              <h3 className="mb-3 -ml-6 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <h3 className="mb-3 -ml-6 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 <HistoryIcon className="mr-1 inline h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
                 {date}
               </h3>
@@ -191,7 +191,7 @@ function FilterGroup({ label, value, options, onChange }: {
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">{label}</span>
+      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
       <div className="flex flex-wrap gap-1">
         {options.map((o) => (
           <button

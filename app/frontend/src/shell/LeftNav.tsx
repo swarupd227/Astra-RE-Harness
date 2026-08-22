@@ -137,12 +137,12 @@ export function LeftNav() {
           {!collapsed && (
             <div className="min-w-0">
               <div className="truncate text-[13px] font-bold leading-tight text-white">Astra Enterprise</div>
-              <div className="truncate text-[10px] text-slate-400 leading-tight">Reverse-engineering harness</div>
+              <div className="truncate text-micro text-slate-400 leading-tight">Reverse-engineering harness</div>
             </div>
           )}
         </div>
         {!collapsed && (
-          <div className="mt-3 text-[10px] uppercase tracking-wider text-slate-500">
+          <div className="mt-3 text-micro uppercase tracking-wider text-slate-500">
             Multi-language · multi-target
           </div>
         )}
@@ -156,7 +156,7 @@ export function LeftNav() {
         {SECTIONS.filter((s) => !s.adminOnly || isAdmin).map((section) => (
           <div key={section.title} className="mb-3">
             {!collapsed && (
-              <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              <p className="px-2 pb-1 text-micro font-semibold uppercase tracking-wider text-slate-500">
                 {section.title}
               </p>
             )}
@@ -178,14 +178,14 @@ export function LeftNav() {
       <div className={clsx('border-t border-white/10 py-3', collapsed ? 'px-1' : 'px-3')}>
         {!collapsed && (
           <div className="mb-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 text-caption text-slate-400">
               <ShieldCheck
                 size={13}
                 className={clsx('shrink-0', live ? 'text-emerald-400' : 'text-rose-400')}
               />
               {live ? 'Audit-logged · evidence-ready' : 'API offline'}
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 text-caption text-slate-400">
               <Cpu size={13} className={clsx('shrink-0', live ? 'text-emerald-400' : 'text-rose-400')} />
               <span className="truncate font-mono">
                 {whoami.data?.displayName ? `signed in as ${whoami.data.displayName}` : '…'}
@@ -202,7 +202,7 @@ export function LeftNav() {
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={clsx(
-            'flex w-full items-center rounded-md py-1.5 text-[11px] text-slate-400 transition-colors hover:bg-white/5 hover:text-white',
+            'flex w-full items-center rounded-md py-1.5 text-caption text-slate-400 transition-colors hover:bg-white/5 hover:text-white',
             collapsed ? 'justify-center px-2' : 'gap-2 px-2',
           )}
           data-testid="sidebar-collapse-toggle"

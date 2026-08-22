@@ -30,7 +30,7 @@ export function StageCard({
       )}
     >
       <header className="flex items-start justify-between gap-2">
-        <span className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+        <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Stage {String(index).padStart(2, '0')}
         </span>
         <PhaseChip phase={phase} active={active} />

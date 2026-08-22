@@ -47,7 +47,7 @@ export function PipelineHero() {
       className="rounded-lg border border-border-subtle bg-canvas/40 p-6 lg:p-8"
     >
       <header className="mb-6 max-w-3xl">
-        <p className="font-mono text-caption uppercase tracking-wider text-accent">
+        <p className="text-caption font-medium uppercase tracking-wider text-accent">
           The pipeline
         </p>
         <h2 id="pipeline-heading" className="mt-2 text-h-lg font-semibold text-ink-primary">

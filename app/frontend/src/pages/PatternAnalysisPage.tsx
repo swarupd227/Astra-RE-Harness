@@ -305,7 +305,7 @@ export function PatternAnalysisPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
-            <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
               Pattern Analysis
             </p>
             <h1 className="mt-1 text-display font-semibold text-ink-primary">{c.name}</h1>
@@ -404,19 +404,19 @@ export function PatternAnalysisPage() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardBody>
-                <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Routines analysed</p>
+                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Routines analysed</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{totalRoutines}</p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Core patterns (2+ routines)</p>
+                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Core patterns (2+ routines)</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{coreClusters}</p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Singletons (long tail)</p>
+                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Singletons (long tail)</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{singletons}</p>
               </CardBody>
             </Card>

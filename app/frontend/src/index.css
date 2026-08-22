@@ -67,7 +67,7 @@
   }
 
   .pill {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-micro font-semibold;
   }
 
   .btn {
@@ -87,8 +87,11 @@
     @apply btn bg-rose text-white hover:bg-rose/90;
   }
 
+  /* Section label. Was 11px uppercase; uppercase micro-type is the visual
+     grammar of a console, and it is the treatment a reader meets most
+     often in this app. Sentence case at a readable size instead. */
   .label {
-    @apply text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary;
+    @apply text-caption font-semibold tracking-wide text-ink-tertiary;
   }
 }
 

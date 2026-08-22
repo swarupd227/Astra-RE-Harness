@@ -83,7 +83,7 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
         <div className="px-6 py-4 space-y-6">
           {SECTIONS.map((section) => (
             <section key={section.title}>
-              <h3 className="mb-2 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <h3 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 {section.title}
               </h3>
               <ul className="divide-y divide-border-subtle">

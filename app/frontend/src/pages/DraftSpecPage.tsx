@@ -105,7 +105,7 @@ export function DraftSpecPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 Draft spec
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>

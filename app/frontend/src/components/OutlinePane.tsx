@@ -42,7 +42,7 @@ export function OutlinePane({
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-r border-border-subtle bg-raised p-4">
       <header>
-        <p className="font-mono text-caption uppercase tracking-wider text-ink-tertiary">Outline</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Outline</p>
         <h2 className="mt-1 text-h-md font-semibold text-ink-primary">{processed} / {total} claims processed</h2>
         <ProgressBar processed={processed} total={total} />
         <CountStrip counts={counts} />
@@ -51,7 +51,7 @@ export function OutlinePane({
       <nav aria-label="Spec outline" className="space-y-3">
         {items.map((item) => (
           <section key={item.section}>
-            <h3 className="mb-1 font-mono text-caption uppercase tracking-wider text-ink-tertiary">
+            <h3 className="mb-1 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
               {item.label}
               <span className="ml-1 text-ink-tertiary/70">({item.claims.length})</span>
             </h3>

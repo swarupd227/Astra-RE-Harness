@@ -93,7 +93,7 @@ function NodeView({
           <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-accent motion-safe:animate-pulse" aria-hidden="true" />
         )}
         {!node.loading && (node.todoCount ?? 0) > 0 && (
-          <span className="ml-auto rounded-sm bg-[#F2E5C2] px-1.5 py-0.5 font-mono text-[10px] uppercase text-status-scaffolded">
+          <span className="ml-auto rounded-sm bg-[#F2E5C2] px-1.5 py-0.5 font-mono text-micro uppercase text-status-scaffolded">
             TODO {node.todoCount}
           </span>
         )}
