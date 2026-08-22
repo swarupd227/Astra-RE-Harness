@@ -42,10 +42,16 @@ public sealed class DocExportService
         "data-dictionary", "glossary", "interface", "business-rule", "diagram",
     ];
 
-    public DocExportService(AppDbContext db, ILogger<DocExportService> logger)
+    private readonly RequirementsCoverageService _coverage;
+
+    public DocExportService(
+        AppDbContext db,
+        ILogger<DocExportService> logger,
+        RequirementsCoverageService coverage)
     {
         _db = db;
         _logger = logger;
+        _coverage = coverage;
     }
 
     public sealed record ExportResult(string FileName, string ContentType, byte[] Bytes);
@@ -62,7 +68,16 @@ public sealed class DocExportService
             .Include(s => s.Subroutine)
             .ToListAsync(ct);
 
-        return format.ToLowerInvariant() switch
+        var fmt = format.ToLowerInvariant();
+
+        // The requirements pack closes with its own completeness check, so
+        // the reader learns what is missing from the same document rather
+        // than having to go looking for a separate report.
+        var coverage = fmt is "requirements-docx" or "requirements-pdf"
+            ? await _coverage.BuildAsync(corpusId, ct)
+            : null;
+
+        return fmt switch
         {
             "mkdocs" => BuildMkDocsZip(corpus, sections),
             "pdf" => await RunPandocAsync(
@@ -83,7 +98,7 @@ public sealed class DocExportService
                 ct,
                 referenceDocPath: DocxReferencePath),
             "requirements-docx" => await RunPandocAsync(
-                CombineRequirementsMarkdown(corpus, sections),
+                CombineRequirementsMarkdown(corpus, sections, coverage),
                 outputExt: "docx",
                 pandocArgs: "--toc --toc-depth=2 --number-sections",
                 cssContent: null,
@@ -92,7 +107,7 @@ public sealed class DocExportService
                 ct,
                 referenceDocPath: DocxReferencePath),
             "requirements-pdf" => await RunPandocAsync(
-                CombineRequirementsMarkdown(corpus, sections),
+                CombineRequirementsMarkdown(corpus, sections, coverage),
                 outputExt: "pdf",
                 pandocArgs: "--pdf-engine=weasyprint --toc --toc-depth=2 --number-sections",
                 cssContent: PdfStylesheet,
@@ -523,7 +538,66 @@ markdown_extensions:
             "The operational envelope the system exhibits today — performance, data integrity, concurrency, security, and error handling. Each entry names what a replacement inherits if the behaviour is carried over unchanged."),
     ];
 
-    private static string CombineRequirementsMarkdown(Corpus corpus, IReadOnlyList<DocSection> sections)
+    /// <summary>
+    /// Renders the completeness check as the pack's closing chapter. A
+    /// document that asserts its own gaps is far safer to hand to a
+    /// stakeholder than one that reads as complete because omissions are
+    /// invisible.
+    /// </summary>
+    private static void AppendCoverageChapter(
+        StringBuilder sb, RequirementsCoverageService.CoverageReport cov)
+    {
+        sb.AppendLine("# Completeness Check");
+        sb.AppendLine();
+        sb.AppendLine(
+            "This chapter is generated, not asserted: it compares the requirements above against " +
+            "every business rule and capability extracted from the source, and reports what is not " +
+            "represented. Read it before signing off.");
+        sb.AppendLine();
+        sb.AppendLine("| Check | Covered | Total | |");
+        sb.AppendLine("|---|---:|---:|---|");
+        sb.AppendLine($"| Business rules behind a requirement | {cov.BusinessRules.Covered} | {cov.BusinessRules.Total} | {cov.BusinessRules.Percent}% |");
+        sb.AppendLine($"| Capabilities with a requirement | {cov.Capabilities.Covered} | {cov.Capabilities.Total} | {cov.Capabilities.Percent}% |");
+        sb.AppendLine();
+        sb.AppendLine($"The pack contains **{cov.RequirementCount}** functional requirements and **{cov.NfrCount}** non-functional requirements.");
+        sb.AppendLine();
+
+        if (cov.Complete)
+        {
+            sb.AppendLine("No gaps detected: every extracted business rule and capability is represented, " +
+                          "and every requirement carries traceability and acceptance criteria.");
+            sb.AppendLine();
+            return;
+        }
+
+        if (cov.BusinessRules.Uncovered.Count > 0)
+        {
+            sb.AppendLine("## Business rules not represented by any requirement");
+            sb.AppendLine();
+            foreach (var u in cov.BusinessRules.Uncovered) sb.AppendLine($"- {u.Text}");
+            sb.AppendLine();
+        }
+        if (cov.Capabilities.Uncovered.Count > 0)
+        {
+            sb.AppendLine("## Capabilities with no requirement");
+            sb.AppendLine();
+            foreach (var u in cov.Capabilities.Uncovered) sb.AppendLine($"- {u.Text}");
+            sb.AppendLine();
+        }
+        if (cov.RequirementGaps.Count > 0)
+        {
+            sb.AppendLine("## Requirements missing traceability or acceptance criteria");
+            sb.AppendLine();
+            foreach (var g in cov.RequirementGaps)
+                sb.AppendLine($"- {g.Requirement} — missing {string.Join(", ", g.Missing)}");
+            sb.AppendLine();
+        }
+    }
+
+    private static string CombineRequirementsMarkdown(
+        Corpus corpus,
+        IReadOnlyList<DocSection> sections,
+        RequirementsCoverageService.CoverageReport? coverage = null)
     {
         var sb = new StringBuilder();
 
@@ -577,6 +651,10 @@ markdown_extensions:
             sb.AppendLine(
                 "This project has no requirements sections yet. Generate them with the " +
                 "`capability-map`, `process-flow`, `functional-requirement` and `nfr` stages.");
+        }
+        else if (coverage is not null)
+        {
+            AppendCoverageChapter(sb, coverage);
         }
 
         return sb.ToString();

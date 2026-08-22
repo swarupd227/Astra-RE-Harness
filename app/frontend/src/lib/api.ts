@@ -386,6 +386,25 @@ export type ModuleGraph = {
   };
 };
 
+// Phase C — requirements-pack completeness report.
+export type RequirementsCoverageSection = {
+  total: number;
+  covered: number;
+  percent: number;
+  uncovered: { text: string; covered: boolean; coveredBy: string | null }[];
+};
+
+export type RequirementsCoverage = {
+  corpusId: string;
+  corpusName: string;
+  requirementCount: number;
+  nfrCount: number;
+  businessRules: RequirementsCoverageSection;
+  capabilities: RequirementsCoverageSection;
+  requirementGaps: { requirement: string; missing: string[] }[];
+  complete: boolean;
+};
+
 export type DependencyGraphResponse = {
   corpusId: string;
   sourceVersionId: string;
@@ -1329,6 +1348,18 @@ export const api = {
     ),
   rejectDocSection: (sectionId: string) =>
     apiFetch<void>(`/api/v1/docs/sections/${sectionId}`, { method: 'DELETE' }),
+
+  // Phase C — sign a whole section kind at once (a requirements pack is
+  // reviewed as one document, not 40 independent cards).
+  acceptDocSectionKind: (corpusId: string, kind: string) =>
+    apiFetch<{ corpusId: string; kind: string; signed: number }>(
+      `/api/v1/corpora/${corpusId}/docs/sections/accept?kind=${encodeURIComponent(kind)}`,
+      { method: 'POST' }
+    ),
+
+  // Phase C — requirements-pack completeness report.
+  getRequirementsCoverage: (corpusId: string) =>
+    apiFetch<RequirementsCoverage>(`/api/v1/corpora/${corpusId}/requirements/coverage`),
 
   generateDocs: (corpusId: string, opts?: { stages?: string[]; take?: number; force?: boolean }) => {
     const q = new URLSearchParams();

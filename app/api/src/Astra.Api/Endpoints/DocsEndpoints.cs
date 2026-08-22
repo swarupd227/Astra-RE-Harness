@@ -258,6 +258,70 @@ public static class DocsEndpoints
             return Results.Ok(new { id = section.Id, state = section.State, updatedAt = section.UpdatedAt });
         });
 
+        // POST /api/v1/corpora/{corpusId}/docs/sections/accept?kind=functional-requirement
+        //
+        // Sign every DRAFT/IN_REVIEW section of one kind in a single action.
+        // A requirements pack is 40+ sections reviewed as one document; making
+        // the reviewer click 40 times invites rubber-stamping, which defeats
+        // the point of the sign-off. Signing stays deliberate — one kind at a
+        // time, admin persona, and every section is still audited by id.
+        app.MapPost("/api/v1/corpora/{corpusId:guid}/docs/sections/accept", async (
+            Guid corpusId,
+            string? kind,
+            AppDbContext db,
+            DevPersonaContext actor,
+            IAuditLogger audit,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            if (string.IsNullOrWhiteSpace(kind))
+                return Results.BadRequest(new
+                {
+                    error = new { code = "docs.accept.kind_required", message = "Specify ?kind= to bulk-sign." },
+                });
+
+            var pending = await db.DocSections
+                .Where(s => s.CorpusId == corpusId
+                         && s.SectionKind == kind
+                         && (s.State == "DRAFT" || s.State == "IN_REVIEW"))
+                .ToListAsync(ct);
+            if (pending.Count == 0)
+                return Results.Ok(new { corpusId, kind, signed = 0, message = "Nothing pending for this kind." });
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var s in pending)
+            {
+                s.State = "SIGNED";
+                s.UpdatedAt = now;
+            }
+            await db.SaveChangesAsync(ct);
+
+            await audit.LogAsync(
+                "doc_section.bulk_accepted", "corpus", corpusId, actor,
+                payload: new { kind, signed = pending.Count, sectionIds = pending.Select(s => s.Id) },
+                ct: ct);
+
+            return Results.Ok(new { corpusId, kind, signed = pending.Count });
+        });
+
+        // GET /api/v1/corpora/{corpusId}/requirements/coverage
+        //
+        // Completeness check over the generated requirements pack: which
+        // extracted business rules and capabilities are not represented by
+        // any requirement, and which requirements lack traceability or
+        // acceptance criteria. Open to every persona — a reviewer needs to
+        // see gaps before signing, and the report changes nothing.
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/requirements/coverage", async (
+            Guid corpusId,
+            Astra.Api.Docs.RequirementsCoverageService coverage,
+            CancellationToken ct) =>
+        {
+            var report = await coverage.BuildAsync(corpusId, ct);
+            return report is null
+                ? Results.NotFound(new { error = new { code = "docs.corpus.not_found" } })
+                : Results.Ok(report);
+        });
+
         // DELETE /api/v1/docs/sections/{id}  — reject: soft-delete → REJECTED (Admin only)
         // Returns 204 on success and on idempotent re-reject.
         app.MapDelete("/api/v1/docs/sections/{id:guid}", async (

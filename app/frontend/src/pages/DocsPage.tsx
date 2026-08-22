@@ -89,6 +89,16 @@ export function DocsPage() {
   const [runError, setRunError] = useState<string | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  // Phase C — sign every pending section of the kind on screen.
+  const signKindMutation = useMutation({
+    mutationFn: (kind: string) => api.acceptDocSectionKind(id, kind),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['doc-sections', id] });
+      qc.invalidateQueries({ queryKey: ['docs-summary', id] });
+      qc.invalidateQueries({ queryKey: ['requirements-coverage', id] });
+    },
+  });
+
   const handleExport = async (format: string) => {
     if (exportLoading) return;
     setExportLoading(format);
@@ -119,6 +129,14 @@ export function DocsPage() {
   const summary = useQuery({
     queryKey: ['docs-summary', id],
     queryFn: () => api.getDocSummary(id),
+    enabled: !!id,
+  });
+
+  // Phase C — completeness of the requirements pack. Cheap (one query over
+  // stored sections), so it refreshes whenever the section list does.
+  const coverage = useQuery({
+    queryKey: ['requirements-coverage', id],
+    queryFn: () => api.getRequirementsCoverage(id),
     enabled: !!id,
   });
 
@@ -223,6 +241,15 @@ export function DocsPage() {
     acc[r.state] = (acc[r.state] ?? 0) + r.count;
     return acc;
   }, {});
+
+  // Unsigned sections of the kind currently on screen — drives "Sign all N".
+  const pendingInKind = (summary.data?.breakdown ?? [])
+    .filter(r => r.kind === selectedKind && (r.state === 'DRAFT' || r.state === 'IN_REVIEW'))
+    .reduce((n, r) => n + r.count, 0);
+
+  const cov = coverage.data;
+  const isRequirementKind = ['capability-map', 'process-flow', 'functional-requirement', 'nfr']
+    .includes(selectedKind);
 
   if (corpus.isPending || summary.isPending) {
     return (
@@ -330,6 +357,22 @@ export function DocsPage() {
                   <Download className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" />
                   <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-tertiary" />
                 </div>
+
+                {/* Sign every pending section of the kind on screen. */}
+                {pendingInKind > 0 && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => signKindMutation.mutate(selectedKind)}
+                    disabled={signKindMutation.isPending}
+                    data-testid="sign-kind"
+                    title={`Mark all ${pendingInKind} unsigned ${KIND_LABELS[selectedKind] ?? selectedKind} section(s) as signed`}
+                  >
+                    {signKindMutation.isPending
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <ShieldCheck className="h-4 w-4" />}
+                    Sign all {pendingInKind}
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -338,6 +381,76 @@ export function DocsPage() {
         {/* Inline errors */}
         {exportError && (
           <p className="mt-1 text-xs text-rose-600">{exportError}</p>
+        )}
+
+        {/* Phase C — requirements completeness. Shown while reviewing the
+            pack, because "is anything missing?" is the question that has to
+            be answered before signing, and a complete-looking document
+            cannot answer it on its own. */}
+        {isRequirementKind && cov && cov.requirementCount > 0 && (
+          <div
+            className="mt-3 rounded border border-border-subtle bg-raised p-3"
+            data-testid="requirements-coverage"
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="font-medium text-ink-primary">Completeness</span>
+              <span className={cov.businessRules.percent === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+                Business rules {cov.businessRules.covered}/{cov.businessRules.total} ({cov.businessRules.percent}%)
+              </span>
+              <span className={cov.capabilities.percent === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+                Capabilities {cov.capabilities.covered}/{cov.capabilities.total} ({cov.capabilities.percent}%)
+              </span>
+              <span className="font-mono text-caption text-ink-tertiary">
+                {cov.requirementCount} requirements · {cov.nfrCount} NFRs
+              </span>
+              {cov.complete && (
+                <span className="inline-flex items-center gap-1 text-emerald-600">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> no gaps
+                </span>
+              )}
+            </div>
+
+            {cov.businessRules.uncovered.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                  {cov.businessRules.uncovered.length} business rule(s) not represented by any requirement
+                </summary>
+                <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
+                  {cov.businessRules.uncovered.map((u, i) => (
+                    <li key={i} className="list-disc">{u.text}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {cov.capabilities.uncovered.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                  {cov.capabilities.uncovered.length} capability(ies) with no requirement
+                </summary>
+                <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
+                  {cov.capabilities.uncovered.map((u, i) => (
+                    <li key={i} className="list-disc">{u.text}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {cov.requirementGaps.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                  {cov.requirementGaps.length} requirement(s) missing traceability or acceptance criteria
+                </summary>
+                <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
+                  {cov.requirementGaps.map((g, i) => (
+                    <li key={i} className="list-disc">
+                      {g.requirement} <span className="text-ink-tertiary">— missing {g.missing.join(', ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
         )}
         {generateMutation.error && (
           <p className="mt-1 text-xs text-rose-600">
