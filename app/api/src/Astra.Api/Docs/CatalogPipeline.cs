@@ -162,11 +162,76 @@ public sealed class CatalogPipeline
                 includeRules: false, includeInterfaces: false, includeSideEffects: false),
             runId, corpusId, sourceVersionId, force, ct);
 
-    public Task<StageOutcome> RunFunctionalRequirementsAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
-        RunCatalogAsync("functional-requirement", _functionalPrompt, db =>
+    public async Task<StageOutcome> RunFunctionalRequirementsAsync(
+        Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct)
+    {
+        var first = await RunCatalogAsync("functional-requirement", _functionalPrompt, db =>
             BuildRequirementsInputAsync(db, corpusId, sourceVersionId, ct,
-                includeRules: true, includeInterfaces: false, includeSideEffects: false),
+                includeRules: true, includeInterfaces: false, includeSideEffects: false,
+                includeCapabilities: true),
             runId, corpusId, sourceVersionId, force, ct);
+
+        // A failed first pass leaves nothing coherent to top up — filling
+        // "gaps" against an empty set would just regenerate the whole pack
+        // through the narrow gap-fill prompt.
+        if (first.Failed > 0) return first;
+
+        // Otherwise always top up, including when the first pass was skipped
+        // because requirements already existed: re-running the stage should
+        // converge on full coverage rather than doing nothing. Costs one
+        // coverage computation and no model call when there are no gaps.
+        var fill = await FillRequirementGapsAsync(runId, corpusId, sourceVersionId, ct);
+        return new StageOutcome(first.Entries + fill.Entries, first.Failed + fill.Failed);
+    }
+
+    /// <summary>
+    /// Second pass over the requirements, driven by the completeness check
+    /// rather than by hope: it asks for requirements covering exactly the
+    /// business rules and capabilities that no requirement currently
+    /// represents. One extra call, and it converges because the gap list is
+    /// computed from what was actually stored, not guessed at.
+    /// </summary>
+    private async Task<StageOutcome> FillRequirementGapsAsync(
+        Guid runId, Guid corpusId, Guid sourceVersionId, CancellationToken ct)
+    {
+        List<string> uncoveredRules;
+        List<string> uncoveredCapabilities;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var coverageSvc = scope.ServiceProvider.GetRequiredService<RequirementsCoverageService>();
+            var report = await coverageSvc.BuildAsync(corpusId, ct);
+            if (report is null) return new StageOutcome(0, 0);
+            uncoveredRules = report.BusinessRules.Uncovered.Select(u => u.Text).ToList();
+            uncoveredCapabilities = report.Capabilities.Uncovered.Select(u => u.Text).ToList();
+        }
+        if (uncoveredRules.Count == 0 && uncoveredCapabilities.Count == 0)
+            return new StageOutcome(0, 0);
+
+        _logger.LogInformation(
+            "Requirements gap-fill for corpus {Corpus}: {Rules} rule(s) and {Caps} capability(ies) uncovered",
+            corpusId, uncoveredRules.Count, uncoveredCapabilities.Count);
+
+        return await RunCatalogAsync("functional-requirement", _functionalPrompt, async db =>
+        {
+            var modules = await LoadModuleSummariesAsync(db, corpusId, sourceVersionId, ct);
+            var routines = await LoadRoutineSummariesAsync(db, corpusId, sourceVersionId, ct);
+            var capabilities = await LoadCatalogEntriesAsync(db, corpusId, sourceVersionId, "capability-map", ct);
+            return JsonSerializer.Serialize(new
+            {
+                task =
+                    "GAP FILL. A first pass has already written requirements for this system. " +
+                    "Write requirements ONLY for the uncovered items listed below: every uncovered " +
+                    "business rule and every uncovered capability must end up behind at least one " +
+                    "requirement. Do not restate requirements for anything else, and keep the same " +
+                    "as-is stance — describe what the system does today, not what it should do.",
+                uncovered_business_rules = uncoveredRules,
+                uncovered_capabilities = uncoveredCapabilities,
+                capability_definitions = capabilities,
+                module_summaries = modules,
+                routine_summaries = routines.Select(r => new { r.name, summary = Truncate(r.summary, 200) }),
+            });
+        }, runId, corpusId, sourceVersionId, force: false, ct, append: true);
+    }
 
     public Task<StageOutcome> RunProcessFlowsAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct) =>
         RunCatalogAsync("process-flow", _processFlowPrompt, db =>
@@ -187,7 +252,8 @@ public sealed class CatalogPipeline
     /// </summary>
     private async Task<string> BuildRequirementsInputAsync(
         AppDbContext db, Guid corpusId, Guid sourceVersionId, CancellationToken ct,
-        bool includeRules, bool includeInterfaces, bool includeSideEffects)
+        bool includeRules, bool includeInterfaces, bool includeSideEffects,
+        bool includeCapabilities = false)
     {
         var corpusName = await GetCorpusNameAsync(db, corpusId, ct);
         var modules = await LoadModuleSummariesAsync(db, corpusId, sourceVersionId, ct);
@@ -199,11 +265,22 @@ public sealed class CatalogPipeline
         var interfaces = includeInterfaces
             ? await LoadCatalogEntriesAsync(db, corpusId, sourceVersionId, "interface", ct)
             : new List<string>();
+        // The requirements stage previously could not see the capability map,
+        // so it had no way to know which capabilities it was obliged to
+        // cover — the reason a whole capability came out with no requirement.
+        var capabilities = includeCapabilities
+            ? await LoadCatalogEntriesAsync(db, corpusId, sourceVersionId, "capability-map", ct)
+            : new List<string>();
 
         object BuildPayload(int summaryChars, bool withSideEffects) => new
         {
             corpus_name = corpusName,
             system_overview = Truncate(overview ?? "", 6000),
+            coverage_obligation = capabilities.Count > 0
+                ? "Every capability in capability_definitions and every rule in business_rules " +
+                  "must be represented by at least one requirement below."
+                : null,
+            capability_definitions = capabilities,
             module_summaries = modules,
             business_rules = rules,
             interfaces,
@@ -243,7 +320,8 @@ public sealed class CatalogPipeline
     private async Task<StageOutcome> RunCatalogAsync(
         string sectionKind, string systemPrompt,
         Func<AppDbContext, Task<string>> buildUserMessage,
-        Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct)
+        Guid runId, Guid corpusId, Guid sourceVersionId, bool force, CancellationToken ct,
+        bool append = false)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -255,7 +333,16 @@ public sealed class CatalogPipeline
                      && s.SourceVersionId == sourceVersionId
                      && s.SectionKind == sectionKind)
             .ToListAsync(ct);
-        if (existing.Count > 0)
+
+        // Append mode (the requirements gap-fill) adds to what is already
+        // there and continues the numbering, so FR-045 follows FR-044
+        // instead of a second FR-001 appearing in the document.
+        var ordinalOffset = 0;
+        if (append)
+        {
+            ordinalOffset = existing.Count;
+        }
+        else if (existing.Count > 0)
         {
             if (!force) return new StageOutcome(0, 0);
             db.DocSections.RemoveRange(existing);
@@ -303,7 +390,7 @@ public sealed class CatalogPipeline
                     Scope = "corpus",
                     State = "DRAFT",
                     PayloadJson = JsonDocument.Parse(entryJson),
-                    RenderedMarkdown = RenderCatalogEntryMarkdown(sectionKind, entry, entryIndex + 1),
+                    RenderedMarkdown = RenderCatalogEntryMarkdown(sectionKind, entry, ordinalOffset + entryIndex + 1),
                     GenerationRunId = runId,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
