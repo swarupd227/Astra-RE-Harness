@@ -87,8 +87,14 @@ public sealed class RequirementsCoverageService
             .Select(x => (x.Statement, Tokens: Tokenise(x.Name)))
             .ToList();
 
+        // Rule text is long, so a high bar is safe. Capability names are two
+        // or three words, where a single differing word ("Fee Calculation and
+        // Agreement" vs "Fee Management") drops the ratio below any strict
+        // threshold and manufactures a gap that isn't there. Short names get
+        // the lower bar; the cost of a false match is a missed gap, the cost
+        // of a false gap is a report nobody believes.
         var ruleCoverage = Cover(rules, claimedRules, threshold: 0.55);
-        var capabilityCoverage = Cover(capabilities, claimedCapabilities, threshold: 0.6);
+        var capabilityCoverage = Cover(capabilities, claimedCapabilities, threshold: 0.5);
 
         // A requirement with no traceability cannot be audited back to the
         // source, which is the property that makes this pack defensible.
@@ -120,20 +126,46 @@ public sealed class RequirementsCoverageService
         IReadOnlyList<(string Statement, HashSet<string> Tokens)> claims,
         double threshold)
     {
+        // Weight each word by how rare it is across both sides. Structural
+        // nouns that recur everywhere ("management", "document", "proposal")
+        // then carry almost no signal, while the distinguishing domain terms
+        // ("restriction", "household", "fee") carry most of it. Without this,
+        // two unrelated entries match on the word "management" alone — which
+        // marks a real gap as covered, the one error this report must not make.
+        var targetTokens = targets.Select(Tokenise).ToList();
+        var df = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var set in targetTokens.Concat(claims.Select(c => c.Tokens)))
+            foreach (var w in set)
+                df[w] = df.GetValueOrDefault(w) + 1;
+
+        double Weight(string w) => 1.0 / (1.0 + Math.Log(1 + df.GetValueOrDefault(w)));
+        double Mass(IEnumerable<string> ws) => ws.Sum(Weight);
+
+        double Score(HashSet<string> a, HashSet<string> b)
+        {
+            if (a.Count == 0 || b.Count == 0) return 0;
+            var shared = Mass(a.Where(b.Contains));
+            var denom = Math.Min(Mass(a), Mass(b));
+            return denom <= 0 ? 0 : shared / denom;
+        }
+
         var uncovered = new List<CoverageItem>();
         var covered = 0;
-        foreach (var target in targets)
+        for (var i = 0; i < targets.Count; i++)
         {
-            var tokens = Tokenise(target);
-            var hit = claims.FirstOrDefault(c => Similar(tokens, c.Tokens, threshold));
-            if (hit.Tokens is not null)
-            {
+            var tokens = targetTokens[i];
+            // Best match, not first match: at these thresholds a weak
+            // coincidental overlap can otherwise win over the real counterpart
+            // and get reported as the reason something is covered.
+            var best = claims
+                .Select(c => (c.Statement, Score: Score(tokens, c.Tokens)))
+                .OrderByDescending(x => x.Score)
+                .FirstOrDefault();
+
+            if (best.Score >= threshold)
                 covered++;
-            }
             else
-            {
-                uncovered.Add(new CoverageItem(Truncate(target, 200), false, null));
-            }
+                uncovered.Add(new CoverageItem(Truncate(targets[i], 200), false, null));
         }
         return new CoverageSection(targets.Count, covered, uncovered);
     }
@@ -151,21 +183,25 @@ public sealed class RequirementsCoverageService
     {
         if (string.IsNullOrWhiteSpace(s)) return new HashSet<string>(StringComparer.Ordinal);
         return Regex.Matches(s.ToLowerInvariant(), "[a-z0-9]{3,}")
-            .Select(m => m.Value)
+            .Select(m => Singularise(m.Value))
             .Where(t => !StopWords.Contains(t))
             .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
-    /// Containment rather than Jaccard: a requirement legitimately cites a
-    /// shortened form of a rule, so the smaller set being largely inside
-    /// the larger one is the signal, not equal size.
+    /// Crude plural folding, enough that "Account Restriction Management"
+    /// and "Account Restrictions" are recognised as the same capability.
+    /// Deliberately not a real stemmer: over-stemming merges unrelated
+    /// domain terms, and a false match hides a gap.
     /// </summary>
-    private static bool Similar(HashSet<string> a, HashSet<string> b, double threshold)
+    private static string Singularise(string token)
     {
-        if (a.Count == 0 || b.Count == 0) return false;
-        var overlap = a.Count(b.Contains);
-        return (double)overlap / Math.Min(a.Count, b.Count) >= threshold;
+        if (token.Length <= 4) return token;
+        if (token.EndsWith("ies", StringComparison.Ordinal)) return token[..^3] + "y";
+        if (token.EndsWith("ses", StringComparison.Ordinal)) return token[..^2];
+        if (token.EndsWith("s", StringComparison.Ordinal) && !token.EndsWith("ss", StringComparison.Ordinal))
+            return token[..^1];
+        return token;
     }
 
     private static string ReadString(JsonElement el, string prop) =>
