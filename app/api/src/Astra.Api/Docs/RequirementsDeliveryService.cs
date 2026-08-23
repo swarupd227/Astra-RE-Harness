@@ -80,7 +80,7 @@ public sealed class RequirementsDeliveryService
         var versionId = corpus.LatestVersionId;
         var subs = await _db.Subroutines.AsNoTracking()
             .Where(s => s.SourceFile!.SourceVersionId == versionId)
-            .Select(s => new { s.Id, s.Name })
+            .Select(s => new { s.Id, s.Name, Path = s.SourceFile!.RelativePath })
             .ToListAsync(ct);
 
         var subIds = subs.Select(s => s.Id).ToList();
@@ -136,6 +136,16 @@ public sealed class RequirementsDeliveryService
         var byBare = subs.GroupBy(s => Bare(s.Name), StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() == 1)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        // Parsers differ on whether a routine name carries its type: the C#
+        // parser stores "ProductDao.findProgramById", the Java one stores
+        // "save" three separate times. A requirement cites the qualified
+        // form either way, so the qualifier is matched against the file it
+        // came from — that is what tells AccountStrategyService.save apart
+        // from FeeService.save without guessing.
+        var byTypeAndName = subs
+            .GroupBy(s => $"{FileType(s.Path)}.{Bare(s.Name)}", StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         string StatusOf(Guid subId)
         {
@@ -162,8 +172,14 @@ public sealed class RequirementsDeliveryService
 
             foreach (var name in named)
             {
-                if (!byFull.TryGetValue(name, out var hit))
+                if (!byFull.TryGetValue(name, out var hit)
+                    && !byTypeAndName.TryGetValue(name, out hit)
+                    && !byFull.TryGetValue(Bare(name), out hit))
+                {
+                    // Last resort: a bare name is only safe when exactly one
+                    // routine in the project carries it.
                     byBare.TryGetValue(Bare(name), out hit);
+                }
                 if (hit is null)
                 {
                     // Requirements often cite a type or table alongside the
@@ -203,6 +219,17 @@ public sealed class RequirementsDeliveryService
 
         return new DeliveryReport(
             corpusId, corpus.Name, results.Count, counts, noTrace, unresolvedNames, results);
+    }
+
+    /// <summary>"a/b/AccountStrategyService.java" → "AccountStrategyService".</summary>
+    private static string FileType(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var file = path.Replace('\', '/');
+        var slash = file.LastIndexOf('/');
+        if (slash >= 0) file = file[(slash + 1)..];
+        var dot = file.IndexOf('.');
+        return dot > 0 ? file[..dot] : file;
     }
 
     private static string Bare(string name)
