@@ -25,9 +25,7 @@ export function SystemPage() {
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Status</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Hello-world of every layer. The page below is alive only if the React app, the .NET 8
-          API, Postgres, MinIO, and the parser sidecar are all reachable from inside the Docker
-          network.
+          Live status of every service this application depends on.
         </p>
       </header>
 
@@ -110,7 +108,7 @@ export function SystemPage() {
             <div className="p-6">
               <ErrorBlock
                 title="Readiness probe failed"
-                message="The /health/ready endpoint is not responding. Check that the API container is up and Postgres + MinIO have started."
+                message="The readiness check is not responding. The service may be starting up or unavailable."
                 onRetry={() => readiness.refetch()}
               />
             </div>

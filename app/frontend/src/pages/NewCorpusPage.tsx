@@ -122,10 +122,9 @@ export function NewCorpusPage() {
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Connect a new project</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
           Upload source files (or a <span className="font-mono">.zip</span> archive) or
-          point at a Git repository. The parser sidecar runs the appropriate
-          per-language parser against every file to extract the subroutine
-          inventory. Pick a source language to tighten the file filter, or leave
-          on <em>auto-detect</em> to accept any of the registered languages.
+          point at a Git repository. Every file is parsed to build an inventory of
+          its routines. Pick a source language to narrow the file filter, or
+          leave <em>auto-detect</em> on.
         </p>
       </header>
 

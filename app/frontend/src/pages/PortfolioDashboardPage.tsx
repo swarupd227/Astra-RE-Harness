@@ -222,7 +222,7 @@ function LlmCostCard({
           </div>
         </div>
         <p className="text-caption text-ink-tertiary">
-          Mock-provider runs report $0. Real-provider totals accumulate per LlmCall row.
+          Costs accumulate per model call. Runs against the mock provider report $0.
         </p>
       </CardBody>
     </Card>

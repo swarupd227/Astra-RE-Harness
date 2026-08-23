@@ -373,7 +373,7 @@ function buildNextSteps(stats?: SystemStats): { label: string; sub: string; href
   if (out.length === 0 && stats.corpora.total === 0) {
     out.push({
       label: 'Connect your first project',
-      sub: 'Upload Fortran or paste a Git URL — the parser sidecar runs fparser2',
+      sub: 'Upload source files or paste a Git URL — the language is detected automatically',
       href: '/projects/new',
       icon: Plus,
     });
