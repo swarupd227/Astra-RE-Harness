@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { AwaitingDataIllustration } from '@/illustrations/AwaitingData';
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import { formatState } from '@/lib/labels';
 
 export function MyReviewsPage() {
   const reviews = useQuery({ queryKey: ['my-reviews'], queryFn: myReviewsApi.list });
@@ -122,7 +123,7 @@ function ReviewCard({ item }: { item: MyReviewItem }) {
                 </p>
               </div>
             </div>
-            <Badge tone={isSigned ? 'signed' : 'review'}>{item.state}</Badge>
+            <Badge tone={isSigned ? 'signed' : 'review'}>{formatState(item.state)}</Badge>
           </header>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-caption text-ink-secondary">

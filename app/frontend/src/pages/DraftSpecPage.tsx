@@ -11,6 +11,7 @@ import { ProviderStrip } from '@/components/ProviderStrip';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 import { MonacoSource, type Citation } from '@/components/MonacoSource';
 import { StreamingSpecPanel, type DraftSpec } from '@/components/StreamingSpecPanel';
+import { formatState } from '@/lib/labels';
 
 export function DraftSpecPage() {
   const { id = '' } = useParams();
@@ -110,7 +111,7 @@ export function DraftSpecPage() {
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
             </div>
-            <Badge tone={isSigned ? 'signed' : isInReview ? 'review' : 'draft'}>{sp.state}</Badge>
+            <Badge tone={isSigned ? 'signed' : isInReview ? 'review' : 'draft'}>{formatState(sp.state)}</Badge>
           </div>
           <div className="flex items-center gap-2">
             {isDraft && isEngineer && (

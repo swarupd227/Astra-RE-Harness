@@ -10,6 +10,7 @@ import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { NoCorporaIllustration } from '@/illustrations/NoCorpora';
+import { formatState } from '@/lib/labels';
 
 export function CorporaPage() {
   const corpora = useQuery({ queryKey: ['corpora'], queryFn: api.listCorpora });
@@ -170,7 +171,7 @@ function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
                 </p>
               </div>
             </div>
-            <Badge tone={badgeToneForState(corpus.state)}>{corpus.state}</Badge>
+            <Badge tone={badgeToneForState(corpus.state)}>{formatState(corpus.state)}</Badge>
           </header>
           <dl className="mt-5 grid grid-cols-3 gap-4 text-body">
             <div>

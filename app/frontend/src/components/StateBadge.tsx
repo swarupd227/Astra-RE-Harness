@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { formatState } from '@/lib/labels';
 
 type State = 'PARSED' | 'DRAFT' | 'IN_REVIEW' | 'SIGNED' | 'SCAFFOLDED' | 'COMMITTED' | string;
 
@@ -12,7 +13,7 @@ export function StateBadge({ state, className }: { state: State; className?: str
   return (
     <span className={clsx('pill ring-1', c.bg, c.text, c.ring, className)}>
       <span className={clsx('h-1.5 w-1.5 rounded-full', c.dot)} />
-      {state}
+      {formatState(state)}
     </span>
   );
 }

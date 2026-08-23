@@ -31,6 +31,7 @@ import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { formatState } from '@/lib/labels';
 
 /**
  * Home page — replaces the Phase-A placeholder with persona-adaptive,
@@ -319,7 +320,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
                         </p>
                       </div>
                       <Badge tone={c.state === 'PARSED' ? 'signed' : c.state === 'FAILED' ? 'failed' : 'draft'}>
-                        {c.state}
+                        {formatState(c.state)}
                       </Badge>
                       <ChevronRight className="h-4 w-4 shrink-0 text-ink-tertiary opacity-0 transition-opacity duration-fast group-hover:opacity-100" />
                     </Link>
@@ -462,7 +463,7 @@ function ReviewRow({ r }: { r: MyReviewItem }) {
             {r.corpusName} · {r.relativePath} · ~{r.estimatedReviewMinutes} min
           </p>
         </div>
-        <Badge tone={r.state === 'SIGNED' ? 'signed' : r.state === 'IN_REVIEW' ? 'review' : 'draft'}>{r.state}</Badge>
+        <Badge tone={r.state === 'SIGNED' ? 'signed' : r.state === 'IN_REVIEW' ? 'review' : 'draft'}>{formatState(r.state)}</Badge>
         <ChevronRight className="h-4 w-4 shrink-0 text-ink-tertiary opacity-0 transition-opacity duration-fast group-hover:opacity-100" />
       </Link>
     </li>

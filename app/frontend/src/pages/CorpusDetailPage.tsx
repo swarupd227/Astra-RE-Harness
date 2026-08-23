@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { ReingestModal } from '@/components/ReingestModal';
+import { formatState } from '@/lib/labels';
 
 export function CorpusDetailPage() {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ export function CorpusDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{c.state}</Badge>
+          <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{formatState(c.state)}</Badge>
           <Button variant="secondary" onClick={() => navigate(`/corpora/${id}/docs`)} data-testid="open-docs">
             <BookOpen className="h-4 w-4" aria-hidden="true" />
             Docs
@@ -192,7 +193,7 @@ function FileBlock({ file }: { file: NonNullable<ReturnType<typeof useFiles>>[nu
                   </span>
                   <span className="font-mono font-semibold text-ink-primary">{sub.name}</span>
                   <Badge tone={subBadgeTone(sub.state)} className="text-[10px]">
-                    {sub.state}
+                    {formatState(sub.state)}
                   </Badge>
                   {sub.carriedForward && (
                     <span

@@ -8,6 +8,7 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { Button } from '@/components/Button';
 import { MonacoSource } from '@/components/MonacoSource';
+import { formatState } from '@/lib/labels';
 
 export function SubroutineDetailPage() {
   const { id = '' } = useParams();
@@ -67,7 +68,7 @@ export function SubroutineDetailPage() {
           <p className="mt-1 font-mono text-caption text-ink-tertiary">{s.signature}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge tone={badgeToneForState(s.state)}>{s.state}</Badge>
+          <Badge tone={badgeToneForState(s.state)}>{formatState(s.state)}</Badge>
           {(s.state === 'DRAFT' || s.state === 'IN_REVIEW' || s.state === 'SIGNED') && (
             <Link to={s.state === 'DRAFT' ? `/subroutines/${s.id}/spec` : `/subroutines/${s.id}/review`}>
               <Button variant="secondary" size="md">
