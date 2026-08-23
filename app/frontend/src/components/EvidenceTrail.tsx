@@ -70,7 +70,7 @@ export function EvidenceTrail({ specId }: { specId: string }) {
 
       <div className="space-y-2 p-5">
         <SourceBlock e={e} />
-        <Arrow label="parsed by fparser2 (gRPC sidecar)" />
+        <Arrow label="parsed to a syntax tree" />
         <AstBlock e={e} />
         <Arrow label="LLM call to provider" />
         <ProviderBlock e={e} />

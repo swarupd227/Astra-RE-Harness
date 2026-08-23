@@ -50,7 +50,7 @@ const tiles: Tile[] = [
     to: '/platform/languages',
     title: 'Languages',
     description:
-      'Supported legacy languages and their typed claim schemas. Fortran live; COBOL pilot; RPG and PL/1 on the roadmap.',
+      'Supported source languages and the typed claim schema each one uses.',
     icon: Languages,
     status: 'live',
   },
@@ -82,7 +82,7 @@ const tiles: Tile[] = [
     to: '/platform/golden-dataset',
     title: 'Golden Dataset',
     description:
-      'Calibration corpus of trap-laden Fortran + COBOL snippets paired with expected extract claims. Score regression on every prompt change.',
+      'Curated code samples paired with the claims each analysis should produce. Scores regressions on every prompt change.',
     icon: Gauge,
     status: 'live',
   },
