@@ -39,6 +39,29 @@ const KIND_LABELS: Record<string, string> = {
   'nfr':                   'Non-Functional',
 };
 
+const DELIVERY_ORDER = ['verified', 'built', 'signed', 'specified', 'parsed', 'failed', 'untraceable'];
+
+const DELIVERY_LABELS: Record<string, string> = {
+  verified: 'verified',
+  built: 'built',
+  signed: 'signed',
+  specified: 'specified',
+  parsed: 'not started',
+  failed: 'failing',
+  untraceable: 'no traceable routine',
+};
+
+function deliveryTone(status: string): string {
+  switch (status) {
+    case 'verified': return 'text-emerald-600';
+    case 'built':    return 'text-ace-600';
+    case 'signed':   return 'text-ace-700';
+    case 'failed':   return 'text-rose-600';
+    case 'untraceable': return 'text-amber-600';
+    default:         return 'text-ink-tertiary';
+  }
+}
+
 const REQUIREMENTS_STAGES = ['capability-map', 'process-flow', 'functional-requirement', 'nfr'];
 
 const STATE_LABELS: Record<string, string> = {
@@ -99,6 +122,19 @@ export function DocsPage() {
     },
   });
 
+  const handleBacklog = async () => {
+    try {
+      const { blob, filename } = await api.downloadRequirementsBacklog(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError((err as Error).message ?? 'Backlog export failed');
+    }
+  };
+
   const handleExport = async (format: string) => {
     if (exportLoading) return;
     setExportLoading(format);
@@ -137,6 +173,14 @@ export function DocsPage() {
   const coverage = useQuery({
     queryKey: ['requirements-coverage', id],
     queryFn: () => api.getRequirementsCoverage(id),
+    enabled: !!id,
+  });
+
+  // Delivery state of the pack — what has actually been built against
+  // each requirement. Same cost profile as coverage: a join, no model call.
+  const delivery = useQuery({
+    queryKey: ['requirements-delivery', id],
+    queryFn: () => api.getRequirementsDelivery(id),
     enabled: !!id,
   });
 
@@ -248,6 +292,7 @@ export function DocsPage() {
     .reduce((n, r) => n + r.count, 0);
 
   const cov = coverage.data;
+  const del = delivery.data;
   const isRequirementKind = ['capability-map', 'process-flow', 'functional-requirement', 'nfr']
     .includes(selectedKind);
 
@@ -450,6 +495,81 @@ export function DocsPage() {
                 </ul>
               </details>
             )}
+          </div>
+        )}
+
+        {/* Delivery register. The pack names the routines each requirement
+            derives from; the rest of the pipeline knows what happened to
+            those routines. Joining them is what lets this answer "is it
+            built yet?" rather than only "is it written down?". */}
+        {isRequirementKind && del && del.requirementCount > 0 && (
+          <div
+            className="mt-3 rounded border border-border-subtle bg-raised p-3"
+            data-testid="requirements-delivery"
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="font-medium text-ink-primary">Delivery</span>
+              {DELIVERY_ORDER.filter((k) => del.statusCounts[k]).map((k) => (
+                <span key={k} className={deliveryTone(k)}>
+                  {del.statusCounts[k]} {DELIVERY_LABELS[k] ?? k}
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={handleBacklog}
+                data-testid="download-backlog"
+                className="ml-auto inline-flex items-center gap-1.5 rounded border border-border-subtle px-2 py-1 text-caption text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary"
+              >
+                <Download className="h-3.5 w-3.5" /> Backlog (.csv)
+              </button>
+            </div>
+
+            {(del.requirementsWithoutTraceableRoutine > 0 || del.routineNamesUnresolved > 0) && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                {del.requirementsWithoutTraceableRoutine > 0 && (
+                  <>{del.requirementsWithoutTraceableRoutine} requirement(s) trace to no routine in this project. </>
+                )}
+                {del.routineNamesUnresolved > 0 && (
+                  <>{del.routineNamesUnresolved} cited name(s) did not match a routine — usually a type or table rather than a routine.</>
+                )}
+              </p>
+            )}
+
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-ink-secondary">
+                Show all {del.requirementCount} requirements
+              </summary>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-caption">
+                  <thead>
+                    <tr className="text-left text-ink-tertiary">
+                      <th className="py-1 pr-3 font-medium">Ref</th>
+                      <th className="py-1 pr-3 font-medium">Requirement</th>
+                      <th className="py-1 pr-3 font-medium">Status</th>
+                      <th className="py-1 pr-3 font-medium">Wave</th>
+                      <th className="py-1 font-medium">Routines</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {del.requirements.map((r) => (
+                      <tr key={r.reference} className="border-t border-border-subtle align-top">
+                        <td className="py-1 pr-3 font-mono text-ink-tertiary">{r.reference}</td>
+                        <td className="py-1 pr-3 text-ink-primary">{r.statement}</td>
+                        <td className={`py-1 pr-3 whitespace-nowrap ${deliveryTone(r.status)}`}>
+                          {DELIVERY_LABELS[r.status] ?? r.status}
+                        </td>
+                        <td className="py-1 pr-3 font-mono text-ink-tertiary">
+                          {r.waves.length ? r.waves.join(', ') : '—'}
+                        </td>
+                        <td className="py-1 font-mono text-ink-tertiary">
+                          {r.routinesResolved}/{r.routinesNamed}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </div>
         )}
         {generateMutation.error && (

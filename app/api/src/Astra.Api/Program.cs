@@ -369,6 +369,7 @@ builder.Services.AddScoped<Astra.Api.Export.ProjectExportService>();
 
 // ─── Phase C — requirements-pack completeness report ──────────────────
 builder.Services.AddScoped<Astra.Api.Docs.RequirementsCoverageService>();
+builder.Services.AddScoped<Astra.Api.Docs.RequirementsDeliveryService>();
 
 // ─── OpenTelemetry ────────────────────────────────────────────────────
 var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "astra-api";

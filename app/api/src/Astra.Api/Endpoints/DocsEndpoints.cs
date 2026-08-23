@@ -322,6 +322,65 @@ public static class DocsEndpoints
                 : Results.Ok(report);
         });
 
+        // GET /api/v1/corpora/{corpusId}/requirements/delivery
+        //
+        // Delivery state of the requirements pack: for each requirement,
+        // which routines it derives from, how far each has progressed
+        // (specified → signed → built → verified) and which migration wave
+        // carries it. Pure join over data the pipeline already stored — no
+        // model call, so it is cheap enough to poll.
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/requirements/delivery", async (
+            Guid corpusId,
+            Astra.Api.Docs.RequirementsDeliveryService delivery,
+            CancellationToken ct) =>
+        {
+            var report = await delivery.BuildAsync(corpusId, ct);
+            return report is null
+                ? Results.NotFound(new { error = new { code = "docs.corpus.not_found" } })
+                : Results.Ok(report);
+        });
+
+        // GET /api/v1/corpora/{corpusId}/requirements/backlog.csv
+        //
+        // The same register as a work-item import. The build team consumes
+        // structure rather than re-keying a Word document; the columns map
+        // onto the standard Jira / Azure DevOps CSV importers.
+        app.MapGet("/api/v1/corpora/{corpusId:guid}/requirements/backlog.csv", async (
+            Guid corpusId,
+            Astra.Api.Docs.RequirementsDeliveryService delivery,
+            IAuditLogger audit,
+            DevPersonaContext actor,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            var report = await delivery.BuildAsync(corpusId, ct);
+            if (report is null)
+                return Results.NotFound(new { error = new { code = "docs.corpus.not_found" } });
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Reference,Summary,Capability,Priority,Status,Waves,RoutinesNamed,RoutinesResolved,Routines");
+            foreach (var r in report.Requirements)
+            {
+                sb.Append(Csv(r.Reference)).Append(',')
+                  .Append(Csv(r.Statement)).Append(',')
+                  .Append(Csv(r.Capability)).Append(',')
+                  .Append(Csv(r.Priority)).Append(',')
+                  .Append(Csv(r.Status)).Append(',')
+                  .Append(Csv(string.Join(" ", r.Waves))).Append(',')
+                  .Append(r.RoutinesNamed).Append(',')
+                  .Append(r.RoutinesResolved).Append(',')
+                  .Append(Csv(string.Join(" ", r.Routines.Select(x => x.Name))))
+                  .AppendLine();
+            }
+
+            await audit.LogAsync("requirements.backlog_exported", "corpus", corpusId, actor,
+                payload: new { rows = report.Requirements.Count }, ctx, ct);
+
+            var name = $"{report.CorpusName.ToLowerInvariant().Replace(' ', '-')}-backlog.csv";
+            ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{name}\"";
+            return Results.Text(sb.ToString(), "text/csv");
+        });
+
         // DELETE /api/v1/docs/sections/{id}  — reject: soft-delete → REJECTED (Admin only)
         // Returns 204 on success and on idempotent re-reject.
         app.MapDelete("/api/v1/docs/sections/{id:guid}", async (
@@ -451,6 +510,9 @@ public static class DocsEndpoints
 
         return app;
     }
+
+    /// <summary>RFC-4180 field: quote always, double any inner quote.</summary>
+    private static string Csv(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
 
     private static IResult Forbid() =>
         Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);

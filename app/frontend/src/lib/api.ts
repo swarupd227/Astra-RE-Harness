@@ -405,6 +405,37 @@ export type RequirementsCoverage = {
   complete: boolean;
 };
 
+// Delivery state of the requirements pack — each requirement joined to
+// the routines it derives from and how far those have progressed.
+export type RequirementRoutineStatus = {
+  name: string;
+  subroutineId: string | null;
+  status: 'unresolved' | 'parsed' | 'specified' | 'signed' | 'built' | 'verified' | 'failed';
+  wave: number | null;
+};
+
+export type RequirementDelivery = {
+  reference: string;
+  statement: string;
+  capability: string;
+  priority: string;
+  status: string;
+  waves: number[];
+  routinesNamed: number;
+  routinesResolved: number;
+  routines: RequirementRoutineStatus[];
+};
+
+export type RequirementsDelivery = {
+  corpusId: string;
+  corpusName: string;
+  requirementCount: number;
+  statusCounts: Record<string, number>;
+  requirementsWithoutTraceableRoutine: number;
+  routineNamesUnresolved: number;
+  requirements: RequirementDelivery[];
+};
+
 export type DependencyGraphResponse = {
   corpusId: string;
   sourceVersionId: string;
@@ -1358,6 +1389,24 @@ export const api = {
     ),
 
   // Phase C — requirements-pack completeness report.
+  getRequirementsDelivery: (corpusId: string) =>
+    apiFetch<RequirementsDelivery>(`/api/v1/corpora/${corpusId}/requirements/delivery`),
+
+  downloadRequirementsBacklog: async (corpusId: string): Promise<{ blob: Blob; filename: string }> => {
+    const headers = new Headers();
+    headers.set('X-Dev-Persona', getPersona());
+    const res = await fetch(
+      `${API_BASE}/api/v1/corpora/${encodeURIComponent(corpusId)}/requirements/backlog.csv`,
+      { headers }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new ApiError(res.status, 'requirements.backlog.failed', `Backlog export failed (${res.status}): ${text}`);
+    }
+    const match = (res.headers.get('Content-Disposition') ?? '').match(/filename="([^"]+)"/);
+    return { blob: await res.blob(), filename: match?.[1] ?? 'backlog.csv' };
+  },
+
   getRequirementsCoverage: (corpusId: string) =>
     apiFetch<RequirementsCoverage>(`/api/v1/corpora/${corpusId}/requirements/coverage`),
 
