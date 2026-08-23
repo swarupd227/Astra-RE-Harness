@@ -83,7 +83,7 @@ export function SubroutinesPage() {
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
           Cross-project search
         </p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">Subroutines</h1>
+        <h1 className="mt-2 text-display font-semibold text-ink-primary">Routines</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
           Search every routine across all projects. Click a result to open its details.
         </p>

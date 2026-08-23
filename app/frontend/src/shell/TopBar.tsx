@@ -116,9 +116,9 @@ function inferBreadcrumb(pathname: string): string {
     if (pathname.endsWith('/extract')) return 'Extract spec';
     if (pathname.endsWith('/spec')) return 'Draft spec';
     if (pathname.endsWith('/review')) return 'Spec review';
-    return 'Subroutine';
+    return 'Routine';
   }
-  if (pathname === '/subroutines') return 'Subroutines';
+  if (pathname === '/subroutines') return 'Routines';
   if (pathname.startsWith('/specs/')) {
     if (pathname.endsWith('/audit')) return 'Audit trail';
     if (pathname.endsWith('/scaffold')) return 'Generate scaffold';

@@ -381,7 +381,7 @@ function Outcome({ result }: { result: ReingestResult }) {
       </div>
       <dl className="mt-3 grid grid-cols-4 gap-3 text-body">
         <Stat label="Files" value={result.fileCount.toString()} />
-        <Stat label="Subroutines" value={result.subroutineCount.toString()} />
+        <Stat label="Routines" value={result.subroutineCount.toString()} />
         <Stat label="Carried fwd" value={result.carriedForwardCount.toString()} tone={result.carriedForwardCount > 0 ? 'signed' : 'neutral'} />
         <Stat label="Superseded" value={result.supersededCount.toString()} tone={result.supersededCount > 0 ? 'failed' : 'neutral'} />
       </dl>

@@ -62,21 +62,21 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
     return [
       { label: 'Home', href: '/' },
       projectsLink,
-      { label: 'Subroutine' },
+      { label: 'Routine' },
       { label: 'Extract' },
     ];
   if (pathname.match(/^\/subroutines\/[^/]+\/spec$/))
     return [
       { label: 'Home', href: '/' },
       projectsLink,
-      { label: 'Subroutine' },
+      { label: 'Routine' },
       { label: 'Draft spec' },
     ];
   if (pathname.match(/^\/subroutines\/[^/]+\/review$/))
     return [
       { label: 'Home', href: '/' },
       projectsLink,
-      { label: 'Subroutine' },
+      { label: 'Routine' },
       { label: 'Spec review' },
     ];
   if (pathname.match(/^\/specs\/[^/]+\/audit$/))
@@ -121,12 +121,12 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
       { label: prettyPlatformLeaf(pathname) },
     ];
   if (pathname === '/subroutines')
-    return [{ label: 'Home', href: '/' }, { label: 'Subroutines' }];
+    return [{ label: 'Home', href: '/' }, { label: 'Routines' }];
   if (pathname.startsWith('/subroutines/'))
     return [
       { label: 'Home', href: '/' },
       projectsLink,
-      { label: 'Subroutine' },
+      { label: 'Routine' },
     ];
   return [{ label: 'Home', href: '/' }];
 }

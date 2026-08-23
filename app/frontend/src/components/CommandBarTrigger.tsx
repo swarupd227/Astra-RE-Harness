@@ -17,7 +17,7 @@ export function CommandBarTrigger() {
         className="hidden items-center gap-2 rounded-md border border-border-subtle bg-canvas px-3 py-1.5 text-body text-ink-secondary transition-colors duration-fast hover:bg-sunken hover:text-ink-primary md:inline-flex"
       >
         <Search className="h-4 w-4" aria-hidden="true" />
-        <span>Search projects, subroutines…</span>
+        <span>Search projects, routines…</span>
         <kbd className="ml-2 rounded border border-border bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary">
           {isMac ? '⌘' : 'Ctrl'}K
         </kbd>

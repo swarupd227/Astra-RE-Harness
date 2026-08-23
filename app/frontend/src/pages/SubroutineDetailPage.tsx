@@ -36,7 +36,7 @@ export function SubroutineDetailPage() {
     return (
       <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
         <ErrorBlock
-          title="Could not load subroutine"
+          title="Could not load routine"
           message={sub.error.message}
           onRetry={() => sub.refetch()}
         />

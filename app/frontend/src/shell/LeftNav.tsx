@@ -50,7 +50,7 @@ export const SECTIONS: Section[] = [
     items: [
       { to: '/',            label: 'Home',         icon: Home },
       { to: '/projects',    label: 'Projects',     icon: Layers },
-      { to: '/subroutines', label: 'Subroutines',  icon: FileSearch },
+      { to: '/subroutines', label: 'Routines',  icon: FileSearch },
     ],
   },
   {

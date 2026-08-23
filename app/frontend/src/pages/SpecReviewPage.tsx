@@ -199,7 +199,7 @@ export function SpecReviewPage() {
     return <div className="mx-auto max-w-[1600px] space-y-4 p-6 lg:p-10"><Skeleton className="h-12 w-96" /><Skeleton className="h-[600px] w-full" /></div>;
   }
   if (sub.isError || source.isError) {
-    return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="Could not load subroutine" message={String(sub.error ?? source.error)} /></div>;
+    return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
   }
   if (spec.isError) {
     return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
@@ -241,7 +241,7 @@ export function SpecReviewPage() {
       <header className="border-b border-border-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back to subroutine">
+            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back to routine">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>

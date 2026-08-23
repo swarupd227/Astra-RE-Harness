@@ -157,7 +157,7 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
       href: '/projects',
     },
     {
-      label: 'Subroutines',
+      label: 'Routines',
       value: stats.subroutines.total.toLocaleString(),
       sub: subroutineStateSummary(stats.subroutines.byState),
       icon: FileSearch,

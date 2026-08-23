@@ -453,7 +453,7 @@ function ResultCard({ result, onOpen }: { result: IngestResult; onOpen: () => vo
         <dl className="mt-4 grid grid-cols-3 gap-4 text-body">
           <Stat label="Files" value={result.fileCount.toString()} />
           <Stat label="Lines of code" value={result.totalLoc.toLocaleString()} />
-          <Stat label="Subroutines" value={result.subroutineCount.toString()} />
+          <Stat label="Routines" value={result.subroutineCount.toString()} />
         </dl>
         {result.warnings.length > 0 && (
           <details className="mt-4 rounded-md border border-border-subtle bg-sunken p-3">

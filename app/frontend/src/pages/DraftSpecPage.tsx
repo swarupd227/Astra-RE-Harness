@@ -51,7 +51,7 @@ export function DraftSpecPage() {
   if (sub.isError || source.isError) {
     return (
       <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
-        <ErrorBlock title="Could not load subroutine" message={String(sub.error ?? source.error)} />
+        <ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} />
       </div>
     );
   }
@@ -101,7 +101,7 @@ export function DraftSpecPage() {
             <Link
               to={`/subroutines/${s.id}`}
               className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
-              aria-label="Back to subroutine"
+              aria-label="Back to routine"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>

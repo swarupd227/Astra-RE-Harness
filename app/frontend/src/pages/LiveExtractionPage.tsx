@@ -172,7 +172,7 @@ export function LiveExtractionPage() {
   if (sub.isError || source.isError) {
     return (
       <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
-        <ErrorBlock title="Could not load subroutine" message={String(sub.error ?? source.error)} />
+        <ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} />
       </div>
     );
   }
