@@ -225,7 +225,7 @@ public sealed class RequirementsDeliveryService
     private static string FileType(string? path)
     {
         if (string.IsNullOrEmpty(path)) return "";
-        var file = path.Replace('\', '/');
+        var file = path.Replace('\\', '/');
         var slash = file.LastIndexOf('/');
         if (slash >= 0) file = file[(slash + 1)..];
         var dot = file.IndexOf('.');
