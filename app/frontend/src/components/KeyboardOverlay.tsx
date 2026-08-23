@@ -9,7 +9,7 @@ const SECTIONS: Section[] = [
     title: 'Global',
     items: [
       { keys: ['?'], label: 'Show this keyboard help' },
-      { keys: ['⌘', 'K'], label: 'Open command bar (Phase C)' },
+      { keys: ['⌘', 'K'], label: 'Open command bar' },
       { keys: ['Esc'], label: 'Close any modal or overlay' },
     ],
   },
@@ -21,7 +21,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'Spec review (Phase B)',
+    title: 'Spec review',
     items: [
       { keys: ['j'], label: 'Next claim' },
       { keys: ['k'], label: 'Previous claim' },

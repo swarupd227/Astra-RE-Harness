@@ -81,9 +81,9 @@ export function SignatureHealthPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="signature-health-page">
       <PageHero
         tone="emerald"
-        eyebrow="Phase #4 · Signature health"
+        eyebrow="Governance"
         title="Signature Health"
-        lead={`Every signed spec across every project. A spec is "healthy" when the corpus hasn't been re-ingested since signing — i.e. the source revision the signature is bound to is still the latest. Drift means a newer revision exists and the spec needs to be re-verified.`}
+        lead="Signed specifications across all projects. A signature drifts when its project is re-synced after signing, and needs re-verification."
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_1fr_2fr]">
@@ -104,7 +104,7 @@ export function SignatureHealthPage() {
       <Card>
         <CardHeader
           title="Portfolio"
-          description="Drift-first ordering so actionable rows surface up."
+          description="Items needing attention appear first."
           action={
             isAdmin && q.data.drifted > 0 && (
               <Button

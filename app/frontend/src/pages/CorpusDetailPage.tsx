@@ -151,7 +151,7 @@ export function CorpusDetailPage() {
       <Card>
         <CardHeader
           title="Files in this version"
-          description="Click a subroutine to open its detail surface (Stage 2)."
+          description="Select a routine to open its details."
         />
         <CardBody className="p-0">
           <ul className="divide-y divide-border-subtle">

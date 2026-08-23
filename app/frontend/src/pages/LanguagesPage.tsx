@@ -100,7 +100,7 @@ export function LanguagesPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="languages-page">
       <header>
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Phase #3a · Spec schemas
+          Spec schemas
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Languages</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">

@@ -117,7 +117,7 @@ export function NewCorpusPage() {
     <div className="mx-auto max-w-[820px] space-y-6 p-6 lg:p-10">
       <header>
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Phase C.1 · Stage 1 · Ingest
+          Ingest
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Connect a new project</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
@@ -130,7 +130,7 @@ export function NewCorpusPage() {
       </header>
 
       <Card>
-        <CardHeader title="Source" description="Pick one. Both paths end at the same PARSED state." />
+        <CardHeader title="Source" description="Choose one." />
         <CardBody className="space-y-5">
           <div role="tablist" aria-label="Ingest source type" className="flex gap-2">
             <button

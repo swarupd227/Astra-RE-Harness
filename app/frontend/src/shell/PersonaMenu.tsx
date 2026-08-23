@@ -13,7 +13,7 @@ const META: Record<Persona, { label: string; tagline: string; icon: typeof Shiel
   },
   sme: {
     label: 'SME',
-    tagline: 'Reviews and signs specs. Owns Stage 4.',
+    tagline: 'Reviews and signs specifications.',
     icon: ClipboardCheck,
     tone: 'text-status-review',
   },

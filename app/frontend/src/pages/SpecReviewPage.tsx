@@ -244,7 +244,7 @@ export function SpecReviewPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Spec review · Stage 4</p>
+              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Spec review</p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
             </div>
             <Badge tone={signed ? 'signed' : inReview ? 'review' : 'draft'}>{sp.state}</Badge>

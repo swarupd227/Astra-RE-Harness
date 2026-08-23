@@ -106,9 +106,9 @@ export function GoldenDatasetPage() {
     >
       <PageHero
         tone="violet"
-        eyebrow="Phase 6.0 · Calibration corpus"
+        eyebrow="Quality"
         title="Golden Dataset"
-        lead={`Hand-curated legacy-code snippets, each annotated with the claims the extract pipeline is expected to produce. Every prompt change re-runs the corpus and surfaces any entry whose claim coverage dropped — the regression measurement instrument that backs the "we measure ourselves" story.`}
+        lead="Curated code samples paired with the claims each analysis should produce. Re-run after a prompt change to catch regressions."
         actions={
           isAdmin ? (
             <>

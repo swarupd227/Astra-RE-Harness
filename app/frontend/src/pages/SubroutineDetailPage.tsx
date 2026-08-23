@@ -145,7 +145,7 @@ function StructurePanel({
 }) {
   return (
     <Card>
-      <CardHeader title="Structure" description="From AST. Lights up further in Phase C." />
+      <CardHeader title="Structure" />
       <CardBody className="space-y-5">
         <Group title="COMMON blocks" items={sub.commonBlockRefs ?? []} />
         <Group title="Calls" items={sub.calledSubroutines ?? []} />
@@ -197,13 +197,13 @@ function NextStepCard() {
       <CardBody>
         <p className="text-caption font-medium uppercase tracking-wider text-accent">Up next</p>
         <p className="mt-2 text-body font-semibold text-ink-primary">
-          Stage 3 — Live extraction
+          Live extraction
         </p>
         <p className="mt-1 text-caption text-ink-secondary">
           Anthropic Claude streams a behavioural spec with line-cited claims onto this surface.
         </p>
         <p className="mt-3 inline-flex items-center gap-1.5 text-caption text-ink-tertiary">
-          Lights up in Phase B.2
+          Not yet extracted
           <ArrowRight className="h-3 w-3" />
         </p>
       </CardBody>
@@ -258,7 +258,7 @@ function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<type
   const noPlan = q.isError; // 404 = no plan for this corpus
   return (
     <Card data-testid="wave-assignment-card">
-      <CardHeader title="Wave assignment" description="From the corpus's current migration plan." />
+      <CardHeader title="Wave assignment" description="From the current migration plan." />
       <CardBody className="space-y-2">
         {q.isPending && <Skeleton className="h-5 w-32" />}
         {noPlan && (
@@ -288,7 +288,7 @@ function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<type
 function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getMigrationReadiness>>>> }) {
   return (
     <Card data-testid="migration-readiness-card">
-      <CardHeader title="Migration readiness" description="Decision-tree classification from the dependency graph." />
+      <CardHeader title="Migration readiness" description="Based on this routine's dependencies." />
       <CardBody className="space-y-2">
         {q.isPending && <Skeleton className="h-5 w-40" />}
         {q.isError && (

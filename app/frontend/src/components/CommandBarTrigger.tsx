@@ -37,13 +37,11 @@ export function CommandBarTrigger() {
           >
             <h2 className="text-h-md font-semibold text-ink-primary">Command bar</h2>
             <p className="mt-2 text-body text-ink-secondary">
-              Cross-project search, navigation jumps, and pipeline actions land here in Phase C
-              (week 8). Today the surface is a placeholder so the keyboard shortcut and
-              affordance can settle.
+              Search across projects and jump between screens. Not available yet.
             </p>
             <div className="mt-4 flex items-center gap-2 rounded-md border border-border-subtle bg-canvas px-3 py-2 font-mono text-caption text-ink-tertiary">
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              Coming in Phase C
+              Not available yet
             </div>
             <button
               type="button"

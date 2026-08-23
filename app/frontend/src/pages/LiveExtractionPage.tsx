@@ -201,7 +201,7 @@ export function LiveExtractionPage() {
             </span>
             <div>
               <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-                Stage 3 · Extraction in progress
+                Extraction in progress
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
                 {s.name}

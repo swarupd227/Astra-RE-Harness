@@ -62,7 +62,7 @@ export function RolesPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="roles-page">
       <header>
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Phase #4 · Roles &amp; permissions
+          Roles &amp; permissions
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Roles &amp; Permissions</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
@@ -88,7 +88,7 @@ export function RolesPage() {
               Capability matrix
             </span>
           }
-          description="Each action is allowed for one or more personas. Cells with a check are allowed by the current API policy."
+          description="A check means that role is allowed to perform the action."
         />
         <CardBody className="space-y-6">
           {byCategory.map(([category, actions]) => (
@@ -165,7 +165,7 @@ function UsersPanel() {
             Users
           </span>
         }
-        description="Every user belongs to one persona. Adjust below; every change is written to the audit log."
+        description="Every user has one role. Changes are recorded in the audit trail."
         action={
           !adding && (
             <Button variant="primary" size="sm" onClick={() => setAdding(true)}>

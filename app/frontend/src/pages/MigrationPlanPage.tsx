@@ -118,7 +118,7 @@ export function MigrationPlanPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="migration-plan-page">
       <PageHero
         tone="indigo"
-        eyebrow={`Phase 8.0 · portfolio migration planning · ${corpus.data?.name ?? corpusId}`}
+        eyebrow={corpus.data?.name ?? corpusId}
         title="Migration plan"
         lead="Dependency-aware wave assignment for the corpus's latest source version. Wave 1 starts with leaf routines (no in-corpus callees); each subsequent wave depends only on routines in earlier waves."
       />

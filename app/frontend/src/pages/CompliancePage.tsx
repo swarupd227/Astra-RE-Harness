@@ -91,9 +91,9 @@ export function CompliancePage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="compliance-page">
       <PageHero
         tone="amber"
-        eyebrow="Phase #3d · Audit feed exporter"
+        eyebrow="Governance"
         title="Audit & compliance feed"
-        lead={<>Every state transition in the harness is appended to an immutable audit log. Pull it as a SOX, HIPAA, or PCI evidence bundle — one click, every export itself logged as a <span className="font-mono text-caption">compliance.feed_exported</span> row.</>}
+        lead="Export the audit log as a SOX, HIPAA, or PCI evidence bundle. Every export is itself recorded in the log."
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

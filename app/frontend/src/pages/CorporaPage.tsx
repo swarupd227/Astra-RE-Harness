@@ -18,9 +18,8 @@ export function CorporaPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
       <PageHero
         tone="emerald"
-        eyebrow="Phase C.1 · ingest"
         title="Projects"
-        lead={<>Each project is a versioned snapshot of legacy source. Upload source files or a <span className="font-mono">.zip</span>, or clone from a Git URL — the parser sidecars detect the language (Fortran, COBOL, C++, Delphi, VB6, VB.NET, C#, OpenEdge ABL, PHP, or Java) and persist every routine.</>}
+        lead="A project is a versioned snapshot of your source. Upload files or a .zip, or clone from a Git repository — the language is detected automatically."
         actions={
           <Link to="/projects/new" data-testid="add-corpus">
             <Button variant="primary">
@@ -48,7 +47,7 @@ export function CorporaPage() {
             <EmptyState
               illustration={<NoCorporaIllustration size={140} />}
               title="No projects yet"
-              description="Upload legacy source files or connect a Git repo to start. A demo project is created on first boot when seeding is enabled."
+              description="Upload source files or connect a Git repository to begin."
               action={
                 <Link to="/projects/new">
                   <Button variant="primary">

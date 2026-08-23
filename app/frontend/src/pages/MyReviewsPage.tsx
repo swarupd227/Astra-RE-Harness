@@ -31,7 +31,7 @@ export function MyReviewsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Stage 4 · SME landing</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Review queue</p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">My reviews</h1>
         <div className="mt-3 flex flex-wrap gap-2 font-mono text-caption">
           <CountChip n={r.counts.awaiting} label="awaiting" tone="draft" />

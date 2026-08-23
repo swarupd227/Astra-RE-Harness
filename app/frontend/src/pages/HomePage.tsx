@@ -78,20 +78,20 @@ function Hero({
 }) {
   const personaCopy: Record<Persona, { title: string; subtitle: string }> = {
     engineer: {
-      title: 'Engineer console',
-      subtitle: 'Ingest legacy Fortran. Stream a citation-grounded spec. Hand it to an SME for review.',
+      title: 'Overview',
+      subtitle: 'Bring in legacy source, generate specifications, and send them for review.',
     },
     sme: {
-      title: 'SME review console',
-      subtitle: 'Read each claim, accept or edit, resolve open questions, sign the spec with HSM-backed RS256.',
+      title: 'Overview',
+      subtitle: 'Review each specification, resolve open questions, and sign off.',
     },
     observer: {
-      title: 'Observer console',
-      subtitle: 'Audit every transition. Inspect signed specs, costs, and provider provenance.',
+      title: 'Overview',
+      subtitle: 'Track progress, costs, and the full audit trail across projects.',
     },
     admin: {
-      title: 'Admin console',
-      subtitle: 'Operator view: provider status, cost rollup, system health, and reset levers.',
+      title: 'Overview',
+      subtitle: 'System health, costs, and configuration.',
     },
   };
   const copy = personaCopy[persona];
@@ -258,7 +258,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
           <CardHeader
             titleAs="h2"
             title={<span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> What's next</span>}
-            description="Actionable handles based on the current pipeline state."
+            description="What needs your attention now."
           />
           <CardBody>
             <ul className="space-y-2">
@@ -289,7 +289,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
           <CardHeader
             titleAs="h2"
             title={<span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Projects</span>}
-            description="Connect a Git URL or upload source files to start the pipeline."
+            description="Connect a Git repository or upload source files to begin."
             action={
               <Link to="/projects/new"><Button variant="primary" size="sm"><Plus className="h-4 w-4" /> Add project</Button></Link>
             }
@@ -499,7 +499,7 @@ function AdminHome({
       <Card data-testid="home-admin-provider">
         <CardHeader
           title={<span className="inline-flex items-center gap-2"><Cpu className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Provider status</span>}
-          description="Active LLM configuration. Every call records provider + model + residency stamp on its LlmCall row."
+          description="The model currently in use. Every call is recorded for audit."
         />
         <CardBody className="space-y-3">
           <div className="rounded-md border border-border-subtle bg-sunken p-3 font-mono text-body">
@@ -589,7 +589,7 @@ function SignedSpecsCard() {
     <Card data-testid="home-signed">
       <CardHeader
         title={<span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-status-signed" aria-hidden="true" /> Signed specs</span>}
-        description="Cryptographically signed; verifiable independently via specCanonicalHash."
+        description="Cryptographically signed and independently verifiable."
       />
       <CardBody className="p-0">
         {signed.isPending ? (

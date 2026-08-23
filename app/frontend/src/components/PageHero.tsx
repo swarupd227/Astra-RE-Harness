@@ -25,7 +25,7 @@ const eyebrowToneClass: Record<HeroTone, string> = {
 };
 
 /**
- * Coloured page hero block. Renders an eyebrow (phase / breadcrumb),
+ * Coloured page hero block. Renders an eyebrow (section / breadcrumb),
  * a display-size title, and an optional lead paragraph + slot for
  * actions, on a subtle gradient backdrop keyed to a brand tone.
  *

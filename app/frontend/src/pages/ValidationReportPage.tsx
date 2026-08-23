@@ -129,7 +129,7 @@ export function ValidationReportPage() {
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to scaffold
           </Link>
           <p className="mt-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-            Phase #2 · Post-migration validation
+            Post-migration validation
           </p>
           <h1 className="mt-1 text-display font-semibold text-ink-primary">
             Validation report

@@ -171,7 +171,7 @@ export function LiveScaffoldPage() {
             </span>
             <div>
               <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-                Stage 5 · Scaffold generation
+                Scaffold generation
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
                 {orderedPaths.length} {orderedPaths.length === 1 ? 'file' : 'files'} streaming

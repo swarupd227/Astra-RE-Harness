@@ -81,12 +81,11 @@ export function SubroutinesPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
       <header>
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Phase C.12 · Cross-project search
+          Cross-project search
         </p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Subroutines</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Search every subroutine across every project's current version. Click a result to drop
-          straight into Stage 2 (subroutine detail) and continue the extract → sign → scaffold flow.
+          Search every routine across all projects. Click a result to open its details.
         </p>
       </header>
 

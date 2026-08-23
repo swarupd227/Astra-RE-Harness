@@ -40,7 +40,7 @@ export function CommentsPage() {
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-            Phase C.7 · Mentions inbox
+            Mentions inbox
           </p>
           <h1 className="mt-2 text-display font-semibold text-ink-primary">Comments</h1>
           <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">

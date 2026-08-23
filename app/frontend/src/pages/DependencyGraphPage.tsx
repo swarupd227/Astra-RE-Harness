@@ -284,7 +284,7 @@ export function DependencyGraphPage() {
       <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10 fadeup">
         <PageHero
           tone="violet"
-          eyebrow={`Phase 8.0 · dependency-aware migration · ${corpus.data?.name ?? corpusId}`}
+          eyebrow={corpus.data?.name ?? corpusId}
           title="Dependency graph"
           lead="Parser-extracted call graph + shared-storage references."
         />
@@ -293,7 +293,7 @@ export function DependencyGraphPage() {
             <EmptyState
               illustration={<AwaitingDataIllustration size={140} />}
               title="No call graph yet"
-              description="This corpus has no cross-routine CALL or shared-storage references to graph — either it hasn't finished parsing, or every routine is self-contained."
+              description="No dependencies found between routines in this project. Parsing may still be in progress."
             />
           </CardBody>
         </Card>
@@ -308,7 +308,7 @@ export function DependencyGraphPage() {
     >
       <PageHero
         tone="violet"
-        eyebrow={`Phase 8.0 · dependency-aware migration · ${corpus.data?.name ?? corpusId}`}
+        eyebrow={corpus.data?.name ?? corpusId}
         title="Dependency graph"
         lead="Parser-extracted call graph + shared-storage references. Nodes colour by their assigned migration wave. Click any routine to highlight its full upstream and downstream path · double-click to drill in."
       />

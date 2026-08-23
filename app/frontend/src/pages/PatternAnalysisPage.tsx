@@ -324,7 +324,7 @@ export function PatternAnalysisPage() {
               onClick={() => runMutation.mutate(false)}
               disabled={isRunning}
               data-testid="run-pattern-analysis"
-              title="Extracts any routine that has no spec yet, then re-groups the corpus. Routines already extracted are reused."
+              title="Analyses any routine not yet covered, then regroups the project. Existing work is reused."
             >
               {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {lastRun ? 'Re-run analysis' : 'Run analysis'}
@@ -336,7 +336,7 @@ export function PatternAnalysisPage() {
                 onBlur={() => setConfirmForce(false)}
                 disabled={isRunning}
                 data-testid="force-pattern-analysis"
-                title="Discards every existing spec and re-runs the LLM over the whole corpus. Hours on a large project — only needed after an extraction-prompt change."
+                title="Discards all existing specifications and re-analyses the whole project. Takes hours on a large project."
                 className="rounded border border-border-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {confirmForce ? 'Confirm full re-extraction' : 'Re-extract all specs…'}
@@ -365,8 +365,7 @@ export function PatternAnalysisPage() {
                 {liveState === 'RUNNING' ? liveSummary ?? 'Running…' : 'Queued…'}
               </p>
               <p className="mt-0.5 font-mono text-caption text-ink-tertiary">
-                Stage 1 extracts every un-extracted routine's spec; stage 2 sends the whole
-                corpus to Claude in one call to group routines into shared patterns.
+                Analysing each routine, then grouping them into shared patterns.
               </p>
             </div>
           </CardBody>

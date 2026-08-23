@@ -102,7 +102,7 @@ export function ScaffoldArtifactPage() {
             </span>
             <div>
               <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-                Stage 5 · Scaffolded package
+                Scaffolded package
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
                 {sc.fileCount} files · {sc.todoCount} TODOs · {sc.targetPlatform}
@@ -136,7 +136,7 @@ export function ScaffoldArtifactPage() {
                 rel="noreferrer"
                 onClick={(e) => e.preventDefault()}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
-                title={`Faux commit (Phase B.4 stub)\n${sc.git.commitUrl}`}
+                title={`Simulated commit\n${sc.git.commitUrl}`}
               >
                 <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
                 {sc.git.branch}

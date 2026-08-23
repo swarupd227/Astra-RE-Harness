@@ -101,12 +101,10 @@ export function AuditTrailPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Stage 4 · Append-only</p>
+        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Provenance</p>
         <h1 className="mt-2 text-display font-semibold text-ink-primary">Audit trail</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          The full provenance chain for this spec — source bytes, AST extraction, LLM call, SME review,
-          signature, scaffold — followed by every state transition in chronological order. Append-only:
-          events are never edited or deleted.
+          Every event recorded for this specification, in order. Records are never edited or deleted.
         </p>
       </header>
 
@@ -114,7 +112,7 @@ export function AuditTrailPage() {
       <EvidenceTrail specId={id} />
 
       <Card>
-        <CardHeader title="Filters" description="Narrow the timeline by event type or actor persona." />
+        <CardHeader title="Filters" description="Narrow by event type or who performed it." />
         <CardBody className="flex flex-wrap items-center gap-3">
           <FilterGroup
             label="Type"
@@ -174,7 +172,7 @@ export function AuditTrailPage() {
 
       {/* Phase C.7: spec-level discussion thread alongside the audit trail. */}
       <Card>
-        <CardHeader title="Discussion" description="Thread anchored to this spec. @-mention engineer, sme, observer, or admin to notify them." />
+        <CardHeader title="Discussion" description="@-mention a teammate to notify them." />
         <CardBody>
           <CommentsThread specId={id} emptyHint="No discussion yet. Open with a question or context for the next reviewer." />
         </CardBody>

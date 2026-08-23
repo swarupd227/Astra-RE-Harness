@@ -69,15 +69,11 @@ export function HarmonisationPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="harmonisation-page">
       <header>
         <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Phase 7.1 · Cross-routine consistency
+          Cross-routine consistency
         </p>
         <h1 className="mt-1 text-display font-semibold text-ink-primary">Harmonisation</h1>
         <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Sends every SIGNED spec in a corpus to the LLM in a single
-          call and surfaces inconsistencies across them — callee-IO
-          drift, COMMON-layout drift, terminology drift, missing
-          invariants, duplicate open questions. Findings are
-          suggestions; the SME confirms or dismisses each.
+          Compares signed specifications across the project and flags inconsistencies — conflicting descriptions, mismatched data layouts, differing terminology. Each finding is a suggestion for a reviewer to confirm or dismiss.
         </p>
       </header>
 

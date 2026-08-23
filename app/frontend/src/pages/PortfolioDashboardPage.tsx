@@ -64,9 +64,8 @@ export function PortfolioDashboardPage() {
     <div className="mx-auto max-w-[1300px] space-y-6 p-6 lg:p-10 fadeup" data-testid="portfolio-dashboard-page">
       <PageHero
         tone="teal"
-        eyebrow="Phase 8.0 · portfolio migration planning"
         title="Portfolio dashboard"
-        lead="Cross-corpus aggregates: routines, signature progress, LLM spend, recent activity. The numbers below are live — they recompute on every load from the source rows."
+        lead="Routines, signature progress, spend, and recent activity across all projects."
       />
 
       {summary.isPending && <Skeleton className="h-40" />}

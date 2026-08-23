@@ -79,8 +79,7 @@ export function SystemPage() {
           <CardBody>
             <p className="text-body text-ink-secondary">
               <span className="font-mono text-ink-primary">X-Dev-Persona</span> header sets the
-              active persona. OIDC via Microsoft Entra ID replaces this in Phase C; the surface
-              keeps the same shape.
+              active role. Single sign-on will replace this.
             </p>
           </CardBody>
         </Card>
@@ -89,7 +88,7 @@ export function SystemPage() {
       <Card>
         <CardHeader
           title="Service readiness"
-          description="Polled every 5 seconds. Each row is one upstream dependency."
+          description="Refreshed every 5 seconds."
           action={
             readiness.data ? (
               readiness.data.status === 'ready' ? (
