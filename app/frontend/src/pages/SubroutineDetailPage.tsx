@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, FileCode, GitCommit, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Boxes, FileCode, GitCommit, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
@@ -8,6 +9,11 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { Button } from '@/components/Button';
 import { MonacoSource } from '@/components/MonacoSource';
+import { TargetSelector } from '@/components/TargetSelector';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { WorkflowRail, nextStepFor } from '@/components/WorkflowRail';
+import { useTargetStack } from '@/hooks/useTargetStack';
+import { prettySchema, prettyStack } from '@/lib/targetStacks';
 import { formatState } from '@/lib/labels';
 
 export function SubroutineDetailPage() {
@@ -23,6 +29,8 @@ export function SubroutineDetailPage() {
     queryFn: () => api.getSubroutineSource(id),
     enabled: !!id,
   });
+  const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
+  const [confirmReextract, setConfirmReextract] = useState(false);
 
   if (sub.isPending || source.isPending) {
     return (
@@ -50,6 +58,10 @@ export function SubroutineDetailPage() {
   // it from the corpus name regex; SubroutineEndpoints has projected
   // `sourceLanguage` since ingest, the frontend type just omitted it).
   const help = helpForSchemaId(s.sourceLanguage);
+  const next = nextStepFor(s.state);
+  // Any state past PARSED means a spec exists whose reviews re-extraction
+  // would discard.
+  const hasExistingSpec = ['DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDED'].includes(s.state);
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
@@ -78,15 +90,31 @@ export function SubroutineDetailPage() {
             </Link>
           )}
           <Button
-            variant="primary"
+            // Re-extraction replaces the draft and drops every claim review
+            // taken against it — it used to fire straight off this button.
+            variant={hasExistingSpec ? 'secondary' : 'primary'}
             size="md"
-            onClick={() => navigate(`/subroutines/${s.id}/extract`)}
+            onClick={() =>
+              hasExistingSpec
+                ? setConfirmReextract(true)
+                : navigate(`/subroutines/${s.id}/extract`)
+            }
+            data-testid="extract-cta"
           >
             <Sparkles className="h-4 w-4" />
-            {s.state === 'DRAFT' ? 'Re-extract spec' : 'Extract spec'}
+            {hasExistingSpec ? 'Re-extract spec' : 'Extract spec'}
           </Button>
         </div>
       </header>
+
+      {/* Where this routine is in the workflow, and what happens next. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-md border border-border-subtle bg-raised px-4 py-3">
+        <WorkflowRail state={s.state} persona={whoami.data?.persona as any} />
+        <p className="text-caption text-ink-secondary">
+          Next: <strong className="text-ink-primary">{next.action}</strong>
+          <span className="text-ink-tertiary"> · {next.ownerLabel}</span>
+        </p>
+      </div>
 
       {help && (
         <div
@@ -130,12 +158,91 @@ export function SubroutineDetailPage() {
         </Card>
 
         <aside className="space-y-4">
+          <NextStepCard subroutineId={s.id} state={s.state} />
+          <TargetStackCard sourceLanguage={s.sourceLanguage} />
           <StructurePanel sub={s} />
           <MigrationContextPanel subroutineId={s.id} />
-          <NextStepCard />
         </aside>
       </div>
+
+      <ConfirmModal
+        open={confirmReextract}
+        title="Re-extract this spec?"
+        body={`${s.name} already has a spec. Re-extracting calls the model again and replaces it.`}
+        consequences={[
+          'Every claim decision taken on the current draft is discarded.',
+          s.state === 'SIGNED' || s.state === 'SCAFFOLDED'
+            ? 'This spec is signed — the signature covers the current claims, not the new ones.'
+            : 'The routine returns to DRAFT and must be routed to the SME again.',
+          'The new extraction is billed as a fresh model call.',
+        ]}
+        confirmLabel="Re-extract"
+        onConfirm={() => navigate(`/subroutines/${s.id}/extract`)}
+        onClose={() => setConfirmReextract(false)}
+        testId="reextract-confirm"
+      />
     </div>
+  );
+}
+
+/**
+ * Target stack, chosen here rather than only after sign-off.
+ *
+ * The picker used to live exclusively on the spec-review surface, gated on
+ * SIGNED + engineer — the last possible moment, in the least likely place, so
+ * "which stack will this become?" had no answer while you were still deciding
+ * whether to migrate the routine at all.
+ */
+function TargetStackCard({ sourceLanguage }: { sourceLanguage: string | null }) {
+  const { targetStack, setTargetStack, overriddenFrom, savedOverridesRecommended } =
+    useTargetStack(sourceLanguage);
+  return (
+    <Card>
+      <CardHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Boxes className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
+            Target stack
+          </span>
+        }
+        description={`Generated code for this routine will be ${prettyStack(targetStack)}.`}
+      />
+      <CardBody className="space-y-2">
+        <TargetSelector
+          value={targetStack}
+          onChange={setTargetStack}
+          sourceLanguage={sourceLanguage}
+          compact
+        />
+        {overriddenFrom && (
+          <p
+            className="flex items-start gap-1.5 rounded-md border border-status-scaffolded/40 bg-[#F2E5C2]/40 px-2.5 py-2 text-caption text-ink-primary"
+            data-testid="target-overridden-notice"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
+            <span>
+              Your saved target <strong className="font-mono">{prettyStack(overriddenFrom)}</strong> has no
+              production archetype for {prettySchema(sourceLanguage ?? '')} — using{' '}
+              <strong className="font-mono">{prettyStack(targetStack)}</strong>.
+            </span>
+          </p>
+        )}
+        {savedOverridesRecommended && (
+          <p className="text-caption text-ink-tertiary" data-testid="target-saved-notice">
+            Using your saved target. Recommended here:{' '}
+            <strong className="font-mono text-ink-secondary">{prettyStack(savedOverridesRecommended)}</strong>.{' '}
+            <button
+              type="button"
+              onClick={() => setTargetStack(savedOverridesRecommended)}
+              className="underline decoration-dotted underline-offset-2 hover:text-accent"
+              data-testid="use-recommended-target"
+            >
+              Use recommended
+            </button>
+          </p>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -192,20 +299,32 @@ function Group({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function NextStepCard() {
+/**
+ * Up-next card. Was hardcoded to "Live extraction · Not yet extracted"
+ * regardless of state, so a signed or scaffolded routine still advertised the
+ * first step. Now it reads the lifecycle state and links to the surface where
+ * the next action actually lives.
+ */
+function NextStepCard({ subroutineId, state }: { subroutineId: string; state: string }) {
+  const next = nextStepFor(state);
   return (
     <Card className="border-accent/40 bg-accent-muted/40">
       <CardBody>
-        <p className="text-caption font-medium uppercase tracking-wider text-accent">Up next</p>
-        <p className="mt-2 text-body font-semibold text-ink-primary">
-          Live extraction
+        <p className="text-caption font-medium uppercase tracking-wider text-accent">
+          {next.done ? 'Done' : 'Up next'}
         </p>
-        <p className="mt-1 text-caption text-ink-secondary">
-          Anthropic Claude streams a behavioural spec with line-cited claims onto this surface.
-        </p>
-        <p className="mt-3 inline-flex items-center gap-1.5 text-caption text-ink-tertiary">
-          Not yet extracted
-          <ArrowRight className="h-3 w-3" />
+        <p className="mt-2 text-body font-semibold text-ink-primary">{next.action}</p>
+        <p className="mt-1 text-caption text-ink-secondary">{next.hint}</p>
+        <Link
+          to={next.href(subroutineId)}
+          className="mt-3 inline-flex items-center gap-1.5 text-caption font-medium text-accent hover:underline"
+          data-testid="next-step-cta"
+        >
+          {next.done ? 'Open it' : 'Go there'}
+          <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </Link>
+        <p className="mt-2 text-caption text-ink-tertiary">
+          Owned by <strong className="text-ink-secondary">{next.ownerLabel}</strong>
         </p>
       </CardBody>
     </Card>

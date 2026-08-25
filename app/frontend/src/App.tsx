@@ -19,6 +19,7 @@ import { CommentsPage } from '@/pages/CommentsPage';
 import { AuditTrailPage } from '@/pages/AuditTrailPage';
 import { LiveScaffoldPage } from '@/pages/LiveScaffoldPage';
 import { ScaffoldArtifactPage } from '@/pages/ScaffoldArtifactPage';
+import { ScaffoldsPage } from '@/pages/ScaffoldsPage';
 import { ValidationReportPage } from '@/pages/ValidationReportPage';
 import { CompliancePage } from '@/pages/CompliancePage';
 import { PlatformIndexPage } from '@/pages/PlatformIndexPage';
@@ -103,9 +104,11 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
   if (pathname.match(/^\/scaffolds\/[^/]+$/))
     return [
       { label: 'Home', href: '/' },
-      projectsLink,
+      { label: 'Generated code', href: '/scaffolds' },
       { label: 'Scaffold artifact' },
     ];
+  if (pathname === '/scaffolds')
+    return [{ label: 'Home', href: '/' }, { label: 'Generated code' }];
   if (pathname === '/my-reviews')
     return [{ label: 'Home', href: '/' }, { label: 'My reviews' }];
   if (pathname === '/comments')
@@ -238,6 +241,7 @@ export function App() {
             <Route path="/subroutines/:id/review" element={<SpecReviewPage />} />
             <Route path="/specs/:id/audit" element={<AuditTrailPage />} />
             <Route path="/specs/:id/scaffold" element={<LiveScaffoldPage />} />
+            <Route path="/scaffolds" element={<ScaffoldsPage />} />
             <Route path="/scaffolds/:id" element={<ScaffoldArtifactPage />} />
             <Route path="/scaffolds/:id/validation" element={<ValidationReportPage />} />
             <Route path="/my-reviews" element={<MyReviewsPage />} />

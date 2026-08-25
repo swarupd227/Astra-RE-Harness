@@ -673,6 +673,7 @@ export type EvidenceResponse = {
     lineStart: number;
     lineEnd: number;
     state: string;
+    sourceLanguage: string | null;
     commonBlockRefs: string[] | null;
     calledSubroutines: string[] | null;
     file: { id: string; relativePath: string; lineCount: number; fileHash: string } | null;
@@ -1253,6 +1254,17 @@ export const api = {
   getScaffoldForSpec: (specId: string) =>
     apiFetch<ScaffoldResponse>(`/api/v1/specs/${specId}/scaffold`),
   getScaffold: (id: string) => apiFetch<ScaffoldResponse>(`/api/v1/scaffolds/${id}`),
+  // Generated-code index — every package the platform has produced, across
+  // every routine. Previously there was no way back to a scaffold once you
+  // navigated away from the spec-review or live-generation surfaces.
+  listScaffolds: (params?: { targetStack?: string; state?: string; corpusId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.targetStack) qs.set('targetStack', params.targetStack);
+    if (params?.state) qs.set('state', params.state);
+    if (params?.corpusId) qs.set('corpusId', params.corpusId);
+    const q = qs.toString();
+    return apiFetch<{ data: ScaffoldSummary[] }>(`/api/v1/scaffolds${q ? `?${q}` : ''}`);
+  },
   commitScaffold: (id: string, body: { branch?: string; commitMessage?: string }) =>
     apiFetch<{ id: string; state: string; branch: string; commitHash: string; commitUrl: string; stub: boolean }>(
       `/api/v1/scaffolds/${id}/commit`,
@@ -1727,6 +1739,26 @@ export type ScaffoldResponse = {
     costUsd: number;
   } | null;
   files: ScaffoldFile[];
+};
+
+/** One row of GET /api/v1/scaffolds — the generated-code index. */
+export type ScaffoldSummary = {
+  id: string;
+  specId: string;
+  subroutineId: string;
+  routineName: string;
+  sourceLanguage: string | null;
+  sourcePath: string;
+  corpusId: string;
+  corpusName: string;
+  targetPlatform: string;
+  state: string;
+  fileCount: number;
+  totalLines: number;
+  todoCount: number;
+  generatedAt: string;
+  gitBranch: string | null;
+  gitCommitHash: string | null;
 };
 
 /** Build the canonical claim path used by the API. */

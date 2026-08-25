@@ -15,3 +15,11 @@ desktop.ini
 
 # Logs
 *.log
+
+# Generated demo artifacts (videos, decks, rendered slides) — regenerate via
+# app/e2e's build scripts, don't track the rendered output itself
+app/e2e/demo-output/**/*.mp4
+app/e2e/demo-output/**/*.pptx
+app/e2e/demo-output/**/*.pdf
+app/e2e/demo-output/**/*.jpg
+app/e2e/demo-output/**/*.png

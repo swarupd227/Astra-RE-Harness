@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Cog,
   Cpu,
   Database,
   FileSearch,
@@ -51,6 +52,7 @@ export const SECTIONS: Section[] = [
       { to: '/',            label: 'Home',         icon: Home },
       { to: '/projects',    label: 'Projects',     icon: Layers },
       { to: '/subroutines', label: 'Routines',  icon: FileSearch },
+      { to: '/scaffolds',   label: 'Generated code', icon: Cog },
     ],
   },
   {

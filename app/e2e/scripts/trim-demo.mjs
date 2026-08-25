@@ -217,9 +217,8 @@ for (const w of waits) {
   const titleFontSize = Math.round(width * 0.038);   // ~30 px at 800w, 61 at 1600w
   const subtitleFontSize = Math.round(width * 0.022); // ~18 px at 800w, 35 at 1600w
   const yOffset = Math.round(height * 0.06);
-  const skippedS = Math.max(0.1, w.endS - w.startS);
-  const captionLine1 = `Anthropic real call (skipped)`;
-  const captionLine2 = `${w.label}  ·  ${skippedS.toFixed(0)}s elapsed`;
+  const captionLine1 = `Regenerating & running the test pack…`;
+  const captionLine2 = `Validating against the signed spec`;
   const segName = nextPart();
   parts.push(segName);
   dockerFFmpeg(videoDir, [

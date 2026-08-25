@@ -110,6 +110,15 @@ async function ensureProposalLive(req: APIRequestContext): Promise<string | null
   return live?.id ?? forCluster[0]?.id ?? null;
 }
 
+async function ensureMigrationPlan(req: APIRequestContext): Promise<void> {
+  const existing = await req.get(`${API_BASE}/api/v1/corpora/${CORPUS_ID}/migration-plan`, { headers: ENG });
+  if (existing.ok()) return;
+  // Deterministic (Kahn BFS on the call graph) — no LLM call, safe to pre-bake.
+  await req.post(`${API_BASE}/api/v1/corpora/${CORPUS_ID}/migration-plan/generate`, {
+    headers: ADMIN, data: {},
+  });
+}
+
 test.describe('UniBasic — Pattern Analysis + live archetype authoring + real scaffold', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -138,10 +147,11 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
     try {
       await ensureSpecSigned(request);
       const proposalId = await ensureProposalLive(request);
+      await ensureMigrationPlan(request);
 
       await test.step('Projects grid — the UniBasic project', async () => {
         await page.goto('/projects');
-        await setCaption(page, `This project holds nine real UniBasic (PICK/MultiValue) routines pulled from a live client codebase.`);
+        await setCaption(page, `This project has nine UniBasic (PICK/MultiValue) routines from a real client codebase.`);
         try {
           await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate cold-boot render race */ }
@@ -150,16 +160,40 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
 
       await test.step('corpus detail — file + routine counts', async () => {
         await page.goto(`/corpora/${CORPUS_ID}`);
-        await setCaption(page, `Nine UniBasic files, over six hundred lines of real business logic. Next we ask the platform to find shared patterns across all of them.`);
+        await setCaption(page, `Nine UniBasic files, parsed with our own UniBasic parser — over six hundred lines of business logic. Next, the platform looks for shared patterns across all of them.`);
         try {
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate */ }
         if (beat) await page.waitForTimeout(beat);
       });
 
+      await test.step('dependency graph — who calls whom', async () => {
+        await page.goto(`/corpora/${CORPUS_ID}/dependency-graph`);
+        await page.waitForLoadState('networkidle').catch(() => { /* tolerate */ });
+        await setCaption(page, `The platform maps which routines call which — including calls out to external programs it hasn't seen yet. This map decides the migration order.`);
+        try {
+          await expect(page.locator('canvas, svg').first()).toBeVisible({ timeout: 8_000 });
+        } catch { /* tolerate */ }
+        if (beat) await page.waitForTimeout(beat * 1.5);
+      });
+
+      await test.step('migration plan — what moves in which wave', async () => {
+        await page.goto(`/corpora/${CORPUS_ID}/migration-plan`);
+        await setCaption(page, `From that map, the migration is planned in waves. Routines others depend on move first — export goes in the last wave because it calls VZ.SALES.BR.`);
+        try {
+          await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 8_000 });
+        } catch { /* tolerate */ }
+        if (beat) await page.waitForTimeout(beat);
+        for (let i = 0; i < 2; i += 1) {
+          await page.mouse.wheel(0, 350);
+          await page.waitForTimeout(900);
+        }
+        if (beat) await page.waitForTimeout(beat);
+      });
+
       await test.step('pattern analysis — how many distinct behaviours does this codebase actually have?', async () => {
         await page.goto(`/corpora/${CORPUS_ID}/pattern-analysis`);
-        await setCaption(page, `Claude reads every routine in one pass and groups the ones that behave alike. This corpus has two shared patterns and five one-off routines.`);
+        await setCaption(page, `The platform reads every routine in one pass and groups the ones that behave alike. This corpus has two shared patterns and five one-off routines.`);
         try {
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate */ }
@@ -173,7 +207,7 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
       });
 
       await test.step('the export/UPS cluster — a live, LLM-authored archetype', async () => {
-        await setCaption(page, `This cluster's archetype wasn't hand-coded by an engineer. Claude proposed it, the platform auto-compiled and tested it, and once it passed, it went live instantly — no code change, no restart.`);
+        await setCaption(page, `The platform proposed this pattern, then compiled and tested it automatically. Once it passed, it went live — no code change, no restart.`);
         if (proposalId) {
           // Expand the proposal panel so the "Live" badge + test count + file
           // list are all visible on screen at once.
@@ -192,7 +226,7 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
 
       await test.step(`UPS routine — the signed spec`, async () => {
         await page.goto(`/subroutines/${UPS_SUB_ID}/review`);
-        await setCaption(page, `An engineer extracted a contract spec from the real UniBasic source; an SME reviewed and signed every claim. This is what the generator is grounded in — not a guess.`);
+        await setCaption(page, `An engineer extracted a spec from the UniBasic source, and an SME reviewed and signed it. The generator uses this signed spec.`);
         const sig = page.getByTestId('evidence-block-signature');
         try { await expect(sig).toBeVisible({ timeout: 10_000 }); } catch { /* tolerate */ }
         if (beat) await page.waitForTimeout(beat);
@@ -205,13 +239,13 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
 
       await test.step('the real, generated scaffold — not a template', async () => {
         await page.goto(`/scaffolds/${UPS_SCAFFOLD_ID}`);
-        await setCaption(page, `From that signed spec, Claude wrote this package one routine at a time — real generation, not a fill-in-the-blank template. Twelve files, customized to UPS specifically.`);
+        await setCaption(page, `From that signed spec, the platform generated this package one routine at a time. Twelve files, tailored to UPS.`);
         try {
           await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · java-spring/ })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate */ }
         if (beat) await page.waitForTimeout(beat);
         // Click into the real generated service + exception classes.
-        await setCaption(page, `This is the actual generated Java — the export logic, the SFTP upload, the error handling — all shaped around what the signed spec says UPS must do.`);
+        await setCaption(page, `This is the generated Java code — the export logic, the SFTP upload, and error handling — based on the signed spec.`);
         try {
           const files = page.locator('button', { hasText: /BatchExportService\.java|SftpUploadException\.java/ });
           const n = await files.count();
@@ -225,7 +259,7 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
 
       await test.step('validation report — one gate re-run live, two honestly not yet possible', async () => {
         await page.goto(`/scaffolds/${UPS_SCAFFOLD_ID}/validation`);
-        await setCaption(page, `Compile already passed. Now watch the test-pack gate regenerate and run for real, live, right now.`);
+        await setCaption(page, `Compile already passed. Now the platform regenerates and runs the test-pack gate live.`);
         try {
           await expect(page.getByRole('heading', { name: 'Validation report', level: 1 })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate */ }
@@ -243,15 +277,39 @@ test.describe('UniBasic — Pattern Analysis + live archetype authoring + real s
           } catch { /* tolerate a flaked click — the honest report matters more than a perfect take */ }
         });
         if (beat) await page.waitForTimeout(beat);
+      });
 
-        await setCaption(page, `Equivalence and property-based search need a real PICK/MultiValue runtime to compare against — that sidecar doesn't exist yet, so this platform honestly shows those two gates as not run. No shortcuts, no faked green checks.`);
-        if (beat) await page.waitForTimeout(beat * 2);
+      await test.step('the generated documentation — real output from reverse engineering', async () => {
+        await page.goto(`/corpora/${CORPUS_ID}/docs`);
+        await setCaption(page, `The platform also generates documentation from what it reverse-engineered — routine summaries, a data dictionary, a glossary, and business rules.`);
+        try {
+          await expect(page.getByText('Documentation', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+        } catch { /* tolerate */ }
+        if (beat) await page.waitForTimeout(beat);
+
+        // Routine summaries — open one, written straight from the real UniBasic source.
+        try {
+          await page.locator('nav button', { hasText: 'Routines' }).first().click({ timeout: 5_000 });
+          await page.waitForTimeout(1_000);
+          await page.locator('div.flex.min-h-0.flex-col button.w-full.border-b').first().click({ timeout: 5_000 });
+        } catch { /* tolerate */ }
+        await setCaption(page, `Every routine gets a summary of what it does and what it depends on, generated from the UniBasic source.`);
+        if (beat) await page.waitForTimeout(beat);
+
+        // Data dictionary — the shared vocabulary the platform extracted across the corpus.
+        try {
+          await page.locator('nav button', { hasText: 'Data Dictionary' }).first().click({ timeout: 5_000 });
+          await page.waitForTimeout(1_000);
+          await page.locator('div.flex.min-h-0.flex-col button.w-full.border-b').first().click({ timeout: 5_000 });
+        } catch { /* tolerate */ }
+        await setCaption(page, `A data dictionary and glossary capture how this UniBasic system uses its fields and terms.`);
+        if (beat) await page.waitForTimeout(beat);
       });
 
       await test.step('portfolio dashboard — closing wide shot across every project', async () => {
         await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'admin'));
         await page.goto('/platform/portfolio');
-        await setCaption(page, `Zooming out: this is real progress tracked across every migration project on the platform, UniBasic included — specs extracted, signed, scaffolded, and validated.`);
+        await setCaption(page, `This is progress tracked across every migration project on the platform, including UniBasic — specs extracted, signed, scaffolded, and validated.`);
         try {
           await expect(page.getByRole('heading', { name: /Portfolio dashboard/i, level: 1 })).toBeVisible({ timeout: 10_000 });
         } catch { /* tolerate */ }

@@ -66,6 +66,7 @@ public static class EvidenceEndpoints
                     lineStart = spec.Subroutine.LineStart,
                     lineEnd = spec.Subroutine.LineEnd,
                     state = spec.Subroutine.State,
+                    sourceLanguage = spec.Subroutine.SourceLanguage,
                     commonBlockRefs = spec.Subroutine.CommonBlockRefs,
                     calledSubroutines = spec.Subroutine.CalledSubroutines,
                     file = spec.Subroutine.SourceFile is null ? null : new

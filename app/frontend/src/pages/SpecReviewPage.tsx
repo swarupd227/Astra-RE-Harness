@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
 import { api, ApiError, claimPathFor, commentsApi, type ClaimReview, type SpecClaim } from '@/lib/api';
 import { CommentsThread } from '@/components/CommentsThread';
 import { EvidenceTrail } from '@/components/EvidenceTrail';
@@ -12,6 +12,9 @@ import { Button } from '@/components/Button';
 import { ProviderStrip } from '@/components/ProviderStrip';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 import { TargetSelector } from '@/components/TargetSelector';
+import { prettySchema, prettyStack } from '@/lib/targetStacks';
+import { useTargetStack } from '@/hooks/useTargetStack';
+import { WorkflowRail } from '@/components/WorkflowRail';
 import { SignatureHealthBadge } from '@/components/SignatureHealthBadge';
 import { MonacoSource, type Citation } from '@/components/MonacoSource';
 import { OutlinePane, type OutlineItem } from '@/components/OutlinePane';
@@ -35,74 +38,21 @@ export function SpecReviewPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [signOpen, setSignOpen] = useState(false);
 
-  // Phase #4 / value-add #3 — engineer-chosen target stack. Persists
-  // across reloads so the demo can switch once and keep the choice; the
-  // server-side guard still rejects gated stacks (e.g. java-spring) so
-  // self-service .NET 8 is the only thing that actually generates today.
+  // Phase #4 / value-add #3 — engineer-chosen target stack. The hook keeps
+  // the saved choice only while it is actually buildable for this routine's
+  // source language, and reports when it overrode or diverged from the
+  // recommendation so the notices below can say so out loud.
   //
-  // Phase 10.1.a.3 — `dotnet8` is the wrong fallback for specs whose
-  // schema (vb6, future cobol-only stacks…) has no dotnet8 archetypes.
-  // We still init from localStorage so the user's last explicit choice
-  // wins, but track whether the value was stored so we can auto-correct
-  // when the corpus's inferred schema has no archetypes on the default.
-  const initialHadStored = useMemo(() => {
-    try { return !!localStorage.getItem('astra.targetStack'); }
-    catch { return false; }
-  }, []);
-  const [targetStack, setTargetStack] = useState<string>(() => {
-    try {
-      return localStorage.getItem('astra.targetStack') ?? 'dotnet8';
-    } catch {
-      return 'dotnet8';
-    }
-  });
-  const onTargetChange = (next: string) => {
-    setTargetStack(next);
-    try {
-      localStorage.setItem('astra.targetStack', next);
-    } catch {
-      /* ignore — private mode etc. */
-    }
-  };
-
-  // Phase 10.1.a.3 — auto-correct the default when the current stack
-  // has no archetype compatible with the spec's source schema. Only
-  // fires when the user has NOT previously made an explicit choice
-  // (initialHadStored guard) — otherwise we'd override their pick.
-  // Schema is inferred from the corpus name because SpecResponse
-  // doesn't yet carry schemaId — same heuristic as CorporaPage's
-  // language pill so the two stay in sync without a backend change.
-  const archetypes = useQuery({
-    queryKey: ['archetypes'],
-    queryFn: api.listArchetypes,
-    staleTime: 5 * 60_000,
-  });
-  useEffect(() => {
-    if (initialHadStored) return;
-    const arches = archetypes.data?.data ?? [];
-    if (arches.length === 0) return;
-    // Phase 10.1.b.1 — read schema directly from the subroutine row.
-    // SubroutineEndpoints already projects `sourceLanguage`; we no
-    // longer guess from the corpus name. Null means "subroutine
-    // parsed before sourceLanguage was populated" — fall through
-    // to the unfiltered candidate search.
-    const schema = sub.data?.sourceLanguage ?? null;
-    const currentHasMatch = arches.some(
-      (a) =>
-        a.targetStack === targetStack &&
-        a.status.toLowerCase().startsWith('production') &&
-        (!schema || a.compatibleSchemas.includes(schema)),
-    );
-    if (currentHasMatch) return;
-    const candidate = arches.find(
-      (a) =>
-        a.status.toLowerCase().startsWith('production') &&
-        (schema ? a.compatibleSchemas.includes(schema) : true),
-    );
-    if (candidate && candidate.targetStack !== targetStack) {
-      setTargetStack(candidate.targetStack);
-    }
-  }, [archetypes.data, sub.data, initialHadStored, targetStack]);
+  // Phase 10.1.b.1 — schema comes straight off the subroutine row;
+  // SubroutineEndpoints has projected `sourceLanguage` since ingest. Null
+  // means "parsed before that column existed" and matches every archetype.
+  const schema = sub.data?.sourceLanguage ?? null;
+  const {
+    targetStack,
+    setTargetStack: onTargetChange,
+    overriddenFrom,
+    savedOverridesRecommended,
+  } = useTargetStack(schema);
 
   const sections: Section[] = useMemo(() => {
     const s = spec.data?.spec;
@@ -139,6 +89,19 @@ export function SpecReviewPage() {
       }
     }
     return failures;
+  }, [sections, reviewByPath]);
+
+  // First claim still lacking a final decision — powers the "jump to next
+  // undecided" affordance next to a disabled Sign button, so the precondition
+  // list stops being something you can only read inside a modal you can't open.
+  const firstUndecidedId = useMemo(() => {
+    for (const sec of sections) {
+      for (const c of sec.claims) {
+        const r = reviewByPath.get(claimPathFor(sec.key, c.id));
+        if (!r || (sec.key === 'open_questions' && r.action === 'question')) return c.id;
+      }
+    }
+    return null;
   }, [sections, reviewByPath]);
 
   const total = sections.reduce((n, s) => n + s.claims.length, 0);
@@ -257,15 +220,83 @@ export function SpecReviewPage() {
               <History className="h-3.5 w-3.5" aria-hidden="true" />
               Audit trail
             </Link>
-            {inReview && isSme && (
-              <Button variant="primary" size="md" onClick={() => setSignOpen(true)} disabled={preconditionFailures.length > 0}>
-                <ShieldCheck className="h-4 w-4" /> Sign spec
-              </Button>
+            {inReview && (
+              // Rendered for every persona. Hiding it from non-SMEs left an
+              // engineer staring at a read-only page with no explanation; a
+              // disabled control that names its owner is the honest version.
+              <div className="flex items-center gap-2">
+                {isSme && preconditionFailures.length > 0 && firstUndecidedId && (
+                  <button
+                    type="button"
+                    onClick={() => onJump(firstUndecidedId)}
+                    data-testid="jump-to-undecided"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+                  >
+                    Next undecided
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => setSignOpen(true)}
+                  disabled={!isSme || preconditionFailures.length > 0}
+                  title={
+                    !isSme
+                      ? "Sign-off is the SME's step — switch persona to SME in the menu at the top right."
+                      : preconditionFailures.length > 0
+                        ? `${preconditionFailures.length} claim${preconditionFailures.length === 1 ? '' : 's'} still need a decision:\n` +
+                          preconditionFailures.slice(0, 6).join('\n') +
+                          (preconditionFailures.length > 6 ? `\n…and ${preconditionFailures.length - 6} more` : '')
+                        : undefined
+                  }
+                  data-testid="sign-spec-cta"
+                >
+                  <ShieldCheck className="h-4 w-4" /> Sign spec
+                </Button>
+              </div>
             )}
-            {signed && whoami.data?.persona === 'engineer' && (
-              <ScaffoldCta specId={sp.id} targetStack={targetStack} />
+            {signed && (
+              whoami.data?.persona === 'engineer' ? (
+                <ScaffoldCta specId={sp.id} targetStack={targetStack} />
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled
+                  title="Code generation is the Engineer's step — switch persona to Engineer in the menu at the top right."
+                  data-testid="scaffold-cta-wrong-persona"
+                >
+                  <Cog className="h-4 w-4" /> Generate scaffold
+                </Button>
+              )
             )}
           </div>
+        </div>
+
+        {/* Where this routine sits in the workflow, and — when the primary
+            CTA is disabled — why. A tooltip alone is not discoverable on a
+            disabled control. */}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <WorkflowRail state={sp.state} persona={whoami.data?.persona as any} />
+          {inReview && !isSme && (
+            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+              Sign-off is the <strong className="text-ink-secondary">SME</strong>'s step — switch persona
+              in the menu at the top right to act on this spec.
+            </p>
+          )}
+          {inReview && isSme && preconditionFailures.length > 0 && (
+            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+              <strong className="text-ink-secondary">{preconditionFailures.length}</strong>{' '}
+              claim{preconditionFailures.length === 1 ? '' : 's'} still need a decision before this spec can be signed.
+            </p>
+          )}
+          {signed && whoami.data?.persona !== 'engineer' && (
+            <p className="text-caption text-ink-tertiary" data-testid="scaffold-blocked-reason">
+              Code generation is the <strong className="text-ink-secondary">Engineer</strong>'s step — switch
+              persona to choose a target stack and generate.
+            </p>
+          )}
         </div>
       </header>
 
@@ -280,8 +311,44 @@ export function SpecReviewPage() {
       </div>
 
       {signed && whoami.data?.persona === 'engineer' && (
-        <div className="border-b border-border-subtle bg-canvas/40 px-6 py-3">
-          <TargetSelector value={targetStack} onChange={onTargetChange} />
+        <div className="space-y-2 border-b border-border-subtle bg-canvas/40 px-6 py-3">
+          <TargetSelector value={targetStack} onChange={onTargetChange} sourceLanguage={schema} />
+          {overriddenFrom && (
+            <p
+              className="flex flex-wrap items-center gap-x-2 rounded-md border border-status-scaffolded/40 bg-[#F2E5C2]/40 px-3 py-2 text-caption text-ink-primary"
+              data-testid="target-overridden-notice"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
+              Your saved target <strong className="font-mono">{prettyStack(overriddenFrom)}</strong> has no
+              production archetype for {prettySchema(schema ?? '')} sources — using{' '}
+              <strong className="font-mono">{prettyStack(targetStack)}</strong> instead.
+              <button
+                type="button"
+                onClick={() => onTargetChange(targetStack)}
+                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-accent"
+              >
+                Keep {prettyStack(targetStack)}
+              </button>
+            </p>
+          )}
+          {savedOverridesRecommended && (
+            <p
+              className="flex flex-wrap items-center gap-x-2 text-caption text-ink-tertiary"
+              data-testid="target-saved-notice"
+            >
+              Using your saved target <strong className="font-mono text-ink-secondary">{prettyStack(targetStack)}</strong>.
+              Recommended for {prettySchema(schema ?? '')}:{' '}
+              <strong className="font-mono text-ink-secondary">{prettyStack(savedOverridesRecommended)}</strong>.
+              <button
+                type="button"
+                onClick={() => onTargetChange(savedOverridesRecommended)}
+                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-accent"
+                data-testid="use-recommended-target"
+              >
+                Use recommended
+              </button>
+            </p>
+          )}
         </div>
       )}
 
@@ -393,21 +460,25 @@ function ScaffoldCta({ specId, targetStack }: { specId: string; targetStack: str
     staleTime: 0,
   });
   if (probe.data?.id) {
+    // Name the stack the package was actually built for — "Open scaffold"
+    // alone gave no clue whether you were about to read Java or C#.
     return (
       <Link to={`/scaffolds/${probe.data.id}`}>
         <Button variant="secondary" size="md">
-          <Cog className="h-4 w-4" /> Open scaffold
+          <Cog className="h-4 w-4" /> Open scaffold · {prettyStack(probe.data.targetPlatform)}
         </Button>
       </Link>
     );
   }
   // Forward the engineer-chosen target stack on the navigation URL so the
-  // LiveScaffoldPage can pass it through to POST /scaffold.
-  const qs = targetStack && targetStack !== 'dotnet8' ? `?target=${encodeURIComponent(targetStack)}` : '';
+  // LiveScaffoldPage can pass it through to POST /scaffold. Always sent —
+  // omitting it for dotnet8 made an explicit .NET 8 choice indistinguishable
+  // from "no choice", and the server's own default then took over.
+  const qs = targetStack ? `?target=${encodeURIComponent(targetStack)}` : '';
   return (
     <Link to={`/specs/${specId}/scaffold${qs}`}>
       <Button variant="primary" size="md">
-        <Cog className="h-4 w-4" /> Generate scaffold
+        <Cog className="h-4 w-4" /> Generate scaffold · {prettyStack(targetStack)}
       </Button>
     </Link>
   );

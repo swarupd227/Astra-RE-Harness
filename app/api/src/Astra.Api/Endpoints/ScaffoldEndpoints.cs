@@ -193,6 +193,59 @@ public static class ScaffoldEndpoints
             }
         });
 
+        // ─── List every generated package ────────────────────────────────
+        // Until this existed the only way back to generated code was the
+        // spec-review CTA or the live-generation page: close the tab and the
+        // artifact was unreachable unless you remembered which routine made
+        // it. Powers the Generated code index in the UI.
+        app.MapGet("/api/v1/scaffolds", async (
+            string? targetStack,
+            Guid? corpusId,
+            string? state,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var q = db.Scaffolds.AsNoTracking()
+                .Include(s => s.Spec)
+                    .ThenInclude(sp => sp!.Subroutine)
+                        .ThenInclude(sub => sub!.SourceFile)
+                            .ThenInclude(f => f!.SourceVersion)
+                                .ThenInclude(v => v!.Corpus)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(targetStack))
+                q = q.Where(s => s.TargetPlatform == targetStack);
+            if (!string.IsNullOrWhiteSpace(state))
+                q = q.Where(s => s.State == state);
+            if (corpusId is { } cid)
+                q = q.Where(s => s.Spec!.Subroutine!.SourceFile!.SourceVersion!.CorpusId == cid);
+
+            var rows = await q
+                .OrderByDescending(s => s.GeneratedAt)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    specId = s.SpecId,
+                    subroutineId = s.Spec!.SubroutineId,
+                    routineName = s.Spec!.Subroutine!.Name,
+                    sourceLanguage = s.Spec!.Subroutine!.SourceLanguage,
+                    sourcePath = s.Spec!.Subroutine!.SourceFile!.RelativePath,
+                    corpusId = s.Spec!.Subroutine!.SourceFile!.SourceVersion!.CorpusId,
+                    corpusName = s.Spec!.Subroutine!.SourceFile!.SourceVersion!.Corpus!.Name,
+                    targetPlatform = s.TargetPlatform,
+                    state = s.State,
+                    fileCount = s.FileCount,
+                    totalLines = s.TotalLines,
+                    todoCount = s.TodoCount,
+                    generatedAt = s.GeneratedAt,
+                    gitBranch = s.GitBranch,
+                    gitCommitHash = s.GitCommitHash,
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(new { data = rows });
+        });
+
         // ─── Read scaffold by spec id (the demo entry point) ─────────────
         app.MapGet("/api/v1/specs/{id:guid}/scaffold", async (
             Guid id,
