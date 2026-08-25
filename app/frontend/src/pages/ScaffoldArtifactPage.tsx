@@ -81,7 +81,6 @@ export function ScaffoldArtifactPage() {
   }
 
   const sc = scaffold.data;
-  const subroutineId = evidence.data?.subroutine?.id ?? null;
   const sourceLanguage = evidence.data?.subroutine?.sourceLanguage ?? null;
 
   const onCommit = async () => {
