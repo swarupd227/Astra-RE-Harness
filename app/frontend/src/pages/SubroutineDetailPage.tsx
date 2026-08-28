@@ -33,6 +33,24 @@ export function SubroutineDetailPage() {
   const [confirmReextract, setConfirmReextract] = useState(false);
 
   if (sub.isPending || source.isPending) {
+    // A query that fails and can't be retried (offline, a backgrounded tab
+    // that lost connectivity) sits in status "pending" / fetchStatus
+    // "paused" indefinitely — isPending alone would show the skeleton
+    // forever, since refetchOnWindowFocus is off app-wide and nothing else
+    // nudges it. Treat a paused fetch as an error case instead of a loading
+    // one; checked as its own early return so the isPending/isError checks
+    // below keep their original shape and TS can still narrow sub.data.
+    if (sub.fetchStatus === 'paused' || source.fetchStatus === 'paused') {
+      return (
+        <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
+          <ErrorBlock
+            title="Could not load routine"
+            message="Couldn't reach the server — check your connection and retry."
+            onRetry={() => { sub.refetch(); source.refetch(); }}
+          />
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10">
         <Skeleton className="h-10 w-96" />
@@ -40,13 +58,13 @@ export function SubroutineDetailPage() {
       </div>
     );
   }
-  if (sub.isError) {
+  if (sub.isError || source.isError) {
     return (
       <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
         <ErrorBlock
           title="Could not load routine"
-          message={sub.error.message}
-          onRetry={() => sub.refetch()}
+          message={(sub.error ?? source.error)!.message}
+          onRetry={() => { sub.refetch(); source.refetch(); }}
         />
       </div>
     );

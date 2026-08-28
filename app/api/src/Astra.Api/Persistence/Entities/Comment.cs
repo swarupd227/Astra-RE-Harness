@@ -28,7 +28,15 @@ public sealed class Comment
     /// <summary>Replies anchor on this. Null for top-level comments.</summary>
     public Guid? ParentCommentId { get; set; }
 
-    /// <summary>Markdown-ish body (we render as plain text for safety).</summary>
+    /// <summary>
+    /// Stored raw, exactly as submitted — including any HTML/script-looking text.
+    /// This is safe ONLY because every current renderer treats it as plain text
+    /// (React text children on the frontend; no dangerouslySetInnerHTML, no
+    /// markdown parser touches it). If a consumer ever needs to render this as
+    /// HTML or Markdown, it MUST sanitize/encode at that render site — do not
+    /// "fix" this by encoding here, which would corrupt legitimate bodies
+    /// containing &lt; &gt; &amp; (e.g. "if x &lt; 5") for the existing safe renderer.
+    /// </summary>
     public string Body { get; set; } = "";
 
     /// <summary>JSON array of persona strings — written by the API after parsing the body.</summary>

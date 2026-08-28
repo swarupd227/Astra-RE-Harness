@@ -300,9 +300,18 @@ public sealed class IngestPipeline
                 TotalLoc: totalLoc,
                 SubroutineCount: totalSubs,
                 Warnings: warnings,
-                ErrorMessage: ex.Message);
+                ErrorMessage: ClientSafeErrorMessage(corpus.Id));
         }
     }
+
+    /// <summary>
+    /// A generic message for the API response / UI. The real exception (which for
+    /// storage-layer failures can include request IDs, XML error bodies and other
+    /// backend-internal detail) goes to <see cref="_logger"/> only, via the
+    /// LogError call at the catch site — never to the client.
+    /// </summary>
+    private static string ClientSafeErrorMessage(Guid corpusId) =>
+        $"Ingest failed unexpectedly. Check the server log for corpus {corpusId} for details.";
 
     // ────────────────────────────────────────────────────────────────────
     // Re-sync (Phase C.3)
@@ -585,7 +594,7 @@ public sealed class IngestPipeline
                 CarriedForwardCount: carriedForward,
                 SupersededCount: superseded,
                 Warnings: warnings,
-                ErrorMessage: ex.Message);
+                ErrorMessage: ClientSafeErrorMessage(corpus.Id));
         }
     }
 

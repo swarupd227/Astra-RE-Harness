@@ -179,7 +179,11 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
       tone: 'draft' as const,
     },
     {
-      label: 'Last activity',
+      // Reflects stats.llm.lastCalledAt specifically — the last Claude call,
+      // not the last event of any kind. Keep the label matched to that, or it
+      // reads as disagreeing with the (separately-sourced) activity feed below,
+      // which includes ingests, comments, exports and everything else too.
+      label: 'Last LLM call',
       value: stats.llm.lastCalledAt ? relativeTime(stats.llm.lastCalledAt) : '—',
       sub: stats.llm.lastCalledAt ? new Date(stats.llm.lastCalledAt).toLocaleString() : 'no LLM calls yet',
       icon: HistoryIcon,
@@ -638,7 +642,7 @@ function SignedSpecsCard() {
 function subroutineStateSummary(byState: Record<string, number>): string {
   const order = ['PARSED', 'DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDED'];
   const parts = order
-    .map((s) => (byState[s] ? `${byState[s]} ${s.toLowerCase()}` : null))
+    .map((s) => (byState[s] ? `${byState[s]} ${s.toLowerCase().replace(/_/g, ' ')}` : null))
     .filter(Boolean) as string[];
   return parts.length === 0 ? 'no subroutines yet' : parts.slice(0, 3).join(' · ');
 }

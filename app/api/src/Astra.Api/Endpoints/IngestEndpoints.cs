@@ -463,15 +463,36 @@ public static class IngestEndpoints
             var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
             if (Ingest.SourceLanguageDetector.FromExtension(ext) is null) continue;
 
+            var relativePath = entry.FullName.Replace('\\', '/');
+            if (!IsSafeZipEntryPath(relativePath)) continue;  // path traversal / absolute path attempt
+
             string text;
             using (var es = entry.Open())
             using (var reader = new StreamReader(es, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
                 text = await reader.ReadToEndAsync(ct);
 
             yield return new IngestPipeline.IncomingFile(
-                RelativePath: entry.FullName.Replace('\\', '/'),
+                RelativePath: relativePath,
                 Content: text);
         }
+    }
+
+    /// <summary>
+    /// Rejects zip entries whose name would resolve outside the corpus's own file
+    /// tree — a rooted path (<c>/etc/passwd</c>, <c>C:\...</c>) or any <c>..</c>
+    /// segment (<c>../../evil.pick</c>). Entry names come straight from the
+    /// uploaded archive and are otherwise untrusted input; RelativePath is later
+    /// used to build storage keys, so a traversal segment here is a Zip Slip.
+    /// </summary>
+    private static bool IsSafeZipEntryPath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return false;
+        if (Path.IsPathRooted(relativePath)) return false;
+        foreach (var segment in relativePath.Split('/'))
+        {
+            if (segment == "..") return false;
+        }
+        return true;
     }
 
     private static List<IngestPipeline.IncomingFile> CollectFortranFiles(

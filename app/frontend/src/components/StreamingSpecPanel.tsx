@@ -46,10 +46,10 @@ export function StreamingSpecPanel({
       {(draft.invariants?.length ?? 0) > 0 && (
         <Section title="Invariants" count={draft.invariants!.length}>
           <ul className="space-y-2">
-            {draft.invariants!.map((inv) => (
+            {draft.invariants!.map((inv, i) => (
               <ClaimCard
                 key={inv.id}
-                id={inv.id}
+                id={`INV-${i + 1}`}
                 body={inv.claim}
                 citations={inv.citations}
                 confidence={inv.confidence}
@@ -86,7 +86,7 @@ export function StreamingSpecPanel({
                 key={i}
                 id={`EC-${i + 1}`}
                 body={ec.description}
-                supplemental={`Behavior: ${ec.behavior}`}
+                supplemental={ec.behavior ? `Behavior: ${ec.behavior}` : undefined}
                 citations={ec.citations}
                 confidence={ec.confidence}
                 onCite={onCitationClick}

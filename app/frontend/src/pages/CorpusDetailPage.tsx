@@ -129,6 +129,19 @@ export function CorpusDetailPage() {
         </div>
       </header>
 
+      {c.state === 'FAILED' && (
+        // The specific reason isn't persisted anywhere retrievable — only
+        // logged server-side at the time of failure — so this can't say more
+        // than "it failed" without either the corpus having a stored error
+        // column (schema change) or the server log. Re-sync is the one
+        // concrete thing this screen can actually offer.
+        <ErrorBlock
+          title="This project failed to ingest"
+          message="Something went wrong while processing the uploaded files. Re-sync to try again, or check the server log if it keeps failing."
+          onRetry={() => setReingestOpen(true)}
+        />
+      )}
+
       {exportError && (
         <p className="text-xs text-rose-600" data-testid="export-project-error">{exportError}</p>
       )}
