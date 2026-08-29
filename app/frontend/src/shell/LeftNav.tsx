@@ -120,7 +120,13 @@ export function LeftNav() {
     queryFn: () => api.health(),
     refetchInterval: 60_000,
   });
-  const live = health.data?.status === 'ok';
+  // Three states, not two: while the first probe is still in flight (every
+  // fresh page load re-mounts this and re-fetches), `live` used to default
+  // to false via `undefined === 'ok'` — flashing the red "API offline" dot
+  // and text on every single navigation, not just on a real outage.
+  const live = health.isPending ? null : health.data?.status === 'ok';
+  const liveColor = live === null ? 'text-slate-500' : live ? 'text-emerald-400' : 'text-rose-400';
+  const liveLabel = live === null ? 'Checking…' : live ? 'Audit-logged · evidence-ready' : 'API offline';
 
   return (
     <aside
@@ -183,12 +189,12 @@ export function LeftNav() {
             <div className="flex items-center gap-2 text-caption text-slate-400">
               <ShieldCheck
                 size={13}
-                className={clsx('shrink-0', live ? 'text-emerald-400' : 'text-rose-400')}
+                className={clsx('shrink-0', liveColor)}
               />
-              {live ? 'Audit-logged · evidence-ready' : 'API offline'}
+              {liveLabel}
             </div>
             <div className="flex items-center gap-2 text-caption text-slate-400">
-              <Cpu size={13} className={clsx('shrink-0', live ? 'text-emerald-400' : 'text-rose-400')} />
+              <Cpu size={13} className={clsx('shrink-0', liveColor)} />
               <span className="truncate font-mono">
                 {whoami.data?.displayName ? `signed in as ${whoami.data.displayName}` : '…'}
               </span>

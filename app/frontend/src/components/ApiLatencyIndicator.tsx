@@ -23,7 +23,11 @@ async function probe(): Promise<Sample> {
 }
 
 export function ApiLatencyIndicator() {
-  const [sample, setSample] = useState<Sample>({ ms: null, ok: false });
+  // ok starts true (not false): this mounts fresh on every full navigation,
+  // and a false default rendered "unreachable" — the actual down state —
+  // for up to 3s before the first probe() resolves, on every single page
+  // load, regardless of whether the API was ever actually unreachable.
+  const [sample, setSample] = useState<Sample>({ ms: null, ok: true });
   const [inFlight, setInFlight] = useState(true);
 
   useEffect(() => {
