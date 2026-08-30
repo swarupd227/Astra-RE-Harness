@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { Check, Edit3, HelpCircle, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { ClaimReview, SpecClaim } from '@/lib/api';
+import { claimBodyText, type ClaimReview, type SpecClaim } from '@/lib/api';
 import { Button } from '@/components/Button';
 
 type Action = 'accept' | 'edit' | 'reject' | 'question';
@@ -34,8 +34,15 @@ export function ReviewableClaimCard({
     if (editing && inputRef.current) inputRef.current.focus();
   }, [editing]);
 
-  const body = claim.claim ?? claim.description ?? claim.question ?? '';
-  const supplemental = claim.behavior ? `Behavior: ${claim.behavior}` : null;
+  const body = claimBodyText(claim);
+  // scenario is only useful as extra context when handling (not
+  // description) is the main body text — when description exists,
+  // scenario duplicates it.
+  const supplemental = claim.behavior
+    ? `Behavior: ${claim.behavior}`
+    : !claim.description && claim.scenario
+      ? claim.scenario
+      : null;
   const tone = stateToTone(review?.action);
 
   const accept = async () => {

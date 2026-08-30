@@ -842,6 +842,17 @@ export type SpecClaim = {
   claim?: string;
   description?: string;
   question?: string;
+  // The extraction schema has drifted across prompt versions and signing
+  // state — the same claim kind comes back with different field names
+  // depending on which spec you're looking at (verified directly against
+  // the API on real specs: pre-signing invariants use `statement`,
+  // pre-signing edge cases use `handling`/`scenario`; signing normalizes
+  // onto `description`). Every consumer of a claim's body text should go
+  // through claimBodyText() below rather than reading one of these fields
+  // directly, or it'll render blank for whichever variant it didn't expect.
+  statement?: string;
+  handling?: string;
+  scenario?: string;
   citations?: { lines: string }[];
   confidence?: string;
   behavior?: string;
@@ -853,6 +864,13 @@ export type SpecClaim = {
   original_description?: string;
   original_question?: string;
 };
+
+/** The single source of truth for "what is this claim's body text" — see
+ * the field-drift note on SpecClaim above. Always use this instead of
+ * reading claim.claim/.description/.question directly. */
+export function claimBodyText(claim: SpecClaim): string {
+  return claim.description ?? claim.statement ?? claim.claim ?? claim.handling ?? claim.question ?? '';
+}
 
 export type ClaimReview = {
   id: string;

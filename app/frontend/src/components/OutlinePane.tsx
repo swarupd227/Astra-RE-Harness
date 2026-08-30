@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import type { ClaimReview, SpecClaim } from '@/lib/api';
-import { claimPathFor } from '@/lib/api';
+import { claimBodyText, claimPathFor } from '@/lib/api';
 
 export type OutlineItem = {
   section: string;
@@ -74,7 +74,7 @@ export function OutlinePane({
                       <StateDot state={state} />
                       <span className="text-ink-primary">{c.id}</span>
                       <span className="ml-auto truncate text-ink-tertiary">
-                        {(c.claim ?? c.description ?? c.question ?? '').slice(0, 24)}
+                        {claimBodyText(c).slice(0, 24)}
                       </span>
                     </button>
                   </li>
