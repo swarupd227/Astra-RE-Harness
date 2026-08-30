@@ -44,7 +44,10 @@ export default defineConfig({
       ? { mode: 'on', size: { width: 1600, height: 1000 } }
       : 'retain-on-failure',
     actionTimeout: recordDemo ? 30_000 : 8_000,
-    navigationTimeout: 15_000,
+    // The deployed Azure environment has occasionally shown elevated
+    // latency (observed >5s just for the base HTML response) — 15s wasn't
+    // enough margin once the full SPA bundle load is added on top.
+    navigationTimeout: 45_000,
     // RECORD_DEMO: slow every action by 600ms so a stakeholder can watch
     // each click land. The test will naturally take ~1 min longer; that's
     // the cost of stakeholder-readable pacing.

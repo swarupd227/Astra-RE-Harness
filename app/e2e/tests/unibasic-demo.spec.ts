@@ -77,6 +77,29 @@ async function setCaption(page: Page, text: string): Promise<void> {
   }, text);
 }
 
+/**
+ * Navigate, then check for a genuine connectivity blip (not the ~3s cold-
+ * start window every fresh mount has while its first health probe is in
+ * flight — that's a normal, brief loading state). If the "unreachable" /
+ * "API offline" indicators are STILL showing after settling, this is a real
+ * transient failure — reload once and give it a second chance rather than
+ * recording ten more seconds of broken skeleton state.
+ */
+async function gotoAndSettle(page: Page, url: string): Promise<void> {
+  await page.goto(url);
+  try { await page.waitForLoadState('domcontentloaded', { timeout: 5_000 }); } catch { /* tolerate */ }
+  await page.waitForTimeout(2_500); // past the normal cold-start probe window
+  try {
+    const stillDown = await page.getByText(/unreachable|API offline/i).first().isVisible({ timeout: 500 });
+    if (stillDown) {
+      await page.waitForTimeout(2_000);
+      await page.reload();
+      try { await page.waitForLoadState('domcontentloaded', { timeout: 8_000 }); } catch { /* tolerate */ }
+      await page.waitForTimeout(1_500);
+    }
+  } catch { /* tolerate — no indicator found is the good case */ }
+}
+
 test.describe('UniBasic → Java Spring: signed spec, generated code, live validation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -104,7 +127,11 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
 
     try {
       await test.step('Home — what this platform does', async () => {
-        await page.goto('/');
+        // beforeEach already navigated to '/' to set localStorage — a second
+        // goto('/') here just reloads the exact same page, doubling the
+        // slowest, most-visible load of the whole recording (the opening
+        // seconds). Settle on what's already loaded instead.
+        try { await page.waitForLoadState('domcontentloaded', { timeout: 5_000 }); } catch { /* tolerate */ }
         await setCaption(page, `Astra reverse-engineers legacy source code and migrates it to a modern stack — with a human reviewing every claim along the way.`);
         try {
           await expect(page.getByText('ASTRA RE HARNESS')).toBeVisible({ timeout: 15_000 });
@@ -113,16 +140,22 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Projects — the UniBasic project', async () => {
-        await page.goto('/projects');
+        await gotoAndSettle(page, '/projects');
         await setCaption(page, `This project is a real UniBasic (Pick/MultiValue) codebase — the kind of terse, 40-year-old business logic that's hardest to migrate safely.`);
         try {
           await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible({ timeout: 15_000 });
         } catch { /* tolerate */ }
         if (beat) await page.waitForTimeout(beat);
+        // Scroll the QA-test scratch corpora (sorted first, above the real
+        // projects) out of frame before the beat that actually gets shown.
+        try {
+          await page.getByText('UniBasic Pick Sample').first().scrollIntoViewIfNeeded({ timeout: 5_000 });
+        } catch { /* tolerate */ }
+        if (beat) await page.waitForTimeout(beat / 2);
       });
 
       await test.step('Corpus detail — parsed inventory', async () => {
-        await page.goto(`/corpora/${CORPUS_ID}`);
+        await gotoAndSettle(page, `/corpora/${CORPUS_ID}`);
         await setCaption(page, `Seven UniBasic files, parsed with Astra's own UniBasic parser into an inventory of routines — ready for extraction.`);
         try {
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
@@ -131,7 +164,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Draft spec — what the LLM actually extracted', async () => {
-        await page.goto(`/subroutines/${SUB_ID}/spec`);
+        await gotoAndSettle(page, `/subroutines/${SUB_ID}/spec`);
         await setCaption(page, `An LLM reads the source and extracts a structured spec — inputs, outputs, invariants, side effects, and edge cases — each one citing the exact source lines it came from.`);
         try {
           await expect(page.getByText('DRAFT SPEC')).toBeVisible({ timeout: 15_000 });
@@ -146,7 +179,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Spec review — signed, evidence-backed', async () => {
-        await page.goto(`/subroutines/${SUB_ID}/review`);
+        await gotoAndSettle(page, `/subroutines/${SUB_ID}/review`);
         await setCaption(page, `A human reviewer signs off on every claim. The signature is a real RFC-8785 canonical-JSON signature — checkable with the public key on any machine.`);
         const sig = page.getByTestId('evidence-block-signature');
         try { await expect(sig).toBeVisible({ timeout: 10_000 }); } catch { /* tolerate */ }
@@ -156,7 +189,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Generated code — every package the platform has produced', async () => {
-        await page.goto('/scaffolds');
+        await gotoAndSettle(page, '/scaffolds');
         await setCaption(page, `Every package generated from a signed spec lands here — across every routine, every target stack.`);
         try {
           await expect(page.getByText('Generated code').first()).toBeVisible({ timeout: 15_000 });
@@ -165,7 +198,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('The real, generated Java — not a template', async () => {
-        await page.goto(`/scaffolds/${SCAFFOLD_ID}`);
+        await gotoAndSettle(page, `/scaffolds/${SCAFFOLD_ID}`);
         await setCaption(page, `From that signed spec, the platform generated a real Spring service — eight files, tailored to this one routine.`);
         try {
           await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · java-spring/ })).toBeVisible({ timeout: 15_000 });
@@ -184,7 +217,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Validation report — one gate re-run live, one honestly not yet possible', async () => {
-        await page.goto(`/scaffolds/${SCAFFOLD_ID}/validation`);
+        await gotoAndSettle(page, `/scaffolds/${SCAFFOLD_ID}/validation`);
         await setCaption(page, `Compile already passed. Now the platform regenerates the test pack from the signed spec and runs it live.`);
         try {
           await expect(page.getByText('Validation report')).toBeVisible({ timeout: 15_000 });
@@ -212,7 +245,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Generated documentation — real output from reverse engineering', async () => {
-        await page.goto(`/corpora/${CORPUS_ID}/docs`);
+        await gotoAndSettle(page, `/corpora/${CORPUS_ID}/docs`);
         await setCaption(page, `The same reverse-engineering pass also produces documentation — functional requirements, a data dictionary, a glossary — straight from the UniBasic source.`);
         try {
           await expect(page.getByText('DOCUMENTATION')).toBeVisible({ timeout: 15_000 });
@@ -227,7 +260,7 @@ test.describe('UniBasic → Java Spring: signed spec, generated code, live valid
       });
 
       await test.step('Closing — the whole workspace', async () => {
-        await page.goto('/');
+        await gotoAndSettle(page, '/');
         await setCaption(page, `From forty-year-old UniBasic to reviewed, signed, tested Java — with a human accountable for every step.`);
         try {
           await expect(page.getByText('ASTRA RE HARNESS')).toBeVisible({ timeout: 15_000 });
