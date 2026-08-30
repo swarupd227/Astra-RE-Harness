@@ -54,7 +54,14 @@ export function ScaffoldArtifactPage() {
   const treeFiles = files.map((f) => ({ path: f.path, language: f.language, todoCount: f.todoCount }));
   const active = useMemo<ScaffoldFile | null>(() => {
     if (!files.length) return null;
-    const path = activePath ?? files[0].path;
+    // Default to the first file that actually cites a spec claim, not just
+    // files[0] — which is whatever the generator emitted first (often a
+    // build-config file like pom.xml with zero citations). Landing there
+    // makes the "Derived from" panel show "0 signed-spec claims" on first
+    // load even when the package is fully traceable, which reads as broken
+    // rather than as "you happen to be looking at the one file with none."
+    const defaultPath = files.find((f) => f.derivedFromClaimIds.length > 0)?.path ?? files[0].path;
+    const path = activePath ?? defaultPath;
     return files.find((f) => f.path === path) ?? files[0];
   }, [files, activePath]);
 

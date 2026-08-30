@@ -145,7 +145,18 @@ export function ValidationReportPage() {
         <OverallBadge verdict={overall} />
       </header>
 
-      <ProviderSettingsCard />
+      {scaffold.data?.llmCall && (
+        <ProviderSettingsCard
+          override={{
+            provider: scaffold.data.llmCall.provider,
+            model: scaffold.data.llmCall.model,
+            configVersion: scaffold.data.llmCall.providerConfigVersion,
+            promptId: scaffold.data.llmCall.promptTemplateId,
+            promptVersion: scaffold.data.llmCall.promptTemplateVersion,
+            promptContext: `${scaffold.data.targetPlatform} scaffold`,
+          }}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StageCard

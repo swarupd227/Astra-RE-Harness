@@ -36,6 +36,24 @@ export function TraceabilityPanel({
     .map((id) => resolve(spec, id))
     .filter((c): c is { id: string; section: string; body: string } => c !== null);
 
+  // claimIds came from the file's own derivedFromClaimIds, so a citation was
+  // made — resolve() just couldn't match it against this spec's actual claim
+  // IDs. That's a real ID-vocabulary mismatch between scaffold generation and
+  // spec extraction, not "this file has no claims" — saying "0 signed-spec
+  // claims" here would misreport a data problem as an empty-but-fine state.
+  if (claims.length === 0) {
+    return (
+      <div className="p-6">
+        <p className="text-caption text-ink-tertiary">
+          This file cites {claimIds.length} claim{claimIds.length === 1 ? '' : 's'}
+          {' '}({claimIds.join(', ')}), but none matched an ID in this signed spec.
+          The citation and the spec have drifted out of sync — not a sign the
+          file has no claims behind it.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 p-5">
       <header>
@@ -44,6 +62,11 @@ export function TraceabilityPanel({
         </p>
         <h3 className="mt-1 text-h-md font-semibold text-ink-primary">
           {claims.length} signed-spec {claims.length === 1 ? 'claim' : 'claims'}
+          {claims.length < claimIds.length && (
+            <span className="ml-2 text-caption font-normal text-ink-tertiary">
+              ({claimIds.length - claims.length} more cited but unmatched)
+            </span>
+          )}
         </h3>
       </header>
 

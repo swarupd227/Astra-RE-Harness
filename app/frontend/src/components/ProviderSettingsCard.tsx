@@ -5,6 +5,35 @@ import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 
+const DISPLAY_NAME: Record<string, string> = {
+  anthropic: 'Anthropic Claude',
+  azure_openai: 'Azure OpenAI',
+  mock: 'Mock (offline)',
+  'fail-mock': 'Mock (errors-by-design)',
+};
+
+/** Mirrors the backend's ProviderEndpoints.ParseFlags — splits a
+ *  "anthropic:zdr=true:no-train:no-retention:enterprise-endpoint"-style
+ *  config-version string into the same flag set. */
+function parseConfigFlags(configVersion: string): Set<string> {
+  return new Set(
+    configVersion
+      .split(':')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export type ProviderOverride = {
+  provider: string;
+  model: string;
+  configVersion: string;
+  promptId?: string | null;
+  promptVersion?: string | null;
+  /** e.g. "java-spring scaffold" — replaces the "schemaId → targetStack" line, which only makes sense for the global extract-prompt default. */
+  promptContext?: string;
+};
+
 /**
  * Provider Settings card — value-add #1 in the Nous platform pitch.
  *
@@ -16,20 +45,63 @@ import { Skeleton } from '@/components/Skeleton';
  *
  * Use the `compact` variant in tight headers; the default variant is the
  * full card.
+ *
+ * Pass `override` when the caller already has the ACTUAL LLM call that
+ * produced the artifact on screen (e.g. a scaffold's own llmCall) — without
+ * it, this falls back to GET /api/v1/providers/settings, which is the
+ * platform's global default config and (as of this writing) a hardcoded
+ * fortran-f77 → dotnet8 example prompt, unrelated to whatever artifact the
+ * card happens to be rendered next to. That mismatch is real and visible
+ * (shows Fortran prompt info on a UniBasic/Java-Spring validation report,
+ * for instance) — override with the artifact's own call wherever one is
+ * available rather than "fixing" the global endpoint to guess correctly.
  */
-export function ProviderSettingsCard({ compact = false }: { compact?: boolean } = {}) {
+export function ProviderSettingsCard({
+  compact = false,
+  override,
+}: {
+  compact?: boolean;
+  override?: ProviderOverride;
+} = {}) {
   const q = useQuery({
     queryKey: ['providerSettings'],
     queryFn: api.getProviderSettings,
     staleTime: 5 * 60_000,
+    enabled: !override,
   });
 
-  if (q.isPending) {
+  if (!override && q.isPending) {
     return <Skeleton className={compact ? 'h-8 w-full' : 'h-32 w-full'} />;
   }
-  if (q.isError || !q.data) return null;
+  if (!override && (q.isError || !q.data)) return null;
 
-  const { provider, residency, promptLibrary } = q.data;
+  const provider = override
+    ? {
+        displayName: DISPLAY_NAME[override.provider] ?? override.provider,
+        model: override.model,
+        endpointHostname: null as string | null,
+        apiVersion: null as string | null,
+      }
+    : q.data!.provider;
+  const residencyFlags = override ? parseConfigFlags(override.configVersion) : null;
+  const residency = override
+    ? {
+        configVersion: override.configVersion,
+        zdr: residencyFlags!.has('zdr=true') || residencyFlags!.has('zdr'),
+        noTraining: residencyFlags!.has('no-train'),
+        noRetention: residencyFlags!.has('no-retention'),
+        enterpriseEndpoint: residencyFlags!.has('enterprise-endpoint'),
+        offline: residencyFlags!.has('offline'),
+      }
+    : q.data!.residency;
+  const promptLibrary = override
+    ? {
+        extractPromptId: override.promptId ?? null,
+        extractPromptVersion: override.promptVersion ?? null,
+        schemaId: override.promptContext ?? '',
+        targetStack: '',
+      }
+    : q.data!.promptLibrary;
   const trustChips = buildTrustChips(residency);
 
   if (compact) {
@@ -119,7 +191,7 @@ export function ProviderSettingsCard({ compact = false }: { compact?: boolean } 
                 {promptLibrary.extractPromptId}@{promptLibrary.extractPromptVersion}
               </div>
               <div className="font-mono text-[11px] text-ink-tertiary">
-                {promptLibrary.schemaId} → {promptLibrary.targetStack}
+                {override ? promptLibrary.schemaId : `${promptLibrary.schemaId} → ${promptLibrary.targetStack}`}
               </div>
             </div>
           )}
