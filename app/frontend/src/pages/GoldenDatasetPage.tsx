@@ -611,7 +611,7 @@ function NewEntryModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between">
-          <h2 className="text-headline font-semibold text-ink-primary">New golden-dataset entry</h2>
+          <h2 className="text-headline font-semibold text-ink-primary">New Golden Dataset entry</h2>
           <button className="rounded p-1 hover:bg-surface-secondary" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </button>

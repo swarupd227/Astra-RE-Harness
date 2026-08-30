@@ -50,7 +50,7 @@ public sealed class DevPersonaMiddleware
         personaCtx.Persona = headerValue.ParsePersona(fallback);
         personaCtx.DisplayName = headerValue is null
             ? "Dev User (default persona)"
-            : $"Dev User ({personaCtx.Persona})";
+            : $"Dev User ({personaCtx.Persona.DisplayName()})";
         personaCtx.IsBypass = true;
 
         ctx.Items["persona"] = personaCtx.Persona;

@@ -2,6 +2,16 @@ import { clsx } from 'clsx';
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+// The extraction schema has drifted across prompt versions, and a spec's
+// pre-signing shape isn't normalized the way a signed one is (signing adds
+// sme_action/sme_reviewed_at and appears to fold everything onto
+// `description`). Observed live, same claim kind, different specs:
+//   invariants:  {claim} | {statement, category, rationale} | {description, kind, sme_action, ...}
+//   edge_cases:  {description, behavior} | {handling, scenario} | {description, impact, sme_action, ...}
+// None of these are wrong — they're just not one shape. Every field below is
+// optional and read via a fallback chain rather than assuming a single name,
+// so a spec extracted under any of these variants still renders real text
+// instead of a blank claim card.
 export type DraftSpec = {
   routine?: string;
   source_path?: string;
@@ -9,9 +19,23 @@ export type DraftSpec = {
   summary?: string;
   inputs?: { id: string; name: string; type: string; semantic: string }[];
   outputs?: { id: string; name: string; type: string; semantic: string }[];
-  invariants?: { id: string; claim: string; citations: { lines: string }[]; confidence: string }[];
+  invariants?: {
+    id: string;
+    claim?: string;
+    statement?: string;
+    description?: string;
+    citations: { lines: string }[];
+    confidence?: string;
+  }[];
   side_effects?: { description: string; citations: { lines: string }[] }[];
-  edge_cases?: { description: string; citations: { lines: string }[]; behavior: string; confidence: string }[];
+  edge_cases?: {
+    description?: string;
+    handling?: string;
+    scenario?: string;
+    citations: { lines: string }[];
+    behavior?: string;
+    confidence?: string;
+  }[];
   open_questions?: { id: string; question: string; status: string }[];
 };
 
@@ -50,7 +74,7 @@ export function StreamingSpecPanel({
               <ClaimCard
                 key={inv.id}
                 id={`INV-${i + 1}`}
-                body={inv.claim}
+                body={inv.description ?? inv.statement ?? inv.claim ?? ''}
                 citations={inv.citations}
                 confidence={inv.confidence}
                 onCite={onCitationClick}
@@ -85,8 +109,17 @@ export function StreamingSpecPanel({
               <ClaimCard
                 key={i}
                 id={`EC-${i + 1}`}
-                body={ec.description}
-                supplemental={ec.behavior ? `Behavior: ${ec.behavior}` : undefined}
+                body={ec.description ?? ec.handling ?? ''}
+                supplemental={
+                  ec.behavior
+                    ? `Behavior: ${ec.behavior}`
+                    // scenario is only useful as extra context when handling (not
+                    // description) is the main body text — when description exists,
+                    // scenario duplicates it.
+                    : !ec.description && ec.scenario
+                      ? ec.scenario
+                      : undefined
+                }
                 citations={ec.citations}
                 confidence={ec.confidence}
                 onCite={onCitationClick}

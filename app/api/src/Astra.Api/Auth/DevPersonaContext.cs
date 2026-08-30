@@ -30,4 +30,13 @@ public static class PersonaExtensions
             "admin"    => Persona.Admin,
             _          => fallback
         };
+
+    /// <summary>Human display form — plain enum ToString() renders Sme as
+    /// "Sme", not the acronym "SME", everywhere a persona name is shown
+    /// (Signature Health, My Reviews, Migration Plan attribution, ...).</summary>
+    public static string DisplayName(this Persona p) => p switch
+    {
+        Persona.Sme => "SME",
+        _ => p.ToString(),
+    };
 }

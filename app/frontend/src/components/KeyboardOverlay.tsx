@@ -1,7 +1,13 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
-type Shortcut = { keys: string[]; label: string };
+// `available: false` shortcuts are listed but not wired up to any handler
+// yet — verified against the actual keydown listeners in App.tsx and
+// SpecReviewPage.tsx, not guessed. Keeping them documented (as a roadmap of
+// what a claim card is meant to support) is fine; showing them identically
+// to working shortcuts is not — a user pressing 'a' expecting to accept a
+// claim and having nothing happen reads as broken, not "not built yet".
+type Shortcut = { keys: string[]; label: string; available?: boolean };
 type Section = { title: string; items: Shortcut[] };
 
 const SECTIONS: Section[] = [
@@ -25,10 +31,14 @@ const SECTIONS: Section[] = [
     items: [
       { keys: ['j'], label: 'Next claim' },
       { keys: ['k'], label: 'Previous claim' },
-      { keys: ['a'], label: 'Accept claim' },
-      { keys: ['e'], label: 'Edit claim' },
-      { keys: ['r'], label: 'Reject claim (requires reason)' },
-      { keys: ['?'], label: 'Open question on claim' },
+      { keys: ['a'], label: 'Accept claim', available: false },
+      { keys: ['e'], label: 'Edit claim', available: false },
+      { keys: ['r'], label: 'Reject claim (requires reason)', available: false },
+      // Global '?' always wins (it's a window-level listener with no scoping
+      // to Spec Review), so this one can never actually fire — not a "?"
+      // collision to resolve, just a shortcut that was never given a
+      // handler or a non-conflicting key.
+      { keys: ['?'], label: 'Open question on claim', available: false },
       { keys: ['s'], label: 'Open sign-off modal (when ready)' },
     ],
   },
@@ -67,7 +77,7 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
               Keyboard shortcuts
             </h2>
             <p className="mt-1 text-caption text-ink-secondary">
-              Greyed shortcuts unlock as their phase ships.
+              Greyed-out shortcuts are listed but not wired up yet.
             </p>
           </div>
           <button
@@ -87,21 +97,35 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
                 {section.title}
               </h3>
               <ul className="divide-y divide-border-subtle">
-                {section.items.map((item) => (
-                  <li key={item.label} className="flex items-center justify-between py-2 text-body">
-                    <span className="text-ink-primary">{item.label}</span>
-                    <span className="flex items-center gap-1">
-                      {item.keys.map((k, i) => (
-                        <kbd
-                          key={i}
-                          className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-caption text-ink-primary shadow-e1"
-                        >
-                          {k}
-                        </kbd>
-                      ))}
-                    </span>
-                  </li>
-                ))}
+                {section.items.map((item) => {
+                  const available = item.available ?? true;
+                  return (
+                    <li
+                      key={item.label}
+                      className={
+                        'flex items-center justify-between py-2 text-body' +
+                        (available ? '' : ' opacity-45')
+                      }
+                    >
+                      <span className="text-ink-primary">{item.label}</span>
+                      <span className="flex items-center gap-1">
+                        {item.keys.map((k, i) => (
+                          <kbd
+                            key={i}
+                            className={
+                              'rounded border px-1.5 py-0.5 font-mono text-caption shadow-e1 ' +
+                              (available
+                                ? 'border-border bg-canvas text-ink-primary'
+                                : 'border-border-subtle bg-canvas text-ink-tertiary')
+                            }
+                          >
+                            {k}
+                          </kbd>
+                        ))}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))}

@@ -42,8 +42,25 @@ export function CompliancePage() {
     return formats.data?.data.find((f) => f.id === selectedId) ?? formats.data?.data[0];
   }, [formats.data, selectedId]);
 
+  // A compliance export accepting a nonsensical request (an inverted date
+  // range, a non-positive row limit) with no feedback undercuts the whole
+  // point of this page — audit rigor. Validate before the request ever
+  // fires, not after a confusing empty/malformed CSV comes back.
+  const validationError = useMemo(() => {
+    if (since && until && new Date(since).getTime() > new Date(until).getTime()) {
+      return '"Since" is after "Until" — no rows can match this range.';
+    }
+    if (limit) {
+      const n = Number(limit);
+      if (!Number.isFinite(n) || n <= 0) {
+        return 'Row limit must be a positive number.';
+      }
+    }
+    return null;
+  }, [since, until, limit]);
+
   const onDownload = async () => {
-    if (!selected) return;
+    if (!selected || validationError) return;
     setDownloading(true);
     setDownloadError(null);
     try {
@@ -144,6 +161,7 @@ export function CompliancePage() {
                 variant="primary"
                 onClick={onDownload}
                 loading={downloading}
+                disabled={!!validationError}
                 data-testid="compliance-download"
               >
                 <Download className="h-4 w-4" />
@@ -156,6 +174,12 @@ export function CompliancePage() {
                 </span>
               )}
             </div>
+
+            {validationError && (
+              <p className="text-caption text-status-failed" data-testid="compliance-validation-error">
+                {validationError}
+              </p>
+            )}
 
             {downloadError && (
               <ErrorBlock title="Download failed" message={downloadError} />

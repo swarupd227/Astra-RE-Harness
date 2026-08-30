@@ -101,9 +101,31 @@ public static class ClaimKindBucketer
 
     /// <summary>The non-empty kind keys present in a bucketed spec, sorted
     /// and comma-joined — the deterministic "claim-kind signature" used as
-    /// the coarse clustering hint before the LLM judging pass.</summary>
-    public static string Signature(Dictionary<string, List<string>> buckets) =>
-        string.Join(",", buckets.Where(kv => kv.Value.Count > 0).Select(kv => kv.Key).OrderBy(k => k, StringComparer.Ordinal));
+    /// the coarse clustering hint before the LLM judging pass, and shown
+    /// directly to users on the Pattern Analysis page.
+    ///
+    /// Bucket() deliberately double-registers several kinds under both a
+    /// snake_case and camelCase key (see the VB/OpenEdge/PHP/UniBasic
+    /// comments above) so golden-dataset scoring finds a claim regardless of
+    /// which name a schema declares it under. For any single spec both
+    /// aliases always hold identical claim text, since they read the same
+    /// source JSON array — useful redundancy for scoring lookups, but it
+    /// means the naive key list contains visible duplicates like
+    /// "edgeCase,edge_case" for what is, for this spec, one kind of claim.
+    /// Dedupe by the bucket's actual content (not by a hand-maintained alias
+    /// table, which would drift out of sync with Bucket() over time) before
+    /// joining, keeping whichever alias sorts first.</summary>
+    public static string Signature(Dictionary<string, List<string>> buckets)
+    {
+        var seenContent = new HashSet<string>();
+        var kinds = new List<string>();
+        foreach (var kv in buckets.Where(kv => kv.Value.Count > 0).OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            var contentKey = string.Join('␟', kv.Value);
+            if (seenContent.Add(contentKey)) kinds.Add(kv.Key);
+        }
+        return string.Join(",", kinds);
+    }
 
     private static void TryAddKind(
         Dictionary<string, List<string>> buckets,
