@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Phase A: a placeholder that announces the surface and explains when
@@ -8,6 +8,36 @@ import { useState } from 'react';
 export function CommandBarTrigger() {
   const [open, setOpen] = useState(false);
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+  // The button has always advertised a ⌘K / Ctrl+K badge, but nothing in the
+  // app ever listened for it — pressing the exact shortcut printed on screen
+  // did nothing, not even the "not available yet" modal the button itself
+  // opens correctly on click. Wire the same trigger to the keyboard so the
+  // two paths behave identically, rather than removing the badge (the
+  // surface is real, if unimplemented — see the modal copy below).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // The modal's own copy promises "Press Esc to close", but nothing ever
+  // listened for Escape — only clicking the backdrop or the button worked.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open]);
 
   return (
     <>
