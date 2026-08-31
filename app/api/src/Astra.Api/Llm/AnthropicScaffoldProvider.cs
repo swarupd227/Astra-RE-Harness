@@ -461,9 +461,18 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     /// <summary>
     /// Parse the model's files array, defensively (markdown fences / prose
     /// wrapping tolerated via brace-depth scan, same pattern as
-    /// HarmonisationPipeline / PatternAnalysisOrchestrator). Falls back to
-    /// the reference archetype's own claim-id mapping per path so a
-    /// customized file keeps its provenance even if the model omits it.
+    /// HarmonisationPipeline / PatternAnalysisOrchestrator).
+    ///
+    /// <c>derivedFromClaimIds</c> comes from the model's own response for
+    /// each file — the prompt (v3+) hands it the real signed spec and asks
+    /// it to cite that spec's actual claim ids. Only falls back to the
+    /// reference archetype's per-path mapping when the model omits the
+    /// field for a file; that mapping describes the REFERENCE routine's
+    /// own example claims, not this routine's, so it's a last resort, not
+    /// the primary source (a prior version of this method used it
+    /// unconditionally, which meant every scaffolded file was mislabeled
+    /// with whichever archetype's author happened to write for their own
+    /// worked example).
     /// </summary>
     private static List<GeneratedFile> ParseFiles(string rawJson, ArchetypeRegistry.LoadedArchetype archetype)
     {
@@ -486,7 +495,12 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
                 if (string.IsNullOrWhiteSpace(path)) continue;
                 var language = ReadString(item, "language", "java");
                 var content = ReadString(item, "content", "");
-                var claims = claimsByPath.TryGetValue(path, out var c) ? c : Array.Empty<string>();
+                var modelClaims = item.TryGetProperty("derivedFromClaimIds", out var c) && c.ValueKind == JsonValueKind.Array
+                    ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                    : Array.Empty<string>();
+                var claims = modelClaims.Length > 0
+                    ? modelClaims
+                    : claimsByPath.TryGetValue(path, out var archetypeClaims) ? archetypeClaims : Array.Empty<string>();
                 result.Add(new GeneratedFile(path, language, content, claims));
             }
         }
