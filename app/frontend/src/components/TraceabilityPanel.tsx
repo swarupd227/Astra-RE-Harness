@@ -1,5 +1,5 @@
 import { ArrowUpRight } from 'lucide-react';
-import type { SpecResponse } from '@/lib/api';
+import { claimBodyText, type SpecClaim, type SpecResponse } from '@/lib/api';
 
 /**
  * Phase B.4 right-side panel on the Scaffold Artifact view. Maps a file's
@@ -96,24 +96,25 @@ export function TraceabilityPanel({
 }
 
 function resolve(spec: SpecResponse, id: string): { id: string; section: string; body: string } | null {
-  const sections: { key: keyof SpecResponse['spec']; label: string; bodyKey: 'claim' | 'description' | 'question' | 'semantic' }[] = [
-    { key: 'invariants', label: 'invariant', bodyKey: 'claim' },
-    { key: 'side_effects', label: 'side effect', bodyKey: 'description' },
-    { key: 'edge_cases', label: 'edge case', bodyKey: 'description' },
-    { key: 'open_questions', label: 'open question', bodyKey: 'question' },
-    { key: 'inputs', label: 'input', bodyKey: 'semantic' },
-    { key: 'outputs', label: 'output', bodyKey: 'semantic' },
+  const sections: { key: keyof SpecResponse['spec']; label: string }[] = [
+    { key: 'invariants', label: 'invariant' },
+    { key: 'side_effects', label: 'side effect' },
+    { key: 'edge_cases', label: 'edge case' },
+    { key: 'open_questions', label: 'open question' },
+    { key: 'inputs', label: 'input' },
+    { key: 'outputs', label: 'output' },
   ];
   for (const sec of sections) {
     const arr = spec.spec[sec.key];
     if (!arr || !Array.isArray(arr)) continue;
     const hit = (arr as Array<Record<string, unknown>>).find((c) => c.id === id);
     if (hit) {
-      return {
-        id,
-        section: sec.label,
-        body: String(hit[sec.bodyKey] ?? hit.claim ?? hit.description ?? hit.question ?? id),
-      };
+      // inputs/outputs are params (name/type/semantic), not claims — everything
+      // else goes through the same claim-body fallback chain every other claim
+      // display uses, so this doesn't drift out of sync with those again.
+      const semantic = typeof hit.semantic === 'string' ? hit.semantic : '';
+      const body = semantic || claimBodyText(hit as unknown as SpecClaim) || id;
+      return { id, section: sec.label, body };
     }
   }
   return null;

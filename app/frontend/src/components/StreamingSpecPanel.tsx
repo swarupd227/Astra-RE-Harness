@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 // pre-signing shape isn't normalized the way a signed one is (signing adds
 // sme_action/sme_reviewed_at and appears to fold everything onto
 // `description`). Observed live, same claim kind, different specs:
-//   invariants:  {claim} | {statement, category, rationale} | {description, kind, sme_action, ...}
+//   invariants:  {claim} | {statement} | {condition, rationale} | {description, kind, sme_action, ...}
 //   edge_cases:  {description, behavior} | {handling, scenario} | {description, impact, sme_action, ...}
 // None of these are wrong — they're just not one shape. Every field below is
 // optional and read via a fallback chain rather than assuming a single name,
@@ -23,6 +23,8 @@ export type DraftSpec = {
     id: string;
     claim?: string;
     statement?: string;
+    condition?: string;
+    rationale?: string;
     description?: string;
     citations: { lines: string }[];
     confidence?: string;
@@ -74,7 +76,12 @@ export function StreamingSpecPanel({
               <ClaimCard
                 key={inv.id}
                 id={`INV-${i + 1}`}
-                body={inv.description ?? inv.statement ?? inv.claim ?? ''}
+                body={inv.description ?? inv.statement ?? inv.condition ?? inv.claim ?? ''}
+                supplemental={
+                  // rationale is only useful as extra context when condition (not
+                  // description/statement) is the main body text.
+                  !inv.description && !inv.statement && inv.rationale ? inv.rationale : undefined
+                }
                 citations={inv.citations}
                 confidence={inv.confidence}
                 onCite={onCitationClick}

@@ -35,14 +35,16 @@ export function ReviewableClaimCard({
   }, [editing]);
 
   const body = claimBodyText(claim);
-  // scenario is only useful as extra context when handling (not
-  // description) is the main body text — when description exists,
-  // scenario duplicates it.
+  // scenario/rationale are only useful as extra context when they weren't
+  // the source of the main body text — when description/statement/condition
+  // already won out, they'd just duplicate it.
   const supplemental = claim.behavior
     ? `Behavior: ${claim.behavior}`
     : !claim.description && claim.scenario
       ? claim.scenario
-      : null;
+      : !claim.description && !claim.statement && claim.rationale
+        ? claim.rationale
+        : null;
   const tone = stateToTone(review?.action);
 
   const accept = async () => {
