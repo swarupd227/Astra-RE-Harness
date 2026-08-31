@@ -142,7 +142,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
 
         yield return Stage("validating", 3, "Parsing generated package");
 
-        var generatedFiles = ParseFiles(rawJson, archetype);
+        var generatedFiles = ParseFiles(rawJson, archetype, ExtractValidClaimIds(request.SignedSpecJson));
         if (generatedFiles.Count == 0)
         {
             yield return new("error", new
@@ -284,7 +284,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
 
         yield return Stage("validating", 3, "Parsing modernized file");
 
-        var generatedFiles = ParseInPlaceFiles(rawJson);
+        var generatedFiles = ParseInPlaceFiles(rawJson, ExtractValidClaimIds(request.SignedSpecJson));
         if (generatedFiles.Count == 0)
         {
             yield return new("error", new
@@ -350,9 +350,12 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     /// <summary>
     /// Parse the in-place model's files array. Unlike <see cref="ParseFiles"/>
     /// there's no archetype to fall back on for claim provenance, so each
-    /// file object carries its own <c>derivedFromClaimIds</c> directly.
+    /// file object carries its own <c>derivedFromClaimIds</c> directly —
+    /// filtered against <paramref name="validClaimIds"/> for the same
+    /// reason <see cref="ParseFiles"/> filters: the model doesn't always
+    /// stick to the given spec's actual ids.
     /// </summary>
-    private static List<GeneratedFile> ParseInPlaceFiles(string rawJson)
+    private static List<GeneratedFile> ParseInPlaceFiles(string rawJson, HashSet<string> validClaimIds)
     {
         var result = new List<GeneratedFile>();
 
@@ -373,7 +376,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
                 var language = ReadString(item, "language", "java");
                 var content = ReadString(item, "content", "");
                 var claims = item.TryGetProperty("derivedFromClaimIds", out var c) && c.ValueKind == JsonValueKind.Array
-                    ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                    ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0 && validClaimIds.Contains(s)).ToArray()
                     : Array.Empty<string>();
                 result.Add(new GeneratedFile(path, language, content, claims));
             }
@@ -464,17 +467,28 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     /// HarmonisationPipeline / PatternAnalysisOrchestrator).
     ///
     /// <c>derivedFromClaimIds</c> comes from the model's own response for
-    /// each file — the prompt (v3+) hands it the real signed spec and asks
-    /// it to cite that spec's actual claim ids. Only falls back to the
-    /// reference archetype's per-path mapping when the model omits the
-    /// field for a file; that mapping describes the REFERENCE routine's
-    /// own example claims, not this routine's, so it's a last resort, not
-    /// the primary source (a prior version of this method used it
-    /// unconditionally, which meant every scaffolded file was mislabeled
-    /// with whichever archetype's author happened to write for their own
-    /// worked example).
+    /// each file, filtered against <paramref name="validClaimIds"/> — the
+    /// real id set from the signed spec the model was actually given.
+    /// Grounding this in code rather than trusting the model's compliance
+    /// with the prompt matters in practice: even with the prompt (v3+)
+    /// telling it to cite the given spec's real ids, it sometimes invents
+    /// its own finer-grained ids instead (observed live: "dau.locate_..."
+    /// style ids that exist nowhere in the spec). Filtering means an
+    /// invented id can never reach the UI, at the cost of a shorter
+    /// citation list for files where the model didn't stick to the given
+    /// vocabulary — better an honest gap than a fabricated citation.
+    ///
+    /// Only falls back to the reference archetype's per-path mapping when
+    /// the model omits the field for a file entirely (empty/missing, not
+    /// merely "filtered to nothing"); that mapping describes the REFERENCE
+    /// routine's own example claims, not this routine's, so it's a last
+    /// resort for older/malformed responses, not the primary source (a
+    /// prior version of this method used it unconditionally, which meant
+    /// every scaffolded file was mislabeled with whichever archetype's
+    /// author happened to write for their own worked example).
     /// </summary>
-    private static List<GeneratedFile> ParseFiles(string rawJson, ArchetypeRegistry.LoadedArchetype archetype)
+    private static List<GeneratedFile> ParseFiles(
+        string rawJson, ArchetypeRegistry.LoadedArchetype archetype, HashSet<string> validClaimIds)
     {
         var claimsByPath = archetype.Files.ToDictionary(f => f.Path, f => f.DerivedFromClaimIds);
         var result = new List<GeneratedFile>();
@@ -499,7 +513,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
                     ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
                     : Array.Empty<string>();
                 var claims = modelClaims.Length > 0
-                    ? modelClaims
+                    ? modelClaims.Where(validClaimIds.Contains).ToArray()
                     : claimsByPath.TryGetValue(path, out var archetypeClaims) ? archetypeClaims : Array.Empty<string>();
                 result.Add(new GeneratedFile(path, language, content, claims));
             }
@@ -509,6 +523,46 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             // Leave whatever parsed successfully before the failure.
         }
         return result;
+    }
+
+    /// <summary>
+    /// The complete set of claim ids that actually exist in the signed
+    /// spec the model was given — every <c>id</c> across invariants,
+    /// side_effects, edge_cases, open_questions, inputs, and outputs. Used
+    /// to filter <c>derivedFromClaimIds</c> so a hallucinated id can never
+    /// reach the UI, regardless of how faithfully the model followed the
+    /// prompt's instruction to cite only real ids.
+    /// </summary>
+    private static HashSet<string> ExtractValidClaimIds(string signedSpecJson)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var doc = JsonDocument.Parse(signedSpecJson);
+            foreach (var section in new[] { "invariants", "side_effects", "edge_cases", "open_questions", "inputs", "outputs" })
+            {
+                if (!doc.RootElement.TryGetProperty(section, out var arr) || arr.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var item in arr.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object
+                        && item.TryGetProperty("id", out var idEl)
+                        && idEl.ValueKind == JsonValueKind.String
+                        && idEl.GetString() is { Length: > 0 } id)
+                    {
+                        ids.Add(id);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Malformed spec JSON: no known-valid ids, so every file falls
+            // back to the archetype's own mapping below (same as if the
+            // model had returned nothing) rather than trusting anything
+            // unverifiable.
+        }
+        return ids;
     }
 
     private static string? ExtractFirstJsonObject(string text)
