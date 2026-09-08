@@ -14,4 +14,10 @@
       attribute citing the signed claim id so the scaffold ties back to the spec.
     </Description>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- tests/ has its own Demo.IdSMTP.Tests.csproj — exclude its sources
+         here or the default **/*.cs glob compiles them into this project too,
+         without the xunit references that project declares. -->
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>

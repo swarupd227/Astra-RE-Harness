@@ -14,4 +14,10 @@
       FormatException.cs holds the strong-exception-guarantee payload.
     </Description>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- tests/ has its own test csproj — exclude its sources here or the
+         default **/*.cs glob compiles them into this project too, without
+         the xunit references that project declares. -->
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>
