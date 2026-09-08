@@ -33,6 +33,8 @@ public sealed class TestPackGenerator
 {
     // Allowable C# identifier chars in claim ids / method names.
     private static readonly Regex Sanitize = new(@"[^A-Za-z0-9_]", RegexOptions.Compiled);
+    private static readonly Regex NamespacePattern = new(
+        @"^\s*namespace\s+([A-Za-z_][A-Za-z0-9_.]*)\s*[;{]", RegexOptions.Compiled | RegexOptions.Multiline);
 
     private readonly AppDbContext _db;
     private readonly IBlobClient _blob;
@@ -86,7 +88,18 @@ public sealed class TestPackGenerator
 
         var subroutineName = spec.Subroutine?.Name ?? "Unknown";
         var className = SanitizeIdentifier(subroutineName) + "_SignedSpecPack";
-        var testFilePath = $"tests/{className}.cs";
+
+        // Read the manifest up front so the test file's directory and
+        // namespace can be derived from whatever this scaffold's OWN test
+        // files already use, rather than assuming every archetype shares
+        // one flat layout — a two-runtime scaffold (e.g. angular-dotnet8)
+        // keeps its .NET tests under backend/tests/, not tests/ at the
+        // scaffold root, and its namespace is never Demo.RollStock.Tests
+        // (hardcoded here for the one archetype this was built against).
+        var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+        using var manifestDoc = JsonDocument.Parse(manifestText);
+        var (testDir, testNamespace) = DeriveTestFileLocation(manifestDoc.RootElement, subroutineName);
+        var testFilePath = $"{testDir}/{className}.cs";
 
         // ── Walk the spec JSON via the externalised schema (Phase #3a) ──
         // The schema declares which kinds exist for this source language
@@ -108,12 +121,10 @@ public sealed class TestPackGenerator
         }
 
         // ── Render the file ──────────────────────────────────────────────
-        var content = RenderTestFile(className, subroutineName, spec.Id, schema, claimsByKind);
+        var content = RenderTestFile(className, testNamespace, subroutineName, spec.Id, schema, claimsByKind);
 
         // ── Update the scaffold manifest in MinIO ────────────────────────
         var allClaims = claimsByKind.SelectMany(kv => kv.Value).ToList();
-        var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
-        using var manifestDoc = JsonDocument.Parse(manifestText);
         var newManifest = ReplaceOrAppendFile(
             manifestDoc.RootElement, testFilePath, "csharp", content,
             claimIds: allClaims.Select(c => c.Id).ToArray());
@@ -261,6 +272,7 @@ public sealed class TestPackGenerator
 
     private static string RenderTestFile(
         string className,
+        string testNamespace,
         string subroutineName,
         Guid specId,
         SpecSchema schema,
@@ -283,7 +295,7 @@ public sealed class TestPackGenerator
         sb.AppendLine("// =====================================================================");
         sb.AppendLine("using Xunit;");
         sb.AppendLine();
-        sb.AppendLine("namespace Demo.RollStock.Tests;");
+        sb.AppendLine($"namespace {testNamespace};");
         sb.AppendLine();
         sb.AppendLine($"public class {className}");
         sb.AppendLine("{");
@@ -377,6 +389,45 @@ public sealed class TestPackGenerator
 
     private static int CountTodos(string content) =>
         Regex.Matches(content, @"\bTODO\b").Count;
+
+    /// <summary>
+    /// Finds an existing C# test file already in the scaffold's manifest
+    /// and reuses its directory and namespace for the new SignedSpecPack
+    /// file, instead of assuming every archetype puts tests at a flat
+    /// "tests/" root under one fixed namespace (true for every
+    /// single-runtime dotnet8/java-spring archetype, but not for a
+    /// two-runtime one like angular-dotnet8, whose .NET tests live under
+    /// backend/tests/). Falls back to the old flat convention only if no
+    /// C# test file exists yet in the manifest at all.
+    /// </summary>
+    private static (string Dir, string Namespace) DeriveTestFileLocation(
+        JsonElement manifestRoot, string subroutineName)
+    {
+        if (manifestRoot.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in files.EnumerateArray())
+            {
+                var path = TryGetString(f, "path");
+                if (path is null || !path.Contains("test", StringComparison.OrdinalIgnoreCase)
+                    || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var content = TryGetString(f, "content");
+                var ns = content is null ? null : ExtractNamespace(content);
+                if (ns is null) continue;
+
+                var dir = path.Contains('/') ? path[..path.LastIndexOf('/')] : "tests";
+                return (dir, ns);
+            }
+        }
+        return ("tests", "Demo." + SanitizeIdentifier(subroutineName) + ".Tests");
+    }
+
+    private static string? ExtractNamespace(string content)
+    {
+        var m = NamespacePattern.Match(content);
+        return m.Success ? m.Groups[1].Value : null;
+    }
 
     // ────────────────────────────────────────────────────────────────────
     // Manifest manipulation
