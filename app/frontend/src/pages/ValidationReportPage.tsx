@@ -22,12 +22,22 @@ import {
   type ValidationStage,
   type ValidationStatus,
 } from '@/lib/api';
+import { prettySchema } from '@/lib/targetStacks';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
+
+// Source languages whose EQUIVALENCE gate (CrossRuntimeValidator.cs) is
+// unconditionally a smoke test — proving a reference sidecar is reachable
+// and agrees with a hardcoded example, not that THIS scaffold's generated
+// code behaves like the actual routine. Verified directly against that
+// file's per-language dispatch. Deliberately excludes cobol/fortran-f77:
+// both have a genuine (if narrow — one named routine for cobol) per-routine
+// equivalence path, so greying out their button would hide a real check.
+const EQUIVALENCE_SMOKE_ONLY_LANGUAGES = new Set(['delphi', 'cpp', 'vb6', 'csharp', 'vbnet']);
 
 /**
  * Phase #2d — Post-migration validation report card.
@@ -56,6 +66,24 @@ export function ValidationReportPage() {
     queryFn: () => api.listValidationRuns(id),
     enabled: !!id,
   });
+
+  // ScaffoldResponse doesn't carry sourceLanguage (it's on the subroutine,
+  // not the scaffold) — one extra round trip to find out whether this
+  // routine's EQUIVALENCE gate is smoke-only. Stays disabled==false while
+  // this is still loading; a stray enabled click just runs the honest
+  // smoke test server-side, so there's no correctness risk in the gap.
+  const spec = useQuery({
+    queryKey: ['spec-for-scaffold-validation', scaffold.data?.specId],
+    queryFn: () => api.getSpec(scaffold.data!.specId),
+    enabled: !!scaffold.data?.specId,
+  });
+  const sourceLanguage = spec.data?.subroutine?.sourceLanguage?.toLowerCase() ?? null;
+  const equivalenceDisabledReason = sourceLanguage && EQUIVALENCE_SMOKE_ONLY_LANGUAGES.has(sourceLanguage)
+    ? `For ${prettySchema(sourceLanguage)} sources this only smoke-tests that the reference ` +
+      `sidecar is reachable (a hardcoded example, unrelated to this routine) — not real ` +
+      `equivalence against this scaffold's generated code. No per-routine ${prettySchema(sourceLanguage)} ` +
+      `equivalence harness exists yet.`
+    : undefined;
 
   const refetchRuns = () => queryClient.invalidateQueries({ queryKey: ['validation', id] });
 
@@ -188,6 +216,7 @@ export function ValidationReportPage() {
           isRunning={equivalence.isPending}
           errorMessage={equivalence.error?.message}
           runLabel="Run equivalence"
+          disabledReason={equivalenceDisabledReason}
         />
         <StageCard
           title="Falsifying"
@@ -235,6 +264,7 @@ function StageCard({
   isRunning,
   errorMessage,
   runLabel,
+  disabledReason,
 }: {
   title: string;
   subtitle: string;
@@ -244,6 +274,11 @@ function StageCard({
   isRunning: boolean;
   errorMessage: string | undefined;
   runLabel: string;
+  /** When set, the run button is disabled and this explains why — e.g.
+   * "smoke test only for this source language" — rather than letting an
+   * engineer trigger a check whose PASSED badge could be misread as a
+   * stronger guarantee than it actually gives. */
+  disabledReason?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -309,14 +344,18 @@ function StageCard({
           <Button
             variant={run?.status === 'PASSED' ? 'ghost' : 'primary'}
             onClick={onRun}
-            disabled={isRunning}
+            disabled={isRunning || !!disabledReason}
             loading={isRunning}
+            title={disabledReason}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             {runLabel}
           </Button>
           {run?.id && <LogLink runId={run.id} />}
         </div>
+        {disabledReason && (
+          <p className="text-caption text-ink-tertiary">{disabledReason}</p>
+        )}
       </CardBody>
     </Card>
   );

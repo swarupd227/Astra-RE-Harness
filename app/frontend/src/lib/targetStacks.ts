@@ -110,6 +110,7 @@ export function prettySchema(s: string): string {
     case 'unibasic':    return 'UniBasic';
     case 'openedge':    return 'OpenEdge ABL';
     case 'csharp':      return 'C#';
+    case 'vbnet':       return 'VB.NET';
     case 'java':        return 'Java';
     case 'php':         return 'PHP';
     default:            return s;
