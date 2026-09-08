@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
+using Astra.Api.Storage;
 using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Validation;
@@ -39,6 +41,8 @@ public sealed class PropertyTestValidator
     private readonly PropertyTestRunCache _runCache;
     private readonly GfortranClient _gfortran;
     private readonly IConfiguration _cfg;
+    private readonly IBlobClient _blob;
+    private readonly StorageOptions _storage;
     private readonly ILogger<PropertyTestValidator> _log;
 
     public PropertyTestValidator(
@@ -48,6 +52,8 @@ public sealed class PropertyTestValidator
         PropertyTestRunCache runCache,
         GfortranClient gfortran,
         IConfiguration cfg,
+        IBlobClient blob,
+        StorageOptions storage,
         ILogger<PropertyTestValidator> log)
     {
         _db = db;
@@ -56,7 +62,81 @@ public sealed class PropertyTestValidator
         _runCache = runCache;
         _gfortran = gfortran;
         _cfg = cfg;
+        _blob = blob;
+        _storage = storage;
         _log = log;
+    }
+
+    /// <summary>
+    /// Renders a human-readable transcript and persists it to blob storage,
+    /// setting <see cref="ValidationRun.LogBlobUri"/> so "View log" on the
+    /// UI's validation report actually has something to fetch — every other
+    /// validator (Compile, TestPack, the Delphi/cpp equivalence smokes)
+    /// does this; this one never did, so "View log" on a FALSIFYING run
+    /// 404'd unconditionally (GET /validation-runs/{id}/log returns
+    /// NotFound whenever LogBlobUri is null). Best-effort: a blob-write
+    /// failure here must not fail the validation run itself, so callers
+    /// wrap this in try/catch and proceed without a log on failure.
+    /// </summary>
+    private async Task AttachLogAsync(ValidationRun run, string transcript, CancellationToken ct)
+    {
+        var logKey = $"validation/{run.Id:N}/falsifying.log";
+        run.LogBlobUri = await _blob.PutTextAsync(
+            _storage.Buckets.Scaffolds, logKey, transcript, "text/plain", ct);
+    }
+
+    private static string BuildNoHintsTranscript(Guid specId)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("=== 4th gate — falsifying (Hypothesis-driven property search) ===");
+        sb.AppendLine($"spec: {specId}");
+        sb.AppendLine();
+        sb.AppendLine("No invariant or edge_case claim in this spec carries a generatorHints");
+        sb.AppendLine("block (per ADR-030), so there was nothing to exercise. PASSED, not");
+        sb.AppendLine("FAILED — an empty search surface is honest signal, not a regression.");
+        return sb.ToString();
+    }
+
+    private static string BuildRunTranscript(
+        Guid specId, string mode, PropertyTestClient.FalsifyResponse response)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("=== 4th gate — falsifying (Hypothesis-driven property search) ===");
+        sb.AppendLine($"spec: {specId}");
+        sb.AppendLine($"mode: {mode}");
+        sb.AppendLine($"claims exercised: {response.ClaimResults.Count}");
+        sb.AppendLine($"total examples tried: {response.ClaimResults.Sum(c => c.ExamplesTried)}");
+        sb.AppendLine($"total elapsed: {response.TotalElapsedMs}ms");
+        sb.AppendLine($"overall falsified: {response.OverallFalsified}");
+        sb.AppendLine();
+        foreach (var c in response.ClaimResults)
+        {
+            sb.AppendLine($"--- claim {c.ClaimId} ---");
+            sb.AppendLine($"examplesTried: {c.ExamplesTried} · falsifying: {c.Falsifying} · timedOut: {c.TimedOut} · elapsedMs: {c.ElapsedMs}");
+            if (!string.IsNullOrWhiteSpace(c.SkipReason))
+                sb.AppendLine($"skipReason: {c.SkipReason}");
+            if (!string.IsNullOrWhiteSpace(c.RefOutput))
+                sb.AppendLine($"refOutput: {c.RefOutput}");
+            if (!string.IsNullOrWhiteSpace(c.CandOutput))
+                sb.AppendLine($"candOutput: {c.CandOutput}");
+            if (c.CallbackErrors > 0)
+                sb.AppendLine($"callbackErrors: {c.CallbackErrors}");
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    private static string BuildErrorTranscript(Guid specId, Exception ex)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("=== 4th gate — falsifying (Hypothesis-driven property search) ===");
+        sb.AppendLine($"spec: {specId}");
+        sb.AppendLine();
+        sb.AppendLine("Runner crashed before producing a result.");
+        sb.AppendLine($"{ex.GetType().Name}: {ex.Message}");
+        sb.AppendLine();
+        sb.AppendLine(ex.StackTrace ?? "(no stack trace)");
+        return sb.ToString();
     }
 
     public async Task<ValidationRun> RunAsync(
@@ -105,6 +185,8 @@ public sealed class PropertyTestValidator
                     overallFalsified = false,
                 });
                 run.CompletedAt = DateTimeOffset.UtcNow;
+                try { await AttachLogAsync(run, BuildNoHintsTranscript(spec.Id), ct); }
+                catch (Exception logEx) { _log.LogWarning(logEx, "4th-gate run {Run}: failed to persist log (no-hints path)", run.Id); }
                 await _db.SaveChangesAsync(ct);
 
                 await _audit.LogAsync(
@@ -220,6 +302,9 @@ public sealed class PropertyTestValidator
                     : $"{response.ClaimResults.Count} claims exercised · {response.ClaimResults.Sum(c => c.ExamplesTried)} examples ({mode} mode)";
             }
 
+            try { await AttachLogAsync(run, BuildRunTranscript(spec.Id, mode, response), ct); }
+            catch (Exception logEx) { _log.LogWarning(logEx, "4th-gate run {Run}: failed to persist log", run.Id); }
+
             await _db.SaveChangesAsync(ct);
 
             await _audit.LogAsync(
@@ -251,6 +336,8 @@ public sealed class PropertyTestValidator
             run.ErrorCode = "falsifying.runner_crashed";
             run.Summary = $"Runner error: {ex.GetType().Name}: {ex.Message}";
             run.CompletedAt = DateTimeOffset.UtcNow;
+            try { await AttachLogAsync(run, BuildErrorTranscript(spec.Id, ex), ct); }
+            catch (Exception logEx) { _log.LogWarning(logEx, "4th-gate run {Run}: failed to persist log (errored path)", run.Id); }
             try { await _db.SaveChangesAsync(ct); }
             catch (Exception saveEx) { _log.LogError(saveEx, "Could not persist ERRORED state"); }
 
