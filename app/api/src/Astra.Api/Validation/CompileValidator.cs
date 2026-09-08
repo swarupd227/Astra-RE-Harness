@@ -27,6 +27,9 @@ public sealed class CompileValidator
     private static readonly Regex ErrorLine = new(@"\berror\s+[A-Z]+\d+:", RegexOptions.Compiled);
     private static readonly Regex WarningLine = new(@"\bwarning\s+[A-Z]+\d+:", RegexOptions.Compiled);
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(5);
+    // npm install can legitimately take longer than a dotnet build on a
+    // cold cache — this is only exercised by angular-dotnet8.
+    private static readonly TimeSpan NpmTimeout = TimeSpan.FromMinutes(8);
 
     private readonly AppDbContext _db;
     private readonly IBlobClient _blob;
@@ -83,10 +86,16 @@ public sealed class CompileValidator
             // Phase 5.5: dispatch by target platform. The dotnet8 path
             // materialises the scaffold and shells out locally; the
             // java-spring path POSTs the sources to the maven sidecar so
-            // mvn runs inside the pre-warmed image cache.
+            // mvn runs inside the pre-warmed image cache. angular-dotnet8
+            // (the first two-runtime target stack) builds both halves
+            // in-process and reports one combined verdict.
             if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
             {
                 await RunJavaCompileAsync(scaffold, run, actor, ct);
+            }
+            else if (string.Equals(scaffold.TargetPlatform, "angular-dotnet8", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunAngularDotnetCompileAsync(scaffold, run, actor, ct);
             }
             else
             {
@@ -210,6 +219,144 @@ public sealed class CompileValidator
             // Clean up the materialised files. Keep the obj/ + bin/ folders
             // out of the way — they live entirely inside tempDir and get
             // wiped along with everything else.
+            try
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir);
+            }
+        }
+    }
+
+    /// <summary>
+    /// angular-dotnet8: the first target stack spanning two runtimes in one
+    /// scaffold. Builds backend/ with `dotnet build` (reusing the exact
+    /// helper the dotnet8-only path uses, just pointed at the subdirectory)
+    /// and frontend/ with `npm install` + `npm run build` (Angular CLI's
+    /// production build), then reports one combined PASSED/FAILED verdict.
+    /// The two builds are independent — a broken frontend doesn't hide a
+    /// broken backend or vice versa; both exit codes are in the metrics.
+    /// </summary>
+    private async Task RunAngularDotnetCompileAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-validate-{run.Id:N}");
+        try
+        {
+            // 1. Materialise the scaffold. Paths are already rooted at
+            //    backend/ or frontend/ per the archetype's own layout.
+            var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+            using var manifest = JsonDocument.Parse(manifestText);
+            var files = manifest.RootElement.GetProperty("files");
+
+            Directory.CreateDirectory(tempDir);
+            int fileCount = 0;
+            foreach (var file in files.EnumerateArray())
+            {
+                var relPath = file.GetProperty("path").GetString()
+                    ?? throw new InvalidOperationException("Manifest file entry missing 'path'.");
+                var content = file.GetProperty("content").GetString() ?? "";
+                var abs = Path.Combine(tempDir, relPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, content, ct);
+                fileCount++;
+            }
+            _log.LogInformation(
+                "Materialised {Files} files for angular-dotnet8 scaffold {Scaffold} at {Dir}",
+                fileCount, scaffold.Id, tempDir);
+
+            var backendDir = Path.Combine(tempDir, "backend");
+            var frontendDir = Path.Combine(tempDir, "frontend");
+
+            // 2. Build both halves with their own toolchain.
+            var (dotnetExit, dotnetLog) = Directory.Exists(backendDir)
+                ? await RunDotnetBuildAsync(backendDir, ct)
+                : (-1, "=== backend/ directory missing from scaffold ===\n");
+
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmBuildAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            // 3. Parse warnings/errors out of the dotnet log the same way
+            //    the dotnet8-only path does. ng build's error format doesn't
+            //    match those regexes and isn't worth a second parser for a
+            //    count that's redundant with the exit code either way.
+            int errorCount = 0, warningCount = 0;
+            foreach (var line in dotnetLog.Split('\n'))
+            {
+                if (ErrorLine.IsMatch(line)) errorCount++;
+                else if (WarningLine.IsMatch(line)) warningCount++;
+            }
+
+            var combinedLog = new StringBuilder();
+            combinedLog.AppendLine("=== backend (dotnet build) ===");
+            combinedLog.AppendLine(dotnetLog);
+            combinedLog.AppendLine();
+            combinedLog.AppendLine("=== frontend (npm install + ng build) ===");
+            combinedLog.AppendLine(npmLog);
+            var combinedLogText = combinedLog.ToString();
+
+            // 4. Upload the combined build log to MinIO for posterity.
+            var logKey = $"validation/{run.Id:N}/compile.log";
+            var logUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, logKey, combinedLogText, "text/plain", ct);
+
+            // 5. Update the ValidationRun row with the verdict.
+            run.LogBlobUri = logUri;
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "dotnet+npm",
+                backendExitCode = dotnetExit,
+                frontendExitCode = npmExit,
+                errorCount,
+                warningCount,
+                fileCount,
+                logLines = combinedLogText.Count(c => c == '\n'),
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (dotnetExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                run.Summary = warningCount == 0
+                    ? "Backend + frontend build succeeded · 0 dotnet warnings"
+                    : $"Backend + frontend build succeeded · {warningCount} dotnet warning{(warningCount == 1 ? "" : "s")}";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "compile.build_failed";
+                var parts = new List<string>();
+                if (dotnetExit != 0) parts.Add($"backend exit {dotnetExit}");
+                if (npmExit != 0) parts.Add($"frontend exit {npmExit}");
+                run.Summary = $"Build failed · {string.Join(", ", parts)}";
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new
+                {
+                    runId = run.Id,
+                    stage = run.Stage,
+                    status = run.Status,
+                    summary = run.Summary,
+                    metrics = JsonDocument.Parse(run.MetricsJson),
+                },
+                ct: ct);
+
+            _log.LogInformation(
+                "Angular+dotnet compile validation for scaffold {Scaffold}: {Status} ({Summary})",
+                scaffold.Id, run.Status, run.Summary);
+        }
+        finally
+        {
             try
             {
                 if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
@@ -362,6 +509,81 @@ public sealed class CompileValidator
         }
         combined.AppendLine($"=== exit {proc.ExitCode} ===");
 
+        return (proc.ExitCode, combined.ToString());
+    }
+
+    /// <summary>
+    /// `npm install` then `npm run build` (Angular CLI's production build,
+    /// per the archetype's package.json script). No package-lock.json ships
+    /// in the scaffold — a real Angular lockfile runs to hundreds of KB, far
+    /// past what an LLM can reasonably regenerate per routine inside a
+    /// 16K-token response — so `npm ci` (which requires an existing
+    /// lockfile) isn't an option; `npm install` resolves fresh from
+    /// package.json's version ranges instead. Less reproducible than a
+    /// committed lockfile, but the only viable choice given that constraint.
+    /// </summary>
+    private static async Task<(int ExitCode, string Log)> RunNpmBuildAsync(
+        string workDir, CancellationToken ct)
+    {
+        var (installExit, installLog) = await RunNpmAsync(workDir, "install", ct);
+        var combined = new StringBuilder();
+        combined.AppendLine($"=== npm install (cwd={workDir}) ===");
+        combined.AppendLine(installLog);
+        if (installExit != 0)
+            return (installExit, combined.ToString());
+
+        var (buildExit, buildLog) = await RunNpmAsync(workDir, "run build", ct);
+        combined.AppendLine($"=== npm run build (cwd={workDir}) ===");
+        combined.AppendLine(buildLog);
+        return (buildExit, combined.ToString());
+    }
+
+    private static async Task<(int ExitCode, string Log)> RunNpmAsync(
+        string workDir, string arguments, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "npm.cmd" : "npm",
+            Arguments = arguments,
+            WorkingDirectory = workDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var proc = new Process { StartInfo = psi };
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+
+        if (!proc.Start())
+            throw new InvalidOperationException($"npm {arguments} failed to start.");
+
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        using var timeoutCts = new CancellationTokenSource(NpmTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            await proc.WaitForExitAsync(linkedCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            throw new TimeoutException($"npm {arguments} did not finish within {NpmTimeout.TotalSeconds}s.");
+        }
+
+        var combined = new StringBuilder();
+        combined.Append(stdout);
+        if (stderr.Length > 0)
+        {
+            combined.AppendLine("--- stderr ---");
+            combined.Append(stderr);
+        }
+        combined.AppendLine($"=== exit {proc.ExitCode} ===");
         return (proc.ExitCode, combined.ToString());
     }
 }

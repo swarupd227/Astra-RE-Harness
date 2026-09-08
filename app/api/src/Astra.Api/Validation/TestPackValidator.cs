@@ -48,6 +48,19 @@ public sealed class TestPackValidator
         @"^\s+Skipped:\s*(?<skipped>\d+)",
         RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(10);
+    // npm install can legitimately take longer than a dotnet build on a
+    // cold cache — this is only exercised by angular-dotnet8.
+    private static readonly TimeSpan NpmTimeout = TimeSpan.FromMinutes(8);
+
+    // Jest's default text-reporter summary: "Tests:       2 failed, 5 passed, 7 total"
+    // (categories with a zero count are sometimes omitted entirely, so each
+    // is parsed independently rather than with one fixed-order pattern).
+    private static readonly Regex JestTestsLine = new(
+        @"^Tests:\s+(?<body>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex JestFailed = new(@"(?<n>\d+)\s+failed", RegexOptions.Compiled);
+    private static readonly Regex JestPassed = new(@"(?<n>\d+)\s+passed", RegexOptions.Compiled);
+    private static readonly Regex JestSkipped = new(@"(?<n>\d+)\s+skipped", RegexOptions.Compiled);
+    private static readonly Regex JestTotal = new(@"(?<n>\d+)\s+total", RegexOptions.Compiled);
 
     private readonly AppDbContext _db;
     private readonly IBlobClient _blob;
@@ -103,10 +116,16 @@ public sealed class TestPackValidator
             // Phase 5.5: dispatch by target platform. java-spring scaffolds
             // round-trip through the maven sidecar (mvn test); dotnet8
             // scaffolds keep the original in-process `dotnet test` path.
+            // angular-dotnet8 runs both `dotnet test` (backend/) and
+            // `npm test` / jest (frontend/) and reports one combined verdict.
             if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
             {
                 await RunJavaTestPackAsync(scaffold, run, actor, ct);
                 return run;
+            }
+            if (string.Equals(scaffold.TargetPlatform, "angular-dotnet8", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunAngularDotnetTestPackAsync(scaffold, run, actor, ct);
             }
             return await RunDotnetTestPackAsync(scaffold, run, actor, ct);
         }
@@ -250,6 +269,165 @@ public sealed class TestPackValidator
 
             _log.LogInformation(
                 "Test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
+                scaffold.Id, run.Status, run.Summary);
+
+            return run;
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch (Exception ex) { _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir); }
+        }
+    }
+
+    /// <summary>
+    /// angular-dotnet8: runs `dotnet test` against backend/tests (the exact
+    /// same helper the dotnet8-only path uses, pointed at the subdirectory)
+    /// and `npm install` + `npm test` (jest, per the archetype's package.json
+    /// — no Karma/headless-browser dependency) against frontend/, then sums
+    /// both test runs into one PASSED/FAILED verdict and one combined
+    /// pass/fail/skip/total count.
+    /// </summary>
+    private async Task<ValidationRun> RunAngularDotnetTestPackAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-testpack-{run.Id:N}");
+        try
+        {
+            var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+            using var manifest = JsonDocument.Parse(manifestText);
+            var files = manifest.RootElement.GetProperty("files");
+
+            Directory.CreateDirectory(tempDir);
+            int fileCount = 0;
+            foreach (var file in files.EnumerateArray())
+            {
+                var relPath = file.GetProperty("path").GetString()!;
+                var content = file.GetProperty("content").GetString() ?? "";
+                var abs = Path.Combine(tempDir, relPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, content, ct);
+                fileCount++;
+            }
+
+            var backendDir = Path.Combine(tempDir, "backend");
+            var frontendDir = Path.Combine(tempDir, "frontend");
+
+            var (dotnetExit, dotnetLog) = Directory.Exists(backendDir)
+                ? await RunDotnetTestAsync(backendDir, ct)
+                : (-1, "=== backend/ directory missing from scaffold ===\n");
+
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmTestAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            // Backend counts: same dotnet-test summary parse RunDotnetTestPackAsync uses.
+            int dnPassed = 0, dnFailed = 0, dnSkipped = 0, dnTotal = 0;
+            var singleMatches = SummaryLineSingle.Matches(dotnetLog);
+            if (singleMatches.Count > 0)
+            {
+                foreach (Match m in singleMatches)
+                {
+                    dnFailed += int.Parse(m.Groups["failed"].Value);
+                    dnPassed += int.Parse(m.Groups["passed"].Value);
+                    dnSkipped += int.Parse(m.Groups["skipped"].Value);
+                    dnTotal += int.Parse(m.Groups["total"].Value);
+                }
+            }
+            else
+            {
+                foreach (Match m in TotalMulti.Matches(dotnetLog))   dnTotal += int.Parse(m.Groups["total"].Value);
+                foreach (Match m in PassedMulti.Matches(dotnetLog))  dnPassed += int.Parse(m.Groups["passed"].Value);
+                foreach (Match m in FailedMulti.Matches(dotnetLog))  dnFailed += int.Parse(m.Groups["failed"].Value);
+                foreach (Match m in SkippedMulti.Matches(dotnetLog)) dnSkipped += int.Parse(m.Groups["skipped"].Value);
+            }
+
+            // Frontend counts: Jest's "Tests:" summary line.
+            int jsPassed = 0, jsFailed = 0, jsSkipped = 0, jsTotal = 0;
+            var jestLine = JestTestsLine.Match(npmLog);
+            if (jestLine.Success)
+            {
+                var body = jestLine.Groups["body"].Value;
+                var f = JestFailed.Match(body); if (f.Success) jsFailed = int.Parse(f.Groups["n"].Value);
+                var p = JestPassed.Match(body); if (p.Success) jsPassed = int.Parse(p.Groups["n"].Value);
+                var s = JestSkipped.Match(body); if (s.Success) jsSkipped = int.Parse(s.Groups["n"].Value);
+                var t = JestTotal.Match(body); if (t.Success) jsTotal = int.Parse(t.Groups["n"].Value);
+            }
+
+            int passed = dnPassed + jsPassed;
+            int failed = dnFailed + jsFailed;
+            int skipped = dnSkipped + jsSkipped;
+            int total = dnTotal + jsTotal;
+
+            var combinedLog = new StringBuilder();
+            combinedLog.AppendLine("=== backend (dotnet test) ===");
+            combinedLog.AppendLine(dotnetLog);
+            combinedLog.AppendLine();
+            combinedLog.AppendLine("=== frontend (npm install + npm test / jest) ===");
+            combinedLog.AppendLine(npmLog);
+            var combinedLogText = combinedLog.ToString();
+
+            var logKey = $"validation/{run.Id:N}/test-pack.log";
+            var logUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, logKey, combinedLogText, "text/plain", ct);
+
+            run.LogBlobUri = logUri;
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "dotnet+jest",
+                backendExitCode = dotnetExit,
+                frontendExitCode = npmExit,
+                backend = new { passed = dnPassed, failed = dnFailed, skipped = dnSkipped, total = dnTotal },
+                frontend = new { passed = jsPassed, failed = jsFailed, skipped = jsSkipped, total = jsTotal },
+                passed,
+                failed,
+                skipped,
+                total,
+                fileCount,
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (total == 0)
+            {
+                run.Status = "ERRORED";
+                run.ErrorCode = "test_pack.no_tests_detected";
+                run.Summary = dotnetExit == 0 && npmExit == 0
+                    ? "No tests detected"
+                    : $"backend exit {dotnetExit}, frontend exit {npmExit}; no test summary parsed";
+            }
+            else if (failed == 0 && dotnetExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                run.Summary = skipped == 0
+                    ? $"All {total} tests passed ({dnTotal} backend + {jsTotal} frontend)"
+                    : $"{passed}/{total} passed · {skipped} skipped ({dnTotal} backend + {jsTotal} frontend)";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "test_pack.tests_failed";
+                run.Summary = $"{failed} of {total} tests failed · {passed} passed · {skipped} skipped";
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new
+                {
+                    runId = run.Id,
+                    stage = run.Stage,
+                    status = run.Status,
+                    summary = run.Summary,
+                    metrics = JsonDocument.Parse(run.MetricsJson),
+                },
+                ct: ct);
+
+            _log.LogInformation(
+                "Angular+dotnet test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
                 scaffold.Id, run.Status, run.Summary);
 
             return run;
@@ -464,6 +642,82 @@ public sealed class TestPackValidator
         if (stderr.Length > 0)
         {
             combined.AppendLine("=== stderr ===");
+            combined.Append(stderr);
+        }
+        combined.AppendLine($"=== exit {proc.ExitCode} ===");
+        return (proc.ExitCode, combined.ToString());
+    }
+
+    /// <summary>
+    /// `npm install` then `npm test` (jest, per the archetype's package.json
+    /// — jest compiles TypeScript on the fly per test file, so no prior
+    /// `ng build` is needed, same as `dotnet test` needing no prior
+    /// `dotnet build`). No package-lock.json ships in the scaffold; see the
+    /// note on <see cref="CompileValidator"/>'s equivalent helper for why
+    /// `npm install` rather than `npm ci`.
+    /// </summary>
+    private static async Task<(int ExitCode, string Log)> RunNpmTestAsync(
+        string workDir, CancellationToken ct)
+    {
+        var (installExit, installLog) = await RunNpmAsync(workDir, "install", ct);
+        var combined = new StringBuilder();
+        combined.AppendLine($"=== npm install (cwd={workDir}) ===");
+        combined.AppendLine(installLog);
+        if (installExit != 0)
+            return (installExit, combined.ToString());
+
+        var (testExit, testLog) = await RunNpmAsync(workDir, "test", ct);
+        combined.AppendLine($"=== npm test (cwd={workDir}) ===");
+        combined.AppendLine(testLog);
+        return (testExit, combined.ToString());
+    }
+
+    private static async Task<(int ExitCode, string Log)> RunNpmAsync(
+        string workDir, string arguments, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "npm.cmd" : "npm",
+            Arguments = arguments,
+            WorkingDirectory = workDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var proc = new Process { StartInfo = psi };
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+
+        if (!proc.Start())
+            throw new InvalidOperationException($"npm {arguments} failed to start.");
+
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        using var timeoutCts = new CancellationTokenSource(NpmTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            await proc.WaitForExitAsync(linkedCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            throw new TimeoutException($"npm {arguments} did not finish within {NpmTimeout.TotalSeconds}s.");
+        }
+
+        // Jest writes its summary (including the "Tests:" line the caller
+        // parses) to stderr by default, not stdout — combine both into one
+        // stream up front rather than appending stderr as an afterthought.
+        var combined = new StringBuilder();
+        combined.Append(stdout);
+        if (stderr.Length > 0)
+        {
+            combined.AppendLine("--- stderr ---");
             combined.Append(stderr);
         }
         combined.AppendLine($"=== exit {proc.ExitCode} ===");

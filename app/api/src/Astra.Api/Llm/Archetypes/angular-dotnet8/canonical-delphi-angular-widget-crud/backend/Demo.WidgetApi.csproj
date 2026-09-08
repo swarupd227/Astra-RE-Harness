@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Demo.WidgetApi</RootNamespace>
+    <AssemblyName>Demo.WidgetApi</AssemblyName>
+    <Description>
+      Reference .NET 8 Web API scaffold paired with an Angular frontend
+      (../frontend), generated from a signed Delphi spec (spec/v1,
+      schemaId=delphi). WidgetsController exposes the REST surface the
+      Angular app calls; WidgetService holds the business rules;
+      WidgetRecordPort is the data-access seam (in-memory here, a real
+      migration would swap it for the routine's actual store). Every
+      public surface carries a [SpecClaim(...)] attribute citing the
+      signed claim id so the scaffold ties back to the spec.
+    </Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- tests/ has its own Demo.WidgetApi.Tests.csproj — exclude its sources
+         here or the default **/*.cs glob compiles them into this project too,
+         without the xunit references that project declares. -->
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+</Project>

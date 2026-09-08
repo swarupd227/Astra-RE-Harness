@@ -1,0 +1,34 @@
+<section class="widget-list">
+  <h1>Widgets</h1>
+
+  @if (errorMessage) {
+    <p class="error" role="alert">{{ errorMessage }}</p>
+  }
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Quantity</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (widget of widgets; track widget.id) {
+        <tr>
+          <td>{{ widget.name }}</td>
+          <td>{{ widget.quantity }}</td>
+          <td>
+            <button type="button" (click)="delete(widget.id)">Delete</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  <form (ngSubmit)="add()">
+    <input name="name" [(ngModel)]="newName" placeholder="Name" required />
+    <input name="quantity" type="number" [(ngModel)]="newQuantity" placeholder="Quantity" />
+    <button type="submit">Add widget</button>
+  </form>
+</section>

@@ -2,10 +2,10 @@
   "$schema": "https://astra.nous.ai/spec-schema/v1",
   "schemaVersion": "1.0",
   "id": "delphi",
-  "displayName": "Delphi / Object Pascal → .NET 8 + Java Spring",
+  "displayName": "Delphi / Object Pascal → .NET 8 + Java Spring + Angular",
   "description": "Delphi 7 / Object Pascal source: units with interface + implementation sections, classes with properties + events, IInterface ref-counting, Delphi RTL types (TStream, TStringList, TThread). Calibrated against Indy (TCP/IP/HTTP/SMTP) and JCL utilities. Per ADR-025, every Delphi extraction call ships with a curated RTL → .NET / Java mapping table as in-prompt context.",
   "supportedSourceExtensions": [".pas", ".dpr", ".dpk", ".inc"],
-  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring", "angular-dotnet8"],
   "claimKinds": [
     {
       "id": "invariant",

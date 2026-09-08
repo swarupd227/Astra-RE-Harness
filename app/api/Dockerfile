@@ -41,9 +41,40 @@ FROM sdk AS build
 WORKDIR /src/Astra.Api
 RUN dotnet publish -c Release -o /app /p:UseAppHost=false
 
-# ─── runtime: minimal image ───────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+# ─── runtime: the deployed image ───────────────────────────────────────
+#
+# Was mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} (runtime-only,
+# no SDK) until this was found to leave CompileValidator/TestPackValidator
+# completely broken in production for every target stack that builds
+# in-process (dotnet8, dotnet10, and now angular-dotnet8's backend half):
+# they shell out to `dotnet build`/`dotnet test`, which the aspnet image
+# can't run at all ("No .NET SDKs were found") — this had been silently
+# broken since deployment because java-spring (the only stack anyone had
+# actually exercised through this gate) validates via the separate
+# maven-sidecar container instead, never touching this in-process path.
+# Base is now the full sdk image so those commands exist for real.
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS runtime
 WORKDIR /app
+
+# .NET 10 SDK — mirrors the install in the sdk/dev stage above. Needed
+# here too: VB6 scaffolds target net10.0 (ADR-035), and compile validation
+# for them runs against THIS image, not the build-time sdk stage.
+RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 10.0 --quality preview --install-dir /usr/share/dotnet \
+    && rm /tmp/dotnet-install.sh \
+    && dotnet --list-sdks
+
+# Node.js — angular-dotnet8's frontend half validates via `npm install` +
+# `npm run build` (CompileValidator) and `npm test` / jest (TestPackValidator)
+# in-process, same pattern as the dotnet commands above. NodeSource's setup
+# script is the standard way to get a current Node onto Debian Bookworm
+# (the sdk image's base) since Bookworm's own apt repo Node is too old for
+# current Angular CLI.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version && npm --version
 
 # Phase 11.0.g — documentation export.
 # pandoc: mkdocs zip (no-op), docx, and pdf (--pdf-engine=weasyprint) formats.
@@ -51,12 +82,12 @@ WORKDIR /app
 # Both packages are in Debian Bookworm apt repos.
 #
 # libssl3 / libcurl4 / ca-certificates: LibGit2Sharp's bundled native
-# libgit2 binary links against these at runtime. The dev/build stages
-# derive from the full dotnet/sdk image, which ships them by default —
-# git-URL ingest has always worked locally. This slim aspnet runtime
-# image doesn't include them, which crashed the process with SIGSEGV
-# (exit code 139) the instant anything touched a LibGit2Sharp type,
-# before the app even printed its startup banner.
+# libgit2 binary links against these at runtime. Kept explicit even though
+# the full sdk base likely already carries them, so this doesn't silently
+# regress if a future base-image change slims them back out — this is
+# exactly the class of bug (a LibGit2Sharp SIGSEGV before the app even
+# printed its startup banner) that happened once already when the runtime
+# base didn't have them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     weasyprint \
