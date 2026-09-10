@@ -2,10 +2,10 @@
   "$schema": "https://astra.nous.ai/spec-schema/v1",
   "schemaVersion": "1.0",
   "id": "cpp",
-  "displayName": "C++ → .NET 8 + Java Spring",
+  "displayName": "C++ → .NET 8 + Java Spring + Angular",
   "description": "C++17 / C++20 source: function templates, classes with ownership models, STL containers, RAII via destructors, exceptions with noexcept contracts, dynamic_cast / typeid RTTI. Calibrated against fmtlib/fmt (header-only format library) plus hand-authored UB-trap samples. Per ADR-026, one spec per primary template (not per instantiation); the spec's invariants are quantified over the template type parameters. Per ADR-028, the parser sidecar receives a compile_commands.json bootstrapped by CMake when the corpus is CMake-based.",
   "supportedSourceExtensions": [".cpp", ".cc", ".cxx", ".c++", ".hpp", ".hxx", ".h++", ".ipp", ".h"],
-  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "compatibleTargetStacks": ["dotnet8", "java-spring", "angular-java"],
   "claimKinds": [
     {
       "id": "invariant",
