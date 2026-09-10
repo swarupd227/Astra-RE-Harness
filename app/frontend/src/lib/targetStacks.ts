@@ -96,6 +96,7 @@ export function prettyStack(s: string): string {
     case 'dotnet10':        return '.NET 10';
     case 'java-spring':     return 'Java Spring';
     case 'angular-dotnet8': return 'Angular + .NET 8';
+    case 'angular-java':    return 'Angular + Java';
     default:                return s;
   }
 }

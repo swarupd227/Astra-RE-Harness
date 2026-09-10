@@ -35,6 +35,8 @@ public sealed class TestPackGenerator
     private static readonly Regex Sanitize = new(@"[^A-Za-z0-9_]", RegexOptions.Compiled);
     private static readonly Regex NamespacePattern = new(
         @"^\s*namespace\s+([A-Za-z_][A-Za-z0-9_.]*)\s*[;{]", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex PackagePattern = new(
+        @"^\s*package\s+([A-Za-z_][A-Za-z0-9_.]*)\s*;", RegexOptions.Compiled | RegexOptions.Multiline);
 
     private readonly AppDbContext _db;
     private readonly IBlobClient _blob;
@@ -89,17 +91,27 @@ public sealed class TestPackGenerator
         var subroutineName = spec.Subroutine?.Name ?? "Unknown";
         var className = SanitizeIdentifier(subroutineName) + "_SignedSpecPack";
 
+        // java-spring and angular-java scaffolds have a Java backend and
+        // need a JUnit 5 file, not the C#/xUnit one every other stack gets
+        // (dotnet8/dotnet10/angular-dotnet8). Without this, "Regenerate +
+        // run" injected a nonsensical .cs file into a Java project — it
+        // compiled offline (mvn just ignores a file outside src/**/java)
+        // but gave zero real per-claim coverage for either Java stack.
+        var isJavaBackend = string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scaffold.TargetPlatform, "angular-java", StringComparison.OrdinalIgnoreCase);
+
         // Read the manifest up front so the test file's directory and
-        // namespace can be derived from whatever this scaffold's OWN test
-        // files already use, rather than assuming every archetype shares
-        // one flat layout — a two-runtime scaffold (e.g. angular-dotnet8)
-        // keeps its .NET tests under backend/tests/, not tests/ at the
-        // scaffold root, and its namespace is never Demo.RollStock.Tests
-        // (hardcoded here for the one archetype this was built against).
+        // namespace/package can be derived from whatever this scaffold's
+        // OWN test files already use, rather than assuming every archetype
+        // shares one flat layout — a two-runtime scaffold (e.g.
+        // angular-dotnet8/angular-java) keeps its backend tests under
+        // backend/tests/ or backend/src/test/java/, not at the scaffold
+        // root, and its namespace/package is never the one hardcoded
+        // archetype this was originally built against.
         var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
         using var manifestDoc = JsonDocument.Parse(manifestText);
-        var (testDir, testNamespace) = DeriveTestFileLocation(manifestDoc.RootElement, subroutineName);
-        var testFilePath = $"{testDir}/{className}.cs";
+        var (testDir, testNamespace) = DeriveTestFileLocation(manifestDoc.RootElement, subroutineName, isJavaBackend);
+        var testFilePath = isJavaBackend ? $"{testDir}/{className}.java" : $"{testDir}/{className}.cs";
 
         // ── Walk the spec JSON via the externalised schema (Phase #3a) ──
         // The schema declares which kinds exist for this source language
@@ -121,12 +133,12 @@ public sealed class TestPackGenerator
         }
 
         // ── Render the file ──────────────────────────────────────────────
-        var content = RenderTestFile(className, testNamespace, subroutineName, spec.Id, schema, claimsByKind);
+        var content = RenderTestFile(className, testNamespace, subroutineName, spec.Id, schema, claimsByKind, isJavaBackend);
 
         // ── Update the scaffold manifest in MinIO ────────────────────────
         var allClaims = claimsByKind.SelectMany(kv => kv.Value).ToList();
         var newManifest = ReplaceOrAppendFile(
-            manifestDoc.RootElement, testFilePath, "csharp", content,
+            manifestDoc.RootElement, testFilePath, isJavaBackend ? "java" : "csharp", content,
             claimIds: allClaims.Select(c => c.Id).ToArray());
 
         // Re-upload the manifest under the same key so the scaffold detail
@@ -276,8 +288,12 @@ public sealed class TestPackGenerator
         string subroutineName,
         Guid specId,
         SpecSchema schema,
-        Dictionary<string, List<Claim>> claimsByKind)
+        Dictionary<string, List<Claim>> claimsByKind,
+        bool isJavaBackend)
     {
+        if (isJavaBackend)
+            return RenderJavaTestFile(className, testNamespace, subroutineName, specId, schema, claimsByKind);
+
         var sb = new StringBuilder();
         sb.AppendLine("// =====================================================================");
         sb.AppendLine("// AUTO-GENERATED — Astra TestPackGenerator");
@@ -305,6 +321,55 @@ public sealed class TestPackGenerator
         {
             if (!claimsByKind.TryGetValue(kind.Id, out var claims) || claims.Count == 0) continue;
             EmitSection(sb, PluraliseLabel(kind.Label), claims);
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// JUnit 5 counterpart of RenderTestFile, for java-spring and
+    /// angular-java scaffolds. One @Test per signed-spec claim, same soft-
+    /// assertion contract; @Tag(claimId) is the closest JUnit 5 equivalent
+    /// of xUnit's [Trait("ClaimId", ...)] for keeping the spec→test mapping
+    /// queryable (`mvn test -Dgroups=...`).
+    /// </summary>
+    private static string RenderJavaTestFile(
+        string className,
+        string packageName,
+        string subroutineName,
+        Guid specId,
+        SpecSchema schema,
+        Dictionary<string, List<Claim>> claimsByKind)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// =====================================================================");
+        sb.AppendLine("// AUTO-GENERATED — Astra TestPackGenerator");
+        sb.AppendLine($"// Subroutine: {subroutineName}");
+        sb.AppendLine($"// Source spec id: {specId}");
+        sb.AppendLine($"// Schema: {schema.Id} ({schema.DisplayName})");
+        sb.AppendLine("//");
+        sb.AppendLine("// One @Test per signed-spec claim. Soft assertions pass trivially —");
+        sb.AppendLine("// the contract this file enforces is \"every signed claim has a named");
+        sb.AppendLine("// test fixture\". Engineers replace each body with a behavioural");
+        sb.AppendLine("// assertion as the implementation lands; the @Tag annotations keep");
+        sb.AppendLine("// the spec→test mapping queryable in CI test reports.");
+        sb.AppendLine("//");
+        sb.AppendLine("// Regenerate this file when the spec is re-signed.");
+        sb.AppendLine("// =====================================================================");
+        sb.AppendLine($"package {packageName};");
+        sb.AppendLine();
+        sb.AppendLine("import static org.junit.jupiter.api.Assertions.assertTrue;");
+        sb.AppendLine();
+        sb.AppendLine("import org.junit.jupiter.api.Tag;");
+        sb.AppendLine("import org.junit.jupiter.api.Test;");
+        sb.AppendLine();
+        sb.AppendLine($"class {className} {{");
+
+        foreach (var kind in schema.ClaimKinds)
+        {
+            if (!claimsByKind.TryGetValue(kind.Id, out var claims) || claims.Count == 0) continue;
+            EmitJavaSection(sb, PluraliseLabel(kind.Label), claims);
         }
 
         sb.AppendLine("}");
@@ -343,6 +408,33 @@ public sealed class TestPackGenerator
             foreach (var line in WrapForComment(c.Text, 80))
                 sb.AppendLine($"        // {line}");
             sb.AppendLine($"        Assert.True(true, \"{assertMessage}\");");
+            sb.AppendLine($"    }}");
+        }
+    }
+
+    private static void EmitJavaSection(StringBuilder sb, string heading, List<Claim> claims)
+    {
+        if (claims.Count == 0) return;
+        sb.AppendLine();
+        sb.AppendLine($"    // ── {heading} ──");
+        foreach (var c in claims)
+        {
+            var methodName = "test_" + SanitizeIdentifier(c.Id) + "_" + ShortenForIdentifier(c.Text);
+            var citationComment = c.Citation is null ? "" : $" — {c.Citation}";
+            var assertMessage = EscapeForString($"Soft assertion for {c.Id}. Replace with a behaviour check.");
+            // @Tag values must match [a-zA-Z0-9-_.]+ — a raw claim id like
+            // "INV-1" already fits, but sanitise defensively for any future
+            // schema whose ids don't.
+            var tagValue = Sanitize.Replace(c.Id, "_");
+
+            sb.AppendLine();
+            sb.AppendLine($"    @Test");
+            sb.AppendLine($"    @Tag(\"{tagValue}\")");
+            sb.AppendLine($"    void {methodName}() {{");
+            sb.AppendLine($"        // CLAIM ({c.Id}{citationComment}):");
+            foreach (var line in WrapForComment(c.Text, 80))
+                sb.AppendLine($"        // {line}");
+            sb.AppendLine($"        assertTrue(true, \"{assertMessage}\");");
             sb.AppendLine($"    }}");
         }
     }
@@ -391,41 +483,52 @@ public sealed class TestPackGenerator
         Regex.Matches(content, @"\bTODO\b").Count;
 
     /// <summary>
-    /// Finds an existing C# test file already in the scaffold's manifest
-    /// and reuses its directory and namespace for the new SignedSpecPack
-    /// file, instead of assuming every archetype puts tests at a flat
-    /// "tests/" root under one fixed namespace (true for every
-    /// single-runtime dotnet8/java-spring archetype, but not for a
-    /// two-runtime one like angular-dotnet8, whose .NET tests live under
-    /// backend/tests/). Falls back to the old flat convention only if no
-    /// C# test file exists yet in the manifest at all.
+    /// Finds an existing test file already in the scaffold's manifest (C#
+    /// for a .NET backend, Java for a Java-Spring/angular-java one) and
+    /// reuses its directory and namespace/package for the new
+    /// SignedSpecPack file, instead of assuming every archetype puts tests
+    /// at one fixed flat layout — a two-runtime scaffold (e.g.
+    /// angular-dotnet8/angular-java) keeps its backend tests under
+    /// backend/tests/ or backend/src/test/java/, not at the scaffold root.
+    /// Falls back to a generic convention only if no matching test file
+    /// exists yet in the manifest at all (every shipped archetype has at
+    /// least one seed test file, so this path is rarely hit).
     /// </summary>
     private static (string Dir, string Namespace) DeriveTestFileLocation(
-        JsonElement manifestRoot, string subroutineName)
+        JsonElement manifestRoot, string subroutineName, bool isJavaBackend)
     {
+        var extension = isJavaBackend ? ".java" : ".cs";
         if (manifestRoot.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
         {
             foreach (var f in files.EnumerateArray())
             {
                 var path = TryGetString(f, "path");
                 if (path is null || !path.Contains("test", StringComparison.OrdinalIgnoreCase)
-                    || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    || !path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 var content = TryGetString(f, "content");
-                var ns = content is null ? null : ExtractNamespace(content);
+                var ns = content is null ? null : (isJavaBackend ? ExtractPackage(content) : ExtractNamespace(content));
                 if (ns is null) continue;
 
-                var dir = path.Contains('/') ? path[..path.LastIndexOf('/')] : "tests";
+                var dir = path.Contains('/') ? path[..path.LastIndexOf('/')] : (isJavaBackend ? "src/test/java" : "tests");
                 return (dir, ns);
             }
         }
-        return ("tests", "Demo." + SanitizeIdentifier(subroutineName) + ".Tests");
+        return isJavaBackend
+            ? ("src/test/java/com/example/generated", "com.example.generated")
+            : ("tests", "Demo." + SanitizeIdentifier(subroutineName) + ".Tests");
     }
 
     private static string? ExtractNamespace(string content)
     {
         var m = NamespacePattern.Match(content);
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    private static string? ExtractPackage(string content)
+    {
+        var m = PackagePattern.Match(content);
         return m.Success ? m.Groups[1].Value : null;
     }
 

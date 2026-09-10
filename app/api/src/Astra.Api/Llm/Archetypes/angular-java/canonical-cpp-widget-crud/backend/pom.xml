@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>widget-api</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>C++ REST resource -> Angular + Spring Boot 3 (Java 21)</name>
+    <description>
+        Reference C++-to-Angular+Spring-Boot-3 scaffold for a routine that
+        exposes a list/create/delete resource. Produces two paired,
+        independently buildable packages: a Spring Boot 3 Web API
+        (WidgetRecordPort for data access, WidgetService for business
+        rules, WidgetController for HTTP) and an Angular 18 standalone-
+        component app, mirroring angular-dotnet8/canonical-delphi-angular-
+        widget-crud's shape one-for-one so the same two-runtime
+        CompileValidator/TestPackValidator dispatch pattern applies
+        unchanged. Unlike the other java-spring archetypes, this one is
+        NOT framework-free — it depends on real spring-boot-starter-web,
+        which the maven-sidecar's offline cache now bakes in specifically
+        for this stack (see maven-sidecar/warmup/pom.xml).
+    </description>
+
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- Plugins are pinned to the exact versions baked into the
+             maven-sidecar's OFFLINE ~/.m2 cache (see warmup/pom.xml) — an
+             unpinned default would resolve a different version online and
+             fail outright under `mvn -o`. -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -88,7 +88,10 @@ public sealed class CompileValidator
             // java-spring path POSTs the sources to the maven sidecar so
             // mvn runs inside the pre-warmed image cache. angular-dotnet8
             // (the first two-runtime target stack) builds both halves
-            // in-process and reports one combined verdict.
+            // in-process and reports one combined verdict. angular-java
+            // is the second two-runtime stack — same combined-verdict
+            // shape, but the backend half goes to the maven sidecar
+            // (like java-spring) instead of running in-process.
             if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
             {
                 await RunJavaCompileAsync(scaffold, run, actor, ct);
@@ -96,6 +99,10 @@ public sealed class CompileValidator
             else if (string.Equals(scaffold.TargetPlatform, "angular-dotnet8", StringComparison.OrdinalIgnoreCase))
             {
                 await RunAngularDotnetCompileAsync(scaffold, run, actor, ct);
+            }
+            else if (string.Equals(scaffold.TargetPlatform, "angular-java", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunAngularJavaCompileAsync(scaffold, run, actor, ct);
             }
             else
             {
@@ -353,6 +360,145 @@ public sealed class CompileValidator
 
             _log.LogInformation(
                 "Angular+dotnet compile validation for scaffold {Scaffold}: {Status} ({Summary})",
+                scaffold.Id, run.Status, run.Summary);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir);
+            }
+        }
+    }
+
+    /// <summary>
+    /// angular-java: the second two-runtime target stack. Builds frontend/
+    /// the same way angular-dotnet8 does (`npm install` + `ng build`,
+    /// in-process) but the backend/ half goes to the maven sidecar exactly
+    /// like java-spring's RunJavaCompileAsync — with the `backend/` prefix
+    /// stripped off every path first, since the sidecar expects `pom.xml`
+    /// and `src/main/java/...` at its OWN workdir root, not nested under a
+    /// subdirectory.
+    /// </summary>
+    private async Task RunAngularJavaCompileAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-validate-{run.Id:N}");
+        try
+        {
+            var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+            using var manifest = JsonDocument.Parse(manifestText);
+            var files = manifest.RootElement.GetProperty("files");
+
+            Directory.CreateDirectory(tempDir);
+            var mavenSources = new List<MavenClient.JavaSource>();
+            int fileCount = 0;
+            foreach (var file in files.EnumerateArray())
+            {
+                var relPath = file.GetProperty("path").GetString()
+                    ?? throw new InvalidOperationException("Manifest file entry missing 'path'.");
+                var content = file.GetProperty("content").GetString() ?? "";
+                var abs = Path.Combine(tempDir, relPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, content, ct);
+                fileCount++;
+
+                const string backendPrefix = "backend/";
+                if (relPath.StartsWith(backendPrefix, StringComparison.Ordinal))
+                    mavenSources.Add(new MavenClient.JavaSource(relPath[backendPrefix.Length..], content));
+            }
+            _log.LogInformation(
+                "Materialised {Files} files for angular-java scaffold {Scaffold} at {Dir}",
+                fileCount, scaffold.Id, tempDir);
+
+            var frontendDir = Path.Combine(tempDir, "frontend");
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmBuildAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            MavenClient.CompileSummary? mavenSummary = null;
+            string mavenLog;
+            if (mavenSources.Count == 0)
+            {
+                mavenLog = "=== backend/ directory missing from scaffold ===\n";
+            }
+            else if (!await _maven.PingAsync(ct))
+            {
+                mavenLog = "=== maven sidecar unreachable (GET /health failed) ===\n";
+            }
+            else
+            {
+                mavenSummary = await _maven.CompileAsync(new MavenClient.CompileRequest(mavenSources), ct);
+                mavenLog = mavenSummary.Log;
+            }
+
+            var combinedLog = new StringBuilder();
+            combinedLog.AppendLine("=== backend (mvn -o test-compile via maven sidecar) ===");
+            combinedLog.AppendLine(mavenLog);
+            combinedLog.AppendLine();
+            combinedLog.AppendLine("=== frontend (npm install + ng build) ===");
+            combinedLog.AppendLine(npmLog);
+            var combinedLogText = combinedLog.ToString();
+
+            var logKey = $"validation/{run.Id:N}/compile.log";
+            var logUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, logKey, combinedLogText, "text/plain", ct);
+
+            var backendExit = mavenSummary?.ExitCode ?? -1;
+            run.LogBlobUri = logUri;
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "maven+npm",
+                backendExitCode = backendExit,
+                frontendExitCode = npmExit,
+                backendErrorCount = mavenSummary?.ErrorCount ?? 0,
+                backendWarningCount = mavenSummary?.WarningCount ?? 0,
+                fileCount,
+                logLines = combinedLogText.Count(c => c == '\n'),
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (backendExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                var warnings = mavenSummary!.WarningCount;
+                run.Summary = warnings == 0
+                    ? "Backend + frontend build succeeded · 0 mvn warnings"
+                    : $"Backend + frontend build succeeded · {warnings} mvn warning{(warnings == 1 ? "" : "s")}";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "compile.build_failed";
+                var parts = new List<string>();
+                if (backendExit != 0) parts.Add($"backend exit {backendExit}");
+                if (npmExit != 0) parts.Add($"frontend exit {npmExit}");
+                run.Summary = $"Build failed · {string.Join(", ", parts)}";
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new
+                {
+                    runId = run.Id,
+                    stage = run.Stage,
+                    status = run.Status,
+                    summary = run.Summary,
+                    metrics = JsonDocument.Parse(run.MetricsJson),
+                },
+                ct: ct);
+
+            _log.LogInformation(
+                "Angular+Java compile validation for scaffold {Scaffold}: {Status} ({Summary})",
                 scaffold.Id, run.Status, run.Summary);
         }
         finally

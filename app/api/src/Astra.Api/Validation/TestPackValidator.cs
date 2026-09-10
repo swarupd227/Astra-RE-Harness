@@ -118,6 +118,8 @@ public sealed class TestPackValidator
             // scaffolds keep the original in-process `dotnet test` path.
             // angular-dotnet8 runs both `dotnet test` (backend/) and
             // `npm test` / jest (frontend/) and reports one combined verdict.
+            // angular-java pairs the same jest frontend/ run with a maven-
+            // sidecar `mvn test` on backend/, like java-spring's backend half.
             if (string.Equals(scaffold.TargetPlatform, "java-spring", StringComparison.OrdinalIgnoreCase))
             {
                 await RunJavaTestPackAsync(scaffold, run, actor, ct);
@@ -126,6 +128,10 @@ public sealed class TestPackValidator
             if (string.Equals(scaffold.TargetPlatform, "angular-dotnet8", StringComparison.OrdinalIgnoreCase))
             {
                 return await RunAngularDotnetTestPackAsync(scaffold, run, actor, ct);
+            }
+            if (string.Equals(scaffold.TargetPlatform, "angular-java", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunAngularJavaTestPackAsync(scaffold, run, actor, ct);
             }
             return await RunDotnetTestPackAsync(scaffold, run, actor, ct);
         }
@@ -428,6 +434,199 @@ public sealed class TestPackValidator
 
             _log.LogInformation(
                 "Angular+dotnet test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
+                scaffold.Id, run.Status, run.Summary);
+
+            return run;
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch (Exception ex) { _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir); }
+        }
+    }
+
+    /// <summary>
+    /// angular-java: pairs `npm test` / jest on frontend/ (in-process, the
+    /// exact same helper angular-dotnet8 uses) with `mvn test` on backend/
+    /// via the maven sidecar (like java-spring's RunJavaTestPackAsync),
+    /// stripping the `backend/` prefix off every path first since the
+    /// sidecar expects `pom.xml` at its own workdir root. Sums both into
+    /// one combined pass/fail/skip/total, same shape as
+    /// RunAngularDotnetTestPackAsync.
+    /// </summary>
+    private async Task<ValidationRun> RunAngularJavaTestPackAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-testpack-{run.Id:N}");
+        try
+        {
+            var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+            using var manifest = JsonDocument.Parse(manifestText);
+            var files = manifest.RootElement.GetProperty("files");
+
+            Directory.CreateDirectory(tempDir);
+            var mavenSources = new List<MavenClient.JavaSource>();
+            int fileCount = 0;
+            foreach (var file in files.EnumerateArray())
+            {
+                var relPath = file.GetProperty("path").GetString()!;
+                var content = file.GetProperty("content").GetString() ?? "";
+                var abs = Path.Combine(tempDir, relPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, content, ct);
+                fileCount++;
+
+                const string backendPrefix = "backend/";
+                if (relPath.StartsWith(backendPrefix, StringComparison.Ordinal))
+                    mavenSources.Add(new MavenClient.JavaSource(relPath[backendPrefix.Length..], content));
+            }
+
+            var frontendDir = Path.Combine(tempDir, "frontend");
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmTestAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            MavenClient.CompileAndTestResponse? mavenResult = null;
+            string mavenLog;
+            if (mavenSources.Count == 0)
+            {
+                mavenLog = "=== backend/ directory missing from scaffold ===\n";
+            }
+            else if (!await _maven.PingAsync(ct))
+            {
+                mavenLog = "=== maven sidecar unreachable (GET /health failed) ===\n";
+            }
+            else
+            {
+                mavenResult = await _maven.CompileAndTestAsync(
+                    new MavenClient.CompileAndTestRequest(mavenSources, TimeoutMs: 300_000), ct);
+                var sb = new StringBuilder();
+                sb.AppendLine("=== mvn compile ===");
+                sb.AppendLine(mavenResult.Compile.Log);
+                sb.AppendLine($"=== compile exit {mavenResult.Compile.ExitCode} · {mavenResult.Compile.DurationMs} ms ===");
+                if (mavenResult.Test is not null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("=== mvn test (surefire) ===");
+                    sb.AppendLine(mavenResult.Test.Stdout);
+                    if (!string.IsNullOrWhiteSpace(mavenResult.Test.Stderr))
+                    {
+                        sb.AppendLine("--- stderr ---");
+                        sb.AppendLine(mavenResult.Test.Stderr);
+                    }
+                    sb.AppendLine($"=== test exit {mavenResult.Test.ExitCode} · {mavenResult.Test.DurationMs} ms ===");
+                }
+                else
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"=== test skipped: {mavenResult.SkippedTestReason ?? "(no reason given)"} ===");
+                }
+                mavenLog = sb.ToString();
+            }
+
+            // Backend counts: mvn/surefire, mapped the same way RunJavaTestPackAsync does.
+            int jvPassed = 0, jvFailed = 0, jvSkipped = 0, jvTotal = 0;
+            if (mavenResult?.Test is not null)
+            {
+                jvTotal = mavenResult.Test.Tests;
+                jvFailed = mavenResult.Test.Failures + mavenResult.Test.Errors;
+                jvSkipped = mavenResult.Test.Skipped;
+                jvPassed = Math.Max(0, jvTotal - jvFailed - jvSkipped);
+            }
+
+            // Frontend counts: Jest's "Tests:" summary line.
+            int jsPassed = 0, jsFailed = 0, jsSkipped = 0, jsTotal = 0;
+            var jestLine = JestTestsLine.Match(npmLog);
+            if (jestLine.Success)
+            {
+                var body = jestLine.Groups["body"].Value;
+                var f = JestFailed.Match(body); if (f.Success) jsFailed = int.Parse(f.Groups["n"].Value);
+                var p = JestPassed.Match(body); if (p.Success) jsPassed = int.Parse(p.Groups["n"].Value);
+                var s = JestSkipped.Match(body); if (s.Success) jsSkipped = int.Parse(s.Groups["n"].Value);
+                var t = JestTotal.Match(body); if (t.Success) jsTotal = int.Parse(t.Groups["n"].Value);
+            }
+
+            int passed = jvPassed + jsPassed;
+            int failed = jvFailed + jsFailed;
+            int skipped = jvSkipped + jsSkipped;
+            int total = jvTotal + jsTotal;
+
+            var combinedLog = new StringBuilder();
+            combinedLog.AppendLine("=== backend (mvn test via maven sidecar) ===");
+            combinedLog.AppendLine(mavenLog);
+            combinedLog.AppendLine();
+            combinedLog.AppendLine("=== frontend (npm install + npm test / jest) ===");
+            combinedLog.AppendLine(npmLog);
+            var combinedLogText = combinedLog.ToString();
+
+            var logKey = $"validation/{run.Id:N}/test-pack.log";
+            var logUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, logKey, combinedLogText, "text/plain", ct);
+
+            var backendExit = mavenResult?.Test?.ExitCode ?? mavenResult?.Compile.ExitCode ?? -1;
+            run.LogBlobUri = logUri;
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "maven+jest",
+                backendExitCode = backendExit,
+                frontendExitCode = npmExit,
+                backend = new { passed = jvPassed, failed = jvFailed, skipped = jvSkipped, total = jvTotal },
+                frontend = new { passed = jsPassed, failed = jsFailed, skipped = jsSkipped, total = jsTotal },
+                passed,
+                failed,
+                skipped,
+                total,
+                fileCount,
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (mavenResult is not null && mavenResult.Compile.ExitCode != 0)
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "test_pack.compile_failed";
+                run.Summary = $"mvn compile failed before tests ran · {mavenResult.Compile.ErrorCount} error{(mavenResult.Compile.ErrorCount == 1 ? "" : "s")}";
+            }
+            else if (total == 0)
+            {
+                run.Status = "ERRORED";
+                run.ErrorCode = "test_pack.no_tests_detected";
+                run.Summary = backendExit == 0 && npmExit == 0
+                    ? "No tests detected"
+                    : $"backend exit {backendExit}, frontend exit {npmExit}; no test summary parsed";
+            }
+            else if (failed == 0 && backendExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                run.Summary = skipped == 0
+                    ? $"All {total} tests passed ({jvTotal} backend + {jsTotal} frontend)"
+                    : $"{passed}/{total} passed · {skipped} skipped ({jvTotal} backend + {jsTotal} frontend)";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "test_pack.tests_failed";
+                run.Summary = $"{failed} of {total} tests failed · {passed} passed · {skipped} skipped";
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new
+                {
+                    runId = run.Id,
+                    stage = run.Stage,
+                    status = run.Status,
+                    summary = run.Summary,
+                    metrics = JsonDocument.Parse(run.MetricsJson),
+                },
+                ct: ct);
+
+            _log.LogInformation(
+                "Angular+Java test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
                 scaffold.Id, run.Status, run.Summary);
 
             return run;

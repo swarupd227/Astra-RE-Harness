@@ -35,10 +35,13 @@ RUN pip install --no-cache-dir \
 
 # Pre-warm the local Maven repository against a throw-away POM so the
 # heavy plugins land at build time, not at first user request.
-# This bakes the offline cache into the image (~150 MB) so the
-# container is reproducible across hosts that have no internet at run
-# time (a SOC2 deployment constraint we've already adopted for the
-# gfortran sidecar's apt mirror).
+# This bakes the offline cache into the image so the container is
+# reproducible across hosts that have no internet at run time (a SOC2
+# deployment constraint we've already adopted for the gfortran sidecar's
+# apt mirror). Originally ~150 MB (plain JUnit/AssertJ/Mockito); now also
+# includes spring-boot-starter-web/-test + its embedded-Tomcat/Jackson/
+# spring-test dependency tree for the angular-java target stack, so
+# expect a noticeably larger image (roughly +100-150 MB).
 COPY warmup/ /warmup/
 RUN cd /warmup && mvn -B -q \
         org.apache.maven.plugins:maven-compiler-plugin:3.13.0:help \

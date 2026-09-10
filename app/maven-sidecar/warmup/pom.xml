@@ -9,11 +9,30 @@
 
   Versions here MUST match the versions the scaffold archetype
   (java-spring/cobol-canonical-payroll) declares in its pom.xml.
+
+  Phase — angular-java: also declares spring-boot-starter-parent +
+  -web/-test at the exact version angular-java/canonical-cpp-widget-crud's
+  backend/pom.xml uses, so `mvn -B test` below resolves and caches the
+  full Spring MVC + embedded-Tomcat + Jackson + spring-test dependency
+  tree (and the parent POM chain) at image-build time, when internet
+  access is actually available. The runtime container stays no-egress —
+  only this build step needs the network, same SOC2 pattern already used
+  for the plain-JUnit warmup below. The old framework-free archetypes
+  (java-spring/*) are unaffected; their exact pinned junit/assertj/mockito
+  versions are kept alongside so both dependency sets stay cached.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
     <groupId>com.example.warmup</groupId>
     <artifactId>maven-sidecar-warmup</artifactId>
     <version>0.0.1</version>
@@ -41,6 +60,15 @@
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
