@@ -38,10 +38,7 @@ RUN pip install --no-cache-dir \
 # This bakes the offline cache into the image so the container is
 # reproducible across hosts that have no internet at run time (a SOC2
 # deployment constraint we've already adopted for the gfortran sidecar's
-# apt mirror). Originally ~150 MB (plain JUnit/AssertJ/Mockito); now also
-# includes spring-boot-starter-web/-test + its embedded-Tomcat/Jackson/
-# spring-test dependency tree for the angular-java target stack, so
-# expect a noticeably larger image (roughly +100-150 MB).
+# apt mirror).
 COPY warmup/ /warmup/
 RUN cd /warmup && mvn -B -q \
         org.apache.maven.plugins:maven-compiler-plugin:3.13.0:help \
@@ -57,6 +54,19 @@ RUN cd /warmup && mvn -B -q \
  # offline with "surefire-junit-platform:jar:3.2.5 (absent)".
  && cd /warmup && mvn -B test \
  && rm -rf /warmup
+
+# Second, SEPARATE warmup project for the angular-java target stack's
+# Spring Boot backend (~+100-150 MB: embedded Tomcat, Jackson, spring-
+# test, ...). Kept out of /warmup above deliberately — declaring
+# spring-boot-starter-test alongside /warmup's own explicit assertj/
+# mockito version pins made Maven's nearest-wins mediation favour the
+# pinned versions over Spring's BOM-managed ones, so the versions the
+# real archetype resolves never got cached (confirmed by a live
+# "artifact ... has not been downloaded" failure). A separate reactor
+# with no competing pins resolves and caches Spring's own versions.
+COPY warmup-spring/ /warmup-spring/
+RUN cd /warmup-spring && mvn -B test \
+ && rm -rf /warmup-spring
 
 COPY maven_sidecar/ maven_sidecar/
 

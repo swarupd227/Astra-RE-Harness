@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Throw-away POM used at image-build time to pre-populate the local
+  Maven repository (~/.m2) with everything a real Spring Boot 3 project
+  needs — for the angular-java target stack's backend half, which
+  (unlike every other java-spring-family archetype) is NOT
+  framework-free.
+
+  Deliberately declares NO explicit version for junit-jupiter/assertj-
+  core/mockito-core — spring-boot-starter-test's own dependency-
+  management BOM picks those (3.2.5's BOM manages assertj-core at
+  3.24.2 and mockito-core at 5.7.0, for example). This project exists
+  SEPARATELY from ../warmup/pom.xml specifically so those two version
+  sets never collide: declaring both in one POM makes Maven's nearest-
+  wins dependency mediation favour the OTHER project's explicit pins,
+  so the versions Spring's BOM actually resolves here never get cached
+  — confirmed by a live "mvn -o test-compile" failure against the real
+  angular-java archetype before this was split out.
+
+  These dependency declarations MUST mirror angular-java/canonical-
+  cpp-widget-crud/backend/pom.xml exactly (same parent version, same
+  starters, no extra overrides) so this warmup genuinely caches what
+  that archetype — and anything scaffolded from it — actually needs.
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -11,28 +34,10 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
-    <artifactId>widget-api</artifactId>
-    <version>0.1.0</version>
+    <groupId>com.example.warmup</groupId>
+    <artifactId>maven-sidecar-warmup-spring</artifactId>
+    <version>0.0.1</version>
     <packaging>jar</packaging>
-
-    <name>C++ REST resource -> Angular + Spring Boot 3 (Java 21)</name>
-    <description>
-        Reference C++-to-Angular+Spring-Boot-3 scaffold for a routine that
-        exposes a list/create/delete resource. Produces two paired,
-        independently buildable packages: a Spring Boot 3 Web API
-        (WidgetRecordPort for data access, WidgetService for business
-        rules, WidgetController for HTTP) and an Angular 18 standalone-
-        component app, mirroring angular-dotnet8/canonical-delphi-angular-
-        widget-crud's shape one-for-one so the same two-runtime
-        CompileValidator/TestPackValidator dispatch pattern applies
-        unchanged. Unlike the other java-spring archetypes, this one is
-        NOT framework-free — it depends on real spring-boot-starter-web,
-        which the maven-sidecar's offline cache now bakes in specifically
-        for this stack (see maven-sidecar/warmup-spring/pom.xml — kept
-        separate from warmup/pom.xml so the two projects' dependency
-        versions don't collide).
-    </description>
 
     <properties>
         <java.version>21</java.version>
@@ -51,10 +56,9 @@
     </dependencies>
 
     <build>
-        <!-- Plugins are pinned to the exact versions baked into the
-             maven-sidecar's OFFLINE ~/.m2 cache (see warmup/pom.xml) — an
-             unpinned default would resolve a different version online and
-             fail outright under `mvn -o`. -->
+        <!-- Same plugin versions as ../warmup/pom.xml and the archetype's
+             own pom.xml — must stay pinned for the same offline-build
+             reason (see those files' comments). -->
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
