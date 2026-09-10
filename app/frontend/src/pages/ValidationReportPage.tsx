@@ -40,6 +40,39 @@ import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 const EQUIVALENCE_SMOKE_ONLY_LANGUAGES = new Set(['delphi', 'cpp', 'vb6', 'csharp', 'vbnet']);
 
 /**
+ * Compile/Test-pack subtitles used to unconditionally say "dotnet build" /
+ * "xUnit" / "dotnet test" regardless of target stack — actively wrong for
+ * java-spring (mvn/JUnit) and now angular-java (mvn+npm/JUnit+jest) too.
+ * Matches the actual per-stack dispatch in CompileValidator.cs /
+ * TestPackValidator.cs.
+ */
+function compileSubtitle(targetPlatform: string | undefined): string {
+  switch (targetPlatform) {
+    case 'java-spring':
+      return 'mvn -o test-compile (maven sidecar) against the generated package';
+    case 'angular-dotnet8':
+      return 'dotnet build (backend) + npm run build (frontend)';
+    case 'angular-java':
+      return 'mvn -o test-compile (backend) + npm run build (frontend)';
+    default:
+      return 'dotnet build against the generated package';
+  }
+}
+
+function testPackSubtitle(targetPlatform: string | undefined): string {
+  switch (targetPlatform) {
+    case 'java-spring':
+      return 'generated JUnit fixtures per signed claim + mvn test';
+    case 'angular-dotnet8':
+      return 'generated xUnit + jest fixtures per signed claim + dotnet test + npm test';
+    case 'angular-java':
+      return 'generated JUnit + jest fixtures per signed claim + mvn test + npm test';
+    default:
+      return 'generated xUnit fixtures per signed claim + dotnet test';
+  }
+}
+
+/**
  * Phase #2d — Post-migration validation report card.
  *
  * Surfaces three stages (COMPILE, TEST_PACK, EQUIVALENCE) for a scaffold
@@ -189,7 +222,7 @@ export function ValidationReportPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StageCard
           title="Compile"
-          subtitle="dotnet build against the generated package"
+          subtitle={compileSubtitle(scaffold.data?.targetPlatform)}
           icon={<Hammer className="h-5 w-5" aria-hidden="true" />}
           run={compileRun}
           onRun={() => compile.mutate()}
@@ -199,7 +232,7 @@ export function ValidationReportPage() {
         />
         <StageCard
           title="Test pack"
-          subtitle="generated xUnit fixtures per signed claim + dotnet test"
+          subtitle={testPackSubtitle(scaffold.data?.targetPlatform)}
           icon={<ShieldCheck className="h-5 w-5" aria-hidden="true" />}
           run={testPackRun}
           onRun={() => testPack.mutate()}
