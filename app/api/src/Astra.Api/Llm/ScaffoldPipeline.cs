@@ -11,8 +11,15 @@ namespace Astra.Api.Llm;
 
 public sealed class ScaffoldPipeline
 {
-    public const string PromptTemplateId = "dotnet-scaffold";
-    public const string PromptTemplateVersion = "v2.0";
+    // Fallback only — used to populate ScaffoldRequest (which no provider
+    // actually consults for prompt lookup; each resolves its own prompt
+    // via PromptLibrary keyed on the real target stack) and as a safety
+    // net if a provider's __final__ payload omits promptTemplateId/
+    // Version. The real, per-stack values a provider actually used come
+    // back in that payload — see UnpackPayload — and that's what gets
+    // persisted to the LlmCall row below, not these constants.
+    public const string DefaultPromptTemplateId = "dotnet-scaffold";
+    public const string DefaultPromptTemplateVersion = "v2.0";
     public const string TargetPlatform = "dotnet8";
 
     private readonly IScaffoldProvider _provider;
@@ -81,13 +88,19 @@ public sealed class ScaffoldPipeline
             await _db.SaveChangesAsync(ct);
         }
 
+        // Which prompt actually runs is resolved inside the provider (each
+        // picks its own per-target-stack prompt via PromptLibrary), so it
+        // isn't known yet at this point — the provider emits its own
+        // "provider_info" moments later with the real prompt kind, and the
+        // __final__ payload carries the real id/version for persistence
+        // below. Omitted here rather than guessed, to avoid ever showing a
+        // wrong value (this event previously always claimed
+        // DefaultPromptTemplateId/Version regardless of target stack).
         yield return new("provider_info", new
         {
             name = _provider.Info.Name,
             model = _provider.Info.Model,
             configVersion = _provider.Info.ConfigVersion,
-            promptTemplateId = PromptTemplateId,
-            promptTemplateVersion = PromptTemplateVersion,
             targetPlatform = targetStack,
         });
 
@@ -105,8 +118,8 @@ public sealed class ScaffoldPipeline
             spec.Subroutine?.SourceFile?.RelativePath ?? "",
             spec.SpecJson.RootElement.GetRawText(),
             targetStack,
-            PromptTemplateId,
-            PromptTemplateVersion,
+            DefaultPromptTemplateId,
+            DefaultPromptTemplateVersion,
             spec.Subroutine?.SourceLanguage ?? "",
             originalSourceText);
 
@@ -131,17 +144,21 @@ public sealed class ScaffoldPipeline
             yield break;
         }
 
-        var (filesJson, inputTokens, outputTokens, latencyMs, fileCount, totalLines, todoCount) =
-            UnpackPayload(finalPayload);
+        var (filesJson, inputTokens, outputTokens, latencyMs, fileCount, totalLines, todoCount,
+                promptTemplateId, promptTemplateVersion) = UnpackPayload(finalPayload);
 
-        // Persist the LlmCall row.
+        // Persist the LlmCall row — using the prompt id/version the
+        // provider ACTUALLY resolved (from its __final__ payload), not
+        // this class's own DefaultPromptTemplateId/Version. Those defaults
+        // only apply when a provider's payload omits the fields entirely
+        // (see UnpackPayload) — every current provider supplies them.
         var llmCall = new LlmCall
         {
             Id = Guid.NewGuid(),
             Provider = _provider.Info.Name,
             Model = _provider.Info.Model,
-            PromptTemplateId = PromptTemplateId,
-            PromptTemplateVersion = PromptTemplateVersion,
+            PromptTemplateId = promptTemplateId,
+            PromptTemplateVersion = promptTemplateVersion,
             ProviderConfigVersion = _provider.Info.ConfigVersion,
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
@@ -243,7 +260,8 @@ public sealed class ScaffoldPipeline
     }
 
     private static (string filesJson, int inputTokens, int outputTokens, long latencyMs,
-                    int fileCount, int totalLines, int todoCount)
+                    int fileCount, int totalLines, int todoCount,
+                    string promptTemplateId, string promptTemplateVersion)
         UnpackPayload(object payload)
     {
         var el = JsonSerializer.SerializeToElement(payload);
@@ -256,6 +274,14 @@ public sealed class ScaffoldPipeline
             if (f.TryGetProperty("lineCount", out var lc)) totalLines += lc.GetInt32();
             if (f.TryGetProperty("todoCount", out var tc)) todoCount += tc.GetInt32();
         }
+        // Every current provider (Anthropic + Mock) supplies these — the
+        // fallback only guards a future provider that forgets to.
+        var promptTemplateId = el.TryGetProperty("promptTemplateId", out var pid) && pid.ValueKind == JsonValueKind.String
+            ? pid.GetString()!
+            : DefaultPromptTemplateId;
+        var promptTemplateVersion = el.TryGetProperty("promptTemplateVersion", out var pver) && pver.ValueKind == JsonValueKind.String
+            ? pver.GetString()!
+            : DefaultPromptTemplateVersion;
         return (
             files.GetRawText(),
             el.GetProperty("inputTokens").GetInt32(),
@@ -263,7 +289,9 @@ public sealed class ScaffoldPipeline
             el.GetProperty("latencyMs").GetInt64(),
             fileCount,
             totalLines,
-            todoCount);
+            todoCount,
+            promptTemplateId,
+            promptTemplateVersion);
     }
 
     private static decimal EstimateCost(string provider, int inputTokens, int outputTokens) =>

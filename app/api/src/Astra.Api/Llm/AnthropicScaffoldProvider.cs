@@ -200,6 +200,8 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             ["outputTokens"] = outputTokens,
             ["latencyMs"] = sw.ElapsedMilliseconds,
             ["archetypeId"] = archetype.Manifest.Id,
+            ["promptTemplateId"] = loaded.PromptId,
+            ["promptTemplateVersion"] = loaded.Version,
         });
 
         _logger.LogInformation(
@@ -340,6 +342,8 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             ["outputTokens"] = outputTokens,
             ["latencyMs"] = sw.ElapsedMilliseconds,
             ["archetypeId"] = $"in-place:{request.SourceSchema}",
+            ["promptTemplateId"] = loaded.PromptId,
+            ["promptTemplateVersion"] = loaded.Version,
         });
 
         _logger.LogInformation(

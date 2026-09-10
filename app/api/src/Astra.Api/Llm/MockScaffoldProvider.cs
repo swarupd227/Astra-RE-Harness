@@ -113,6 +113,12 @@ public sealed class MockScaffoldProvider : IScaffoldProvider
             ["outputTokens"] = totalChars / 4,
             ["latencyMs"] = sw.ElapsedMilliseconds,
             ["archetypeId"] = archetype.Manifest.Id,
+            // No real LLM call happens here (the archetype's own files are
+            // streamed unchanged), so there's no per-stack prompt to report
+            // — a fixed placeholder, unlike AnthropicScaffoldProvider's
+            // actually-resolved loaded.PromptId/Version.
+            ["promptTemplateId"] = "mock-archetype-passthrough",
+            ["promptTemplateVersion"] = "v1.0",
         });
     }
 
