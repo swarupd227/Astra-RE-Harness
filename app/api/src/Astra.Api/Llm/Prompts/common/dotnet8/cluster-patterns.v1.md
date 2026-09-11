@@ -25,6 +25,15 @@ notes: |
   full specs scaled past the 200k-token context at ~450 routines
   (EnvestNet). The orchestrator degrades excerpt size in tiers to stay
   inside a fixed prompt budget.
+
+  Phase 12.0.1: even the smallest tier can't fit very large corpora
+  (oatpp: 1815 routines, still 274k tokens at counts-only). Past that
+  point the orchestrator splits routines into several independently-sized
+  batches and calls this prompt once per batch, with {{batchNote}} filled
+  in to tell the model it's only seeing a subset. A separate
+  reconcile-pattern-clusters pass then merges clusters that appear in
+  more than one batch. {{batchNote}} is empty (and this prompt's output
+  is unchanged) whenever the whole corpus still fits in one call.
 ---
 
 # System
@@ -85,7 +94,7 @@ Coverage targets:
 Corpus: {{corpusName}}
 Source version: {{sourceVersionId}}
 Subroutine count: {{subroutineCount}}
-
+{{batchNote}}
 The following are every subroutine in this corpus's latest version with
 an extracted spec, one JSON object per line-item: `n` (the routine's
 integer index — use it to reference the routine in your `members`

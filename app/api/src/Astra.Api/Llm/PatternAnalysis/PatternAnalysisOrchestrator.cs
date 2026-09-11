@@ -17,16 +17,21 @@ namespace Astra.Api.Llm.PatternAnalysis;
 ///     in the corpus's latest version, bounded concurrency, background job
 ///     (mirrors <c>Docs/RoutineSummaryPipeline</c>'s loop).
 ///   Stage 2 "cluster": bucket every resulting spec's claims by kind
-///     (<see cref="Validation.ClaimKindBucketer"/>), then send the whole
-///     corpus to the LLM in ONE call (mirrors <c>HarmonisationPipeline</c>)
-///     asking it to group routines that share one real behavioural
-///     pattern, producing <see cref="PatternCluster"/> rows with a
-///     suggested archetype name per cluster.
+///     (<see cref="Validation.ClaimKindBucketer"/>), then send the corpus
+///     to the LLM asking it to group routines that share one real
+///     behavioural pattern, producing <see cref="PatternCluster"/> rows
+///     with a suggested archetype name per cluster. When the whole corpus
+///     fits in one call (mirrors <c>HarmonisationPipeline</c>) that's a
+///     single request; when it doesn't (very large corpora — see
+///     <see cref="BuildBatches"/>), it's several independently-clustered
+///     batches followed by one reconciliation call that merges clusters
+///     representing the same pattern across batches.
 ///
-/// One call (not one per bucket) so the model can split a bucket whose
-/// members only superficially share claim kinds, or merge across buckets
-/// when the same real idiom happens to produce slightly different claim
-/// sets — decisions that require seeing the whole corpus at once.
+/// One call per batch (not one per bucket) so the model can split a
+/// bucket whose members only superficially share claim kinds, or merge
+/// across buckets when the same real idiom happens to produce slightly
+/// different claim sets — decisions that require seeing as much of the
+/// corpus at once as the context budget allows.
 /// </summary>
 public sealed class PatternAnalysisOrchestrator
 {
@@ -141,11 +146,18 @@ public sealed class PatternAnalysisOrchestrator
 
             var state = extractResult.Succeeded == 0 && extractResult.Failed > 0
                 ? "FAILED"
-                : (extractResult.Failed > 0 ? "PARTIAL" : "SUCCEEDED");
+                : (extractResult.Failed > 0 || clusterResult.FailedBatchCount > 0 ? "PARTIAL" : "SUCCEEDED");
             var summary =
                 $"{extractResult.Succeeded} extracted ({extractResult.Failed} failed, " +
                 $"{extractResult.Skipped} already-extracted) → {clusterResult.ClusterCount} cluster(s) " +
-                $"across {clusterResult.SubroutineCount} routine(s).";
+                $"across {clusterResult.SubroutineCount} routine(s)" +
+                (clusterResult.BatchCount > 1
+                    ? $", clustered in {clusterResult.BatchCount} batches + reconciliation"
+                    : "") +
+                (clusterResult.FailedBatchCount > 0
+                    ? $" ({clusterResult.FailedBatchCount} batch(es) failed — their routines are recorded as unclassified)"
+                    : "") +
+                ".";
             await UpdateAsync(runId, state, summary,
                 new Dictionary<string, object?> { ["extract"] = extractResult, ["cluster"] = clusterResult },
                 completed: true);
@@ -354,7 +366,8 @@ public sealed class PatternAnalysisOrchestrator
 
     // ── Stage 2: claim-kind bucketing + LLM-judged clustering ───────────
 
-    private sealed record ClusterStageResult(int SubroutineCount, int ClusterCount, int InputTokens, int OutputTokens);
+    private sealed record ClusterStageResult(
+        int SubroutineCount, int ClusterCount, int InputTokens, int OutputTokens, int BatchCount, int FailedBatchCount = 0);
 
     private async Task<ClusterStageResult> ClusterAsync(Guid runId, Guid corpusId, Guid sourceVersionId, CancellationToken ct)
     {
@@ -392,7 +405,7 @@ public sealed class PatternAnalysisOrchestrator
             $"DELETE FROM pattern_clusters WHERE corpus_id = {corpusId}", ct);
 
         if (specs.Count == 0)
-            return new ClusterStageResult(0, 0, 0, 0);
+            return new ClusterStageResult(0, 0, 0, 0, 0);
 
         var signatureBySubroutine = new Dictionary<Guid, string>();
         var digests = new List<RoutineDigest>();
@@ -408,48 +421,122 @@ public sealed class PatternAnalysisOrchestrator
                 ReadSpecPurpose(spec.SpecJson.RootElement),
                 buckets));
         }
-        var (entriesJson, digestTier) = BuildEntriesJson(digests);
+
+        var batches = BuildBatches(digests);
         _logger.LogInformation(
-            "Pattern clustering digest: corpus={CorpusId} routines={Count} tier={Tier} chars={Chars}",
-            corpusId, digests.Count, digestTier, entriesJson.Length);
+            "Pattern clustering digest: corpus={CorpusId} routines={Count} batches={BatchCount}",
+            corpusId, digests.Count, batches.Count);
+        if (batches.Count > 1)
+        {
+            _runLogger.Log(runId,
+                $"Clustering input ({digests.Count} routines) exceeds the single-call token budget even at " +
+                $"the smallest digest tier — split into {batches.Count} batches, to be reconciled afterwards.");
+        }
 
         var loaded = prompts.GetLatest("common", "dotnet8", "cluster-patterns")
             ?? throw new InvalidOperationException(
                 "No cluster-patterns prompt registered (common/dotnet8/cluster-patterns).");
 
-        var rendered = prompts.Render(loaded, new Dictionary<string, string?>
-        {
-            ["corpusName"] = corpus.Name,
-            ["sourceVersionId"] = sourceVersionId.ToString(),
-            ["subroutineCount"] = specs.Count.ToString(),
-            ["entriesJson"] = entriesJson,
-        });
-
-        ClusterLlmResult llmResult;
-        if (string.Equals(provider.Info.Name, "anthropic", StringComparison.OrdinalIgnoreCase))
-        {
-            llmResult = await CallAnthropicAsync(httpFactory, anthropicOpts, rendered.System, rendered.User, ct);
-        }
-        else
-        {
-            llmResult = StubMockResult(specs, signatureBySubroutine);
-        }
-
+        var subroutineIdByIndex = digests.Select(d => d.SubroutineId).ToList();
         var specIdBySubroutine = specs.ToDictionary(s => s.SubroutineId, s => s.Id);
-        var clusters = ParseClusters(
-            llmResult.RawJson, runId, corpusId, nameById, specIdBySubroutine, signatureBySubroutine,
-            digests.Select(d => d.SubroutineId).ToList());
 
-        // Safety net: any subroutine the LLM didn't place gets its own
-        // singleton cluster rather than silently vanishing from the report.
-        var placed = clusters
+        var allClusters = new List<PatternCluster>();
+        int totalInputTokens = 0, totalOutputTokens = 0;
+        var failedBatches = 0;
+        for (var b = 0; b < batches.Count; b++)
+        {
+            var batch = batches[b];
+            var batchNote = batches.Count > 1
+                ? $"\nNOTE: This is batch {b + 1} of {batches.Count} — a subset of {digests.Count} total " +
+                  "corpus routines, split across batches to stay within the model's context limit. Cluster " +
+                  "ONLY the routines shown below; do not assume you are seeing the whole corpus, and do not " +
+                  "reference routines outside this batch. A separate reconciliation pass will merge clusters " +
+                  "from different batches that turn out to describe the same real pattern.\n"
+                : "";
+
+            var rendered = prompts.Render(loaded, new Dictionary<string, string?>
+            {
+                ["corpusName"] = corpus.Name,
+                ["sourceVersionId"] = sourceVersionId.ToString(),
+                ["subroutineCount"] = batch.Indices.Count.ToString(),
+                ["entriesJson"] = batch.Json,
+                ["batchNote"] = batchNote,
+            });
+
+            // A transient failure on one batch (e.g. a 429/500 from
+            // Anthropic) must not throw away every other batch's already-
+            // clustered results — same "don't discard completed work"
+            // reasoning as the batching split itself. A failed batch's
+            // routines fall through to the unclassified-singleton safety
+            // net below instead of aborting the whole run.
+            try
+            {
+                ClusterLlmResult llmResult;
+                if (string.Equals(provider.Info.Name, "anthropic", StringComparison.OrdinalIgnoreCase))
+                {
+                    llmResult = await CallAnthropicAsync(httpFactory, anthropicOpts, rendered.System, rendered.User, ct);
+                }
+                else
+                {
+                    var batchSubroutineIds = batch.Indices.Select(i => digests[i].SubroutineId).ToHashSet();
+                    llmResult = StubMockResult(
+                        specs.Where(s => batchSubroutineIds.Contains(s.SubroutineId)).ToList(), signatureBySubroutine);
+                }
+                totalInputTokens += llmResult.InputTokens;
+                totalOutputTokens += llmResult.OutputTokens;
+
+                allClusters.AddRange(ParseClusters(
+                    llmResult.RawJson, runId, corpusId, nameById, specIdBySubroutine, signatureBySubroutine,
+                    subroutineIdByIndex));
+            }
+            catch (Exception ex)
+            {
+                failedBatches++;
+                _logger.LogWarning(ex,
+                    "Pattern clustering batch {Batch}/{Total} failed for run {RunId}; its {Count} routine(s) will be recorded as unclassified.",
+                    b + 1, batches.Count, runId, batch.Indices.Count);
+                _runLogger.Log(runId,
+                    $"Batch {b + 1}/{batches.Count} clustering call failed ({ex.Message}); its {batch.Indices.Count} " +
+                    "routine(s) will be recorded as unclassified rather than failing the whole run.");
+            }
+
+            if (batches.Count > 1)
+            {
+                await UpdateAsync(runId, "RUNNING",
+                    $"Stage 2/2: clustered batch {b + 1}/{batches.Count} ({batch.Indices.Count} routines) — " +
+                    $"{allClusters.Count} cluster(s) so far" +
+                    (failedBatches > 0 ? $", {failedBatches} batch(es) failed" : ""),
+                    null);
+            }
+        }
+
+        if (batches.Count > 1)
+        {
+            try
+            {
+                allClusters = await ReconcileClustersAsync(
+                    runId, corpus.Name, allClusters, provider, prompts, httpFactory, anthropicOpts, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Pattern-cluster reconciliation failed for run {RunId}; keeping {Count} per-batch clusters unmerged.",
+                    runId, allClusters.Count);
+                _runLogger.Log(runId,
+                    $"Reconciliation pass failed ({ex.Message}); keeping all {allClusters.Count} per-batch clusters unmerged.");
+            }
+        }
+
+        // Safety net: any subroutine no batch placed gets its own singleton
+        // cluster rather than silently vanishing from the report.
+        var placed = allClusters
             .SelectMany(c => ParseMemberIds(c.MemberSubroutineIdsJson))
             .ToHashSet();
         foreach (var spec in specs)
         {
             if (placed.Contains(spec.SubroutineId)) continue;
             var name = nameById.TryGetValue(spec.SubroutineId, out var n) ? n : spec.SubroutineId.ToString();
-            clusters.Add(new PatternCluster
+            allClusters.Add(new PatternCluster
             {
                 Id = Guid.NewGuid(),
                 PatternAnalysisRunId = runId,
@@ -468,10 +555,10 @@ public sealed class PatternAnalysisOrchestrator
             });
         }
 
-        await db.PatternClusters.AddRangeAsync(clusters, ct);
+        await db.PatternClusters.AddRangeAsync(allClusters, ct);
         await db.SaveChangesAsync(ct);
 
-        return new ClusterStageResult(specs.Count, clusters.Count, llmResult.InputTokens, llmResult.OutputTokens);
+        return new ClusterStageResult(specs.Count, allClusters.Count, totalInputTokens, totalOutputTokens, batches.Count, failedBatches);
     }
 
     // ── Clustering-input digest ─────────────────────────────────────────
@@ -483,6 +570,14 @@ public sealed class PatternAnalysisOrchestrator
     // instead — sized to a budget by degrading through tiers: claim
     // excerpts → shorter excerpts → per-kind counts only. The largest tier
     // that fits wins.
+    //
+    // Phase 12.0.1: even counts-only doesn't fit every corpus in one call
+    // (oatpp: 1815 routines still serialised past budget, and Anthropic
+    // rejected the resulting 274k-token prompt outright — the previous
+    // "send it anyway" fallback was actually a hard failure, discarding
+    // Stage 1's completed extraction work). BuildBatches splits routines
+    // across several counts-only-tier batches instead, each clustered
+    // independently and merged by ReconcileClustersAsync afterwards.
     private const int MaxEntriesJsonChars = 450_000; // ≈150k tokens at ~3 chars/token
 
     private static readonly JsonSerializerOptions DigestJsonOpts = new()
@@ -498,25 +593,29 @@ public sealed class PatternAnalysisOrchestrator
         string? Purpose,
         Dictionary<string, List<string>> Buckets);
 
-    private static (string Json, string Tier) BuildEntriesJson(IReadOnlyList<RoutineDigest> digests)
-    {
-        var tiers = new (string Name, int ClaimsPerKind, int ClaimChars, int PurposeChars)[]
-        {
-            ("excerpts", 4, 200, 300),
-            ("short-excerpts", 2, 110, 160),
-            ("counts-only", 0, 0, 110),
-        };
+    private sealed record ClusterBatch(string Json, string Tier, IReadOnlyList<int> Indices);
 
-        var json = "";
-        var tierName = "";
-        foreach (var tier in tiers)
+    private static readonly (string Name, int ClaimsPerKind, int ClaimChars, int PurposeChars)[] DigestTiers =
+    {
+        ("excerpts", 4, 200, 300),
+        ("short-excerpts", 2, 110, 160),
+        ("counts-only", 0, 0, 110),
+    };
+
+    /// <summary>Serialise the given digest indices at one tier. Entries carry
+    /// a compact integer index `n` instead of the GUID; the model references
+    /// routines by `n` in its output, which cuts the response to ~1/10th the
+    /// tokens of full-GUID output (which ran past the HTTP timeout on
+    /// EnvestNet). `n` is always the index into the FULL digest list, not the
+    /// batch — so batches never need to remap indices in the model's reply.</summary>
+    private static string BuildEntriesJsonAtTier(
+        IReadOnlyList<RoutineDigest> digests, IReadOnlyList<int> indices,
+        (string Name, int ClaimsPerKind, int ClaimChars, int PurposeChars) tier)
+    {
+        var entries = indices.Select(i =>
         {
-            tierName = tier.Name;
-            // Entries carry a compact integer index `n` instead of the GUID;
-            // the model references routines by `n` in its output, which cuts
-            // the response to ~1/10th the tokens of 450 GUID strings (the
-            // full-GUID output ran past the HTTP timeout on EnvestNet).
-            var entries = digests.Select((d, i) => new
+            var d = digests[i];
+            return new
             {
                 n = i,
                 subroutineName = d.Name,
@@ -532,14 +631,77 @@ public sealed class PatternAnalysisOrchestrator
                             kv => kv.Value.Take(tier.ClaimsPerKind)
                                 .Select(text => Truncate(text, tier.ClaimChars))
                                 .ToList()),
-            });
-            json = JsonSerializer.Serialize(entries, DigestJsonOpts);
-            if (json.Length <= MaxEntriesJsonChars) return (json, tierName);
-        }
+            };
+        });
+        return JsonSerializer.Serialize(entries, DigestJsonOpts);
+    }
 
-        // counts-only is ~100 bytes per routine; if a pathological corpus
-        // still exceeds the budget, send it anyway rather than refusing.
-        return (json, tierName);
+    /// <summary>Try every tier in order (richest first) for the given
+    /// indices; returns the first that fits the budget, or the smallest
+    /// tier's JSON with <c>Fits=false</c> if none does.</summary>
+    private static (string Json, string Tier, bool Fits) BuildEntriesJsonFor(
+        IReadOnlyList<RoutineDigest> digests, IReadOnlyList<int> indices)
+    {
+        var json = "";
+        var tierName = "";
+        foreach (var tier in DigestTiers)
+        {
+            tierName = tier.Name;
+            json = BuildEntriesJsonAtTier(digests, indices, tier);
+            if (json.Length <= MaxEntriesJsonChars) return (json, tierName, true);
+        }
+        return (json, tierName, false);
+    }
+
+    /// <summary>
+    /// Split the corpus's routines into one or more batches, each of which
+    /// fits <see cref="MaxEntriesJsonChars"/>. The common case — the whole
+    /// corpus fits at some tier — returns a single batch with EXACTLY the
+    /// same JSON <see cref="BuildEntriesJsonFor"/> would have produced
+    /// before batching existed, so nothing changes for corpora that already
+    /// worked. Only when even the smallest (counts-only) tier can't fit
+    /// everything does this fall through to packing routines into several
+    /// counts-only batches — a uniform tier across batches keeps quality
+    /// consistent and keeps the packing pass a single O(n) sweep.
+    /// </summary>
+    private static List<ClusterBatch> BuildBatches(IReadOnlyList<RoutineDigest> digests)
+    {
+        var all = Enumerable.Range(0, digests.Count).ToList();
+        var (wholeJson, wholeTier, fits) = BuildEntriesJsonFor(digests, all);
+        if (fits) return new List<ClusterBatch> { new(wholeJson, wholeTier, all) };
+
+        var countsOnlyTier = DigestTiers[^1];
+        // Pre-measure each routine's own counts-only entry length once, so
+        // packing is a single linear sweep instead of re-serialising the
+        // whole growing batch on every routine (which would be O(n²) at
+        // oatpp's scale).
+        var itemLengths = all
+            .Select(i => BuildEntriesJsonAtTier(digests, new[] { i }, countsOnlyTier).Length - 2) // strip "[" "]"
+            .ToList();
+
+        var batches = new List<ClusterBatch>();
+        var current = new List<int>();
+        var runningLength = 2; // "[" + "]"
+        foreach (var i in all)
+        {
+            var addLength = itemLengths[i] + (current.Count > 0 ? 1 : 0); // +1 for the joining comma
+            if (current.Count > 0 && runningLength + addLength > MaxEntriesJsonChars)
+            {
+                batches.Add(new ClusterBatch(
+                    BuildEntriesJsonAtTier(digests, current, countsOnlyTier), countsOnlyTier.Name, current));
+                current = new List<int>();
+                runningLength = 2;
+                addLength = itemLengths[i];
+            }
+            current.Add(i);
+            runningLength += addLength;
+        }
+        if (current.Count > 0)
+        {
+            batches.Add(new ClusterBatch(
+                BuildEntriesJsonAtTier(digests, current, countsOnlyTier), countsOnlyTier.Name, current));
+        }
+        return batches;
     }
 
     private static string? ReadSpecPurpose(JsonElement root)
@@ -647,6 +809,169 @@ public sealed class PatternAnalysisOrchestrator
         return new ClusterLlmResult(JsonSerializer.Serialize(payload, JsonOpts), 0, 0);
     }
 
+    // ── Cross-batch reconciliation ──────────────────────────────────────
+    // Each batch clusters its own routines with no visibility into any
+    // other batch, so the same real pattern can legitimately surface twice
+    // — once per batch. This pass sees only compact per-cluster summaries
+    // (never the underlying routine digests, which keeps it cheap
+    // regardless of how many batches Stage 2 needed) and decides which
+    // cross-batch clusters should merge into one.
+
+    private static readonly JsonSerializerOptions CaseInsensitiveOpts = new() { PropertyNameCaseInsensitive = true };
+
+    private sealed record MemberEntry(Guid SubroutineId, string SubroutineName, Guid? SpecId);
+
+    private static List<MemberEntry> ParseMemberEntries(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<MemberEntry>>(json, CaseInsensitiveOpts) ?? new(); }
+        catch { return new(); }
+    }
+
+    private async Task<List<PatternCluster>> ReconcileClustersAsync(
+        Guid runId, string corpusName, List<PatternCluster> clusters, ILlmProvider provider,
+        Prompts.PromptLibrary prompts, IHttpClientFactory httpFactory, AnthropicOptions anthropicOpts,
+        CancellationToken ct)
+    {
+        if (clusters.Count <= 1) return clusters;
+
+        var summaryEntries = clusters.Select((c, i) => new
+        {
+            cIndex = i,
+            label = c.Label,
+            suggestedArchetypeName = c.SuggestedArchetypeName,
+            claimKindSignature = c.ClaimKindSignature,
+            memberCount = c.MemberCount,
+            exampleNames = ParseMemberEntries(c.MemberSubroutineIdsJson).Take(3).Select(m => m.SubroutineName).ToList(),
+        });
+        var entriesJson = JsonSerializer.Serialize(summaryEntries, DigestJsonOpts);
+
+        var loaded = prompts.GetLatest("common", "dotnet8", "reconcile-pattern-clusters");
+        if (loaded is null)
+        {
+            _logger.LogWarning(
+                "No reconcile-pattern-clusters prompt registered; skipping reconciliation, keeping {Count} per-batch clusters unmerged.",
+                clusters.Count);
+            return clusters;
+        }
+
+        var rendered = prompts.Render(loaded, new Dictionary<string, string?>
+        {
+            ["corpusName"] = corpusName,
+            ["clusterCount"] = clusters.Count.ToString(),
+            ["entriesJson"] = entriesJson,
+        });
+
+        if (!string.Equals(provider.Info.Name, "anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            // Mock provider: no LLM judging available — same honesty posture
+            // as StubMockResult, just leave every batch's clusters distinct.
+            return clusters;
+        }
+
+        var llmResult = await CallAnthropicAsync(httpFactory, anthropicOpts, rendered.System, rendered.User, ct);
+        var mergeGroups = ParseMergeGroups(llmResult.RawJson, clusters.Count);
+        if (mergeGroups.Count == 0) return clusters;
+
+        _runLogger.Log(runId,
+            $"Reconciliation: {mergeGroups.Count} merge group(s) found across {clusters.Count} per-batch clusters.");
+
+        var merged = new List<PatternCluster>();
+        var consumed = new HashSet<int>();
+        foreach (var group in mergeGroups)
+        {
+            var indices = group.ClusterIndices.Where(i => !consumed.Contains(i)).Distinct().ToList();
+            if (indices.Count < 2) continue; // already consumed by an earlier group, or degenerate — no-op
+            foreach (var i in indices) consumed.Add(i);
+
+            var sourceClusters = indices.Select(i => clusters[i]).ToList();
+            var mergedMembers = sourceClusters
+                .SelectMany(c => ParseMemberEntries(c.MemberSubroutineIdsJson))
+                .GroupBy(m => m.SubroutineId)
+                .Select(g => g.First())
+                .ToList();
+
+            merged.Add(new PatternCluster
+            {
+                Id = Guid.NewGuid(),
+                PatternAnalysisRunId = runId,
+                CorpusId = sourceClusters[0].CorpusId,
+                ClaimKindSignature = string.Join(",",
+                    sourceClusters.Select(c => c.ClaimKindSignature).Where(s => !string.IsNullOrEmpty(s)).Distinct()),
+                Label = TruncateTo(
+                    !string.IsNullOrWhiteSpace(group.MergedLabel) ? group.MergedLabel : sourceClusters[0].Label, 256),
+                SuggestedArchetypeName = TruncateTo(
+                    !string.IsNullOrWhiteSpace(group.MergedSuggestedArchetypeName)
+                        ? group.MergedSuggestedArchetypeName
+                        : sourceClusters[0].SuggestedArchetypeName, 128),
+                Rationale = !string.IsNullOrWhiteSpace(group.MergedRationale)
+                    ? group.MergedRationale
+                    : "Merged across batches during reconciliation: " +
+                      string.Join(" | ", sourceClusters.Select(c => c.Rationale)),
+                MemberSubroutineIdsJson = JsonSerializer.Serialize(mergedMembers.Select(m => new
+                {
+                    subroutineId = m.SubroutineId,
+                    subroutineName = m.SubroutineName,
+                    specId = m.SpecId,
+                })),
+                MemberCount = mergedMembers.Count,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        var result = new List<PatternCluster>(clusters.Count - consumed.Count + merged.Count);
+        for (var i = 0; i < clusters.Count; i++)
+        {
+            if (!consumed.Contains(i)) result.Add(clusters[i]);
+        }
+        result.AddRange(merged);
+        return result;
+    }
+
+    private sealed record MergeGroup(
+        List<int> ClusterIndices, string MergedLabel, string MergedSuggestedArchetypeName, string MergedRationale);
+
+    private static List<MergeGroup> ParseMergeGroups(string rawJson, int clusterCount)
+    {
+        var groups = new List<MergeGroup>();
+        var json = ExtractFirstJsonObject(rawJson);
+        if (json is null) return groups;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("mergeGroups", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return groups;
+
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var indices = new List<int>();
+                if (item.TryGetProperty("clusterIndices", out var idxArr) && idxArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in idxArr.EnumerateArray())
+                    {
+                        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var idx)
+                            && idx >= 0 && idx < clusterCount)
+                        {
+                            indices.Add(idx);
+                        }
+                    }
+                }
+                if (indices.Count < 2) continue; // a "merge" of fewer than 2 clusters is a no-op
+                groups.Add(new MergeGroup(
+                    indices,
+                    ReadString(item, "mergedLabel", ""),
+                    ReadString(item, "mergedSuggestedArchetypeName", ""),
+                    ReadString(item, "mergedRationale", "")));
+            }
+        }
+        catch
+        {
+            // Malformed reconciliation output just means no merges apply;
+            // the per-batch clusters already parsed successfully stand.
+        }
+        return groups;
+    }
+
     private static List<PatternCluster> ParseClusters(
         string rawJson, Guid runId, Guid corpusId,
         Dictionary<Guid, string> nameById,
@@ -682,7 +1007,7 @@ public sealed class PatternAnalysisOrchestrator
                 if (item.ValueKind != JsonValueKind.Object) continue;
                 var memberIds = new List<Guid>();
                 // Preferred shape: "members" — integer indexes into the input
-                // entry list (see BuildEntriesJson's `n`).
+                // entry list (see BuildEntriesJsonAtTier's `n`).
                 if (item.TryGetProperty("members", out var idxArr) && idxArr.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var el in idxArr.EnumerateArray())
