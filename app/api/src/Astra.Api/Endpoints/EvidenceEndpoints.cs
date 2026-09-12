@@ -49,8 +49,13 @@ public static class EvidenceEndpoints
                 .GroupBy(r => r.Action)
                 .ToDictionary(g => g.Key, g => g.Count());
 
+            // A spec can now carry a scaffold per target stack (Phase 15.1);
+            // this evidence summary just needs "the" one, so show the most
+            // recently generated rather than an arbitrary row.
             var scaffold = await db.Scaffolds.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.SpecId == id, ct);
+                .Where(s => s.SpecId == id)
+                .OrderByDescending(s => s.GeneratedAt)
+                .FirstOrDefaultAsync(ct);
 
             return Results.Ok(new
             {

@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Boxes, ChevronDown, ChevronRight, Loader2, Play, Wand2, XCircle } from 'lucide-react';
+import {
+  ArrowLeft, Boxes, ChevronDown, ChevronRight, Loader2, Pause, Play, Square, Wand2, XCircle,
+} from 'lucide-react';
 import { api, getPersona, API_BASE } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
-import type { ArchetypeProposal, PatternCluster } from '@/lib/api';
+import type { ArchetypeProposal, PatternAnalysisProgress, PatternCluster } from '@/lib/api';
 
 const RUNNING_STATES = new Set(['QUEUED', 'RUNNING']);
+const TERMINAL_STATES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED']);
 
 function clusterTone(memberCount: number): 'signed' | 'draft' | 'neutral' {
   if (memberCount >= 3) return 'signed';
@@ -36,6 +39,12 @@ function proposalLabel(state: string): string {
     case 'REJECTED': return 'Rejected';
     default: return state;
   }
+}
+
+function formatEta(seconds?: number | null): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  if (seconds < 60) return `~${Math.max(1, Math.round(seconds))}s left`;
+  return `~${Math.ceil(seconds / 60)} min left`;
 }
 
 /** Propose / review / approve panel for one cluster. Self-contained so its
@@ -184,10 +193,13 @@ export function PatternAnalysisPage() {
   const persona = getPersona();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
-  // Full re-extraction re-runs the LLM over every routine in the corpus —
-  // hours and real money on a large one. Arm it with a second click.
+  // A forced run discards the corpus's survey digests and re-surveys every
+  // routine — minutes on a large corpus, but still real money. Arm it with
+  // a second click.
   const [confirmForce, setConfirmForce] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [progress, setProgress] = useState<PatternAnalysisProgress | null>(null);
+  const [stageLabel, setStageLabel] = useState<string | null>(null);
 
   const corpus = useQuery({
     queryKey: ['corpus', id],
@@ -207,33 +219,76 @@ export function PatternAnalysisPage() {
     enabled: !!id,
   });
 
-  // Incremental by default: extract only routines that have never been
-  // extracted, then re-cluster. Forcing re-extracts routines that already
-  // have specs, which is only wanted after an extract-prompt change.
+  // Runs survive the page: on load, re-attach to a run that is still
+  // going, or surface one that was paused / interrupted so it can be
+  // resumed. (Previously a reload silently forgot a 2-hour run.)
+  const runsQuery = useQuery({
+    queryKey: ['pattern-analysis-runs', id],
+    queryFn: () => api.listPatternAnalysisRuns(id, 5),
+    enabled: !!id,
+  });
+  const latestRun = runsQuery.data?.data?.[0];
+  useEffect(() => {
+    if (!latestRun || activeRunId) return;
+    if (RUNNING_STATES.has(latestRun.state)) setActiveRunId(latestRun.id);
+  }, [latestRun, activeRunId]);
+  const resumableRun = !activeRunId && latestRun?.state === 'RESUMABLE' ? latestRun : null;
+
+  const startRun = (result: { runId: string }) => {
+    setRunError(null);
+    setConfirmForce(false);
+    setLogLines([]);
+    setProgress(null);
+    setStageLabel(null);
+    setActiveRunId(result.runId);
+  };
+
+  // Incremental by default: survey only routines with no digest yet, then
+  // re-cluster. Forcing re-surveys routines that already have a digest,
+  // which is only wanted after a survey-prompt change.
   const runMutation = useMutation({
     mutationFn: (force: boolean) => api.runPatternAnalysis(id, { force }),
-    onSuccess: (result) => {
-      setRunError(null);
-      setConfirmForce(false);
-      setLogLines([]);
-      setActiveRunId(result.runId);
-    },
+    onSuccess: startRun,
+  });
+  const resumeMutation = useMutation({
+    mutationFn: (runId: string) => api.resumePatternAnalysisRun(runId),
+    onSuccess: (_r, runId) => startRun({ runId }),
+  });
+  const pauseMutation = useMutation({
+    mutationFn: (runId: string) => api.pausePatternAnalysisRun(runId),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (runId: string) => api.cancelPatternAnalysisRun(runId),
   });
 
-  // Per-routine progress while a run is in flight. Without this the page
-  // showed one unchanging line for the whole run, so a working pass and a
-  // hung one looked identical.
+  // Live progress off the structured run-event stream: `log` events keep
+  // the terminal readable, `progress` drives the bar + ETA, `stage`
+  // names the phase. EventSource reconnects with Last-Event-ID on its own,
+  // so a dropped connection replays what it missed.
   useEffect(() => {
     if (!activeRunId) return;
     const es = new EventSource(`${API_BASE}/api/v1/pattern-analysis/runs/${activeRunId}/logs`);
     es.onmessage = (e: MessageEvent) => {
       try {
-        const { message } = JSON.parse(e.data) as { message: string };
-        setLogLines((prev) => [...prev.slice(-400), message]);
+        const { message } = JSON.parse(e.data) as { message?: string };
+        if (message) setLogLines((prev) => [...prev.slice(-400), message]);
       } catch { /* ignore malformed events */ }
     };
+    es.addEventListener('progress', (e) => {
+      try {
+        const { data } = JSON.parse((e as MessageEvent).data) as { data: PatternAnalysisProgress };
+        if (data) setProgress(data);
+      } catch { /* ignore */ }
+    });
+    es.addEventListener('stage', (e) => {
+      try {
+        const { data } = JSON.parse((e as MessageEvent).data) as { data?: { label?: string; step?: number; of?: number } };
+        if (data?.label) setStageLabel(`${data.label}${data.step && data.of ? ` (${data.step}/${data.of})` : ''}`);
+        setProgress(null);
+      } catch { /* ignore */ }
+    });
     es.addEventListener('done', () => es.close());
-    es.onerror = () => es.close();
+    es.onerror = () => { /* EventSource retries by itself */ };
     return () => es.close();
   }, [activeRunId]);
 
@@ -249,10 +304,14 @@ export function PatternAnalysisPage() {
 
   useEffect(() => {
     const s = runStatus.data?.state;
-    if (s === 'SUCCEEDED' || s === 'PARTIAL' || s === 'FAILED') {
+    if (!s) return;
+    if (TERMINAL_STATES.has(s) || s === 'RESUMABLE') {
       if (s === 'FAILED') setRunError(runStatus.data?.errorSummary ?? 'Pattern analysis failed.');
       qc.invalidateQueries({ queryKey: ['pattern-clusters', id] });
+      qc.invalidateQueries({ queryKey: ['pattern-analysis-runs', id] });
       setActiveRunId(null);
+      setProgress(null);
+      setStageLabel(null);
     }
   }, [runStatus.data?.state, runStatus.data?.errorSummary, id, qc]);
 
@@ -278,14 +337,17 @@ export function PatternAnalysisPage() {
   }
 
   const c = corpus.data;
-  const isRunning = runMutation.isPending || !!activeRunId;
+  const isRunning = runMutation.isPending || resumeMutation.isPending || !!activeRunId;
   const liveState = runStatus.data?.state;
   const liveSummary = runStatus.data?.summary;
+  const stopRequested = pauseMutation.isPending || cancelMutation.isPending || !!runStatus.data?.cancelRequested;
   const lastRun = clustersQuery.data?.run;
   const clusters = clustersQuery.data?.clusters ?? [];
   const totalRoutines = clusters.reduce((sum, cl) => sum + cl.memberCount, 0);
   const singletons = clusters.filter(cl => cl.memberCount === 1).length;
   const coreClusters = clusters.filter(cl => cl.memberCount > 1).length;
+  const percent = progress && progress.total > 0 ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : null;
+  const eta = formatEta(progress?.etaSeconds);
   // The API returns proposals newest-first; keep only the first (most
   // recent) one seen per cluster. Building the Map from a plain .map()
   // would let a later, older entry silently overwrite the newest one.
@@ -324,7 +386,7 @@ export function PatternAnalysisPage() {
               onClick={() => runMutation.mutate(false)}
               disabled={isRunning}
               data-testid="run-pattern-analysis"
-              title="Analyses any routine not yet covered, then regroups the project. Existing work is reused."
+              title="Surveys any routine not yet covered (minutes, not hours), then regroups the project. Existing digests and specs are reused."
             >
               {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {lastRun ? 'Re-run analysis' : 'Run analysis'}
@@ -336,10 +398,10 @@ export function PatternAnalysisPage() {
                 onBlur={() => setConfirmForce(false)}
                 disabled={isRunning}
                 data-testid="force-pattern-analysis"
-                title="Discards all existing specifications and re-analyses the whole project. Takes hours on a large project."
+                title="Discards this project's survey digests and re-surveys every routine. A few minutes on a large project; signed specs are never touched."
                 className="rounded border border-border-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {confirmForce ? 'Confirm full re-extraction' : 'Re-extract all specs…'}
+                {confirmForce ? 'Confirm full re-survey' : 'Re-survey all routines…'}
               </button>
             )}
           </div>
@@ -349,25 +411,113 @@ export function PatternAnalysisPage() {
       {runError && (
         <div className="flex items-start gap-3 rounded border border-rose-500/30 bg-rose-500/10 px-4 py-3">
           <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-          <span className="flex-1 text-sm text-rose-700 dark:text-rose-400">{runError}</span>
+          <span className="flex-1 text-sm text-rose-700">{runError}</span>
           <button onClick={() => setRunError(null)} className="shrink-0 text-xs text-rose-500 hover:text-rose-700">
             Dismiss
           </button>
         </div>
       )}
 
+      {resumableRun && (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+          data-testid="pattern-analysis-resumable"
+        >
+          <Pause className="h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-ink-primary">A previous run is paused</p>
+            <p className="font-mono text-caption text-ink-tertiary">
+              {resumableRun.summary ?? 'Interrupted — completed digests are kept.'}
+            </p>
+          </div>
+          {persona === 'admin' && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => resumeMutation.mutate(resumableRun.id)}
+                disabled={resumeMutation.isPending}
+                data-testid="resume-pattern-analysis"
+              >
+                {resumeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Resume
+              </Button>
+              <button
+                type="button"
+                onClick={() => cancelMutation.mutate(resumableRun.id, {
+                  onSuccess: () => qc.invalidateQueries({ queryKey: ['pattern-analysis-runs', id] }),
+                })}
+                className="font-mono text-caption text-ink-tertiary hover:text-rose-600"
+              >
+                Discard
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {isRunning && (
         <Card>
-          <CardBody className="flex items-center gap-3">
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-tertiary" />
-            <div>
-              <p className="text-body font-medium text-ink-primary">
-                {liveState === 'RUNNING' ? liveSummary ?? 'Running…' : 'Queued…'}
-              </p>
-              <p className="mt-0.5 font-mono text-caption text-ink-tertiary">
-                Analysing each routine, then grouping them into shared patterns.
-              </p>
+          <CardBody className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-tertiary" />
+              <div className="flex-1">
+                <p className="text-body font-medium text-ink-primary">
+                  {stopRequested
+                    ? 'Stopping after the current routines…'
+                    : liveState === 'RUNNING' ? liveSummary ?? 'Running…' : 'Queued…'}
+                </p>
+                <p className="mt-0.5 font-mono text-caption text-ink-tertiary">
+                  {stageLabel ?? 'Surveying each routine, then grouping them into shared patterns.'}
+                  {progress && percent != null && (
+                    <>
+                      {' · '}{progress.done}/{progress.total}
+                      {progress.propagated > 0 && ` (+${progress.propagated} propagated)`}
+                      {progress.failed > 0 && `, ${progress.failed} failed`}
+                      {eta && ` · ${eta}`}
+                    </>
+                  )}
+                </p>
+              </div>
+              {persona === 'admin' && activeRunId && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => pauseMutation.mutate(activeRunId)}
+                    disabled={stopRequested}
+                    title="Stop now and keep every digest written so far; resume later."
+                    data-testid="pause-pattern-analysis"
+                  >
+                    <Pause className="h-3.5 w-3.5" /> Pause
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => cancelMutation.mutate(activeRunId)}
+                    disabled={stopRequested}
+                    title="Stop and mark the run cancelled. Digests already written are kept."
+                    data-testid="cancel-pattern-analysis"
+                  >
+                    <Square className="h-3.5 w-3.5" /> Cancel
+                  </Button>
+                </div>
+              )}
             </div>
+            {percent != null && (
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-full bg-sunken"
+                role="progressbar"
+                aria-valuenow={percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                data-testid="pattern-analysis-progress"
+              >
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-500"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            )}
           </CardBody>
           {logLines.length > 0 && (
             <div
@@ -386,13 +536,13 @@ export function PatternAnalysisPage() {
         <Skeleton className="h-64 w-full" />
       )}
 
-      {!isRunning && !clustersQuery.isPending && !lastRun && (
+      {!isRunning && !clustersQuery.isPending && !lastRun && !resumableRun && (
         <Card>
           <CardBody>
             <p className="text-body text-ink-secondary">
-              No pattern analysis has run for this corpus yet. Run it to bulk-extract every
-              routine's spec and see how many distinct patterns this codebase actually
-              contains.
+              No pattern analysis has run for this corpus yet. Run it to survey every
+              routine (minutes, not hours) and see how many distinct patterns this
+              codebase actually contains.
             </p>
           </CardBody>
         </Card>
@@ -429,6 +579,7 @@ export function PatternAnalysisPage() {
             <CardBody className="font-mono text-caption text-ink-tertiary">
               {lastRun.completedAt && `Completed ${new Date(lastRun.completedAt).toLocaleString()}`}
               {lastRun.triggeredBy && ` · triggered by ${lastRun.triggeredBy}`}
+              {lastRun.stagesRequested && ` · stages: ${lastRun.stagesRequested}`}
             </CardBody>
           </Card>
 

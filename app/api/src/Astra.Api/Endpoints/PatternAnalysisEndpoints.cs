@@ -23,9 +23,12 @@ public static class PatternAnalysisEndpoints
 {
     public static IEndpointRouteBuilder MapPatternAnalysisEndpoints(this IEndpointRouteBuilder app)
     {
+        // ?stages=survey,cluster (default) | extract,cluster (the old full-
+        // extraction discovery path) | survey (digests only, for Assessment).
         app.MapPost("/api/v1/corpora/{id:guid}/pattern-analysis", async (
             Guid id,
             bool? force,
+            string? stages,
             PatternAnalysisOrchestrator orchestrator,
             AppDbContext db,
             DevPersonaContext actor,
@@ -52,9 +55,28 @@ public static class PatternAnalysisEndpoints
                 });
             }
 
+            // A paused / interrupted run resumes instead of starting over —
+            // unless the caller explicitly forces a fresh pass.
+            if (!(force ?? false))
+            {
+                var resumable = await db.PatternAnalysisRuns.AsNoTracking()
+                    .Where(r => r.CorpusId == id && r.State == "RESUMABLE")
+                    .OrderByDescending(r => r.StartedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (resumable is not null && await orchestrator.ResumeAsync(resumable.Id))
+                {
+                    return Results.Accepted($"/api/v1/pattern-analysis/runs/{resumable.Id}", new
+                    {
+                        runId = resumable.Id,
+                        statusUrl = $"/api/v1/pattern-analysis/runs/{resumable.Id}",
+                        resumed = true,
+                    });
+                }
+            }
+
             try
             {
-                var runId = await orchestrator.StartAsync(id, force ?? false, actor.DisplayName, ct);
+                var runId = await orchestrator.StartAsync(id, force ?? false, actor.DisplayName, stages, ct);
                 return Results.Accepted($"/api/v1/pattern-analysis/runs/{runId}", new
                 {
                     runId,
@@ -70,11 +92,47 @@ public static class PatternAnalysisEndpoints
             }
         });
 
-        // SSE stream of per-routine progress for an active run — same shape
-        // as the docs generator's log stream, sharing its channel bus.
+        // Phase 15.2 — run control. Cancel is terminal; pause parks the run
+        // as RESUMABLE with every digest kept; resume continues it.
+        app.MapPost("/api/v1/pattern-analysis/runs/{runId:guid}/cancel", async (
+            Guid runId, PatternAnalysisOrchestrator orchestrator, DevPersonaContext actor) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            return await orchestrator.StopAsync(runId, resumable: false)
+                ? Results.Accepted($"/api/v1/pattern-analysis/runs/{runId}", new { runId, state = "CANCELLING" })
+                : Results.Conflict(new { error = new { code = "pattern_analysis_run.not_active" } });
+        });
+
+        app.MapPost("/api/v1/pattern-analysis/runs/{runId:guid}/pause", async (
+            Guid runId, PatternAnalysisOrchestrator orchestrator, DevPersonaContext actor) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            return await orchestrator.StopAsync(runId, resumable: true)
+                ? Results.Accepted($"/api/v1/pattern-analysis/runs/{runId}", new { runId, state = "PAUSING" })
+                : Results.Conflict(new { error = new { code = "pattern_analysis_run.not_active" } });
+        });
+
+        app.MapPost("/api/v1/pattern-analysis/runs/{runId:guid}/resume", async (
+            Guid runId, PatternAnalysisOrchestrator orchestrator, DevPersonaContext actor) =>
+        {
+            if (actor.Persona != Persona.Admin) return Forbid();
+            return await orchestrator.ResumeAsync(runId)
+                ? Results.Accepted($"/api/v1/pattern-analysis/runs/{runId}", new { runId, state = "RUNNING", resumed = true })
+                : Results.Conflict(new { error = new { code = "pattern_analysis_run.not_resumable" } });
+        });
+
+        // SSE stream for an active run, off the structured RunEventBus.
+        //   - `log` events stay unnamed with {message} so the existing
+        //     EventSource.onmessage consumer keeps working;
+        //   - `progress` / `stage` / `state` / `item` arrive as named events
+        //     for the progress bar and activity feed;
+        //   - every event carries `id: <seq>` and the route honours
+        //     Last-Event-ID / ?afterSeq= so a reconnecting browser replays
+        //     what it missed instead of starting blind.
         app.MapGet("/api/v1/pattern-analysis/runs/{runId:guid}/logs", async (
             Guid runId,
-            Astra.Api.Docs.DocRunLogger logger,
+            long? afterSeq,
+            Astra.Api.Runs.RunEventBus bus,
             HttpContext ctx,
             CancellationToken ct) =>
         {
@@ -83,14 +141,36 @@ public static class PatternAnalysisEndpoints
             ctx.Response.Headers["X-Accel-Buffering"] = "no";
             await ctx.Response.Body.FlushAsync(ct);
 
-            await foreach (var line in logger.SubscribeAsync(runId, ct))
+            var since = afterSeq ?? 0;
+            if (ctx.Request.Headers.TryGetValue("Last-Event-ID", out var lastId)
+                && long.TryParse(lastId.ToString(), out var parsed))
             {
-                var json = JsonSerializer.Serialize(new { message = line });
-                await ctx.Response.WriteAsync($"data: {json}\n\n", ct);
+                since = Math.Max(since, parsed);
+            }
+
+            await foreach (var evt in bus.SubscribeAsync(runId, since, ct))
+            {
+                var payload = JsonSerializer.Serialize(new
+                {
+                    message = evt.Message,
+                    agent = evt.Agent,
+                    stage = evt.Stage,
+                    type = evt.Type,
+                    seq = evt.Seq,
+                    ts = evt.Ts,
+                    data = evt.Data,
+                });
+                var frame = evt.Type == "log"
+                    ? $"id: {evt.Seq}\ndata: {payload}\n\n"
+                    : $"id: {evt.Seq}\nevent: {evt.Type}\ndata: {payload}\n\n";
+                await ctx.Response.WriteAsync(frame, ct);
                 await ctx.Response.Body.FlushAsync(ct);
             }
-            await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
-            await ctx.Response.Body.FlushAsync(ct);
+            if (!ct.IsCancellationRequested)
+            {
+                await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
+                await ctx.Response.Body.FlushAsync(ct);
+            }
         });
 
         app.MapGet("/api/v1/pattern-analysis/runs/{runId:guid}", async (
@@ -152,6 +232,8 @@ public static class PatternAnalysisEndpoints
         sourceVersionId = r.SourceVersionId,
         stagesRequested = r.StagesRequested,
         state = r.State,
+        heartbeatAt = r.HeartbeatAt,
+        cancelRequested = r.CancelRequested,
         metrics = r.MetricsJson is null
             ? null
             : (JsonElement?)JsonDocument.Parse(r.MetricsJson).RootElement,

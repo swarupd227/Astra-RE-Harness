@@ -25,8 +25,22 @@ public sealed class PatternAnalysisRun
     /// mirroring DocGenerationRun.StagesRequested.</summary>
     public string StagesRequested { get; set; } = "extract,cluster";
 
-    /// <summary>"QUEUED" | "RUNNING" | "SUCCEEDED" | "PARTIAL" | "FAILED".</summary>
+    /// <summary>"QUEUED" | "RUNNING" | "SUCCEEDED" | "PARTIAL" | "FAILED" |
+    /// "CANCELLED" | "RESUMABLE" (paused, or interrupted by a restart —
+    /// every digest already written is kept and a resume skips it).</summary>
     public string State { get; set; } = "QUEUED";
+
+    /// <summary>Touched every few seconds by the running pipeline so a
+    /// stale RUNNING row can be told apart from a live one.</summary>
+    public DateTimeOffset? HeartbeatAt { get; set; }
+
+    /// <summary>Set by the cancel/pause endpoints; the pipeline polls it
+    /// between items (and the in-process token is cancelled directly when
+    /// the run lives in this process).</summary>
+    public bool CancelRequested { get; set; }
+
+    /// <summary>{"completedStages":[...]} — stages a resume can skip.</summary>
+    public string? CheckpointJson { get; set; }
 
     /// <summary>Incrementally-updated progress: extraction counts (succeeded/
     /// failed/skipped/total) and, once stage 2 starts, bucket/cluster counts

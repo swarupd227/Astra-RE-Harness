@@ -16,6 +16,13 @@ public sealed class LlmCall
 
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
+
+    /// <summary>Prompt-cache hits/writes reported by the provider. Input
+    /// tokens exclude these; see <see cref="Llm.ModelPricing"/> for how they
+    /// are billed.</summary>
+    public int CacheReadTokens { get; set; }
+    public int CacheCreationTokens { get; set; }
+
     public long LatencyMs { get; set; }
     public decimal CostUsd { get; set; }
 

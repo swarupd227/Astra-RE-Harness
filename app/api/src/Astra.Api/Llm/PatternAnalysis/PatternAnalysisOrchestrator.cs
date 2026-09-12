@@ -5,7 +5,9 @@ using System.Text.RegularExpressions;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
+using Astra.Api.Runs;
 
 namespace Astra.Api.Llm.PatternAnalysis;
 
@@ -61,18 +63,41 @@ public sealed class PatternAnalysisOrchestrator
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PatternAnalysisOrchestrator> _logger;
     private readonly Astra.Api.Docs.DocRunLogger _runLogger;
+    private readonly AnthropicRateLimiter _limiter;
+    private readonly SurveyStage _survey;
+    private readonly RunEventBus _bus;
     private readonly int _maxConcurrency;
     private readonly string _trivialModel;
+
+    /// <summary>Runs executing in this process, so cancel/pause can stop
+    /// them immediately instead of waiting for the next heartbeat poll.</summary>
+    private sealed class ActiveRun
+    {
+        public readonly CancellationTokenSource Cts = new();
+        public volatile string StopReason = "";
+    }
+    private readonly ConcurrentDictionary<Guid, ActiveRun> _active = new();
+    private static readonly TimeSpan HeartbeatEvery = TimeSpan.FromSeconds(10);
 
     public PatternAnalysisOrchestrator(
         IServiceScopeFactory scopeFactory,
         ILogger<PatternAnalysisOrchestrator> logger,
         Astra.Api.Docs.DocRunLogger runLogger,
+        AnthropicRateLimiter limiter,
+        SurveyStage survey,
+        RunEventBus bus,
+        IHostApplicationLifetime lifetime,
         IConfiguration cfg)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _runLogger = runLogger;
+        _limiter = limiter;
+        _survey = survey;
+        _bus = bus;
+        // Graceful shutdown: park every live run as RESUMABLE so the next
+        // process (or the auto-resume service) picks it up where it stopped.
+        lifetime.ApplicationStopping.Register(OnShutdown);
         // Was a hard-coded 4. Wall-clock on a bulk pass is linear in this.
         _maxConcurrency = Math.Clamp(cfg.GetValue("Llm:BulkExtractConcurrency", 8), 1, 32);
         // Trivial routines are the bulk of a bean-style corpus and their
@@ -94,8 +119,28 @@ public sealed class PatternAnalysisOrchestrator
         return loc <= 8 && AccessorNameRegex.IsMatch(s.Name);
     }
 
-    public async Task<Guid> StartAsync(Guid corpusId, bool force, string? triggeredBy, CancellationToken ct)
+    private static readonly string[] KnownStages = { "survey", "extract", "cluster" };
+
+    /// <summary>
+    /// Parse a comma-separated stage list into canonical order, dropping
+    /// unknown names. Empty → the default <c>survey,cluster</c>. The old
+    /// full-extraction discovery path stays reachable as
+    /// <c>extract,cluster</c>.
+    /// </summary>
+    public static IReadOnlyList<string> NormaliseStages(string? stages)
     {
+        var requested = (stages ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToLowerInvariant())
+            .Where(KnownStages.Contains)
+            .ToHashSet();
+        if (requested.Count == 0) { requested.Add("survey"); requested.Add("cluster"); }
+        return KnownStages.Where(requested.Contains).ToList();
+    }
+
+    public async Task<Guid> StartAsync(Guid corpusId, bool force, string? triggeredBy, string? stages, CancellationToken ct)
+    {
+        var stageList = NormaliseStages(stages);
         Guid runId;
         Guid sourceVersionId;
         using (var scope = _scopeFactory.CreateScope())
@@ -112,7 +157,7 @@ public sealed class PatternAnalysisOrchestrator
                 Id = Guid.NewGuid(),
                 CorpusId = corpusId,
                 SourceVersionId = sourceVersionId,
-                StagesRequested = "extract,cluster",
+                StagesRequested = string.Join(",", stageList),
                 State = "QUEUED",
                 Summary = "Queued",
                 TriggeredBy = triggeredBy,
@@ -126,51 +171,309 @@ public sealed class PatternAnalysisOrchestrator
         // Fire-and-forget: the request scope dies the moment the endpoint
         // responds, so the worker creates its own scopes throughout (same
         // pattern as DocsGenerationOrchestrator / RoutineSummaryPipeline).
-        _ = Task.Run(() => RunPipelineAsync(runId, corpusId, sourceVersionId, force));
+        _ = Task.Run(() => RunPipelineAsync(runId, corpusId, sourceVersionId, force, stageList));
         return runId;
     }
 
-    private async Task RunPipelineAsync(Guid runId, Guid corpusId, Guid sourceVersionId, bool force)
+    private async Task RunPipelineAsync(
+        Guid runId, Guid corpusId, Guid sourceVersionId, bool force, IReadOnlyList<string> stages)
     {
-        var ct = CancellationToken.None;
+        var active = new ActiveRun();
+        _active[runId] = active;
+        var ct = active.Cts.Token;
+        using var heartbeatStop = new CancellationTokenSource();
+        var heartbeat = HeartbeatLoopAsync(runId, active, heartbeatStop.Token);
+
+        var totalStages = stages.Count;
+        var stageNo = 0;
+        var metrics = new Dictionary<string, object?>();
+        var completed = await LoadCompletedStagesAsync(runId);
+        SurveyStage.Result? survey = null;
+        ExtractStageResult? extract = null;
+        ClusterStageResult? cluster = null;
         try
         {
-            await UpdateAsync(runId, "RUNNING", "Stage 1/2: bulk extraction", null);
-            var extractResult = await ExtractAllAsync(runId, corpusId, sourceVersionId, force, ct);
-            await UpdateAsync(runId, "RUNNING",
-                $"Extraction: {extractResult.Succeeded} succeeded, {extractResult.Failed} failed, " +
-                $"{extractResult.Skipped} already-extracted. Stage 2/2: clustering",
-                new Dictionary<string, object?> { ["extract"] = extractResult });
+            _bus.State(runId, "pattern-analysis", "RUNNING",
+                $"Stages: {string.Join(" → ", stages)}" +
+                (completed.Count > 0 ? $" (resuming; already done: {string.Join(", ", completed)})" : ""));
 
-            var clusterResult = await ClusterAsync(runId, corpusId, sourceVersionId, ct);
+            if (stages.Contains("survey"))
+            {
+                stageNo++;
+                var label = $"Stage {stageNo}/{totalStages}";
+                if (completed.Contains("survey"))
+                {
+                    _runLogger.Log(runId, $"{label}: survey already completed before the interruption — skipping.");
+                }
+                else
+                {
+                    await UpdateAsync(runId, "RUNNING", $"{label}: survey digests", null);
+                    _bus.Publish(runId, "survey", "survey", "stage", new { stage = "survey", step = stageNo, of = totalStages, label = "Survey digests" });
+                    survey = await _survey.RunAsync(runId, sourceVersionId, force,
+                        progress => UpdateAsync(runId, "RUNNING", $"{label}: {progress}", null), ct);
+                    metrics["survey"] = survey;
+                    await UpdateAsync(runId, "RUNNING",
+                        $"Survey: {survey.Surveyed} surveyed, {survey.Propagated} propagated, {survey.Trivial} trivial, " +
+                        $"{survey.FromSpec} from specs, {survey.AlreadyDigested} reused, {survey.Failed} failed " +
+                        $"({survey.Calls} model call(s), ${survey.CostUsd:0.00}, {survey.ElapsedMs / 1000}s).",
+                        metrics);
+                    await CheckpointAsync(runId, "survey");
+                }
+            }
 
-            var state = extractResult.Succeeded == 0 && extractResult.Failed > 0
-                ? "FAILED"
-                : (extractResult.Failed > 0 || clusterResult.FailedBatchCount > 0 ? "PARTIAL" : "SUCCEEDED");
-            var summary =
-                $"{extractResult.Succeeded} extracted ({extractResult.Failed} failed, " +
-                $"{extractResult.Skipped} already-extracted) → {clusterResult.ClusterCount} cluster(s) " +
-                $"across {clusterResult.SubroutineCount} routine(s)" +
-                (clusterResult.BatchCount > 1
-                    ? $", clustered in {clusterResult.BatchCount} batches + reconciliation"
-                    : "") +
-                (clusterResult.FailedBatchCount > 0
-                    ? $" ({clusterResult.FailedBatchCount} batch(es) failed — their routines are recorded as unclassified)"
-                    : "") +
-                ".";
-            await UpdateAsync(runId, state, summary,
-                new Dictionary<string, object?> { ["extract"] = extractResult, ["cluster"] = clusterResult },
-                completed: true);
+            if (stages.Contains("extract"))
+            {
+                stageNo++;
+                if (completed.Contains("extract"))
+                {
+                    _runLogger.Log(runId, $"Stage {stageNo}/{totalStages}: extraction already completed — skipping.");
+                }
+                else
+                {
+                    await UpdateAsync(runId, "RUNNING", $"Stage {stageNo}/{totalStages}: bulk extraction", metrics);
+                    _bus.Publish(runId, "extract", "extract", "stage", new { stage = "extract", step = stageNo, of = totalStages, label = "Bulk extraction" });
+                    extract = await ExtractAllAsync(runId, corpusId, sourceVersionId, force, ct);
+                    metrics["extract"] = extract;
+                    await UpdateAsync(runId, "RUNNING",
+                        $"Extraction: {extract.Succeeded} succeeded, {extract.Failed} failed, {extract.Skipped} already-extracted.",
+                        metrics);
+                    await CheckpointAsync(runId, "extract");
+                }
+            }
+
+            if (stages.Contains("cluster"))
+            {
+                stageNo++;
+                await UpdateAsync(runId, "RUNNING", $"Stage {stageNo}/{totalStages}: clustering", metrics);
+                _bus.Publish(runId, "cluster", "cluster", "stage", new { stage = "cluster", step = stageNo, of = totalStages, label = "Clustering" });
+                cluster = await ClusterAsync(runId, corpusId, sourceVersionId, ct);
+                metrics["cluster"] = cluster;
+            }
+
+            var failures = (survey?.Failed ?? 0) + (extract?.Failed ?? 0) + (cluster?.FailedBatchCount ?? 0);
+            var successes =
+                (survey is null ? 0 : survey.Surveyed + survey.Propagated + survey.Trivial + survey.FromSpec + survey.AlreadyDigested)
+                + (extract is null ? 0 : extract.Succeeded + extract.Skipped)
+                + (cluster?.ClusterCount ?? 0)
+                + completed.Count;
+            var state = successes == 0 && failures > 0 ? "FAILED" : failures > 0 ? "PARTIAL" : "SUCCEEDED";
+            var summary = BuildSummary(survey, extract, cluster);
+            await UpdateAsync(runId, state, summary, metrics, completed: true);
+            _bus.State(runId, "pattern-analysis", state, summary);
             _runLogger.Log(runId, summary);
+            _runLogger.Complete(runId);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            var state = active.StopReason == "CANCELLED" ? "CANCELLED" : "RESUMABLE";
+            var note = state == "CANCELLED"
+                ? "Cancelled by request. Digests already written are kept."
+                : "Paused — completed digests are kept; resume to continue.";
+            _logger.LogInformation("Pattern analysis run {RunId} stopped: {State}", runId, state);
+            await UpdateAsync(runId, state, note, metrics, completed: state == "CANCELLED");
+            await ClearCancelFlagAsync(runId);
+            _bus.State(runId, "pattern-analysis", state, note);
+            _runLogger.Log(runId, note);
             _runLogger.Complete(runId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Pattern analysis run {RunId} crashed", runId);
             _runLogger.Log(runId, $"Run failed: {ex.Message}");
+            _bus.State(runId, "pattern-analysis", "FAILED", ex.Message);
             _runLogger.Complete(runId);
             await FailAsync(runId, ex.Message);
         }
+        finally
+        {
+            heartbeatStop.Cancel();
+            try { await heartbeat; } catch { /* stopped */ }
+            _active.TryRemove(runId, out _);
+        }
+    }
+
+    // ── Durability: cancel / pause / resume ─────────────────────────────
+
+    /// <summary>Stop a live run. <paramref name="resumable"/> = pause
+    /// (RESUMABLE, digests kept, resume later) vs cancel (terminal).</summary>
+    public async Task<bool> StopAsync(Guid runId, bool resumable)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.PatternAnalysisRuns.FirstOrDefaultAsync(r => r.Id == runId);
+        if (row is null || row.State is not ("QUEUED" or "RUNNING")) return false;
+
+        var reason = resumable ? "RESUMABLE" : "CANCELLED";
+        if (_active.TryGetValue(runId, out var active))
+        {
+            row.CancelRequested = true;
+            await db.SaveChangesAsync();
+            active.StopReason = reason;
+            active.Cts.Cancel();
+        }
+        else
+        {
+            // Not executing in this process (stale row from a dead one) —
+            // there is nothing to interrupt, just record the outcome.
+            row.State = reason;
+            row.Summary = resumable
+                ? "Paused — completed digests are kept; resume to continue."
+                : "Cancelled by request.";
+            if (!resumable) row.CompletedAt = DateTimeOffset.UtcNow;
+            row.CancelRequested = false;
+            await db.SaveChangesAsync();
+            _bus.State(runId, "pattern-analysis", reason, row.Summary);
+            _bus.Complete(runId);
+        }
+        return true;
+    }
+
+    /// <summary>Continue a RESUMABLE run with the same stages; already
+    /// digested routines and checkpointed stages are skipped.</summary>
+    public async Task<bool> ResumeAsync(Guid runId)
+    {
+        Guid corpusId, sourceVersionId;
+        IReadOnlyList<string> stages;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = await db.PatternAnalysisRuns.FirstOrDefaultAsync(r => r.Id == runId);
+            if (row is null || row.State != "RESUMABLE") return false;
+            if (_active.ContainsKey(runId)) return false;
+            row.State = "RUNNING";
+            row.CancelRequested = false;
+            row.Summary = "Resuming";
+            row.HeartbeatAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+            corpusId = row.CorpusId;
+            sourceVersionId = row.SourceVersionId;
+            stages = NormaliseStages(row.StagesRequested);
+        }
+        _ = Task.Run(() => RunPipelineAsync(runId, corpusId, sourceVersionId, force: false, stages));
+        return true;
+    }
+
+    private void OnShutdown()
+    {
+        foreach (var (runId, active) in _active)
+        {
+            active.StopReason = "RESUMABLE";
+            active.Cts.Cancel();
+        }
+        try
+        {
+            // The host may not wait for the background tasks' catch blocks;
+            // park the rows synchronously so nothing shows RUNNING forever.
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.PatternAnalysisRuns
+                .Where(r => r.State == "RUNNING" || r.State == "QUEUED")
+                .ExecuteUpdate(u => u
+                    .SetProperty(r => r.State, "RESUMABLE")
+                    .SetProperty(r => r.Summary, "Interrupted by shutdown — completed digests are kept; resume to continue.")
+                    .SetProperty(r => r.CancelRequested, false));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not park pattern-analysis runs as RESUMABLE on shutdown");
+        }
+    }
+
+    private async Task HeartbeatLoopAsync(Guid runId, ActiveRun active, CancellationToken stop)
+    {
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(HeartbeatEvery, stop);
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.PatternAnalysisRuns.FirstOrDefaultAsync(r => r.Id == runId, stop);
+                if (row is null) return;
+                row.HeartbeatAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(stop);
+                if (row.CancelRequested && !active.Cts.IsCancellationRequested)
+                {
+                    if (string.IsNullOrEmpty(active.StopReason)) active.StopReason = "CANCELLED";
+                    active.Cts.Cancel();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Heartbeat failed for pattern-analysis run {RunId}", runId);
+        }
+    }
+
+    private async Task<HashSet<string>> LoadCompletedStagesAsync(Guid runId)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var json = await db.PatternAnalysisRuns.AsNoTracking()
+                .Where(r => r.Id == runId).Select(r => r.CheckpointJson).FirstOrDefaultAsync();
+            if (string.IsNullOrWhiteSpace(json)) return new HashSet<string>();
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("completedStages", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return new HashSet<string>();
+            return arr.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String)
+                .Select(e => e.GetString()!).ToHashSet();
+        }
+        catch { return new HashSet<string>(); }
+    }
+
+    private async Task CheckpointAsync(Guid runId, string stage)
+    {
+        var done = await LoadCompletedStagesAsync(runId);
+        done.Add(stage);
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.PatternAnalysisRuns.FirstOrDefaultAsync(r => r.Id == runId);
+        if (row is null) return;
+        row.CheckpointJson = JsonSerializer.Serialize(new { completedStages = done.ToArray() });
+        row.HeartbeatAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    private async Task ClearCancelFlagAsync(Guid runId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.PatternAnalysisRuns.FirstOrDefaultAsync(r => r.Id == runId);
+        if (row is null) return;
+        row.CancelRequested = false;
+        await db.SaveChangesAsync();
+    }
+
+    private static string BuildSummary(SurveyStage.Result? survey, ExtractStageResult? extract, ClusterStageResult? cluster)
+    {
+        var parts = new List<string>();
+        if (survey is not null)
+        {
+            parts.Add(
+                $"{survey.Surveyed + survey.Propagated + survey.Trivial} digested " +
+                $"({survey.Surveyed} surveyed, {survey.Propagated} propagated, {survey.Trivial} trivial" +
+                $"{(survey.Failed > 0 ? $", {survey.Failed} failed" : "")}) in {Math.Max(1, survey.ElapsedMs / 1000)}s " +
+                $"for ${survey.CostUsd:0.00}");
+        }
+        if (extract is not null)
+        {
+            parts.Add(
+                $"{extract.Succeeded} extracted ({extract.Failed} failed, {extract.Skipped} already-extracted)");
+        }
+        if (cluster is not null)
+        {
+            parts.Add(
+                $"{cluster.ClusterCount} cluster(s) across {cluster.SubroutineCount} routine(s)" +
+                $" [{cluster.SpecEntries} from specs, {cluster.DigestEntries} from digests]" +
+                (cluster.BatchCount > 1 ? $", clustered in {cluster.BatchCount} batches + reconciliation" : "") +
+                (cluster.FailedBatchCount > 0
+                    ? $" ({cluster.FailedBatchCount} batch(es) failed — their routines are recorded as unclassified)"
+                    : ""));
+        }
+        return string.Join(" → ", parts) + ".";
     }
 
     // ── Stage 1: bulk extraction ────────────────────────────────────────
@@ -367,7 +670,8 @@ public sealed class PatternAnalysisOrchestrator
     // ── Stage 2: claim-kind bucketing + LLM-judged clustering ───────────
 
     private sealed record ClusterStageResult(
-        int SubroutineCount, int ClusterCount, int InputTokens, int OutputTokens, int BatchCount, int FailedBatchCount = 0);
+        int SubroutineCount, int ClusterCount, int InputTokens, int OutputTokens, int BatchCount,
+        int FailedBatchCount = 0, int SpecEntries = 0, int DigestEntries = 0);
 
     private async Task<ClusterStageResult> ClusterAsync(Guid runId, Guid corpusId, Guid sourceVersionId, CancellationToken ct)
     {
@@ -404,23 +708,54 @@ public sealed class PatternAnalysisOrchestrator
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM pattern_clusters WHERE corpus_id = {corpusId}", ct);
 
-        if (specs.Count == 0)
+        // Phase 15.2 — clustering input comes from two sources: a full Spec
+        // where one exists (richest), else the survey digest. Nothing is
+        // extracted just to be clustered any more.
+        var specSubIds = specs.Select(s => s.SubroutineId).ToHashSet();
+        var digestRows = (await db.RoutineDigests.AsNoTracking()
+                .Where(d => d.SourceVersionId == sourceVersionId)
+                .ToListAsync(ct))
+            .Where(d => !specSubIds.Contains(d.SubroutineId) && nameById.ContainsKey(d.SubroutineId))
+            .ToList();
+
+        if (specs.Count == 0 && digestRows.Count == 0)
             return new ClusterStageResult(0, 0, 0, 0, 0);
 
         var signatureBySubroutine = new Dictionary<Guid, string>();
-        var digests = new List<RoutineDigest>();
+        var digests = new List<ClusterEntry>();
         foreach (var spec in specs)
         {
             var buckets = Validation.ClaimKindBucketer.Bucket(spec.SpecJson.RootElement);
             var signature = Validation.ClaimKindBucketer.Signature(buckets);
             signatureBySubroutine[spec.SubroutineId] = signature;
-            digests.Add(new RoutineDigest(
+            digests.Add(new ClusterEntry(
                 spec.SubroutineId,
                 nameById.TryGetValue(spec.SubroutineId, out var n) ? n : "(unknown)",
                 signature,
                 ReadSpecPurpose(spec.SpecJson.RootElement),
                 buckets));
         }
+        foreach (var row in digestRows)
+        {
+            var kinds = ParseStringList(row.ClaimKindsJson);
+            var signature = string.Join(",", kinds.OrderBy(k => k, StringComparer.Ordinal));
+            signatureBySubroutine[row.SubroutineId] = signature;
+            digests.Add(new ClusterEntry(
+                row.SubroutineId,
+                nameById[row.SubroutineId],
+                signature,
+                string.IsNullOrWhiteSpace(row.Purpose) ? null : row.Purpose,
+                kinds.ToDictionary(k => k, _ => new List<string>(), StringComparer.Ordinal),
+                ArchetypeHint: row.ArchetypeHint,
+                ClaimKinds: kinds,
+                DataAccess: RenderDataAccess(row.DataAccessJson),
+                Flags: ParseStringList(row.ModernizationFlagsJson)));
+        }
+        _runLogger.Log(runId,
+            $"Clustering {digests.Count} routine(s): {specs.Count} from full specs, " +
+            $"{digestRows.Count(d => d.Source == "survey")} surveyed, " +
+            $"{digestRows.Count(d => d.Source == "propagated")} propagated, " +
+            $"{digestRows.Count(d => d.Source == "trivial")} trivial.");
 
         var batches = BuildBatches(digests);
         _logger.LogInformation(
@@ -478,9 +813,7 @@ public sealed class PatternAnalysisOrchestrator
                 }
                 else
                 {
-                    var batchSubroutineIds = batch.Indices.Select(i => digests[i].SubroutineId).ToHashSet();
-                    llmResult = StubMockResult(
-                        specs.Where(s => batchSubroutineIds.Contains(s.SubroutineId)).ToList(), signatureBySubroutine);
+                    llmResult = StubMockResult(batch.Indices.Select(i => digests[i]).ToList());
                 }
                 totalInputTokens += llmResult.InputTokens;
                 totalOutputTokens += llmResult.OutputTokens;
@@ -532,23 +865,27 @@ public sealed class PatternAnalysisOrchestrator
         var placed = allClusters
             .SelectMany(c => ParseMemberIds(c.MemberSubroutineIdsJson))
             .ToHashSet();
-        foreach (var spec in specs)
+        foreach (var entry in digests)
         {
-            if (placed.Contains(spec.SubroutineId)) continue;
-            var name = nameById.TryGetValue(spec.SubroutineId, out var n) ? n : spec.SubroutineId.ToString();
+            if (placed.Contains(entry.SubroutineId)) continue;
             allClusters.Add(new PatternCluster
             {
                 Id = Guid.NewGuid(),
                 PatternAnalysisRunId = runId,
                 CorpusId = corpusId,
-                ClaimKindSignature = signatureBySubroutine.TryGetValue(spec.SubroutineId, out var sig) ? sig : "",
-                Label = $"Unclassified — {name}",
+                ClaimKindSignature = signatureBySubroutine.TryGetValue(entry.SubroutineId, out var sig) ? sig : "",
+                Label = $"Unclassified — {entry.Name}",
                 SuggestedArchetypeName = "",
                 Rationale = "The clustering pass did not explicitly place this routine; recorded as its own " +
                             "singleton so no routine silently drops out of the report.",
                 MemberSubroutineIdsJson = JsonSerializer.Serialize(new[]
                 {
-                    new { subroutineId = spec.SubroutineId, subroutineName = name, specId = spec.Id },
+                    new
+                    {
+                        subroutineId = entry.SubroutineId,
+                        subroutineName = entry.Name,
+                        specId = specIdBySubroutine.TryGetValue(entry.SubroutineId, out var sid) ? (Guid?)sid : null,
+                    },
                 }),
                 MemberCount = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -558,7 +895,9 @@ public sealed class PatternAnalysisOrchestrator
         await db.PatternClusters.AddRangeAsync(allClusters, ct);
         await db.SaveChangesAsync(ct);
 
-        return new ClusterStageResult(specs.Count, allClusters.Count, totalInputTokens, totalOutputTokens, batches.Count, failedBatches);
+        return new ClusterStageResult(
+            digests.Count, allClusters.Count, totalInputTokens, totalOutputTokens, batches.Count,
+            failedBatches, specs.Count, digestRows.Count);
     }
 
     // ── Clustering-input digest ─────────────────────────────────────────
@@ -586,12 +925,55 @@ public sealed class PatternAnalysisOrchestrator
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private sealed record RoutineDigest(
+    /// <summary>One routine as the clustering judge sees it. Spec-sourced
+    /// entries carry claim excerpts in <c>Buckets</c>; digest-sourced entries
+    /// carry only <c>ClaimKinds</c> plus the survey's hint/data/flags.</summary>
+    private sealed record ClusterEntry(
         Guid SubroutineId,
         string Name,
         string Signature,
         string? Purpose,
-        Dictionary<string, List<string>> Buckets);
+        Dictionary<string, List<string>> Buckets,
+        string? ArchetypeHint = null,
+        IReadOnlyList<string>? ClaimKinds = null,
+        string? DataAccess = null,
+        IReadOnlyList<string>? Flags = null);
+
+    private static List<string> ParseStringList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return new List<string>();
+            return doc.RootElement.EnumerateArray()
+                .Where(e => e.ValueKind == JsonValueKind.String)
+                .Select(e => e.GetString()!)
+                .Where(s => s.Length > 0)
+                .ToList();
+        }
+        catch { return new List<string>(); }
+    }
+
+    /// <summary>"CUSTOMER:U, ORDERS:R" — compact enough to sit in every entry.</summary>
+    private static string? RenderDataAccess(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var parts = doc.RootElement.EnumerateArray()
+                .Select(e => (
+                    Table: e.TryGetProperty("table", out var t) ? t.GetString() : null,
+                    Op: e.TryGetProperty("op", out var o) ? o.GetString() : null))
+                .Where(p => !string.IsNullOrEmpty(p.Table))
+                .Select(p => $"{p.Table}:{p.Op ?? "?"}")
+                .ToList();
+            return parts.Count == 0 ? null : string.Join(", ", parts);
+        }
+        catch { return null; }
+    }
 
     private sealed record ClusterBatch(string Json, string Tier, IReadOnlyList<int> Indices);
 
@@ -609,21 +991,29 @@ public sealed class PatternAnalysisOrchestrator
     /// EnvestNet). `n` is always the index into the FULL digest list, not the
     /// batch — so batches never need to remap indices in the model's reply.</summary>
     private static string BuildEntriesJsonAtTier(
-        IReadOnlyList<RoutineDigest> digests, IReadOnlyList<int> indices,
+        IReadOnlyList<ClusterEntry> digests, IReadOnlyList<int> indices,
         (string Name, int ClaimsPerKind, int ClaimChars, int PurposeChars) tier)
     {
         var entries = indices.Select(i =>
         {
             var d = digests[i];
+            var hasClaims = d.Buckets.Any(kv => kv.Value.Count > 0);
             return new
             {
                 n = i,
                 subroutineName = d.Name,
                 claimKindSignature = d.Signature,
                 purpose = d.Purpose is null ? null : Truncate(d.Purpose, tier.PurposeChars),
-                claimCounts = d.Buckets.Where(kv => kv.Value.Count > 0)
-                    .ToDictionary(kv => kv.Key, kv => kv.Value.Count),
-                claims = tier.ClaimsPerKind == 0
+                // Spec-sourced entries: per-kind counts (+ excerpts below).
+                // Digest-sourced entries: the kinds only.
+                claimCounts = hasClaims
+                    ? d.Buckets.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Count)
+                    : null,
+                claimKinds = hasClaims ? null : d.ClaimKinds,
+                archetypeHint = d.ArchetypeHint,
+                dataAccess = d.DataAccess,
+                flags = d.Flags is { Count: > 0 } ? d.Flags : null,
+                claims = tier.ClaimsPerKind == 0 || !hasClaims
                     ? null
                     : d.Buckets.Where(kv => kv.Value.Count > 0)
                         .ToDictionary(
@@ -640,7 +1030,7 @@ public sealed class PatternAnalysisOrchestrator
     /// indices; returns the first that fits the budget, or the smallest
     /// tier's JSON with <c>Fits=false</c> if none does.</summary>
     private static (string Json, string Tier, bool Fits) BuildEntriesJsonFor(
-        IReadOnlyList<RoutineDigest> digests, IReadOnlyList<int> indices)
+        IReadOnlyList<ClusterEntry> digests, IReadOnlyList<int> indices)
     {
         var json = "";
         var tierName = "";
@@ -664,7 +1054,7 @@ public sealed class PatternAnalysisOrchestrator
     /// counts-only batches — a uniform tier across batches keeps quality
     /// consistent and keeps the packing pass a single O(n) sweep.
     /// </summary>
-    private static List<ClusterBatch> BuildBatches(IReadOnlyList<RoutineDigest> digests)
+    private static List<ClusterBatch> BuildBatches(IReadOnlyList<ClusterEntry> digests)
     {
         var all = Enumerable.Range(0, digests.Count).ToList();
         var (wholeJson, wholeTier, fits) = BuildEntriesJsonFor(digests, all);
@@ -745,42 +1135,18 @@ public sealed class PatternAnalysisOrchestrator
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = userPrompt },
             },
         };
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{opts.BaseUrl}/v1/messages")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json"),
-        };
-        req.Headers.Add("x-api-key", opts.ApiKey);
-        req.Headers.Add("anthropic-version", opts.ApiVersion);
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        // Phase 15.2 — shared retrying send under the process-wide limiter.
+        // A 429 mid-clustering used to fail the whole run after Stage 1 had
+        // already spent its budget.
+        var bodyJson = JsonSerializer.Serialize(requestBody);
+        var response = await AnthropicHttp.SendWithRetryAsync(
+            http, () => AnthropicHttp.BuildMessagesRequest(opts, bodyJson),
+            _limiter, cacheKey: "cluster-patterns", _logger, ct);
 
-        using var resp = await http.SendAsync(req, ct);
-        var body = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Anthropic returned {(int)resp.StatusCode}: {Truncate(body, 400)}");
-
-        using var doc = JsonDocument.Parse(body);
+        using var doc = JsonDocument.Parse(response.Body);
         var root = doc.RootElement;
-
-        int inT = 0, outT = 0;
-        if (root.TryGetProperty("usage", out var usage))
-        {
-            if (usage.TryGetProperty("input_tokens", out var i)) inT = i.GetInt32();
-            if (usage.TryGetProperty("output_tokens", out var o)) outT = o.GetInt32();
-        }
-
-        var sb = new StringBuilder();
-        if (root.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in content.EnumerateArray())
-            {
-                if (block.TryGetProperty("type", out var t) && t.GetString() == "text"
-                    && block.TryGetProperty("text", out var txt))
-                {
-                    sb.Append(txt.GetString());
-                }
-            }
-        }
-        return new ClusterLlmResult(sb.ToString(), inT, outT);
+        var usage = AnthropicHttp.ReadUsage(root);
+        return new ClusterLlmResult(AnthropicHttp.ReadText(root), usage.InputTokens, usage.OutputTokens);
     }
 
     /// <summary>
@@ -789,21 +1155,21 @@ public sealed class PatternAnalysisOrchestrator
     /// an API key. Honest about being a stub, matching HarmonisationPipeline's
     /// StubMockResult convention.
     /// </summary>
-    private static ClusterLlmResult StubMockResult(IList<Spec> specs, Dictionary<Guid, string> signatureBySubroutine)
+    private static ClusterLlmResult StubMockResult(IReadOnlyList<ClusterEntry> entries)
     {
-        var bySignature = specs.GroupBy(s => signatureBySubroutine.TryGetValue(s.SubroutineId, out var sig) ? sig : "");
+        var bySignature = entries.GroupBy(e => e.Signature);
         var clusters = bySignature.Select((g, i) => new
         {
             label = $"Mock cluster {i + 1} — signature: {(string.IsNullOrEmpty(g.Key) ? "(none)" : g.Key)}",
             suggestedArchetypeName = $"canonical-mock-pattern-{i + 1}",
             rationale = "Mock provider — grouped by claim-kind signature only, no LLM judging performed. " +
                         "Set Llm:Provider=anthropic to run a real judged clustering pass.",
-            memberSubroutineIds = g.Select(s => s.SubroutineId.ToString()).ToArray(),
+            memberSubroutineIds = g.Select(e => e.SubroutineId.ToString()).ToArray(),
         }).ToArray();
 
         var payload = new
         {
-            summary = $"Mock clustering pass — {specs.Count} specs grouped into {clusters.Length} signature bucket(s).",
+            summary = $"Mock clustering pass — {entries.Count} routine(s) grouped into {clusters.Length} signature bucket(s).",
             clusters,
         };
         return new ClusterLlmResult(JsonSerializer.Serialize(payload, JsonOpts), 0, 0);

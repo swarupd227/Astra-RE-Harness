@@ -211,6 +211,11 @@ should accompany each), 0-4 default_property_usages, 0-4
 late_binding_calls, 1-3 side_effects, 2-5 edge_cases, 2-4
 open_questions.
 
+## COM ProgID registry (authoritative, cached)
+
+COM ProgID registry (use these `.NET 10 / minimal API` replacement hints verbatim where applicable):
+{{comProgIdRegistry}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -219,9 +224,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-COM ProgID registry (use these `.NET 10 / minimal API` replacement hints verbatim where applicable):
-{{comProgIdRegistry}}
 
 Source:
 ```vb

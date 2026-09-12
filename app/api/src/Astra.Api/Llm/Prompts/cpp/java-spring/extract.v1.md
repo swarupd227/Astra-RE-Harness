@@ -191,6 +191,11 @@ Coverage targets: 3-6 invariants, 1-3 object_lifetimes,
 1 exception_contract (mandatory), 0-1 rtti_usages, 1-3 side_effects,
 2-5 edge_cases, 1-3 open_questions.
 
+## C++ STL mapping table (authoritative, cached)
+
+C++ STL mapping table (use these `java_equivalent` entries verbatim where applicable):
+{{stlMappingTable}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -200,9 +205,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-C++ STL mapping table (use these `java_equivalent` entries verbatim where applicable):
-{{stlMappingTable}}
 
 Source:
 ```cpp

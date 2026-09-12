@@ -1274,8 +1274,14 @@ export const api = {
       body: JSON.stringify({ confirmation }),
     }),
 
-  getScaffoldForSpec: (specId: string) =>
-    apiFetch<ScaffoldResponse>(`/api/v1/specs/${specId}/scaffold`),
+  // A spec can carry an independent scaffold per target stack — pass
+  // targetStack to ask about one specifically (e.g. so the Spec Review CTA
+  // offers "Generate" instead of "Open" for a target that isn't built yet).
+  // Omit it to get the most recently generated one for this spec.
+  getScaffoldForSpec: (specId: string, targetStack?: string) =>
+    apiFetch<ScaffoldResponse>(
+      `/api/v1/specs/${specId}/scaffold${targetStack ? `?targetStack=${encodeURIComponent(targetStack)}` : ''}`,
+    ),
   getScaffold: (id: string) => apiFetch<ScaffoldResponse>(`/api/v1/scaffolds/${id}`),
   // Generated-code index — every package the platform has produced, across
   // every routine. Previously there was no way back to a scaffold once you
@@ -1456,10 +1462,13 @@ export const api = {
   getDocRun: (runId: string) =>
     apiFetch<DocRun>(`/api/v1/docs/runs/${runId}`),
 
-  // Phase 12.0 — Pattern analysis (bulk extraction + claim-kind clustering).
-  runPatternAnalysis: (corpusId: string, opts?: { force?: boolean }) => {
+  // Phase 12.0 — Pattern analysis (survey digests + claim-kind clustering).
+  // Phase 15.2 — `stages` selects the pass: 'survey,cluster' (default,
+  // minutes), 'extract,cluster' (the old full-extraction path), 'survey'.
+  runPatternAnalysis: (corpusId: string, opts?: { force?: boolean; stages?: string }) => {
     const q = new URLSearchParams();
     if (opts?.force) q.set('force', 'true');
+    if (opts?.stages) q.set('stages', opts.stages);
     const qs = q.size ? `?${q.toString()}` : '';
     return apiFetch<PatternAnalysisStartResult>(
       `/api/v1/corpora/${corpusId}/pattern-analysis${qs}`, { method: 'POST' }
@@ -1467,6 +1476,14 @@ export const api = {
   },
   getPatternAnalysisRun: (runId: string) =>
     apiFetch<PatternAnalysisRun>(`/api/v1/pattern-analysis/runs/${runId}`),
+  listPatternAnalysisRuns: (corpusId: string, limit = 5) =>
+    apiFetch<{ data: PatternAnalysisRun[] }>(`/api/v1/corpora/${corpusId}/pattern-analysis-runs?limit=${limit}`),
+  cancelPatternAnalysisRun: (runId: string) =>
+    apiFetch<{ runId: string; state: string }>(`/api/v1/pattern-analysis/runs/${runId}/cancel`, { method: 'POST' }),
+  pausePatternAnalysisRun: (runId: string) =>
+    apiFetch<{ runId: string; state: string }>(`/api/v1/pattern-analysis/runs/${runId}/pause`, { method: 'POST' }),
+  resumePatternAnalysisRun: (runId: string) =>
+    apiFetch<{ runId: string; state: string }>(`/api/v1/pattern-analysis/runs/${runId}/resume`, { method: 'POST' }),
   listPatternClusters: (corpusId: string) =>
     apiFetch<PatternClusterListResult>(`/api/v1/corpora/${corpusId}/pattern-clusters`),
 
@@ -1899,9 +1916,16 @@ export type DocRun = {
   errorSummary?: string;
 };
 
-// Phase 12.0 — Pattern analysis (bulk extraction + claim-kind clustering).
-export type PatternAnalysisStartResult = { runId: string; statusUrl: string };
+// Phase 12.0 — Pattern analysis (survey digests + claim-kind clustering).
+export type PatternAnalysisStartResult = {
+  runId: string;
+  statusUrl: string;
+  /** Phase 15.2 — set when the call re-attached to / resumed an existing run. */
+  alreadyRunning?: boolean;
+  resumed?: boolean;
+};
 
+/** QUEUED | RUNNING | SUCCEEDED | PARTIAL | FAILED | CANCELLED | RESUMABLE */
 export type PatternAnalysisRun = {
   id: string;
   corpusId: string;
@@ -1914,6 +1938,17 @@ export type PatternAnalysisRun = {
   triggeredBy?: string;
   startedAt: string;
   completedAt?: string;
+  heartbeatAt?: string;
+  cancelRequested?: boolean;
+};
+
+/** Named `progress` SSE event from /pattern-analysis/runs/{id}/logs. */
+export type PatternAnalysisProgress = {
+  done: number;
+  total: number;
+  failed: number;
+  propagated: number;
+  etaSeconds?: number | null;
 };
 
 export type PatternClusterMember = { subroutineId: string; subroutineName: string; specId?: string };

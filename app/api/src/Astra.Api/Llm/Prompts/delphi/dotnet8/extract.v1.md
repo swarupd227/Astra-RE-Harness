@@ -168,6 +168,11 @@ routine touches TObject descendants), 0-2 interface_implementations,
 honestly — `medium` or `low` for interpretation that depends on
 context the source doesn't provide.
 
+## Delphi RTL mapping table (authoritative, cached)
+
+Delphi RTL mapping table (use these `.NET` equivalents verbatim where applicable):
+{{rtlMappingTable}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -176,9 +181,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-Delphi RTL mapping table (use these `.NET` equivalents verbatim where applicable):
-{{rtlMappingTable}}
 
 Source:
 ```delphi

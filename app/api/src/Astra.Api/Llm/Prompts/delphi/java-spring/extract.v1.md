@@ -167,6 +167,11 @@ routine touches TObject descendants), 0-2 interface_implementations,
 0-2 property_accessors, 0-2 event_handler_contracts, 0-1 rtti_usages,
 1-3 side_effects, 2-5 edge_cases, 1-3 open_questions.
 
+## Delphi RTL mapping table (authoritative, cached)
+
+Delphi RTL mapping table (use these `java_equivalent` entries verbatim where applicable):
+{{rtlMappingTable}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -175,9 +180,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-Delphi RTL mapping table (use these `java_equivalent` entries verbatim where applicable):
-{{rtlMappingTable}}
 
 Source:
 ```delphi

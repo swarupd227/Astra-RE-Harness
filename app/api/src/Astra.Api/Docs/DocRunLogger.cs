@@ -1,52 +1,26 @@
-using System.Threading.Channels;
+using Astra.Api.Runs;
 
 namespace Astra.Api.Docs;
 
 /// <summary>
-/// In-process log bus for active doc-generation runs.
-/// One unbounded Channel per run.  Late subscribers drain any buffered
-/// messages then block until more arrive or the writer is completed.
-/// Completed channels are kept in the dictionary so a subscriber that
-/// arrives after <see cref="Complete"/> still gets an immediate EOF.
+/// Thin string-log façade over <see cref="RunEventBus"/>, kept so the
+/// docs/harmonisation orchestrators and the <c>/docs/runs/{id}/logs</c> SSE
+/// route work unchanged. New code should publish structured events on the
+/// bus directly; this adapter emits <c>log</c> events only.
 /// </summary>
-public sealed class DocRunLogger : IDisposable
+public sealed class DocRunLogger
 {
-    private readonly Dictionary<Guid, Channel<string>> _channels = new();
-    private readonly object _lock = new();
+    private readonly RunEventBus _bus;
 
-    public void Log(Guid runId, string message)
-        => GetOrCreate(runId).Writer.TryWrite(message);
+    public DocRunLogger(RunEventBus bus)
+    {
+        _bus = bus;
+    }
+
+    public void Log(Guid runId, string message) => _bus.Log(runId, "run", "", message);
 
     public IAsyncEnumerable<string> SubscribeAsync(Guid runId, CancellationToken ct)
-        => GetOrCreate(runId).Reader.ReadAllAsync(ct);
+        => _bus.SubscribeMessagesAsync(runId, 0, ct);
 
-    public void Complete(Guid runId)
-    {
-        lock (_lock)
-        {
-            if (_channels.TryGetValue(runId, out var ch))
-                ch.Writer.TryComplete();
-            // Intentionally keep channel in dictionary so late subscribers
-            // get an immediate EOF rather than waiting forever on a fresh channel.
-        }
-    }
-
-    private Channel<string> GetOrCreate(Guid runId)
-    {
-        lock (_lock)
-        {
-            if (!_channels.TryGetValue(runId, out var ch))
-                _channels[runId] = ch = Channel.CreateUnbounded<string>();
-            return ch;
-        }
-    }
-
-    public void Dispose()
-    {
-        lock (_lock)
-        {
-            foreach (var ch in _channels.Values)
-                ch.Writer.TryComplete();
-        }
-    }
+    public void Complete(Guid runId) => _bus.Complete(runId);
 }

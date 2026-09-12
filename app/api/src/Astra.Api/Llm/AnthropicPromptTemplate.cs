@@ -25,6 +25,7 @@ public static class AnthropicPromptTemplate
     /// </summary>
     public static Built Build(PromptLibrary lib, PromptLibrary.LoadedPrompt prompt, ExtractionRequest req)
     {
+        var scope = EnclosingScopeParser.FromName(req.SubroutineName);
         var rendered = lib.Render(prompt, new Dictionary<string, string?>
         {
             ["subroutineName"] = req.SubroutineName,
@@ -35,9 +36,22 @@ public static class AnthropicPromptTemplate
             // string when no neighbourhood was supplied, so the
             // template's "## Neighbourhood" section collapses cleanly.
             ["neighbourhood"] = RenderNeighbourhood(req.Neighbourhood),
+            // Phase 15.2 — these placeholders existed in the Delphi/C++/VB6/
+            // C#/PHP/ABL prompts since Phase 9 but nothing ever supplied
+            // them, so Claude saw the literal "{{rtlMappingTable}}" text.
+            ["enclosingModule"] = Path.GetFileNameWithoutExtension(req.SourcePath),
+            ["enclosingClass"] = scope.Class ?? "(not available)",
+            ["namespace"] = scope.Namespace ?? "(global)",
+            ["rtlMappingTable"] = MappingTableOrNote(lib, prompt.SourceSchema, "rtl-mapping.json"),
+            ["stlMappingTable"] = MappingTableOrNote(lib, prompt.SourceSchema, "stl-mapping.json"),
+            ["comProgIdRegistry"] = MappingTableOrNote(lib, prompt.SourceSchema, "com-progid-registry.json"),
         });
         return new(rendered.System, rendered.User, rendered.PromptId, rendered.Version);
     }
+
+    private static string MappingTableOrNote(PromptLibrary lib, string sourceSchema, string fileName) =>
+        lib.TryReadAsset(sourceSchema, fileName)
+        ?? $"(no curated {fileName} is registered for {sourceSchema}; map by your own knowledge and flag uncertainty as an open question)";
 
     /// <summary>
     /// Render the structured <see cref="Neighbourhood"/> as a markdown

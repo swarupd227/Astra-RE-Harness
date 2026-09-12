@@ -448,14 +448,17 @@ function ClaimCommentsToggle({ specId, claimPath }: { specId: string; claimPath:
 }
 
 /**
- * SIGNED-state CTA: if a scaffold already exists for this spec, link to it;
- * otherwise offer "Generate scaffold". A single round-trip to the scaffold
- * endpoint disambiguates without needing a separate probe.
+ * SIGNED-state CTA: if a scaffold already exists for the CURRENTLY SELECTED
+ * target stack, link to it; otherwise offer "Generate scaffold" for that
+ * target. A spec can carry an independent scaffold per target stack, so this
+ * probes by (spec, target) — not just spec — otherwise switching the target
+ * picker below could never regenerate for a different stack once any one
+ * target had already been built.
  */
 function ScaffoldCta({ specId, targetStack }: { specId: string; targetStack: string }) {
   const probe = useQuery({
-    queryKey: ['scaffold-by-spec', specId],
-    queryFn: () => api.getScaffoldForSpec(specId).catch(() => null),
+    queryKey: ['scaffold-by-spec', specId, targetStack],
+    queryFn: () => api.getScaffoldForSpec(specId, targetStack).catch(() => null),
     retry: 0,
     staleTime: 0,
   });

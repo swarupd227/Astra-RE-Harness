@@ -34,6 +34,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<PatternAnalysisRun> PatternAnalysisRuns => Set<PatternAnalysisRun>();
     public DbSet<PatternCluster> PatternClusters => Set<PatternCluster>();
     public DbSet<ArchetypeProposal> ArchetypeProposals => Set<ArchetypeProposal>();
+    public DbSet<RoutineDigest> RoutineDigests => Set<RoutineDigest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,6 +138,34 @@ public sealed class AppDbContext : DbContext
             b.HasIndex(x => x.SourceLanguage);
         });
 
+        modelBuilder.Entity<RoutineDigest>(b =>
+        {
+            b.ToTable("routine_digests");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.SubroutineId).HasColumnName("subroutine_id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.Source).HasColumnName("source").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Purpose).HasColumnName("purpose").IsRequired();
+            b.Property(x => x.ArchetypeHint).HasColumnName("archetype_hint").HasMaxLength(128);
+            b.Property(x => x.ClaimKindsJson).HasColumnName("claim_kinds_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.DataAccessJson).HasColumnName("data_access_json").HasColumnType("jsonb");
+            b.Property(x => x.ModernizationFlagsJson).HasColumnName("modernization_flags_json").HasColumnType("jsonb");
+            b.Property(x => x.Complexity).HasColumnName("complexity").HasMaxLength(16);
+            b.Property(x => x.StructuralHash).HasColumnName("structural_hash").HasMaxLength(64);
+            b.Property(x => x.NormalizedTokenCount).HasColumnName("normalized_token_count");
+            b.Property(x => x.ExemplarSubroutineId).HasColumnName("exemplar_subroutine_id");
+            b.Property(x => x.PromptVersion).HasColumnName("prompt_version").HasMaxLength(32);
+            b.Property(x => x.Model).HasColumnName("model").HasMaxLength(128);
+            b.Property(x => x.LlmCallId).HasColumnName("llm_call_id");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.HasOne(x => x.Subroutine).WithMany().HasForeignKey(x => x.SubroutineId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => x.SubroutineId).IsUnique();
+            b.HasIndex(x => x.SourceVersionId);
+            b.HasIndex(x => new { x.SourceVersionId, x.StructuralHash });
+        });
+
         modelBuilder.Entity<LlmCall>(b =>
         {
             b.ToTable("llm_calls");
@@ -149,6 +178,8 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.ProviderConfigVersion).HasColumnName("provider_config_version").HasMaxLength(256).IsRequired();
             b.Property(x => x.InputTokens).HasColumnName("input_tokens");
             b.Property(x => x.OutputTokens).HasColumnName("output_tokens");
+            b.Property(x => x.CacheReadTokens).HasColumnName("cache_read_tokens");
+            b.Property(x => x.CacheCreationTokens).HasColumnName("cache_creation_tokens");
             b.Property(x => x.LatencyMs).HasColumnName("latency_ms");
             b.Property(x => x.CostUsd).HasColumnName("cost_usd").HasColumnType("numeric(10,4)");
             b.Property(x => x.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
@@ -258,8 +289,12 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.GeneratedAt).HasColumnName("generated_at");
             b.HasOne(x => x.Spec).WithMany().HasForeignKey(x => x.SpecId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.LlmCall).WithMany().HasForeignKey(x => x.LlmCallId).OnDelete(DeleteBehavior.SetNull);
-            // Phase B.4 simplification: one scaffold per spec.
-            b.HasIndex(x => x.SpecId).IsUnique();
+            // Phase 15.1 — a spec can be scaffolded onto several target
+            // stacks independently (e.g. dotnet8 AND angular-dotnet8), so the
+            // uniqueness constraint is per (spec, target) — not per spec
+            // alone (the old Phase B.4 constraint), which made generating a
+            // second target silently overwrite the first.
+            b.HasIndex(x => new { x.SpecId, x.TargetPlatform }).IsUnique();
         });
 
         modelBuilder.Entity<ValidationRun>(b =>
@@ -581,6 +616,9 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.TriggeredBy).HasColumnName("triggered_by").HasMaxLength(160);
             b.Property(x => x.StartedAt).HasColumnName("started_at");
             b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            b.Property(x => x.HeartbeatAt).HasColumnName("heartbeat_at");
+            b.Property(x => x.CancelRequested).HasColumnName("cancel_requested");
+            b.Property(x => x.CheckpointJson).HasColumnName("checkpoint_json").HasColumnType("jsonb");
 
             b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.CorpusId, x.StartedAt });

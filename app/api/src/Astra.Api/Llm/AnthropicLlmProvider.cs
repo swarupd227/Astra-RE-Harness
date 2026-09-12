@@ -28,17 +28,20 @@ public sealed class AnthropicLlmProvider : ILlmProvider
     private readonly HttpClient _http;
     private readonly AnthropicOptions _opts;
     private readonly PromptLibrary _prompts;
+    private readonly AnthropicRateLimiter _limiter;
     private readonly ILogger<AnthropicLlmProvider> _logger;
 
     public AnthropicLlmProvider(
         HttpClient http,
         IOptions<AnthropicOptions> opts,
         PromptLibrary prompts,
+        AnthropicRateLimiter limiter,
         ILogger<AnthropicLlmProvider> logger)
     {
         _http = http;
         _opts = opts.Value;
         _prompts = prompts;
+        _limiter = limiter;
         _logger = logger;
         // Pin defaults so callers don't have to remember them. 5 minutes covers
         // mid-sized real-world subroutines (200-500 LOC); we'll switch to a
@@ -143,6 +146,13 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         req.Headers.Add("x-api-key", _opts.ApiKey);
         req.Headers.Add("anthropic-version", _opts.ApiVersion);
 
+        // Phase 15.2 — the process-wide limiter gates every Anthropic call
+        // and learns from the rate-limit headers on the way back. The lease
+        // is held for the whole stream: a streaming response occupies an
+        // output-tokens/min budget until it finishes, not just until the
+        // headers arrive.
+        using var lease = await _limiter.AcquireAsync($"extract:{schemaId}:{targetStack}:{loaded.Version}", ct);
+
         HttpResponseMessage? resp = null;
         string? transportErrorMessage = null;
         try
@@ -164,6 +174,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             });
             yield break;
         }
+        _limiter.Observe(resp);
 
         string? upstreamErrorBody = null;
         if (!resp.IsSuccessStatusCode)
@@ -178,6 +189,9 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                     or HttpStatusCode.BadGateway
                     or HttpStatusCode.ServiceUnavailable
                     or HttpStatusCode.GatewayTimeout,
+                // Lets the bulk orchestrator honour the server's own
+                // pacing instead of its fixed attempt²×2s backoff.
+                retryAfterSeconds = AnthropicHttp.RetryAfterSeconds(resp),
             });
             resp.Dispose();
             yield break;
@@ -356,6 +370,10 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         yield return new ExtractionEvent("__final__", new Dictionary<string, object?>
         {
             ["specJson"] = specClone,
+            // The model that actually ran — a bulk pass may have overridden
+            // the configured default with the trivial tier, and the audit
+            // row + cost estimate must reflect that, not Info.Model.
+            ["model"] = model,
             ["inputTokens"] = inputTokens,
             ["outputTokens"] = outputTokens,
             // Phase 7.0 — caching stats; non-zero on cache hit. The audit

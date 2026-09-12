@@ -78,6 +78,12 @@
          Markdown isn't part of the SDK's default Content glob, so we
          add them explicitly here. -->
     <Content Include="Llm/Prompts/**/*.md" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Sidecar prompt assets (ADR-025 RTL/STL mapping tables, VB6 COM
+         ProgID registry). The SDK already includes *.json as Content; this
+         flips CopyToOutputDirectory so PromptLibrary.TryReadAsset finds them
+         next to the binary — they were silently absent from the image
+         before, which is why {{rtlMappingTable}} never resolved. -->
+    <Content Update="Llm/Prompts/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -235,20 +235,27 @@ public sealed class ExtractionPipeline
         }
 
         // 4. Persist LlmCall + Spec
-        var (specJsonText, inputTokens, outputTokens, latencyMs) = UnpackFinalPayload(finalPayload);
+        var payload = UnpackFinalPayload(finalPayload);
+        var (specJsonText, inputTokens, outputTokens, latencyMs) =
+            (payload.SpecJson, payload.InputTokens, payload.OutputTokens, payload.LatencyMs);
+        var modelUsed = string.IsNullOrWhiteSpace(payload.Model) ? _provider.Info.Model : payload.Model;
 
         var llmCall = new LlmCall
         {
             Id = Guid.NewGuid(),
             Provider = _provider.Info.Name,
-            Model = _provider.Info.Model,
+            Model = modelUsed,
             PromptTemplateId = promptId,
             PromptTemplateVersion = promptVersion,
             ProviderConfigVersion = _provider.Info.ConfigVersion,
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
+            CacheReadTokens = payload.CacheReadTokens,
+            CacheCreationTokens = payload.CacheCreationTokens,
             LatencyMs = latencyMs,
-            CostUsd = EstimateCost(_provider.Info.Name, inputTokens, outputTokens),
+            CostUsd = ModelPricing.Estimate(
+                _provider.Info.Name, modelUsed, inputTokens, outputTokens,
+                payload.CacheReadTokens, payload.CacheCreationTokens),
             Status = "success",
             CalledAt = DateTimeOffset.UtcNow,
         };
@@ -296,9 +303,11 @@ public sealed class ExtractionPipeline
                 subroutineId = sub.Id,
                 subroutineName = sub.Name,
                 provider = _provider.Info.Name,
-                model = _provider.Info.Model,
+                model = modelUsed,
                 promptTemplate = $"{promptId}@{promptVersion}",
                 inputTokens, outputTokens, latencyMs,
+                cacheReadTokens = payload.CacheReadTokens,
+                cacheCreationTokens = payload.CacheCreationTokens,
                 llmCallId = llmCall.Id,
                 providerConfigVersion = _provider.Info.ConfigVersion,
             },
@@ -308,8 +317,11 @@ public sealed class ExtractionPipeline
         {
             specId = spec.Id,
             callId = llmCall.Id,
+            model = modelUsed,
             inputTokens,
             outputTokens,
+            cacheReadTokens = payload.CacheReadTokens,
+            cacheCreationTokens = payload.CacheCreationTokens,
             latencyMs,
             costUsd = llmCall.CostUsd,
         });
@@ -319,15 +331,27 @@ public sealed class ExtractionPipeline
             sub.Id, spec.Id, llmCall.Id, inputTokens, outputTokens, latencyMs);
     }
 
-    private static (string json, int inTok, int outTok, long ms) UnpackFinalPayload(object payload)
+    private sealed record FinalPayload(
+        string SpecJson,
+        string? Model,
+        int InputTokens,
+        int OutputTokens,
+        int CacheReadTokens,
+        int CacheCreationTokens,
+        long LatencyMs);
+
+    private static FinalPayload UnpackFinalPayload(object payload)
     {
         // Round-trip via JsonElement to avoid reflecting on anonymous types.
         var el = JsonSerializer.SerializeToElement(payload);
         var specJson = el.GetProperty("specJson").GetRawText();
+        var model = el.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
         var inTok = el.TryGetProperty("inputTokens", out var i) ? i.GetInt32() : 0;
         var outTok = el.TryGetProperty("outputTokens", out var o) ? o.GetInt32() : 0;
+        var cacheRead = el.TryGetProperty("cacheReadInputTokens", out var cr) ? cr.GetInt32() : 0;
+        var cacheCreate = el.TryGetProperty("cacheCreationInputTokens", out var cc) ? cc.GetInt32() : 0;
         var ms = el.TryGetProperty("latencyMs", out var l) ? l.GetInt64() : 0;
-        return (specJson, inTok, outTok, ms);
+        return new FinalPayload(specJson, model, inTok, outTok, cacheRead, cacheCreate, ms);
     }
 
     private static (bool ok, (int start, int end) range) ParseRange(string? lines)
@@ -345,9 +369,4 @@ public sealed class ExtractionPipeline
         if (int.TryParse(first, out var n)) return (true, (n, n));
         return (false, (0, 0));
     }
-
-    private static decimal EstimateCost(string provider, int inputTokens, int outputTokens) =>
-        provider == "mock"
-            ? 0m
-            : Math.Round((decimal)inputTokens * 0.000003m + (decimal)outputTokens * 0.000015m, 4);
 }

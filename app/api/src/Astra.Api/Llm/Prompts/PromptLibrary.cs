@@ -287,6 +287,32 @@ public sealed class PromptLibrary
             Version: prompt.Version);
     }
 
+    private readonly ConcurrentDictionary<string, string?> _assets = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Read a sidecar prompt asset that lives beside a schema's prompt
+    /// directories — <c>Llm/Prompts/&lt;sourceSchema&gt;/&lt;fileName&gt;</c>, e.g. the
+    /// ADR-025 <c>delphi/rtl-mapping.json</c>. Cached for the process
+    /// lifetime (the file ships with the binary and never changes at
+    /// runtime); null when the schema has no such asset.
+    /// </summary>
+    public string? TryReadAsset(string sourceSchema, string fileName)
+    {
+        var key = $"{sourceSchema}/{fileName}";
+        return _assets.GetOrAdd(key, _ =>
+        {
+            var safeSchema = SafeSegment(sourceSchema, nameof(sourceSchema));
+            var safeFile = SafeSegment(fileName, nameof(fileName));
+            var path = Path.Combine(_dir, safeSchema, safeFile);
+            if (!File.Exists(path))
+            {
+                _log.LogWarning("Prompt asset {Asset} not found at {Path}", key, path);
+                return null;
+            }
+            return File.ReadAllText(path);
+        });
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Loader
     // ────────────────────────────────────────────────────────────────────

@@ -163,14 +163,18 @@ public sealed class ScaffoldPipeline
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             LatencyMs = latencyMs,
-            CostUsd = EstimateCost(_provider.Info.Name, inputTokens, outputTokens),
+            CostUsd = ModelPricing.Estimate(_provider.Info.Name, _provider.Info.Model, inputTokens, outputTokens),
             Status = "success",
             CalledAt = DateTimeOffset.UtcNow,
         };
         await _db.LlmCalls.AddAsync(llmCall, ct);
 
-        // Write the manifest to the scaffolds bucket.
-        var existing = await _db.Scaffolds.FirstOrDefaultAsync(s => s.SpecId == specId, ct);
+        // Write the manifest to the scaffolds bucket. Keyed by (spec, target)
+        // — a spec can carry an independent scaffold per target stack, so
+        // generating a NEW target must not find (and overwrite) a scaffold
+        // that was built for a DIFFERENT one.
+        var existing = await _db.Scaffolds.FirstOrDefaultAsync(
+            s => s.SpecId == specId && s.TargetPlatform == targetStack, ct);
         var scaffoldId = existing?.Id ?? Guid.NewGuid();
         var manifest = new
         {
@@ -293,9 +297,4 @@ public sealed class ScaffoldPipeline
             promptTemplateId,
             promptTemplateVersion);
     }
-
-    private static decimal EstimateCost(string provider, int inputTokens, int outputTokens) =>
-        provider == "mock"
-            ? 0m
-            : Math.Round((decimal)inputTokens * 0.000003m + (decimal)outputTokens * 0.000015m, 4);
 }

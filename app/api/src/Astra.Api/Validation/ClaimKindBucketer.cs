@@ -12,6 +12,54 @@ namespace Astra.Api.Validation;
 public static class ClaimKindBucketer
 {
     /// <summary>
+    /// Every claim kind the platform knows, canonical camelCase key plus a
+    /// one-line definition. Single source for the survey-digest prompt's
+    /// enum and its output validation, so the two can't drift apart. Keep
+    /// in step with the registrations in <see cref="Bucket"/>.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Key, string Definition)> KnownKinds = new[]
+    {
+        ("invariant", "a condition that must hold before/after/throughout the routine"),
+        ("sectionContract", "a named section/paragraph's input→output contract"),
+        ("ioSideEffect", "file, database, terminal or network I/O the routine performs"),
+        ("sideEffect", "state the routine mutates beyond its return value"),
+        ("edgeCase", "boundary or unusual-input behaviour"),
+        ("openQuestion", "behaviour the source leaves ambiguous"),
+        ("objectLifetime", "who allocates/owns/frees an object, ref-counting, disposal"),
+        ("interfaceImplementation", "which interface/contract a type implements and its obligations"),
+        ("propertyAccessor", "getter/setter semantics, backing fields, accessor side effects"),
+        ("eventHandlerContract", "event fired/handled and its contract"),
+        ("rttiUsage", "reflection / RTTI / dynamic type inspection"),
+        ("templateInstantiation", "template/generic instantiation semantics"),
+        ("undefinedBehavior", "C/C++ undefined or implementation-defined behaviour risk"),
+        ("exceptionContract", "what is thrown, caught, or guaranteed on failure"),
+        ("moduleToStaticClass", "module-level code that maps to a static class"),
+        ("implicitConversionRisk", "implicit type coercion the target language won't reproduce"),
+        ("withBlockUsage", "With-block scoping"),
+        ("stringComparisonSemantics", "case/culture-sensitive string comparison rules"),
+        ("errorHandlingContract", "On Error / error-code handling contract"),
+        ("tempTableUsage", "temp-table definition or use"),
+        ("sharedVariableScope", "shared/global variable scope"),
+        ("recordPhraseSemantics", "record-phrase / locking semantics"),
+        ("transactionScope", "transaction boundary"),
+        ("looseTypeCoercion", "loose/dynamic type coercion"),
+        ("arrayShapeSemantics", "associative/dynamic array shape assumptions"),
+        ("nullSafetyContract", "null/undefined handling contract"),
+        ("superglobalUsage", "superglobal / ambient state access"),
+        ("jakartaNamespaceMigration", "javax→jakarta namespace migration"),
+        ("removedApiUsage", "use of an API removed in the target runtime"),
+        ("deprecatedApiUsage", "use of a deprecated API"),
+        ("springBootUpgrade", "Spring Boot upgrade concern"),
+        ("libraryMajorBump", "dependency major-version bump concern"),
+        ("modernizationOpportunity", "a construct with a clearly better modern equivalent"),
+        ("dynamicArrayUsage", "multivalue/dynamic array (attribute/value/subvalue) usage"),
+        ("fieldPositionAccess", "access by field position/attribute number"),
+        ("recordAccessSemantics", "record read/write/lock semantics"),
+        ("dynamicCallTarget", "call target resolved at runtime"),
+        ("dynamicQueryExecution", "dynamically built query/command executed"),
+    };
+
+    /// <summary>
     /// Walk a spec/v1 JSON root and bucket every claim's text-as-string by
     /// kind. Concatenates the readable fields of each claim so callers
     /// don't need to know which property carries the prose.

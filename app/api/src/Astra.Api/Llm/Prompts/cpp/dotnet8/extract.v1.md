@@ -203,6 +203,11 @@ function templates, 0 for non-templates), 0-3 undefined_behaviors,
 `medium` or `low` for any claim that depends on context the source
 doesn't provide.
 
+## C++ STL mapping table (authoritative, cached)
+
+C++ STL mapping table (use these `.NET` equivalents verbatim where applicable):
+{{stlMappingTable}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -212,9 +217,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-C++ STL mapping table (use these `.NET` equivalents verbatim where applicable):
-{{stlMappingTable}}
 
 Source:
 ```cpp

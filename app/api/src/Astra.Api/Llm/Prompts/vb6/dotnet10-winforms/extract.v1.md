@@ -249,6 +249,11 @@ per ProgID), 0-2 event_handler_contracts (1+ for any `_Click`,
 honestly — `medium` or `low` for interpretation that depends on
 context the source doesn't provide.
 
+## COM ProgID registry (authoritative, cached)
+
+COM ProgID registry (use these `.NET 10` replacement hints verbatim where applicable):
+{{comProgIdRegistry}}
+
 # User
 
 Routine: {{subroutineName}}
@@ -257,9 +262,6 @@ File: {{sourcePath}}
 Lines: 1-{{lineCount}}
 
 {{neighbourhood}}
-
-COM ProgID registry (use these `.NET 10` replacement hints verbatim where applicable):
-{{comProgIdRegistry}}
 
 Source:
 ```vb

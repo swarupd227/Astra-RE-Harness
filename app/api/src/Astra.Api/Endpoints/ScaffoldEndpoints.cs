@@ -249,14 +249,25 @@ public static class ScaffoldEndpoints
         // ─── Read scaffold by spec id (the demo entry point) ─────────────
         app.MapGet("/api/v1/specs/{id:guid}/scaffold", async (
             Guid id,
+            string? targetStack,
             AppDbContext db,
             IBlobClient blob,
             CancellationToken ct) =>
         {
-            var scaffold = await db.Scaffolds
-                .Include(s => s.LlmCall)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.SpecId == id, ct);
+            // A spec can carry an independent scaffold per target stack
+            // (Phase 15.1). Pass ?targetStack= to ask about one specifically
+            // — e.g. so the Spec Review CTA offers "Generate" instead of
+            // "Open" for a target that hasn't been built yet. Omit it to get
+            // the most recently generated one, for callers that just want
+            // "a" scaffold for this spec (Evidence, older callers).
+            var query = db.Scaffolds.Include(s => s.LlmCall).AsNoTracking()
+                .Where(s => s.SpecId == id);
+            if (!string.IsNullOrWhiteSpace(targetStack))
+                query = query.Where(s => s.TargetPlatform == targetStack);
+
+            var scaffold = await query
+                .OrderByDescending(s => s.GeneratedAt)
+                .FirstOrDefaultAsync(ct);
             if (scaffold is null)
                 return Results.NotFound(new { error = new { code = "scaffold.not_found" } });
 

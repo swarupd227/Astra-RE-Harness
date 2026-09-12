@@ -143,6 +143,20 @@ switch (llmProvider)
         throw new InvalidOperationException(
             $"Unknown Llm:Provider '{llmProvider}'. Valid values: mock, fail-mock, anthropic.");
 }
+// Phase 15.2 — survey-digest tier for pattern analysis (Haiku by default,
+// bound from Llm:Survey). Follows the provider choice above: real Claude
+// when Llm:Provider=anthropic with a key, otherwise the deterministic mock
+// so the survey → cluster pipeline still runs offline.
+builder.Services.Configure<Astra.Api.Llm.PatternAnalysis.SurveyOptions>(builder.Configuration.GetSection("Llm:Survey"));
+builder.Services.AddHttpClient("anthropic-survey", c => c.Timeout = TimeSpan.FromMinutes(3));
+if (llmProvider == "anthropic" && !string.IsNullOrWhiteSpace(builder.Configuration.GetValue<string>("Llm:Anthropic:ApiKey")))
+    builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.ISurveyProvider, Astra.Api.Llm.PatternAnalysis.AnthropicSurveyProvider>();
+else
+    builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.ISurveyProvider, Astra.Api.Llm.PatternAnalysis.MockSurveyProvider>();
+builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.SurveyStage>();
+// Resumes RESUMABLE pattern-analysis runs after boot (Llm:PatternAnalysis:AutoResume, default true).
+builder.Services.AddHostedService<Astra.Api.Llm.PatternAnalysis.PatternAnalysisResumeService>();
+
 // Task #178 — runtime LLM key management. Remember the boot-time key so a
 // database override can be reverted, and make sure the plain HttpClient
 // factory exists even when the provider booted in mock fallback (the
@@ -150,6 +164,17 @@ switch (llmProvider)
 builder.Services.AddSingleton(new LlmKeyState(
     builder.Configuration.GetValue<string>("Llm:Anthropic:ApiKey") ?? ""));
 builder.Services.AddHttpClient();
+// Phase 15.2 — process-wide adaptive concurrency gate for every Anthropic
+// call. Honours Retry-After / anthropic-ratelimit-* headers so bulk passes
+// can run at 32-wide without turning a rate-limit wall into wasted
+// generations. Bound from Llm:Anthropic:RateLimit.
+builder.Services.Configure<Astra.Api.Llm.AnthropicRateLimiterOptions>(
+    builder.Configuration.GetSection("Llm:Anthropic:RateLimit"));
+builder.Services.AddSingleton<Astra.Api.Llm.AnthropicRateLimiter>();
+// Phase 15.2 — structured, multi-subscriber run-event bus (ring buffer +
+// fan-out). DocRunLogger is now a string façade over it, so the existing
+// docs SSE route keeps working while new surfaces read typed events.
+builder.Services.AddSingleton<Astra.Api.Runs.RunEventBus>();
 // Phase 7.0 — structured cross-routine context builder. Used by
 // ExtractionPipeline to attach a neighbourhood to every ExtractionRequest.
 // Backs the per-source-version routine index the neighbourhood
@@ -732,6 +757,83 @@ using (var scope = app.Services.CreateScope())
             UPDATE archetype_proposals SET source_schema = 'unibasic' WHERE source_schema = '';
             """);
 
+        // Phase 15.2 — prompt-cache telemetry on llm_calls. The provider has
+        // reported cache_read/cache_creation tokens since Phase 7.0 but the
+        // audit row never stored them, so hit-rate and the real (tiered,
+        // cache-discounted) cost were invisible.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS cache_read_tokens integer NOT NULL DEFAULT 0;
+            ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS cache_creation_tokens integer NOT NULL DEFAULT 0;
+            """);
+
+        // Phase 15.2 — per-routine survey digests (the cheap clustering
+        // input that replaces full extraction in Pattern Analysis). Column
+        // types mirror the EF model in AppDbContext.OnModelCreating.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS routine_digests (
+                id                       uuid         PRIMARY KEY,
+                subroutine_id            uuid         NOT NULL REFERENCES subroutines(id) ON DELETE CASCADE,
+                source_version_id        uuid         NOT NULL,
+                source                   varchar(16)  NOT NULL,
+                purpose                  text         NOT NULL,
+                archetype_hint           varchar(128) NULL,
+                claim_kinds_json         jsonb        NOT NULL,
+                data_access_json         jsonb        NULL,
+                modernization_flags_json jsonb        NULL,
+                complexity               varchar(16)  NULL,
+                structural_hash          varchar(64)  NULL,
+                normalized_token_count   integer      NOT NULL DEFAULT 0,
+                exemplar_subroutine_id   uuid         NULL,
+                prompt_version           varchar(32)  NULL,
+                model                    varchar(128) NULL,
+                llm_call_id              uuid         NULL REFERENCES llm_calls(id) ON DELETE SET NULL,
+                created_at               timestamptz  NOT NULL,
+                updated_at               timestamptz  NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_routine_digests_subroutine ON routine_digests (subroutine_id);
+            CREATE INDEX IF NOT EXISTS ix_routine_digests_version ON routine_digests (source_version_id);
+            CREATE INDEX IF NOT EXISTS ix_routine_digests_version_hash ON routine_digests (source_version_id, structural_hash);
+            """);
+
+        // Phase 15.2 — durable pattern-analysis runs: heartbeat, cancel flag,
+        // per-stage checkpoint (see PatternAnalysisOrchestrator).
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE pattern_analysis_runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz NULL;
+            ALTER TABLE pattern_analysis_runs ADD COLUMN IF NOT EXISTS cancel_requested boolean NOT NULL DEFAULT false;
+            ALTER TABLE pattern_analysis_runs ADD COLUMN IF NOT EXISTS checkpoint_json jsonb NULL;
+            """);
+
+        // Phase 15.1 — a spec can now be scaffolded onto several target
+        // stacks independently instead of the second generation silently
+        // overwriting the first. Widen the uniqueness constraint from
+        // (spec) to (spec, target_platform): find whatever unique index
+        // currently covers spec_id alone (its EF-generated name isn't
+        // guaranteed) and replace it, rather than guessing the name.
+        await db.Database.ExecuteSqlRawAsync("""
+            DO $$
+            DECLARE
+                old_index_name text;
+            BEGIN
+                SELECT ix.relname INTO old_index_name
+                FROM pg_index i
+                JOIN pg_class ix ON ix.oid = i.indexrelid
+                JOIN pg_class t ON t.oid = i.indrelid
+                WHERE t.relname = 'scaffolds'
+                  AND i.indisunique
+                  AND i.indkey = (SELECT array_agg(attnum ORDER BY attnum)
+                                   FROM pg_attribute
+                                   WHERE attrelid = t.oid AND attname = 'spec_id')::int2[]
+                LIMIT 1;
+
+                IF old_index_name IS NOT NULL THEN
+                    EXECUTE format('DROP INDEX IF EXISTS %I', old_index_name);
+                END IF;
+            END $$;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_scaffolds_spec_id_target_platform
+              ON scaffolds (spec_id, target_platform);
+            """);
+
         // Phase 14.0 — merge any already-approved (PRODUCTION) archetype
         // proposals into the live in-memory registry, so archetypes
         // authored inside the app survive a restart without ever having
@@ -877,12 +979,16 @@ using (var scope = app.Services.CreateScope())
         {
             var bootTime = DateTimeOffset.UtcNow;
             const string orphanNote = "Orphaned: the API restarted while this run was in flight.";
+            // Phase 15.2 — pattern-analysis runs are resumable: every digest
+            // already written survives, so an interrupted run becomes
+            // RESUMABLE (and PatternAnalysisResumeService picks it up) rather
+            // than FAILED with hours of work discarded.
             var patternRuns = await db.PatternAnalysisRuns
                 .Where(r => r.State == "QUEUED" || r.State == "RUNNING")
                 .ExecuteUpdateAsync(u => u
-                    .SetProperty(r => r.State, "FAILED")
-                    .SetProperty(r => r.ErrorSummary, orphanNote)
-                    .SetProperty(r => r.CompletedAt, bootTime));
+                    .SetProperty(r => r.State, "RESUMABLE")
+                    .SetProperty(r => r.Summary, "Interrupted by an API restart — completed digests are kept; resume to continue.")
+                    .SetProperty(r => r.CancelRequested, false));
             var docRuns = await db.DocGenerationRuns
                 .Where(r => r.State == "QUEUED" || r.State == "RUNNING")
                 .ExecuteUpdateAsync(u => u
@@ -898,7 +1004,7 @@ using (var scope = app.Services.CreateScope())
             if (patternRuns + docRuns + harmonisationRuns > 0)
             {
                 Log.Information(
-                    "Orphaned-run cleanup: marked FAILED — {Pattern} pattern-analysis, {Docs} docs, {Harm} harmonisation run(s)",
+                    "Orphaned-run cleanup: {Pattern} pattern-analysis run(s) → RESUMABLE; marked FAILED — {Docs} docs, {Harm} harmonisation run(s)",
                     patternRuns, docRuns, harmonisationRuns);
             }
 

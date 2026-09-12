@@ -373,6 +373,13 @@ services:
       Llm__Anthropic__Model: "${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}"
       Llm__Anthropic__BaseUrl: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
       Llm__Anthropic__MaxOutputTokens: "${ANTHROPIC_MAX_OUTPUT_TOKENS:-16384}"
+      # Phase 15.2 — pattern-analysis survey tier + process-wide rate limiter.
+      # Survey digests run on Haiku, 32-wide, gated by the adaptive limiter
+      # (halves on 429 / near-exhausted windows, grows back on success).
+      Llm__Survey__Model: "${SURVEY_MODEL:-claude-haiku-4-5-20251001}"
+      Llm__Survey__Concurrency: "${SURVEY_CONCURRENCY:-32}"
+      Llm__Anthropic__RateLimit__MaxInFlight: "${ANTHROPIC_MAX_IN_FLIGHT:-32}"
+      Llm__PatternAnalysis__AutoResume: "${PATTERN_ANALYSIS_AUTO_RESUME:-true}"
       # Phase 11.0 — documentation generation (per ADR-038). Generator
       # rides the same Llm__Provider abstraction (mock | anthropic) with
       # per-tier model overrides so the long-tail routine-summary stage
