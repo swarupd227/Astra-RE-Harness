@@ -35,6 +35,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<PatternCluster> PatternClusters => Set<PatternCluster>();
     public DbSet<ArchetypeProposal> ArchetypeProposals => Set<ArchetypeProposal>();
     public DbSet<RoutineDigest> RoutineDigests => Set<RoutineDigest>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -164,6 +166,45 @@ public sealed class AppDbContext : DbContext
             b.HasIndex(x => x.SubroutineId).IsUnique();
             b.HasIndex(x => x.SourceVersionId);
             b.HasIndex(x => new { x.SourceVersionId, x.StructuralHash });
+        });
+
+        modelBuilder.Entity<Conversation>(b =>
+        {
+            b.ToTable("conversations");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id");
+            b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(24).IsRequired();
+            b.Property(x => x.Title).HasColumnName("title").HasMaxLength(240).IsRequired();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.Property(x => x.LastMessageAt).HasColumnName("last_message_at");
+            b.Property(x => x.LastMessagePreview).HasColumnName("last_message_preview").HasMaxLength(280);
+            b.Property(x => x.MessageCount).HasColumnName("message_count");
+            b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.CorpusId, x.Kind });
+        });
+
+        modelBuilder.Entity<ConversationMessage>(b =>
+        {
+            b.ToTable("conversation_messages");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            b.Property(x => x.Role).HasColumnName("role").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Agent).HasColumnName("agent").HasMaxLength(32);
+            b.Property(x => x.Persona).HasColumnName("persona").HasMaxLength(32);
+            b.Property(x => x.AuthorDisplay).HasColumnName("author_display").HasMaxLength(160);
+            b.Property(x => x.Markdown).HasColumnName("markdown").IsRequired();
+            b.Property(x => x.ArtifactsJson).HasColumnName("artifacts_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.SuggestionsJson).HasColumnName("suggestions_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.ToolCallsJson).HasColumnName("tool_calls_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.PendingActionJson).HasColumnName("pending_action_json").HasColumnType("jsonb");
+            b.Property(x => x.LlmTurnsJson).HasColumnName("llm_turns_json").HasColumnType("jsonb");
+            b.Property(x => x.RunId).HasColumnName("run_id");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasOne(x => x.Conversation).WithMany().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.ConversationId, x.CreatedAt });
         });
 
         modelBuilder.Entity<LlmCall>(b =>

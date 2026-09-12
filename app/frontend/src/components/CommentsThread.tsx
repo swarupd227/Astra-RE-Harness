@@ -5,7 +5,7 @@ import { ApiError, commentsApi, getPersona, type CommentItem } from '@/lib/api';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { ErrorBlock } from '@/components/ErrorBlock';
-import type { Persona } from '@/tokens/tokens';
+import type { Persona } from '@/lib/persona';
 
 const PERSONAS: Persona[] = ['engineer', 'sme', 'observer', 'admin'];
 

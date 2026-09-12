@@ -1,11 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://rsms.me/" />
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-    <title>Astra RE Harness</title>
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0B0B0C" />
+    <title>Astra · by Artizent</title>
+    <script>
+      // Stamp the persisted theme before first paint so a light-mode user
+      // never sees a dark flash (ThemeProvider takes over once React mounts).
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem('astra.theme') === 'light' ? 'light' : 'dark';
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

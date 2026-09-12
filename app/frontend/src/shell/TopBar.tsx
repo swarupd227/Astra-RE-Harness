@@ -1,16 +1,25 @@
+import { Fragment, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CircleHelp, Menu } from 'lucide-react';
+import { ChevronRight, CircleHelp, Menu, Moon, Sun } from 'lucide-react';
 import { Badge } from '@/components/Badge';
 import { CommandBarTrigger } from '@/components/CommandBarTrigger';
 import { ApiLatencyIndicator } from '@/components/ApiLatencyIndicator';
+import { LogoLockup } from '@/components/Logo';
 import { PersonaMenu } from '@/shell/PersonaMenu';
 import { Tooltip } from '@/components/Tooltip';
+import { getRouteMeta } from '@/shell/routeMeta';
 import { api } from '@/lib/api';
+import { useTheme } from '@/theme/ThemeProvider';
 
-// ACE-style TopBar — light surface, breadcrumb on the left, status pills
-// + persona switcher on the right. Sits above a thin brand-stripe (the
-// orange-to-indigo identity sliver).
+const iconButton =
+  'flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-raised hover:text-ink-primary';
+
+/**
+ * Glass top bar: lockup, breadcrumb, ⌘K, status pills, theme toggle, persona.
+ * Lives in the dark shell for every route — the breadcrumb for a legacy
+ * (light-wrapped) page is still drawn here.
+ */
 export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOpenNav: () => void }) {
   const provider = useQuery({
     queryKey: ['provider-settings'],
@@ -18,65 +27,110 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
   });
 
   const location = useLocation();
-  const breadcrumb = inferBreadcrumb(location.pathname);
+  const meta = getRouteMeta(location.pathname);
+  const { theme, toggleTheme } = useTheme();
   const providerName = provider.data?.provider?.name;
   const providerModel = provider.data?.provider?.model;
 
+  useEffect(() => {
+    document.title = `${meta.title} · Astra`;
+  }, [meta.title]);
+
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+
   return (
-    <header className="sticky top-0 z-30 bg-raised">
-      {/* Brand stripe — orange → amber → indigo identity sliver */}
-      <div aria-hidden className="h-[2px] w-full bg-brand-stripe" />
-      <div className="flex h-12 items-center gap-3 border-b border-border-subtle bg-raised px-5">
+    <header className="glass sticky top-0 z-30 shrink-0">
+      <div className="flex h-14 items-center gap-3 px-3 md:px-4">
         <button
           type="button"
           onClick={onOpenNav}
-          className="-ml-1 flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent md:hidden"
+          className={`${iconButton} md:hidden`}
           aria-label="Open navigation menu"
           data-testid="mobile-nav-trigger"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
-        <div className="flex min-w-0 items-center gap-2 text-sm">
-          <Link
-            to="/"
-            className="font-semibold text-ink-secondary transition-colors duration-fast hover:text-ink-primary"
-          >
-            Astra
-          </Link>
-          <span className="text-ink-tertiary">/</span>
-          <span className="truncate font-semibold text-ink-primary" data-testid="breadcrumb-current">
-            {breadcrumb}
-          </span>
-        </div>
 
-        <div className="ml-2 hidden xl:block">
+        <Link
+          to="/"
+          className="shrink-0 rounded-md transition-opacity duration-fast hover:opacity-80"
+          aria-label="Astra — Mission Control"
+        >
+          <LogoLockup size="sm" />
+        </Link>
+
+        <span aria-hidden="true" className="hidden h-5 w-px bg-line-subtle sm:block" />
+
+        <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
+          <ol className="flex min-w-0 items-center gap-1 text-caption text-ink-secondary">
+            {meta.crumbs.map((crumb, idx) => {
+              const last = idx === meta.crumbs.length - 1;
+              return (
+                <Fragment key={`${crumb.label}-${idx}`}>
+                  {idx > 0 && (
+                    <li aria-hidden="true" className="shrink-0">
+                      <ChevronRight className="h-3.5 w-3.5 text-ink-tertiary" />
+                    </li>
+                  )}
+                  <li className={last ? 'min-w-0' : 'hidden min-w-0 sm:block'}>
+                    {last || !crumb.href ? (
+                      <span
+                        className={last ? 'block truncate font-medium text-ink-primary' : 'block truncate'}
+                        aria-current={last ? 'page' : undefined}
+                        data-testid={last ? 'breadcrumb-current' : undefined}
+                      >
+                        {crumb.label}
+                      </span>
+                    ) : (
+                      <Link
+                        to={crumb.href}
+                        className="block truncate rounded-sm transition-colors duration-fast hover:text-ink-primary"
+                      >
+                        {crumb.label}
+                      </Link>
+                    )}
+                  </li>
+                </Fragment>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <CommandBarTrigger />
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <ApiLatencyIndicator />
+          <div className="hidden lg:block">
+            <ApiLatencyIndicator />
+          </div>
           {provider.data && (
-            <Tooltip
-              content={`${providerName ?? '—'} · ${providerModel ?? '—'}`}
-              side="bottom"
-            >
+            <Tooltip content={`${providerName ?? '—'} · ${providerModel ?? '—'}`} side="bottom">
               <span
-                className="pill bg-brand-50 text-brand-700 ring-1 ring-brand-300/40 font-mono"
+                className="pill hidden bg-volt/10 font-mono text-volt-ink ring-1 ring-volt/25 sm:inline-flex"
                 data-testid="topbar-provider-pill"
               >
                 {labelForProvider(providerName, providerModel)}
               </span>
             </Tooltip>
           )}
-          {import.meta.env.DEV && <Badge tone="neutral" className="font-mono">DEV</Badge>}
+          {import.meta.env.DEV && <Badge tone="neutral" className="hidden font-mono md:inline-flex">DEV</Badge>}
           <Tooltip content="Keyboard shortcuts (?)">
+            <button type="button" onClick={onOpenHelp} className={iconButton} aria-label="Open keyboard help">
+              <CircleHelp className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </Tooltip>
+          <Tooltip content={`Switch to ${nextTheme} theme`}>
             <button
               type="button"
-              onClick={onOpenHelp}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent"
-              aria-label="Open keyboard help"
+              onClick={toggleTheme}
+              className={iconButton}
+              aria-label={`Switch to ${nextTheme} theme`}
+              aria-pressed={theme === 'light'}
+              data-testid="theme-toggle"
             >
-              <CircleHelp className="h-4 w-4" aria-hidden="true" />
+              {theme === 'dark' ? (
+                <Sun className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Moon className="h-4 w-4" aria-hidden="true" />
+              )}
             </button>
           </Tooltip>
           <PersonaMenu />
@@ -93,62 +147,4 @@ function labelForProvider(name?: string, model?: string): string {
   if (name === 'fail-mock') return 'mock · chaos';
   if (name === 'openai_compatible' || name === 'openai-compatible') return 'OpenAI-compatible';
   return model ? `${name} · ${model}` : name;
-}
-
-// Cheap heuristic — map the current path to a friendly screen name.
-// (We could read this from a route-level meta field, but inferring keeps
-// every route definition free of UI concerns.)
-function inferBreadcrumb(pathname: string): string {
-  if (pathname === '/') return 'Home';
-  if (pathname === '/system') return 'System';
-  if (pathname.startsWith('/projects')) {
-    if (pathname.match(/\/projects\/new$/)) return 'New project';
-    if (pathname.match(/\/projects\/[^/]+$/)) return 'Project';
-    return 'Projects';
-  }
-  if (pathname.startsWith('/corpora/')) {
-    if (pathname.endsWith('/dependency-graph')) return 'Dependency graph';
-    if (pathname.endsWith('/migration-plan')) return 'Migration plan';
-    return 'Project';
-  }
-  if (pathname === '/corpora') return 'Projects';
-  if (pathname.startsWith('/subroutines/')) {
-    if (pathname.endsWith('/extract')) return 'Extract spec';
-    if (pathname.endsWith('/spec')) return 'Draft spec';
-    if (pathname.endsWith('/review')) return 'Spec review';
-    return 'Routine';
-  }
-  if (pathname === '/subroutines') return 'Routines';
-  if (pathname.startsWith('/specs/')) {
-    if (pathname.endsWith('/audit')) return 'Audit trail';
-    if (pathname.endsWith('/scaffold')) return 'Generate scaffold';
-    return 'Spec';
-  }
-  if (pathname.startsWith('/scaffolds/')) {
-    if (pathname.endsWith('/validation')) return 'Validation';
-    return 'Scaffold artifact';
-  }
-  if (pathname === '/my-reviews') return 'My reviews';
-  if (pathname === '/comments') return 'Comments';
-  if (pathname === '/compliance') return 'Compliance feed';
-  if (pathname === '/platform') return 'Platform overview';
-  if (pathname.startsWith('/platform/')) {
-    const leaf = pathname.split('/').pop() ?? '';
-    return prettyPlatformLeaf(leaf);
-  }
-  return 'Astra';
-}
-
-function prettyPlatformLeaf(leaf: string): string {
-  switch (leaf) {
-    case 'portfolio':      return 'Portfolio dashboard';
-    case 'golden-dataset': return 'Golden Dataset';
-    case 'prompts':        return 'Prompt Catalog';
-    case 'harmonisation':  return 'Harmonisation';
-    case 'languages':      return 'Languages';
-    case 'validation':     return 'Validation Policy';
-    case 'signatures':     return 'Signature Health';
-    case 'roles':          return 'Roles & Permissions';
-    default:               return leaf.charAt(0).toUpperCase() + leaf.slice(1);
-  }
 }

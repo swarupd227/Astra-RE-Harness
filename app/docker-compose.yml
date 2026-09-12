@@ -380,6 +380,8 @@ services:
       Llm__Survey__Concurrency: "${SURVEY_CONCURRENCY:-32}"
       Llm__Anthropic__RateLimit__MaxInFlight: "${ANTHROPIC_MAX_IN_FLIGHT:-32}"
       Llm__PatternAnalysis__AutoResume: "${PATTERN_ANALYSIS_AUTO_RESUME:-true}"
+      # WS2 — the Workspace orchestrator ("Astra"). Empty = Llm__Anthropic__Model.
+      Llm__Copilot__Model: "${COPILOT_MODEL:-}"
       # Phase 11.0 — documentation generation (per ADR-038). Generator
       # rides the same Llm__Provider abstraction (mock | anthropic) with
       # per-tier model overrides so the long-tail routine-summary stage

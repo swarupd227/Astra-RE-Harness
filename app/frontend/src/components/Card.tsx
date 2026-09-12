@@ -7,14 +7,15 @@ export function Card({
   interactive,
   ...rest
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode; interactive?: boolean }) {
-  // Uses the shared `.card` utility (defined in index.css) so every
-  // card across the app shares one source of truth for surface, border,
-  // radius and shadow. `interactive` adds the lift-on-hover affordance.
+  // Uses the shared `.card` utility (defined in index.css) so every card
+  // across the app shares one source of truth for surface, border, radius
+  // and shadow — all theme tokens, so it reads in both themes.
+  // `interactive` adds the lift-on-hover affordance.
   return (
     <div
       className={clsx(
         'card transition-all duration-medium',
-        interactive && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-e2',
+        interactive && 'cursor-pointer hover:-translate-y-0.5 hover:border-line hover:shadow-e2',
         className,
       )}
       {...rest}
@@ -52,7 +53,7 @@ export function CardHeader({
   return (
     <div
       className={clsx(
-        'flex items-start justify-between gap-4 border-b border-border-subtle p-6',
+        'flex items-start justify-between gap-4 border-b border-line-subtle p-6',
         className,
       )}
     >

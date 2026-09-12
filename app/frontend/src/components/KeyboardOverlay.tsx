@@ -15,15 +15,15 @@ const SECTIONS: Section[] = [
     title: 'Global',
     items: [
       { keys: ['?'], label: 'Show this keyboard help' },
-      { keys: ['⌘', 'K'], label: 'Open command bar' },
+      { keys: ['⌘', 'K'], label: 'Ask Astra / open the command palette' },
       { keys: ['Esc'], label: 'Close any modal or overlay' },
     ],
   },
   {
     title: 'Navigation',
     items: [
-      { keys: ['g', 'h'], label: 'Go to home' },
-      { keys: ['g', 's'], label: 'Go to system status' },
+      { keys: ['g', 'h'], label: 'Go to Ask Astra (Mission Control)' },
+      { keys: ['g', 's'], label: 'Go to system health' },
     ],
   },
   {
@@ -65,13 +65,13 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
       onClick={onClose}
     >
       {/* scrim */}
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       {/* panel */}
       <div
-        className="relative max-h-[85vh] w-[640px] max-w-[92vw] overflow-y-auto rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative max-h-[85vh] w-[640px] max-w-[92vw] overflow-y-auto rounded-lg border border-line bg-raised text-ink-primary shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div>
             <h2 id="keyboard-help-title" className="text-h-md font-semibold text-ink-primary">
               Keyboard shortcuts
@@ -90,13 +90,13 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
           </button>
         </header>
 
-        <div className="px-6 py-4 space-y-6">
+        <div className="space-y-6 px-6 py-4">
           {SECTIONS.map((section) => (
             <section key={section.title}>
               <h3 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
                 {section.title}
               </h3>
-              <ul className="divide-y divide-border-subtle">
+              <ul className="divide-y divide-line-subtle">
                 {section.items.map((item) => {
                   const available = item.available ?? true;
                   return (
@@ -115,8 +115,8 @@ export function KeyboardOverlay({ open, onClose }: { open: boolean; onClose: () 
                             className={
                               'rounded border px-1.5 py-0.5 font-mono text-caption shadow-e1 ' +
                               (available
-                                ? 'border-border bg-canvas text-ink-primary'
-                                : 'border-border-subtle bg-canvas text-ink-tertiary')
+                                ? 'border-line bg-sunken text-ink-primary'
+                                : 'border-line-subtle bg-sunken text-ink-tertiary')
                             }
                           >
                             {k}

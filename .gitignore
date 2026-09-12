@@ -23,3 +23,6 @@ app/e2e/demo-output/**/*.pptx
 app/e2e/demo-output/**/*.pdf
 app/e2e/demo-output/**/*.jpg
 app/e2e/demo-output/**/*.png
+
+# TypeScript incremental build state (tsc -b)
+app/frontend/tsconfig.tsbuildinfo

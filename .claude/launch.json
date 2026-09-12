@@ -6,6 +6,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "app/frontend"],
       "port": 5173
+    },
+    {
+      "name": "frontend-localapi",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd app\\frontend && npx vite --mode localapi --host localhost --port 35173 --strictPort"],
+      "port": 35173,
+      "url": "http://localhost:35173"
     }
   ]
 }

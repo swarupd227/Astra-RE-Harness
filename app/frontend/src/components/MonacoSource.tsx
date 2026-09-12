@@ -1,7 +1,7 @@
 import Editor, { type Monaco } from '@monaco-editor/react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { editor } from 'monaco-editor';
-import { tokens } from '@/tokens/tokens';
+import { themeHex, type ThemeName } from '@/theme';
 
 const FORTRAN_KEYWORDS = [
   'SUBROUTINE',
@@ -46,6 +46,66 @@ const FORTRAN_KEYWORDS = [
   'CONTINUE',
 ];
 
+export type MonacoTheme = 'astra-light' | 'astra-dark';
+
+/** Monaco wants bare hex (no `#`) in token rules. */
+function hx(name: Parameters<typeof themeHex>[0], theme: ThemeName): string {
+  return themeHex(name, theme).replace('#', '');
+}
+
+function defineThemes(monaco: Monaco) {
+  // astra-light — what the legacy (light-wrapped) pages render with.
+  monaco.editor.defineTheme('astra-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: hx('ink-tertiary', 'light'), fontStyle: 'italic' },
+      { token: 'metatag', foreground: hx('status-warn', 'light') },
+      { token: 'keyword', foreground: hx('ink-link', 'light'), fontStyle: 'bold' },
+      { token: 'number', foreground: hx('status-ok', 'light') },
+      { token: 'number.float', foreground: hx('status-ok', 'light') },
+      { token: 'string', foreground: hx('status-fail', 'light') },
+      { token: 'operator', foreground: hx('ink-secondary', 'light') },
+      { token: 'identifier', foreground: hx('ink-primary', 'light') },
+    ],
+    colors: {
+      'editor.background': themeHex('raised', 'light'),
+      'editor.foreground': themeHex('ink-primary', 'light'),
+      'editor.lineHighlightBackground': themeHex('sunken', 'light'),
+      'editorLineNumber.foreground': themeHex('ink-tertiary', 'light'),
+      'editorLineNumber.activeForeground': themeHex('ink-primary', 'light'),
+      'editor.selectionBackground': themeHex('accent-muted', 'light'),
+      'editorIndentGuide.background': themeHex('line-subtle', 'light'),
+    },
+  });
+
+  // astra-dark — for source rendered inside the dark shell (workspace cards).
+  monaco.editor.defineTheme('astra-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: hx('ink-tertiary', 'dark'), fontStyle: 'italic' },
+      { token: 'metatag', foreground: hx('status-warn', 'dark') },
+      { token: 'keyword', foreground: hx('status-info', 'dark'), fontStyle: 'bold' },
+      { token: 'number', foreground: hx('status-ok', 'dark') },
+      { token: 'number.float', foreground: hx('status-ok', 'dark') },
+      { token: 'string', foreground: hx('amber-ink', 'dark') },
+      { token: 'operator', foreground: hx('ink-secondary', 'dark') },
+      { token: 'identifier', foreground: hx('ink-primary', 'dark') },
+    ],
+    colors: {
+      'editor.background': themeHex('codebg', 'dark'),
+      'editor.foreground': themeHex('ink-primary', 'dark'),
+      'editor.lineHighlightBackground': themeHex('raised', 'dark'),
+      'editorLineNumber.foreground': themeHex('ink-tertiary', 'dark'),
+      'editorLineNumber.activeForeground': themeHex('ink-primary', 'dark'),
+      'editor.selectionBackground': `${themeHex('volt', 'dark')}40`,
+      'editorIndentGuide.background': themeHex('line-subtle', 'dark'),
+      'editorGutter.background': themeHex('codebg', 'dark'),
+    },
+  });
+}
+
 function registerFortran(monaco: Monaco) {
   if (monaco.languages.getLanguages().some((l) => l.id === 'fortran-fixed')) return;
 
@@ -81,29 +141,7 @@ function registerFortran(monaco: Monaco) {
     },
   });
 
-  monaco.editor.defineTheme('astra-light', {
-    base: 'vs',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '7A8497', fontStyle: 'italic' },
-      { token: 'metatag', foreground: 'B9520B' },
-      { token: 'keyword', foreground: '1F4FA8', fontStyle: 'bold' },
-      { token: 'number', foreground: '0E7C66' },
-      { token: 'number.float', foreground: '0E7C66' },
-      { token: 'string', foreground: 'A8201A' },
-      { token: 'operator', foreground: '475063' },
-      { token: 'identifier', foreground: '101728' },
-    ],
-    colors: {
-      'editor.background': '#FFFFFF',
-      'editor.foreground': tokens.ink.primary,
-      'editor.lineHighlightBackground': '#F1F1ED',
-      'editorLineNumber.foreground': '#7A8497',
-      'editorLineNumber.activeForeground': '#101728',
-      'editor.selectionBackground': '#FBE7D6',
-      'editorIndentGuide.background': '#E4E6EB',
-    },
-  });
+  defineThemes(monaco);
 }
 
 export type Citation = { lineStart: number; lineEnd: number; tone?: 'accent' };
@@ -119,6 +157,7 @@ export function MonacoSource({
   todoMarkers = [],
   highlightLine,
   className,
+  theme = 'astra-light',
 }: {
   value: string;
   height?: number | string;
@@ -127,6 +166,12 @@ export function MonacoSource({
   todoMarkers?: TodoMarker[];
   highlightLine?: number;
   className?: string;
+  /**
+   * Monaco themes are global per page. Legacy pages live in the light
+   * wrapper, so the default stays light; pass `astra-dark` when rendering
+   * inside the dark shell (workspace artifact cards).
+   */
+  theme?: MonacoTheme;
 }) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -179,13 +224,18 @@ export function MonacoSource({
       editorRef.current = ed;
       monacoRef.current = monaco;
       registerFortran(monaco);
-      monaco.editor.setTheme('astra-light');
+      monaco.editor.setTheme(theme);
       decorationsRef.current = ed.createDecorationsCollection([]);
       applyDecorations();
       if (highlightLine) ed.revealLineInCenter(highlightLine);
     },
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Follow a theme prop change after mount.
+  useEffect(() => {
+    monacoRef.current?.editor.setTheme(theme);
+  }, [theme]);
 
   // Reveal whenever highlightLine changes (e.g., on each citation_pulse).
   // After Monaco's smooth-scroll settles (~150 ms), briefly flash the

@@ -157,6 +157,27 @@ builder.Services.AddSingleton<Astra.Api.Llm.PatternAnalysis.SurveyStage>();
 // Resumes RESUMABLE pattern-analysis runs after boot (Llm:PatternAnalysis:AutoResume, default true).
 builder.Services.AddHostedService<Astra.Api.Llm.PatternAnalysis.PatternAnalysisResumeService>();
 
+// WS2 — the conversation spine + Astra orchestrator. Threads/messages are
+// Scoped (own AppDbContext); the orchestrator loop runs inside the SSE
+// request so it is Scoped too and calls the same Scoped pipelines the REST
+// endpoints use. Background runs (extract/scaffold/gate) and the Narrator
+// are singletons that create their own scope per unit of work, copying the
+// requesting persona in. The model behind the loop is Anthropic when a key
+// is configured, else a deterministic keyword router so the Workspace works
+// offline and in e2e.
+builder.Services.Configure<Astra.Api.Copilot.CopilotOptions>(builder.Configuration.GetSection("Llm:Copilot"));
+builder.Services.AddHttpClient("anthropic-copilot", c => c.Timeout = TimeSpan.FromMinutes(5));
+if (llmProvider == "anthropic" && !string.IsNullOrWhiteSpace(builder.Configuration.GetValue<string>("Llm:Anthropic:ApiKey")))
+    builder.Services.AddSingleton<Astra.Api.Copilot.ICopilotBrain, Astra.Api.Copilot.AnthropicCopilotBrain>();
+else
+    builder.Services.AddSingleton<Astra.Api.Copilot.ICopilotBrain, Astra.Api.Copilot.MockCopilotBrain>();
+builder.Services.AddScoped<Astra.Api.Conversations.ConversationService>();
+builder.Services.AddScoped<Astra.Api.Specs.SpecReviewService>();
+builder.Services.AddScoped<Astra.Api.Copilot.CopilotToolRegistry>();
+builder.Services.AddScoped<Astra.Api.Copilot.CopilotOrchestrator>();
+builder.Services.AddSingleton<Astra.Api.Copilot.BackgroundRunService>();
+builder.Services.AddSingleton<Astra.Api.Copilot.Narrator>();
+
 // Task #178 — runtime LLM key management. Remember the boot-time key so a
 // database override can be reverted, and make sure the plain HttpClient
 // factory exists even when the provider booted in mock fallback (the
@@ -443,7 +464,25 @@ using (var scope = app.Services.CreateScope())
     var seedVb6Demo = builder.Configuration.GetValue("Database:SeedVb6Demo", false);
     var seedMvcMusicStoreDemo = builder.Configuration.GetValue("Database:SeedMvcMusicStoreDemo", false);
 
-    if (canConnect && recreate)
+    // A brand-new database (no `subroutines` table, so no programme data)
+    // gets the schema built from the model the same way RecreateOnStartup
+    // does — otherwise the additive ALTER TABLE blocks below crash the
+    // first boot of any fresh environment with `relation "subroutines"
+    // does not exist`, and the only way in was the wipe-everything flag.
+    // The drop is deliberate even here: a half-booted earlier attempt can
+    // leave stray tables (platform_configs) that the model script would
+    // trip over, and nothing worth keeping can exist without the core.
+    var fresh = false;
+    if (canConnect && !recreate)
+    {
+        var probe = await db.Database
+            .SqlQueryRaw<bool>("""SELECT to_regclass('public.subroutines') IS NOT NULL AS "Value" """)
+            .ToListAsync();
+        fresh = probe.Count == 0 || !probe[0];
+        if (fresh) Log.Information("Fresh database detected — building the schema from the model");
+    }
+
+    if (canConnect && (recreate || fresh))
     {
         await db.Database.ExecuteSqlRawAsync("""
             DROP SCHEMA IF EXISTS public CASCADE;
@@ -454,7 +493,7 @@ using (var scope = app.Services.CreateScope())
             """);
         var script = db.Database.GenerateCreateScript();
         await db.Database.ExecuteSqlRawAsync(script);
-        Log.Information("Schema rebuilt from model ({Bytes} bytes of DDL)", script.Length);
+        Log.Information("Schema {Mode} from model ({Bytes} bytes of DDL)", recreate ? "rebuilt" : "created", script.Length);
     }
 
     // Phase #4 additive schema — small CREATE TABLE IF NOT EXISTS statements
@@ -820,9 +859,10 @@ using (var scope = app.Services.CreateScope())
                 JOIN pg_class t ON t.oid = i.indrelid
                 WHERE t.relname = 'scaffolds'
                   AND i.indisunique
-                  AND i.indkey = (SELECT array_agg(attnum ORDER BY attnum)
-                                   FROM pg_attribute
-                                   WHERE attrelid = t.oid AND attname = 'spec_id')::int2[]
+                  -- indkey is an int2vector; it only compares to int2[] after a cast.
+                  AND i.indkey::int2[] = (SELECT array_agg(attnum ORDER BY attnum)
+                                           FROM pg_attribute
+                                           WHERE attrelid = t.oid AND attname = 'spec_id')::int2[]
                 LIMIT 1;
 
                 IF old_index_name IS NOT NULL THEN
@@ -832,6 +872,41 @@ using (var scope = app.Services.CreateScope())
 
             CREATE UNIQUE INDEX IF NOT EXISTS ix_scaffolds_spec_id_target_platform
               ON scaffolds (spec_id, target_platform);
+            """);
+
+        // WS2 — conversation spine (one thread per programme + the global
+        // thread; agent/user turns with artifact cards, suggestions, tool
+        // calls and pending actions as jsonb). Mirrors AppDbContext.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id                    uuid         PRIMARY KEY,
+                corpus_id             uuid         NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                kind                  varchar(24)  NOT NULL,
+                title                 varchar(240) NOT NULL,
+                created_at            timestamptz  NOT NULL,
+                updated_at            timestamptz  NOT NULL,
+                last_message_at       timestamptz  NULL,
+                last_message_preview  varchar(280) NULL,
+                message_count         integer      NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS ix_conversations_corpus_kind ON conversations (corpus_id, kind);
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id                    uuid         PRIMARY KEY,
+                conversation_id       uuid         NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                role                  varchar(16)  NOT NULL,
+                agent                 varchar(32)  NULL,
+                persona               varchar(32)  NULL,
+                author_display        varchar(160) NULL,
+                markdown              text         NOT NULL,
+                artifacts_json        jsonb        NOT NULL DEFAULT '[]'::jsonb,
+                suggestions_json      jsonb        NOT NULL DEFAULT '[]'::jsonb,
+                tool_calls_json       jsonb        NOT NULL DEFAULT '[]'::jsonb,
+                pending_action_json   jsonb        NULL,
+                llm_turns_json        jsonb        NULL,
+                run_id                uuid         NULL,
+                created_at            timestamptz  NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_conversation_messages_conv_created ON conversation_messages (conversation_id, created_at);
             """);
 
         // Phase 14.0 — merge any already-approved (PRODUCTION) archetype
@@ -1073,6 +1148,7 @@ app.MapDocsEndpoints();
 app.MapProjectExportEndpoints();
 app.MapPatternAnalysisEndpoints();
 app.MapArchetypeAuthoringEndpoints();
+app.MapConversationEndpoints();
 
 app.MapGet("/", () => Results.Ok(new
 {

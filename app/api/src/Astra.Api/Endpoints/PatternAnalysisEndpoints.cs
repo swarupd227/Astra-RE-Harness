@@ -32,9 +32,25 @@ public static class PatternAnalysisEndpoints
             PatternAnalysisOrchestrator orchestrator,
             AppDbContext db,
             DevPersonaContext actor,
+            Astra.Api.Copilot.Narrator narrator,
+            Astra.Api.Conversations.ConversationService conversations,
             CancellationToken ct) =>
         {
             if (actor.Persona != Persona.Admin) return Forbid();
+
+            // WS2 — whichever way a run starts (this button or the copilot),
+            // the Discovery agent narrates it into the programme's thread.
+            async Task TrackAsync(Guid runId)
+            {
+                try
+                {
+                    var corpus = await db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
+                    var thread = await conversations.EnsureProgrammeAsync(id, ct);
+                    narrator.Track(runId, thread.Id, "discovery", "pattern-analysis", corpus?.Name ?? "programme", id,
+                        actor.Persona.ToString().ToLowerInvariant(), actor.DisplayName);
+                }
+                catch (Exception) { /* narration is best-effort */ }
+            }
 
             // One run per corpus at a time. Without this, a second click
             // starts a rival pass over the same routines; the two collide on
@@ -45,6 +61,7 @@ public static class PatternAnalysisEndpoints
                 .FirstOrDefaultAsync(ct);
             if (inFlight is not null)
             {
+                await TrackAsync(inFlight.Id);
                 return Results.Accepted($"/api/v1/pattern-analysis/runs/{inFlight.Id}", new
                 {
                     runId = inFlight.Id,
@@ -65,6 +82,7 @@ public static class PatternAnalysisEndpoints
                     .FirstOrDefaultAsync(ct);
                 if (resumable is not null && await orchestrator.ResumeAsync(resumable.Id))
                 {
+                    await TrackAsync(resumable.Id);
                     return Results.Accepted($"/api/v1/pattern-analysis/runs/{resumable.Id}", new
                     {
                         runId = resumable.Id,
@@ -77,6 +95,7 @@ public static class PatternAnalysisEndpoints
             try
             {
                 var runId = await orchestrator.StartAsync(id, force ?? false, actor.DisplayName, stages, ct);
+                await TrackAsync(runId);
                 return Results.Accepted($"/api/v1/pattern-analysis/runs/{runId}", new
                 {
                     runId,
@@ -148,28 +167,35 @@ public static class PatternAnalysisEndpoints
                 since = Math.Max(since, parsed);
             }
 
-            await foreach (var evt in bus.SubscribeAsync(runId, since, ct))
+            try
             {
-                var payload = JsonSerializer.Serialize(new
+                await foreach (var evt in bus.SubscribeAsync(runId, since, ct))
                 {
-                    message = evt.Message,
-                    agent = evt.Agent,
-                    stage = evt.Stage,
-                    type = evt.Type,
-                    seq = evt.Seq,
-                    ts = evt.Ts,
-                    data = evt.Data,
-                });
-                var frame = evt.Type == "log"
-                    ? $"id: {evt.Seq}\ndata: {payload}\n\n"
-                    : $"id: {evt.Seq}\nevent: {evt.Type}\ndata: {payload}\n\n";
-                await ctx.Response.WriteAsync(frame, ct);
-                await ctx.Response.Body.FlushAsync(ct);
+                    var payload = JsonSerializer.Serialize(new
+                    {
+                        message = evt.Message,
+                        agent = evt.Agent,
+                        stage = evt.Stage,
+                        type = evt.Type,
+                        seq = evt.Seq,
+                        ts = evt.Ts,
+                        data = evt.Data,
+                    });
+                    var frame = evt.Type == "log"
+                        ? $"id: {evt.Seq}\ndata: {payload}\n\n"
+                        : $"id: {evt.Seq}\nevent: {evt.Type}\ndata: {payload}\n\n";
+                    await ctx.Response.WriteAsync(frame, ct);
+                    await ctx.Response.Body.FlushAsync(ct);
+                }
+                if (!ct.IsCancellationRequested)
+                {
+                    await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
+                    await ctx.Response.Body.FlushAsync(ct);
+                }
             }
-            if (!ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                await ctx.Response.WriteAsync("event: done\ndata: {}\n\n", ct);
-                await ctx.Response.Body.FlushAsync(ct);
+                // The browser closed the stream — not an error, so no 500 in the log.
             }
         });
 

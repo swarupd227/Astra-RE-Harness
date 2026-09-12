@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TopBar } from '@/shell/TopBar';
 import { LeftNav } from '@/shell/LeftNav';
 import { MobileNav } from '@/shell/MobileNav';
-import { Breadcrumb } from '@/shell/Breadcrumb';
+import { LegacyView } from '@/shell/LegacyView';
+import { WorkspacePage } from '@/workspace/WorkspacePage';
+import { CommandPalette } from '@/copilot/CommandPalette';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CorporaPage } from '@/pages/CorporaPage';
@@ -39,117 +41,12 @@ import { DocsPage } from '@/pages/DocsPage';
 import { PatternAnalysisPage } from '@/pages/PatternAnalysisPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
 
-function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] {
-  // "Projects" is the user-facing word; URLs use /projects with /corpora kept
-  // as a legacy alias so old bookmarks + the e2e suite still resolve.
-  const projectsLink = { label: 'Projects', href: '/projects' };
-  if (pathname === '/') return [{ label: 'Home' }];
-  if (pathname === '/system') return [{ label: 'Home', href: '/' }, { label: 'System' }];
-  if (pathname === '/projects' || pathname === '/corpora')
-    return [{ label: 'Home', href: '/' }, { label: 'Projects' }];
-  if (pathname === '/projects/new' || pathname === '/corpora/new')
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'New project' },
-    ];
-  if (pathname.startsWith('/projects/') || pathname.startsWith('/corpora/'))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Project' },
-    ];
-  if (pathname.match(/^\/subroutines\/[^/]+\/extract$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Routine' },
-      { label: 'Extract' },
-    ];
-  if (pathname.match(/^\/subroutines\/[^/]+\/spec$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Routine' },
-      { label: 'Draft spec' },
-    ];
-  if (pathname.match(/^\/subroutines\/[^/]+\/review$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Routine' },
-      { label: 'Spec review' },
-    ];
-  if (pathname.match(/^\/specs\/[^/]+\/audit$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Spec' },
-      { label: 'Audit trail' },
-    ];
-  if (pathname.match(/^\/specs\/[^/]+\/scaffold$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Spec' },
-      { label: 'Generate scaffold' },
-    ];
-  if (pathname.match(/^\/scaffolds\/[^/]+\/validation$/))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Scaffold artifact' },
-      { label: 'Validation' },
-    ];
-  if (pathname.match(/^\/scaffolds\/[^/]+$/))
-    return [
-      { label: 'Home', href: '/' },
-      { label: 'Generated code', href: '/scaffolds' },
-      { label: 'Scaffold artifact' },
-    ];
-  if (pathname === '/scaffolds')
-    return [{ label: 'Home', href: '/' }, { label: 'Generated code' }];
-  if (pathname === '/my-reviews')
-    return [{ label: 'Home', href: '/' }, { label: 'My reviews' }];
-  if (pathname === '/comments')
-    return [{ label: 'Home', href: '/' }, { label: 'Comments' }];
-  if (pathname === '/compliance')
-    return [{ label: 'Home', href: '/' }, { label: 'Compliance' }];
-  if (pathname === '/platform')
-    return [{ label: 'Home', href: '/' }, { label: 'Platform' }];
-  if (pathname.startsWith('/platform/'))
-    return [
-      { label: 'Home', href: '/' },
-      { label: 'Platform', href: '/platform' },
-      { label: prettyPlatformLeaf(pathname) },
-    ];
-  if (pathname === '/subroutines')
-    return [{ label: 'Home', href: '/' }, { label: 'Routines' }];
-  if (pathname.startsWith('/subroutines/'))
-    return [
-      { label: 'Home', href: '/' },
-      projectsLink,
-      { label: 'Routine' },
-    ];
-  return [{ label: 'Home', href: '/' }];
-}
-
-function prettyPlatformLeaf(pathname: string): string {
-  const last = pathname.slice('/platform/'.length).split('/')[0] ?? '';
-  switch (last) {
-    case 'prompts':    return 'Prompt Catalog';
-    case 'languages':  return 'Languages';
-    case 'validation': return 'Validation Policy';
-    case 'signatures': return 'Signature Health';
-    case 'roles':      return 'Roles & Permissions';
-    default:           return last.charAt(0).toUpperCase() + last.slice(1);
-  }
-}
+/** Pre-v2 pages render inside the light wrapper until Increment 2 restyles them. */
+const legacy = (page: ReactElement) => <LegacyView>{page}</LegacyView>;
 
 export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const location = useLocation();
   const navigate = useNavigate();
 
   const openHelp = useCallback(() => setHelpOpen(true), []);
@@ -201,67 +98,70 @@ export function App() {
     };
   }, [navigate, openHelp]);
 
-  const crumbs = buildBreadcrumbs(location.pathname);
-
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col bg-canvas text-ink-primary">
       <a
         href="#main-content"
-        className="sr-only z-50 rounded-md bg-ink-primary px-4 py-2 text-body font-medium text-white focus:not-sr-only focus:absolute focus:left-3 focus:top-2 focus:outline-2 focus:outline-accent"
+        className="sr-only z-50 rounded-md bg-volt px-4 py-2 text-body font-medium text-on-volt focus:not-sr-only focus:absolute focus:left-3 focus:top-2"
       >
         Skip to content
       </a>
       <TopBar onOpenHelp={openHelp} onOpenNav={openMobileNav} />
       <MobileNav open={mobileNavOpen} onClose={closeMobileNav} />
-      <div className="flex flex-1">
+      <div className="flex min-h-0 flex-1">
         <LeftNav />
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 bg-canvas">
-          <Breadcrumb items={crumbs} />
+        {/* <main> is the scroll container: the Workspace fills it (h-full);
+            legacy pages scroll inside it under the fixed chrome. */}
+        <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas">
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/system" element={<SystemPage />} />
+            {/* The conversation is the primary surface. */}
+            <Route path="/" element={<WorkspacePage />} />
+            <Route path="/w/:conversationId" element={<WorkspacePage />} />
+            <Route path="/home" element={legacy(<HomePage />)} />
+            <Route path="/system" element={legacy(<SystemPage />)} />
             {/* User-facing routes use /projects; /corpora kept as legacy
                 aliases so existing e2e tests and bookmarks still resolve. */}
-            <Route path="/projects" element={<CorporaPage />} />
-            <Route path="/projects/new" element={<NewCorpusPage />} />
-            <Route path="/projects/:id" element={<CorpusDetailPage />} />
-            <Route path="/corpora" element={<CorporaPage />} />
-            <Route path="/corpora/new" element={<NewCorpusPage />} />
-            <Route path="/corpora/:id" element={<CorpusDetailPage />} />
-            <Route path="/corpora/:id/dependency-graph" element={<DependencyGraphPage />} />
-            <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
-            <Route path="/corpora/:id/docs" element={<DocsPage />} />
-            <Route path="/projects/:id/docs" element={<DocsPage />} />
-            <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />
-            <Route path="/projects/:id/pattern-analysis" element={<PatternAnalysisPage />} />
-            <Route path="/subroutines" element={<SubroutinesPage />} />
-            <Route path="/subroutines/:id" element={<SubroutineDetailPage />} />
-            <Route path="/subroutines/:id/extract" element={<LiveExtractionPage />} />
-            <Route path="/subroutines/:id/spec" element={<DraftSpecPage />} />
-            <Route path="/subroutines/:id/review" element={<SpecReviewPage />} />
-            <Route path="/specs/:id/audit" element={<AuditTrailPage />} />
-            <Route path="/specs/:id/scaffold" element={<LiveScaffoldPage />} />
-            <Route path="/scaffolds" element={<ScaffoldsPage />} />
-            <Route path="/scaffolds/:id" element={<ScaffoldArtifactPage />} />
-            <Route path="/scaffolds/:id/validation" element={<ValidationReportPage />} />
-            <Route path="/my-reviews" element={<MyReviewsPage />} />
-            <Route path="/comments" element={<CommentsPage />} />
-            <Route path="/compliance" element={<CompliancePage />} />
-            <Route path="/platform" element={<PlatformIndexPage />} />
-            <Route path="/platform/prompts" element={<PromptCatalogPage />} />
-            <Route path="/platform/golden-dataset" element={<GoldenDatasetPage />} />
-            <Route path="/platform/harmonisation" element={<HarmonisationPage />} />
-            <Route path="/platform/portfolio" element={<PortfolioDashboardPage />} />
-            <Route path="/platform/languages" element={<LanguagesPage />} />
-            <Route path="/platform/roles" element={<RolesPage />} />
-            <Route path="/platform/validation" element={<ValidationPolicyPage />} />
-            <Route path="/platform/llm" element={<LlmSettingsPage />} />
-            <Route path="/platform/signatures" element={<SignatureHealthPage />} />
-            <Route path="*" element={<NotFoundPage />} />
+            <Route path="/projects" element={legacy(<CorporaPage />)} />
+            <Route path="/projects/new" element={legacy(<NewCorpusPage />)} />
+            <Route path="/projects/:id" element={legacy(<CorpusDetailPage />)} />
+            <Route path="/corpora" element={legacy(<CorporaPage />)} />
+            <Route path="/corpora/new" element={legacy(<NewCorpusPage />)} />
+            <Route path="/corpora/:id" element={legacy(<CorpusDetailPage />)} />
+            <Route path="/corpora/:id/dependency-graph" element={legacy(<DependencyGraphPage />)} />
+            <Route path="/corpora/:id/migration-plan" element={legacy(<MigrationPlanPage />)} />
+            <Route path="/corpora/:id/docs" element={legacy(<DocsPage />)} />
+            <Route path="/projects/:id/docs" element={legacy(<DocsPage />)} />
+            <Route path="/corpora/:id/pattern-analysis" element={legacy(<PatternAnalysisPage />)} />
+            <Route path="/projects/:id/pattern-analysis" element={legacy(<PatternAnalysisPage />)} />
+            <Route path="/subroutines" element={legacy(<SubroutinesPage />)} />
+            <Route path="/subroutines/:id" element={legacy(<SubroutineDetailPage />)} />
+            <Route path="/subroutines/:id/extract" element={legacy(<LiveExtractionPage />)} />
+            <Route path="/subroutines/:id/spec" element={legacy(<DraftSpecPage />)} />
+            <Route path="/subroutines/:id/review" element={legacy(<SpecReviewPage />)} />
+            <Route path="/specs/:id/audit" element={legacy(<AuditTrailPage />)} />
+            <Route path="/specs/:id/scaffold" element={legacy(<LiveScaffoldPage />)} />
+            <Route path="/scaffolds" element={legacy(<ScaffoldsPage />)} />
+            <Route path="/scaffolds/:id" element={legacy(<ScaffoldArtifactPage />)} />
+            <Route path="/scaffolds/:id/validation" element={legacy(<ValidationReportPage />)} />
+            <Route path="/my-reviews" element={legacy(<MyReviewsPage />)} />
+            <Route path="/comments" element={legacy(<CommentsPage />)} />
+            <Route path="/compliance" element={legacy(<CompliancePage />)} />
+            <Route path="/platform" element={legacy(<PlatformIndexPage />)} />
+            <Route path="/platform/prompts" element={legacy(<PromptCatalogPage />)} />
+            <Route path="/platform/golden-dataset" element={legacy(<GoldenDatasetPage />)} />
+            <Route path="/platform/harmonisation" element={legacy(<HarmonisationPage />)} />
+            <Route path="/platform/portfolio" element={legacy(<PortfolioDashboardPage />)} />
+            <Route path="/platform/languages" element={legacy(<LanguagesPage />)} />
+            <Route path="/platform/roles" element={legacy(<RolesPage />)} />
+            <Route path="/platform/validation" element={legacy(<ValidationPolicyPage />)} />
+            <Route path="/platform/llm" element={legacy(<LlmSettingsPage />)} />
+            <Route path="/platform/signatures" element={legacy(<SignatureHealthPage />)} />
+            <Route path="*" element={legacy(<NotFoundPage />)} />
           </Routes>
         </main>
       </div>
       <KeyboardOverlay open={helpOpen} onClose={closeHelp} />
+      <CommandPalette />
     </div>
   );
 }

@@ -26,7 +26,7 @@ import {
   type MyReviewItem,
   type SystemStats,
 } from '@/lib/api';
-import type { Persona } from '@/tokens/tokens';
+import type { Persona } from '@/lib/persona';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';

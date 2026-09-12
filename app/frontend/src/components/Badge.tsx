@@ -13,20 +13,21 @@ type Tone =
   | 'info'
   | 'brand';
 
-// ACE-style pill: light-soft background + saturated text + thin ring.
-// Reads cleanly on white cards. Use `tone="brand"` for primary-CTA
-// accents in the brand orange.
+// Pill: 10% tint of the status colour + the status colour as text + a thin
+// ring. Every value is a theme token — in the dark shell the status colours
+// are the bright pastels, inside the light legacy wrapper the palette swaps
+// them for their darker, AA-readable siblings automatically.
 const tones: Record<Tone, string> = {
-  neutral:    'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
-  draft:      'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  review:     'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  signed:     'bg-ace-50 text-ace-700 ring-1 ring-ace-100',
-  scaffolded: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  failed:     'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
-  superseded: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 line-through',
-  success:    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  info:       'bg-teal-50 text-teal-700 ring-1 ring-teal-200',
-  brand:      'bg-brand-50 text-brand-700 ring-1 ring-brand-300/40',
+  neutral:    'bg-sunken text-ink-secondary ring-1 ring-line',
+  draft:      'bg-status-warn/10 text-status-warn ring-1 ring-status-warn/25',
+  review:     'bg-status-ok/10 text-status-ok ring-1 ring-status-ok/25',
+  signed:     'bg-status-info/10 text-status-info ring-1 ring-status-info/25',
+  scaffolded: 'bg-status-warn/10 text-status-warn ring-1 ring-status-warn/25',
+  failed:     'bg-status-fail/10 text-status-fail ring-1 ring-status-fail/25',
+  superseded: 'bg-sunken text-ink-tertiary ring-1 ring-line line-through',
+  success:    'bg-status-ok/10 text-status-ok ring-1 ring-status-ok/25',
+  info:       'bg-status-info/10 text-status-info ring-1 ring-status-info/25',
+  brand:      'bg-volt/10 text-volt-ink ring-1 ring-volt/30',
 };
 
 export function Badge({

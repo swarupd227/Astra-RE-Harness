@@ -11,18 +11,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-fast focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition duration-fast focus-visible:outline-2 focus-visible:outline-volt disabled:opacity-50 disabled:cursor-not-allowed';
 
-// ACE pattern:
-//   primary     → brand orange (Vee/Astra identity, used for top-level CTAs)
-//   secondary   → white card with subtle border (default action)
+// Design system v2:
+//   primary     → volt (the one accent; reserved for the primary CTA)
+//   secondary   → raised surface with a line border (default action)
 //   ghost       → transparent, hover background only
-//   destructive → rose for irreversible actions
+//   destructive → status-fail for irreversible actions
+// Every colour is a theme token, so the same button reads correctly in the
+// dark shell and inside the light legacy wrapper.
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand-500 text-white hover:bg-brand-600',
-  secondary: 'bg-white text-ink-primary border border-border-subtle hover:bg-sunken',
+  primary: 'bg-volt text-on-volt hover:brightness-95 active:brightness-90',
+  secondary: 'bg-raised text-ink-primary border border-line hover:bg-sunken',
   ghost: 'text-ink-secondary hover:bg-sunken hover:text-ink-primary',
-  destructive: 'bg-rose-600 text-white hover:bg-rose-700',
+  destructive: 'bg-status-fail text-white hover:brightness-95 active:brightness-90',
 };
 
 const sizes: Record<Size, string> = {
