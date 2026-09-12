@@ -57,7 +57,7 @@ export function TraceabilityPanel({
   return (
     <div className="space-y-4 p-5">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Derived from
         </p>
         <h3 className="mt-1 text-h-md font-semibold text-ink-primary">
@@ -74,7 +74,7 @@ export function TraceabilityPanel({
         {claims.map((c) => (
           <li
             key={c.id}
-            className="rounded-md border border-border-subtle bg-canvas p-3 transition-colors duration-fast hover:bg-sunken"
+            className="rounded-md border border-line-subtle bg-canvas p-3 transition-colors duration-fast hover:bg-sunken"
           >
             <div className="flex items-center gap-2 text-caption">
               <span className="rounded-sm bg-sunken px-1.5 py-0.5 font-mono uppercase text-ink-secondary">

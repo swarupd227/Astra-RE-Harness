@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { PageHero } from '@/components/PageHero';
 import { KpiCard } from '@/components/KpiCard';
 import { ProgressRing } from '@/components/ProgressRing';
+import { useChartTheme } from '@/theme/charts';
 
 /**
  * Phase 8.0.d — Portfolio dashboard.
@@ -126,17 +127,17 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
   return (
     <Card data-testid="portfolio-corpora-table">
       <CardBody className="space-y-3">
-        <h2 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <h2 className="label">
           Per-corpus rollup
         </h2>
         {rows.length === 0 && (
-          <p className="text-body-sm text-ink-secondary">No corpora yet.</p>
+          <p className="text-caption text-ink-secondary">No corpora yet.</p>
         )}
         {rows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-body-sm">
+            <table className="w-full text-caption">
               <thead>
-                <tr className="text-left text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+                <tr className="text-left label">
                   <th className="py-2">Name</th>
                   <th className="py-2">Plan</th>
                   <th className="py-2 text-right">Routines</th>
@@ -148,9 +149,9 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.corpusId} className="border-t border-border-subtle">
+                  <tr key={r.corpusId} className="border-t border-line-subtle">
                     <td className="py-2">
-                      <Link to={`/corpora/${r.corpusId}`} className="text-accent hover:underline">
+                      <Link to={`/corpora/${r.corpusId}`} className="text-volt-ink hover:underline">
                         {r.name}
                       </Link>
                       <p className="font-mono text-caption text-ink-tertiary">
@@ -199,11 +200,11 @@ function LlmCostCard({
   return (
     <Card data-testid="portfolio-llm-totals">
       <CardBody className="space-y-2">
-        <h2 className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <h2 className="flex items-center gap-2 label">
           <Coins className="h-3.5 w-3.5" />
           LLM spend (platform-wide)
         </h2>
-        <div className="grid grid-cols-2 gap-3 font-mono text-body-sm">
+        <div className="grid grid-cols-2 gap-3 font-mono text-caption">
           <div>
             <p className="text-ink-tertiary">calls</p>
             <p className="text-body-lg text-ink-primary">{t.callCount.toLocaleString()}</p>
@@ -233,12 +234,12 @@ function RecentActivityCard({ activity }: { activity: PortfolioActivity[] }) {
   return (
     <Card data-testid="portfolio-recent-activity">
       <CardBody className="space-y-2">
-        <h2 className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <h2 className="flex items-center gap-2 label">
           <Activity className="h-3.5 w-3.5" />
           Recent activity ({activity.length})
         </h2>
         {activity.length === 0 && (
-          <p className="text-body-sm text-ink-secondary">No audit events yet.</p>
+          <p className="text-caption text-ink-secondary">No audit events yet.</p>
         )}
         <ul className="space-y-1 font-mono text-caption">
           {activity.slice(0, 12).map((e, i) => (
@@ -255,15 +256,7 @@ function RecentActivityCard({ activity }: { activity: PortfolioActivity[] }) {
   );
 }
 
-// ── Recharts panels ────────────────────────────────────────────────
-
-const STATE_COLORS = {
-  parsed:     '#94a3b8',
-  draft:      '#fbbf24',
-  signed:     '#4f46e5',
-  scaffolded: '#7c3aed',
-  committed:  '#059669',
-} as const;
+// ── Recharts panels — colours from the theme table (src/theme/charts.ts) ──
 
 function StateDistributionChart({
   totals,
@@ -277,12 +270,13 @@ function StateDistributionChart({
     parsedCount: number;
   };
 }) {
+  const ct = useChartTheme();
   const data = [
-    { name: 'Parsed',     value: totals.parsedCount,     fill: STATE_COLORS.parsed },
-    { name: 'Draft',      value: totals.draftCount,      fill: STATE_COLORS.draft },
-    { name: 'Signed',     value: totals.signedCount,     fill: STATE_COLORS.signed },
-    { name: 'Scaffolded', value: totals.scaffoldedCount, fill: STATE_COLORS.scaffolded },
-    { name: 'Committed',  value: totals.committedCount,  fill: STATE_COLORS.committed },
+    { name: 'Parsed',     value: totals.parsedCount,     fill: ct.state.parsed },
+    { name: 'Draft',      value: totals.draftCount,      fill: ct.state.draft },
+    { name: 'Signed',     value: totals.signedCount,     fill: ct.state.signed },
+    { name: 'Scaffolded', value: totals.scaffoldedCount, fill: ct.state.scaffolded },
+    { name: 'Committed',  value: totals.committedCount,  fill: ct.state.committed },
   ].filter((d) => d.value > 0);
 
   // Non-visual equivalent — the SVG pie is opaque to assistive tech.
@@ -305,24 +299,14 @@ function StateDistributionChart({
                 nameKey="name"
                 innerRadius={48}
                 outerRadius={84}
-                stroke="#ffffff"
+                stroke={ct.surface}
                 strokeWidth={2}
                 paddingAngle={2}
               >
                 {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
               </Pie>
-              <Tooltip
-                contentStyle={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  boxShadow: '0 4px 12px rgba(16,24,40,.10)',
-                }}
-              />
-              <Legend
-                iconType="circle"
-                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-              />
+              <Tooltip contentStyle={ct.tooltip} itemStyle={{ color: ct.tooltip.color }} />
+              <Legend iconType="circle" formatter={ct.legendText} wrapperStyle={ct.legend} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -335,6 +319,7 @@ function StateDistributionChart({
 }
 
 function PerCorpusProgressChart({ rows }: { rows: PortfolioCorpusRow[] }) {
+  const ct = useChartTheme();
   const data = rows.map((r) => ({
     name: r.name.length > 26 ? `${r.name.slice(0, 24)}…` : r.name,
     Signed: r.counts.signed,
@@ -369,22 +354,15 @@ function PerCorpusProgressChart({ rows }: { rows: PortfolioCorpusRow[] }) {
         <div style={{ width: '100%', height: 220 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  boxShadow: '0 4px 12px rgba(16,24,40,.10)',
-                }}
-              />
-              <Legend iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-              <Bar dataKey="Signed"     stackId="a" fill="#4f46e5" />
-              <Bar dataKey="Scaffolded" stackId="a" fill="#7c3aed" />
-              <Bar dataKey="Committed"  stackId="a" fill="#059669" />
-              <Bar dataKey="Pending"    stackId="a" fill="#cbd5e1" />
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} />
+              <YAxis tick={{ fontSize: 10, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} allowDecimals={false} />
+              <Tooltip contentStyle={ct.tooltip} itemStyle={{ color: ct.tooltip.color }} cursor={{ fill: ct.grid, opacity: 0.4 }} />
+              <Legend iconType="circle" formatter={ct.legendText} wrapperStyle={ct.legend} />
+              <Bar dataKey="Signed"     stackId="a" fill={ct.state.signed} />
+              <Bar dataKey="Scaffolded" stackId="a" fill={ct.state.scaffolded} />
+              <Bar dataKey="Committed"  stackId="a" fill={ct.state.committed} />
+              <Bar dataKey="Pending"    stackId="a" fill={ct.neutral} />
             </BarChart>
           </ResponsiveContainer>
         </div>

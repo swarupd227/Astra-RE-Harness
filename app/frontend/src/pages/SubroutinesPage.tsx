@@ -9,6 +9,7 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { NoResultsIllustration } from '@/illustrations/NoResults';
+import { PageHero } from '@/components/PageHero';
 
 const STATES = ['PARSED', 'EXTRACTING', 'DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDING', 'SCAFFOLDED'];
 
@@ -78,30 +79,26 @@ export function SubroutinesPage() {
   const hasMore = search.data?.hasMore ?? false;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
-      <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-          Cross-project search
-        </p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">Routines</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-          Search every routine across all projects. Click a result to open its details.
-        </p>
-      </header>
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+      <PageHero
+        eyebrow="Cross-project search"
+        title="Routines"
+        lead="Search every routine across all projects. Click a result to open its details."
+      />
 
       <Card>
         <CardBody className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_220px_180px]">
             <label className="block">
               <span className="text-caption text-ink-tertiary">Name or signature contains</span>
-              <div className="mt-1 flex items-center gap-2 rounded-md border border-border bg-raised px-3 py-2 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+              <div className="mt-1 flex items-center gap-2 rounded-md border border-line bg-raised px-3 py-2 focus-within:border-volt focus-within:ring-2 focus-within:ring-volt/20">
                 <Search className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
                 <input
                   type="search"
                   value={rawQ}
                   onChange={(e) => setRawQ(e.target.value)}
                   placeholder="e.g. HYBRD, INV_READ, levenberg"
-                  className="w-full bg-transparent font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:outline-none"
+                  className="w-full bg-transparent font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:outline-none focus-visible:outline-none"
                   data-testid="subroutines-search"
                   autoFocus
                 />
@@ -149,7 +146,7 @@ export function SubroutinesPage() {
               <button
                 type="button"
                 onClick={() => { setRawQ(''); setQ(''); setCorpus(''); setState(''); }}
-                className="font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-ink-primary"
+                className="font-medium text-volt-ink hover:underline"
                 data-testid="clear-filters"
               >
                 Clear filters
@@ -198,7 +195,7 @@ export function SubroutinesPage() {
                 description={`${group.hits.length} match${group.hits.length === 1 ? '' : 'es'}`}
               />
               <CardBody className="p-0">
-                <ul className="divide-y divide-border-subtle">
+                <ul className="divide-y divide-line-subtle">
                   {group.hits.map((hit) => (
                     <li key={hit.id}>
                       <Link
@@ -236,7 +233,7 @@ export function SubroutinesPage() {
 }
 
 const selectClass =
-  'mt-1 w-full rounded-md border border-border bg-raised px-3 py-2 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  'mt-1 w-full rounded-md border border-line bg-raised px-3 py-2 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20';
 
 // A 2px colored left-border keyed to subroutine state. Tailwind needs the
 // class names to appear verbatim somewhere in the source so the JIT picks

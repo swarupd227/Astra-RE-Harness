@@ -99,11 +99,11 @@ export function LanguagesPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="languages-page">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Spec schemas
         </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Languages</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Languages</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           One typed claim schema per legacy language. Every Claude
           extraction produces invariants, side effects, edge cases, and open
           questions against this taxonomy — which is what makes the
@@ -218,7 +218,7 @@ function SchemaCard({
           {schema.supportedSourceExtensions.map((ext) => (
             <span
               key={ext}
-              className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary"
+              className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary"
             >
               {ext}
             </span>
@@ -227,13 +227,13 @@ function SchemaCard({
           {schema.compatibleTargetStacks.map((t) => (
             <span
               key={t}
-              className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary"
+              className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary"
             >
               {t}
             </span>
           ))}
         </div>
-        <div className="inline-flex items-center gap-1 text-caption text-accent">
+        <div className="inline-flex items-center gap-1 text-caption text-volt-ink">
           View claim taxonomy <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </div>
       </CardBody>
@@ -315,12 +315,12 @@ function SchemaDetailDrawer({
       onClick={onClose}
       data-testid="language-detail-drawer"
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative ml-auto flex h-full w-full max-w-[720px] flex-col bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-6 py-4">
           <div>
             <h3 id="schema-drawer-title" className="text-h-md font-semibold text-ink-primary">
               {schema.displayName}
@@ -395,7 +395,7 @@ function SchemaDetailDrawer({
             <>
               <p className="text-body text-ink-secondary">{schema.description}</p>
               {schema.calibratedAgainst && (
-                <div className="mt-4 rounded-md border border-border-subtle bg-sunken/40 px-3 py-2 font-mono text-caption text-ink-secondary">
+                <div className="mt-4 rounded-md border border-line-subtle bg-sunken/40 px-3 py-2 font-mono text-caption text-ink-secondary">
                   Calibrated against: {Array.isArray(schema.calibratedAgainst)
                     ? schema.calibratedAgainst.join(' · ')
                     : schema.calibratedAgainst}
@@ -437,14 +437,14 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
         />
       ) : (
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
         />
       )}
     </label>
@@ -455,7 +455,7 @@ function ClaimKindTable({ kinds }: { kinds: ClaimKindSummary[] }) {
   return (
     <div className="mt-6">
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Claim kinds</div>
-      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-line-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>
@@ -466,7 +466,7 @@ function ClaimKindTable({ kinds }: { kinds: ClaimKindSummary[] }) {
           </thead>
           <tbody>
             {kinds.map((k) => (
-              <tr key={k.id} className="border-t border-border-subtle">
+              <tr key={k.id} className="border-t border-line-subtle">
                 <td className="px-3 py-1.5 font-mono text-caption text-ink-secondary">{k.idPrefix}</td>
                 <td className="px-3 py-1.5 text-ink-primary">{k.label}</td>
                 <td className="px-3 py-1.5 text-ink-secondary">{k.description}</td>

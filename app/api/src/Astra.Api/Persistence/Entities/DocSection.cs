@@ -66,6 +66,20 @@ public sealed class DocSection
     public string? RenderedMarkdown { get; set; }
 
     /// <summary>
+    /// WS6 quality loop record for model-written sections:
+    /// <c>{ score, threshold, provider, criticModel, checks[], critique, revised, note }</c>.
+    /// Deterministic checks (citation resolution, routine coverage, empty
+    /// sections, banned phrases, table length) always run; the critic score
+    /// and revision flag are present only when a model critic ran. Null for
+    /// hand-authored sections and rows written before the quality pass.
+    /// Mapped by attribute so the column works before the fluent mapping in
+    /// AppDbContext lands; the DDL is applied by
+    /// <see cref="Docs.DocsQualityRegistration.ApplyDocsSchemaAsync"/>.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.Column("quality_json", TypeName = "jsonb")]
+    public string? QualityJson { get; set; }
+
+    /// <summary>
     /// LLM generation provenance. Null for hand-authored sections
     /// (an SME can author a section from scratch — same lifecycle).
     /// </summary>

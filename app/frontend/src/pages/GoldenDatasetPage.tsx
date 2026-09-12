@@ -139,15 +139,15 @@ export function GoldenDatasetPage() {
       <Card data-testid="golden-aggregate-banner">
         <CardBody className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+            <p className="label">
               Aggregate score
             </p>
-            <p className="mt-1 text-display font-semibold text-ink-primary">
+            <p className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">
               {aggregate.score === null
                 ? '—'
                 : `${Math.round(aggregate.score * 100)}%`}
             </p>
-            <p className="text-body-sm text-ink-secondary">
+            <p className="text-caption text-ink-secondary">
               {aggregate.scored}/{aggregate.eligible} entries scored ·{' '}
               {aggregate.matched}/{aggregate.total} claims matched
             </p>
@@ -225,14 +225,14 @@ function EntryCard({
       onClick={onOpen}
       data-testid={`golden-entry-${entry.entryId}`}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-border-subtle p-4">
+      <div className="flex items-start justify-between gap-2 border-b border-line-subtle p-4">
         <div>
           <p className="font-mono text-caption text-ink-tertiary">{entry.entryId}</p>
           <p className="mt-1 text-body-lg font-semibold text-ink-primary">{entry.title}</p>
         </div>
         <ScoreBadge run={entry.latestRun} />
       </div>
-      <CardBody className="flex flex-wrap items-center gap-2 text-body-sm text-ink-secondary">
+      <CardBody className="flex flex-wrap items-center gap-2 text-caption text-ink-secondary">
         <Badge tone="neutral">{entry.schemaId}</Badge>
         <Badge tone={difficultyTone(entry.difficulty)}>{entry.difficulty}</Badge>
         <Badge tone="review">{entry.trapCategory}</Badge>
@@ -325,7 +325,7 @@ function EntryDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface-primary p-4">
-          <h2 className="font-mono text-body-sm text-ink-secondary">{entryId}</h2>
+          <h2 className="font-mono text-caption text-ink-secondary">{entryId}</h2>
           <button
             className="rounded p-1 hover:bg-surface-secondary"
             onClick={onClose}
@@ -352,7 +352,7 @@ function EntryDrawer({
           <div className="space-y-6 p-4">
             <div>
               <h1 className="text-headline font-semibold text-ink-primary">{detail.data.title}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-body-sm">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-caption">
                 <Badge tone="neutral">{detail.data.schemaId}</Badge>
                 <Badge tone={difficultyTone(detail.data.difficulty)}>{detail.data.difficulty}</Badge>
                 <Badge tone="review">{detail.data.trapCategory}</Badge>
@@ -402,28 +402,28 @@ function EntryDrawer({
             {scoreError && <ErrorBlock title="Scorer failed" message={scoreError} />}
 
             <Card>
-              <div className="border-b border-border-subtle p-4">
+              <div className="border-b border-line-subtle p-4">
                 <p className="font-mono text-caption text-ink-tertiary">
                   Source · {detail.data.sourcePath} ({detail.data.sourceLines})
                 </p>
               </div>
               <CardBody>
-                <pre className="overflow-x-auto rounded bg-sunken p-3 font-mono text-body-sm">
+                <pre className="overflow-x-auto rounded bg-sunken p-3 font-mono text-caption">
                   {detail.data.sourceContent}
                 </pre>
               </CardBody>
             </Card>
 
             <Card>
-              <div className="border-b border-border-subtle p-4">
+              <div className="border-b border-line-subtle p-4">
                 <p className="font-mono text-caption text-ink-tertiary">
                   Expected claims ({detail.data.expectedClaims.length})
                 </p>
               </div>
               <CardBody className="space-y-2">
                 {detail.data.expectedClaims.map((c) => (
-                  <div key={c.id} className="rounded border border-border-subtle p-2">
-                    <div className="flex items-center gap-2 text-body-sm">
+                  <div key={c.id} className="rounded border border-line-subtle p-2">
+                    <div className="flex items-center gap-2 text-caption">
                       <Badge tone="neutral">{c.kind}</Badge>
                       <span className="font-mono text-ink-tertiary">{c.id}</span>
                     </div>
@@ -437,11 +437,11 @@ function EntryDrawer({
 
             {detail.data.notes && (
               <Card>
-                <div className="border-b border-border-subtle p-4">
+                <div className="border-b border-line-subtle p-4">
                   <p className="font-mono text-caption text-ink-tertiary">Notes</p>
                 </div>
                 <CardBody>
-                  <p className="whitespace-pre-wrap text-body-sm text-ink-secondary">
+                  <p className="whitespace-pre-wrap text-caption text-ink-secondary">
                     {detail.data.notes}
                   </p>
                 </CardBody>
@@ -657,11 +657,11 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+      <span className="label">
         {label}
       </span>
       <input
-        className="mt-1 w-full rounded border border-line bg-surface-primary px-2 py-1 text-body-sm"
+        className="mt-1 w-full rounded border border-line bg-surface-primary px-2 py-1 text-caption"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -684,12 +684,12 @@ function TextArea({
 }) {
   return (
     <label className="block">
-      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+      <span className="label">
         {label}
       </span>
       <textarea
         className={clsx(
-          'mt-1 w-full rounded border border-line bg-surface-primary px-2 py-1 text-body-sm',
+          'mt-1 w-full rounded border border-line bg-surface-primary px-2 py-1 text-caption',
           mono && 'font-mono',
         )}
         rows={rows}
@@ -712,8 +712,8 @@ function Filter({
   options: string[];
 }) {
   return (
-    <label className="flex items-center gap-2 text-body-sm">
-      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+    <label className="flex items-center gap-2 text-caption">
+      <span className="label">
         {label}
       </span>
       <select

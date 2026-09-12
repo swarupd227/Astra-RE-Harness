@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { PageHero } from '@/components/PageHero';
 import { KpiCard } from '@/components/KpiCard';
+import { useChartTheme } from '@/theme/charts';
 
 /**
  * Signature Health portfolio — value-add #8.
@@ -181,8 +182,8 @@ function PortfolioRow({
   return (
     <tr
       className={clsx(
-        'border-t border-border-subtle',
-        isDrift && 'bg-[#F4D8D7]/20',
+        'border-t border-line-subtle',
+        isDrift && 'bg-status-fail/10',
       )}
       data-testid={`portfolio-row-${row.specId}`}
     >
@@ -221,7 +222,7 @@ function PortfolioRow({
           )}
           <Link
             to={`/subroutines/${row.subroutineId}/review`}
-            className="inline-flex items-center gap-1 text-caption font-medium text-accent hover:underline"
+            className="inline-flex items-center gap-1 text-caption font-medium text-volt-ink hover:underline"
           >
             Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
@@ -251,6 +252,7 @@ function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
     return Array.from(byCorpus.values());
   }, [rows]);
 
+  const ct = useChartTheme();
   // Non-visual equivalent — summarise healthy vs drifted for assistive tech.
   const totalHealthy = data.reduce((n, d) => n + d.Healthy, 0);
   const totalDrifted = data.reduce((n, d) => n + d.Drifted, 0);
@@ -267,20 +269,13 @@ function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
         <div style={{ width: '100%', height: 130 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 0, right: 4, left: -16, bottom: -4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748b' }} />
-              <YAxis tick={{ fontSize: 9, fill: '#64748b' }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  fontSize: 11,
-                  boxShadow: '0 4px 12px rgba(16,24,40,.10)',
-                }}
-              />
-              <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="Healthy" stackId="a" fill="#059669" />
-              <Bar dataKey="Drifted" stackId="a" fill="#e11d48" />
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="name" tick={{ fontSize: 9, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} />
+              <YAxis tick={{ fontSize: 9, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} allowDecimals={false} />
+              <Tooltip contentStyle={{ ...ct.tooltip, fontSize: 11 }} itemStyle={{ color: ct.tooltip.color }} cursor={{ fill: ct.grid, opacity: 0.4 }} />
+              <Legend iconType="circle" formatter={ct.legendText} wrapperStyle={{ ...ct.legend, fontSize: 10, paddingTop: 0 }} />
+              <Bar dataKey="Healthy" stackId="a" fill={ct.ok} />
+              <Bar dataKey="Drifted" stackId="a" fill={ct.fail} />
             </BarChart>
           </ResponsiveContainer>
         </div>

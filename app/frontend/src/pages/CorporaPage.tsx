@@ -73,7 +73,7 @@ export function CorporaPage() {
   );
 }
 
-// Phase 9.2.b — per-language colour accent.
+// Phase 9.2.b — per-language colour accent (v2: theme tokens only).
 // Phase 10.1.b.2 — `sourceLanguage` is now on CorpusListItem (computed
 // over the latest version's subroutines, most-common-wins with null on
 // ties). The corpus-name regex is gone; this is a pure lookup.
@@ -89,32 +89,30 @@ type LanguageAccent = {
 
 const LANG_FORTRAN: LanguageAccent = {
   id: 'fortran-f77', label: 'Fortran',
-  pillBg: 'bg-[#E0E7FF]', pillText: 'text-[#3730A3]',  // indigo
-  stripe: 'border-l-[#6366F1]',
+  pillBg: 'bg-status-info/15', pillText: 'text-status-info',
+  stripe: 'border-l-status-info',
 };
 const LANG_COBOL: LanguageAccent = {
   id: 'cobol', label: 'COBOL',
-  pillBg: 'bg-[#CCFBF1]', pillText: 'text-[#0F766E]',  // teal
-  stripe: 'border-l-[#14B8A6]',
+  pillBg: 'bg-status-ok/15', pillText: 'text-status-ok',
+  stripe: 'border-l-status-ok',
 };
 const LANG_DELPHI: LanguageAccent = {
   id: 'delphi', label: 'Delphi',
-  pillBg: 'bg-[#D1FAE5]', pillText: 'text-[#065F46]',  // emerald
-  stripe: 'border-l-[#10B981]',
+  pillBg: 'bg-wave-2/15', pillText: 'text-wave-2',
+  stripe: 'border-l-wave-2',
 };
 const LANG_CPP: LanguageAccent = {
   id: 'cpp', label: 'C++',
-  pillBg: 'bg-[#FEF3C7]', pillText: 'text-[#92400E]',  // amber
-  stripe: 'border-l-[#F59E0B]',
+  pillBg: 'bg-status-warn/15', pillText: 'text-status-warn',
+  stripe: 'border-l-status-warn',
 };
-// Phase 10.0.i — VB6 accent. Sky blue is the most natural fit (the
-// other languages took indigo / teal / emerald / amber); echoes the
-// classic VB6 form-designer header colour without colliding with any
-// of the other four pills.
+// Phase 10.0.i — VB6 accent. Sand keeps it distinct from the four
+// status-coloured pills in both themes.
 const LANG_VB6: LanguageAccent = {
   id: 'vb6', label: 'VB6',
-  pillBg: 'bg-[#E0F2FE]', pillText: 'text-[#075985]',  // sky
-  stripe: 'border-l-[#0EA5E9]',
+  pillBg: 'bg-sand-300/20', pillText: 'text-ink-secondary',
+  stripe: 'border-l-sand-300',
 };
 
 function accentForLanguage(schemaId: string | null): LanguageAccent | null {
@@ -136,10 +134,10 @@ function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
   const language = accentForLanguage(corpus.sourceLanguage);
   const accent = (() => {
     switch (corpus.state) {
-      case 'PARSED':    return { edge: 'border-l-status-review', iconBg: 'bg-[#DAEFE9]', iconFg: 'text-status-review' };
+      case 'PARSED':    return { edge: 'border-l-status-review', iconBg: 'bg-status-ok/10', iconFg: 'text-status-review' };
       case 'PARSING':
-      case 'INGESTING': return { edge: 'border-l-status-draft',  iconBg: 'bg-accent-muted', iconFg: 'text-status-draft' };
-      case 'FAILED':    return { edge: 'border-l-status-failed', iconBg: 'bg-[#F4D8D7]', iconFg: 'text-status-failed' };
+      case 'INGESTING': return { edge: 'border-l-status-draft',  iconBg: 'bg-volt/10', iconFg: 'text-status-draft' };
+      case 'FAILED':    return { edge: 'border-l-status-failed', iconBg: 'bg-status-fail/10', iconFg: 'text-status-failed' };
       default:          return { edge: 'border-l-border',        iconBg: 'bg-sunken',    iconFg: 'text-ink-secondary' };
     }
   })();

@@ -397,6 +397,20 @@ public sealed class CopilotOrchestrator
     private async Task<string> BuildProgrammeContextAsync(Conversation conv, CancellationToken ct)
     {
         var lines = new List<string>();
+        if (conv.Kind == "spec" && conv.RefId is { } specId)
+        {
+            var spec = await _db.Specs.AsNoTracking().Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile)
+                .FirstOrDefaultAsync(s => s.Id == specId, ct);
+            if (spec is not null)
+            {
+                var reviews = await _db.ClaimReviews.AsNoTracking().CountAsync(r => r.SpecId == specId, ct);
+                lines.Add($"This thread is the review thread for the spec of `{spec.Subroutine?.Name}` (specId {spec.Id}, subroutineId {spec.SubroutineId}) " +
+                          $"in `{spec.Subroutine?.SourceFile?.RelativePath}` lines {spec.Subroutine?.LineStart}–{spec.Subroutine?.LineEnd}.");
+                lines.Add($"Spec state: {spec.State}; {reviews} claim decisions recorded so far. Tools that take a spec default to this one — " +
+                          "call get_spec first when you need the claim ids, explain_claim for 'why', review_claim / review_all_claims / sign_spec to act.");
+                lines.Add("");
+            }
+        }
         if (conv.CorpusId is { } cid)
         {
             var corpus = await _db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cid, ct);
@@ -518,6 +532,7 @@ public sealed class CopilotOrchestrator
         Actor = actor,
         ConversationId = conv.Id,
         CorpusId = conv.CorpusId,
+        SpecId = conv.Kind == "spec" ? conv.RefId : null,
         Ct = ct,
     };
 

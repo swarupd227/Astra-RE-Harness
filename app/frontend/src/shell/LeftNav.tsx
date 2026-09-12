@@ -28,7 +28,7 @@ import { clsx } from 'clsx';
 import { Tooltip } from '@/components/Tooltip';
 import { buildInfo } from '@/lib/version';
 import { api, notificationsApi } from '@/lib/api';
-import { AGENT_ORDER, agentMeta } from '@/agents/agents';
+import { useAgentActivity } from '@/agents/useAgentActivity';
 import { RailProgrammes } from '@/shell/RailProgrammes';
 
 type Item = {
@@ -173,7 +173,7 @@ export function LeftNav() {
           <RailProgrammes collapsed={collapsed} />
         </RailSection>
 
-        {/* (c) Agents — decorative for now */}
+        {/* (c) Agents — live: a volt ring pulses on whoever is running something */}
         {!collapsed && (
           <RailSection title="Agents" collapsed={false}>
             <AgentsRow />
@@ -282,29 +282,77 @@ export function AskAstraLink({ collapsed, onNavigate }: { collapsed: boolean; on
   return link;
 }
 
-/** Compact row of the ten agent avatars. Decorative for now. */
+/**
+ * Compact row of the ten agent avatars, driven by `GET /api/v1/copilot/agents`
+ * (polled by `useAgentActivity`). An agent with `activeRuns > 0` gets the
+ * volt pulsing ring — volt is reserved for "an agent is working" — and
+ * `data-active="true"`; the tooltip carries the run count and last activity.
+ */
 function AgentsRow() {
+  const { agents } = useAgentActivity();
   return (
     <ul className="flex flex-wrap gap-1.5 px-2.5" aria-label="Agents">
-      {AGENT_ORDER.map((id) => {
-        const m = agentMeta(id);
+      {agents.map((a) => {
+        const m = a.meta;
         const Icon = m.icon;
-        return (
-          <li key={id} className="flex">
-            <Tooltip content={m.name} side="top">
+        const runs = a.activeRuns;
+        const tooltip = `${m.name} · ${runs} ${runs === 1 ? 'run' : 'runs'} · last: ${describeLast(a.lastActivityAt, a.lastMessage)}`;
+        const link = a.lastConversationId ? `/w/${a.lastConversationId}` : null;
+        const disc = (
+          <span
+            className={clsx(
+              'relative grid h-7 w-7 place-items-center rounded-full transition-shadow duration-medium',
+              m.disc,
+              m.tone,
+              a.active && 'shadow-glow ring-2 ring-volt/70',
+            )}
+            role="img"
+            aria-label={`${m.name} agent${a.active ? `, ${runs} active ${runs === 1 ? 'run' : 'runs'}` : ''}`}
+          >
+            {a.active && (
               <span
-                className={clsx('grid h-7 w-7 place-items-center rounded-full', m.disc, m.tone)}
-                role="img"
-                aria-label={`${m.name} agent`}
-              >
-                <Icon size={14} aria-hidden="true" />
-              </span>
+                className="absolute inset-0 rounded-full bg-volt/30 motion-safe:animate-ping"
+                aria-hidden="true"
+              />
+            )}
+            <Icon size={14} aria-hidden="true" className="relative" />
+          </span>
+        );
+        return (
+          <li
+            key={a.id}
+            className="flex"
+            data-testid={`rail-agent-${a.id}`}
+            data-active={a.active ? 'true' : 'false'}
+          >
+            <Tooltip content={tooltip} side="top">
+              {link ? (
+                <NavLink to={link} className="rounded-full" aria-label={tooltip}>
+                  {disc}
+                </NavLink>
+              ) : (
+                disc
+              )}
             </Tooltip>
           </li>
         );
       })}
     </ul>
   );
+}
+
+/** "3 min ago — Surveyed 12 routines" / "never" for the agent tooltip. */
+function describeLast(at: string | null, message: string | null): string {
+  if (!at) return 'never';
+  const ms = Date.now() - new Date(at).getTime();
+  const when =
+    ms < 60_000 ? 'just now'
+    : ms < 3_600_000 ? `${Math.round(ms / 60_000)} min ago`
+    : ms < 86_400_000 ? `${Math.round(ms / 3_600_000)} h ago`
+    : `${Math.round(ms / 86_400_000)} d ago`;
+  if (!message) return when;
+  const short = message.length > 48 ? `${message.slice(0, 46)}…` : message;
+  return `${when} — ${short}`;
 }
 
 function ActiveItem({

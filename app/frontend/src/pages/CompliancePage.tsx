@@ -210,8 +210,8 @@ function FormatCard({
       className={clsx(
         'flex flex-col items-start gap-2 rounded-md border p-4 text-left transition-all',
         selected
-          ? 'border-accent bg-accent-muted shadow-e1'
-          : 'border-border-subtle bg-raised hover:border-border hover:shadow-e1',
+          ? 'border-volt bg-volt/10 shadow-e1'
+          : 'border-line-subtle bg-raised hover:border-line hover:shadow-e1',
       )}
     >
       <div className="flex w-full items-center justify-between gap-2">
@@ -251,7 +251,7 @@ function FilterField({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
         >
           {options?.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -262,7 +262,7 @@ function FilterField({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 font-mono text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 font-mono text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
         />
       )}
     </label>
@@ -273,7 +273,7 @@ function ColumnTable({ columns }: { columns: { id: string; header: string; descr
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Columns in this bundle</div>
-      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-line-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>
@@ -284,7 +284,7 @@ function ColumnTable({ columns }: { columns: { id: string; header: string; descr
           </thead>
           <tbody>
             {columns.map((c) => (
-              <tr key={c.id} className="border-t border-border-subtle">
+              <tr key={c.id} className="border-t border-line-subtle">
                 <td className="px-3 py-1.5 font-mono text-caption text-ink-secondary">{c.id}</td>
                 <td className="px-3 py-1.5 text-ink-primary">{c.header}</td>
                 <td className="px-3 py-1.5 text-ink-secondary">{c.description}</td>

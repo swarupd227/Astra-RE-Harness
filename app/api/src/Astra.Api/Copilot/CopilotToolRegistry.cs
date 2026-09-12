@@ -59,8 +59,54 @@ public sealed class CopilotToolRegistry
                 ("query", Str("Substring of the routine name or signature. Empty = any.")),
                 ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
                 ("state", Str("Optional state filter.")),
+                ("path", Str("Optional substring of the source file path (module).")),
+                ("language", Str("Optional source language id, e.g. delphi, cpp, cobol.")),
+                ("hasSpec", Bool("Optional: true = only routines with a spec, false = only without.")),
                 ("limit", Int("Max rows, default 20, max 100."))),
             Execute = SearchRoutinesAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
+            Name = "rank_routines",
+            Agent = "planning",
+            Description = "Rank a programme's routines by risk (transitive callers, cycles, shared storage, complexity), fan_in (direct callers), size (lines) or cycles. Use for 'riskiest', 'most depended-on', 'biggest' questions. Each row carries a score and a one-line why.",
+            InputSchema = Obj(
+                ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
+                ("by", Enum("risk", "fan_in", "size", "cycles")),
+                ("limit", Int("Max rows, default 10, max 50."))),
+            Execute = RankRoutinesAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
+            Name = "search_docs",
+            Agent = "discovery",
+            Description = "Full-text search over the generated documentation (overview, module docs, routine summaries, business rules, requirements, assessment). Returns matching sections with snippets.",
+            InputSchema = Obj(
+                ("query", Str("Words to look for.")),
+                ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
+                ("kind", Str("Optional section kind filter, e.g. module, overview, business-rule, assessment."))),
+            Execute = SearchDocsAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
+            Name = "list_modules",
+            Agent = "discovery",
+            Description = "The programme's modules (source files) with routine counts and progress per module. Use for 'what's in this codebase', 'which module is biggest / least done'.",
+            InputSchema = Obj(
+                ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
+                ("limit", Int("Max rows, default 40."))),
+            Execute = ListModulesAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
+            Name = "explain_claim",
+            Agent = "spec",
+            Description = "Fetch one claim of a spec together with the cited source lines (± 15 lines of context) so you can explain it in plain language. Use for 'why?', 'explain INV-2', 'is this claim right?'.",
+            InputSchema = Obj(
+                ("claimId", Str("Claim id, e.g. INV-2, SE-1, EC-3, Q-1.")),
+                ("specId", Str("Spec id. Optional in a spec thread.")),
+                ("subroutineId", Str("Routine id or exact name (alternative to specId)."))),
+            Execute = ExplainClaimAsync,
         });
         _tools.Add(new CopilotTool
         {
@@ -262,6 +308,17 @@ public sealed class CopilotToolRegistry
         });
         _tools.Add(new CopilotTool
         {
+            Name = "run_assessment",
+            Agent = "architecture",
+            Mutating = true,
+            AllowedPersonas = new[] { Persona.Admin },
+            Description = "Run the 10-minute Assessment for a programme: inventory, dependency hotspots and cycles, pattern clusters, complexity and modernization flags, an effort/risk model, and a recommended modernization mode (faithful-1to1 | replatform | modernize | strangler). Takes ~1 minute; the Architecture agent posts the assessment card when done. Admin only.",
+            InputSchema = Obj(("corpusId", Str("Programme id or name. Optional in a programme thread."))),
+            Describe = async (input, ctx) => $"run the assessment for {(await ResolveCorpusAsync(input, ctx))?.Name ?? "this programme"}",
+            Execute = RunAssessmentAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
             Name = "generate_migration_plan",
             Agent = "planning",
             Mutating = true,
@@ -319,6 +376,9 @@ public sealed class CopilotToolRegistry
         var corpus = await ResolveCorpusAsync(input, ctx);
         var query = (Read(input, "query") ?? "").Trim();
         var state = Read(input, "state")?.Trim().ToUpperInvariant();
+        var path = Read(input, "path")?.Trim();
+        var language = Read(input, "language")?.Trim();
+        var hasSpecRaw = Read(input, "hasSpec");
         var limit = Math.Clamp(ReadInt(input, "limit") ?? 20, 1, 100);
 
         var q =
@@ -332,6 +392,12 @@ public sealed class CopilotToolRegistry
         if (!string.IsNullOrEmpty(query))
             q = q.Where(x => EF.Functions.ILike(x.s.Name, $"%{query}%") || EF.Functions.ILike(x.s.Signature, $"%{query}%"));
         if (!string.IsNullOrEmpty(state)) q = q.Where(x => x.s.State == state);
+        if (!string.IsNullOrEmpty(path)) q = q.Where(x => EF.Functions.ILike(x.f.RelativePath, $"%{path}%"));
+        if (!string.IsNullOrEmpty(language)) q = q.Where(x => x.s.SourceLanguage == language);
+        if (string.Equals(hasSpecRaw, "true", StringComparison.OrdinalIgnoreCase))
+            q = q.Where(x => ctx.Db.Specs.Any(sp => sp.SubroutineId == x.s.Id));
+        else if (string.Equals(hasSpecRaw, "false", StringComparison.OrdinalIgnoreCase))
+            q = q.Where(x => !ctx.Db.Specs.Any(sp => sp.SubroutineId == x.s.Id));
 
         var total = await q.CountAsync(ctx.Ct);
         var rows = await q.OrderBy(x => x.s.Name).Take(limit).ToListAsync(ctx.Ct);
@@ -445,25 +511,271 @@ public sealed class CopilotToolRegistry
             .FirstOrDefaultAsync(ctx.Ct);
         if (plan is null)
             return ToolResult.Failure("plan.none", $"No migration plan exists for {corpus.Name} — offer to draft one (generate_migration_plan).");
-        var waves = await ctx.Db.MigrationWaves.AsNoTracking()
-            .Where(w => w.MigrationPlanId == plan.Id).OrderBy(w => w.WaveNumber).ToListAsync(ctx.Ct);
+        var (artifact, payload) = await ArtifactBuilders.PlanWavesAsync(ctx.Db, plan, ctx.Ct);
+        return ToolResult.Success(payload, $"plan: {plan.TotalWaves} waves ({plan.Status})", artifact);
+    }
+
+    // ═══ NL querying (Increment 2) ═══════════════════════════════════════
+
+    private static async Task<ToolResult> RankRoutinesAsync(JsonElement input, ToolContext ctx)
+    {
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        var by = (Read(input, "by") ?? "risk").Trim().ToLowerInvariant();
+        var limit = Math.Clamp(ReadInt(input, "limit") ?? 10, 1, 50);
+
+        var graphs = ctx.Services.GetRequiredService<DependencyGraphBuilder>();
+        var graph = await graphs.BuildAsync(corpus.Id, ctx.Ct);
+        if (graph is null || graph.Nodes.Count == 0)
+            return ToolResult.Failure("graph.empty", $"No dependency graph for {corpus.Name} yet (no ingested version or no routines).");
+
+        var hotspots = Astra.Api.Assessment.AssessmentService.Hotspots(graph, graph.Nodes.Count)
+            .ToDictionary(h => h.Id);
+        var sharedByNode = graph.Edges.Where(e => e.Type == "shared-storage")
+            .SelectMany(e => new[] { e.From, e.To }).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+        var nodeIds = graph.Nodes.Select(n => n.Id).ToList();
+        var digests = await ctx.Db.RoutineDigests.AsNoTracking()
+            .Where(d => nodeIds.Contains(d.SubroutineId))
+            .Select(d => new { d.SubroutineId, d.Complexity })
+            .ToDictionaryAsync(d => d.SubroutineId, d => d.Complexity, ctx.Ct);
+        var lines = await ctx.Db.Subroutines.AsNoTracking()
+            .Where(s => nodeIds.Contains(s.Id))
+            .Select(s => new { s.Id, Lines = s.LineEnd - s.LineStart + 1, s.State, s.SourceLanguage })
+            .ToDictionaryAsync(s => s.Id, ctx.Ct);
+
+        var maxTrans = Math.Max(1, hotspots.Values.Max(h => h.TransitiveCallers));
+        var maxCallers = Math.Max(1, graph.Nodes.Max(n => n.CallerCount));
+        var maxLines = Math.Max(1, lines.Values.Max(l => l.Lines));
+
+        var rows = graph.Nodes.Select(n =>
+        {
+            var h = hotspots[n.Id];
+            var shared = sharedByNode.GetValueOrDefault(n.Id);
+            var complexity = digests.GetValueOrDefault(n.Id);
+            var cx = complexity switch { "complex" => 1.0, "moderate" => 0.5, "simple" => 0.1, _ => 0.3 };
+            var size = lines.TryGetValue(n.Id, out var l) ? l.Lines : 0;
+            var why = new List<string>();
+            double score;
+            switch (by)
+            {
+                case "fan_in":
+                    score = n.CallerCount;
+                    why.Add($"{n.CallerCount} direct callers");
+                    break;
+                case "size":
+                    score = size;
+                    why.Add($"{size} lines");
+                    break;
+                case "cycles":
+                    score = (h.InCycle ? 1000 : 0) + h.TransitiveCallers;
+                    if (h.InCycle) why.Add("in a call cycle");
+                    why.Add($"{h.TransitiveCallers} transitive callers");
+                    break;
+                default:
+                    score = 0.5 * h.TransitiveCallers / maxTrans + (h.InCycle ? 0.2 : 0) + 0.15 * Math.Min(1, shared / 4.0) + 0.15 * cx;
+                    why.Add($"{h.TransitiveCallers} transitive callers");
+                    if (h.InCycle) why.Add("in a call cycle");
+                    if (shared > 0) why.Add($"{shared} shared-storage couplings");
+                    if (complexity is not null) why.Add($"{complexity} complexity");
+                    break;
+            }
+            return new
+            {
+                id = n.Id,
+                name = n.Name,
+                path = n.SourcePath,
+                state = lines.TryGetValue(n.Id, out var l2) ? l2.State : n.State,
+                sourceLanguage = lines.TryGetValue(n.Id, out var l3) ? l3.SourceLanguage : null,
+                callers = n.CallerCount,
+                transitiveCallers = h.TransitiveCallers,
+                inCycle = h.InCycle,
+                lines = size,
+                score = Math.Round(score, 3),
+                why = string.Join(", ", why),
+            };
+        })
+        .OrderByDescending(r => r.score).ThenBy(r => r.name)
+        .Take(limit)
+        .ToList();
+
+        var items = rows.Select(r => new
+        {
+            r.id, r.name, signature = "", r.state, r.sourceLanguage, r.path, lineStart = 0, lineEnd = r.lines, corpusId = corpus.Id,
+            corpusName = corpus.Name, r.score, r.why, r.callers, r.transitiveCallers, r.inCycle,
+        }).ToList();
+        var label = by switch { "fan_in" => "most-called", "size" => "largest", "cycles" => "cycle-bound", _ => "riskiest" };
+        return ToolResult.Success(
+            new { by, corpusId = corpus.Id, corpusName = corpus.Name, graph = new { graph.Stats.NodeCount, graph.Stats.CyclicSccCount, graph.Stats.SharedStorageEdgeCount }, rows },
+            $"{rows.Count} {label} routines in {corpus.Name}",
+            ToolResult.Artifact("routineList", null, new { query = $"{label} routines", total = rows.Count, items, ranked = true, by }));
+    }
+
+    private static async Task<ToolResult> SearchDocsAsync(JsonElement input, ToolContext ctx)
+    {
+        var query = (Read(input, "query") ?? "").Trim();
+        if (query.Length < 2) return ToolResult.Failure("docs.query_required", "Give me a word or two to search for.");
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        var kind = Read(input, "kind")?.Trim();
+
+        var q = ctx.Db.DocSections.AsNoTracking()
+            .Where(s => s.State != "SUPERSEDED" && s.RenderedMarkdown != null && EF.Functions.ILike(s.RenderedMarkdown!, $"%{query}%"));
+        if (corpus is not null) q = q.Where(s => s.CorpusId == corpus.Id);
+        if (!string.IsNullOrEmpty(kind)) q = q.Where(s => s.SectionKind == kind);
+        var sections = await q.OrderByDescending(s => s.UpdatedAt).Take(5).ToListAsync(ctx.Ct);
+        if (sections.Count == 0)
+            return ToolResult.Failure("docs.no_match", $"Nothing in the generated documentation mentions \"{query}\"" +
+                                                       (corpus is null ? "." : $" for {corpus.Name}. If no docs exist yet, offer generate_docs."));
+
+        var artifacts = new List<ArtifactDto>();
+        var hits = new List<object>();
+        foreach (var s in sections)
+        {
+            var md = s.RenderedMarkdown ?? "";
+            var idx = md.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+            var start = Math.Max(0, idx - 200);
+            var snippet = md.Substring(start, Math.Min(md.Length - start, 400)).Replace("\n", " ");
+            var title = s.ModuleName is { Length: > 0 } m ? $"{Pretty(s.SectionKind)} · {m}"
+                      : s.SubroutineId is not null ? $"{Pretty(s.SectionKind)} · routine"
+                      : Pretty(s.SectionKind);
+            var href = s.SectionKind == Astra.Api.Assessment.AssessmentService.SectionKind
+                ? $"/projects/{s.CorpusId}/assessment"
+                : $"/projects/{s.CorpusId}/docs";
+            hits.Add(new { sectionId = s.Id, kind = s.SectionKind, scope = s.Scope, module = s.ModuleName, state = s.State, snippet = "…" + snippet + "…" });
+            if (artifacts.Count < 2) artifacts.Add(ArtifactBuilders.DocSection(s, title, href));
+        }
+        return new ToolResult(true, new { query, matches = hits }, $"{sections.Count} doc sections mention \"{query}\"", artifacts);
+    }
+
+    private static async Task<ToolResult> ListModulesAsync(JsonElement input, ToolContext ctx)
+    {
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        if (corpus.LatestVersionId is not { } vid) return ToolResult.Failure("corpus.no_version", "No ingested version yet.");
+        var limit = Math.Clamp(ReadInt(input, "limit") ?? 40, 1, 200);
+
+        var rows = await (
+            from s in ctx.Db.Subroutines.AsNoTracking()
+            join f in ctx.Db.SourceFiles.AsNoTracking() on s.SourceFileId equals f.Id
+            where f.SourceVersionId == vid
+            group s by new { f.RelativePath, f.LineCount } into g
+            select new
+            {
+                path = g.Key.RelativePath,
+                lines = g.Key.LineCount,
+                routines = g.Count(),
+                signed = g.Count(x => x.State == "SIGNED" || x.State == "SCAFFOLDED" || x.State == "COMMITTED"),
+                parsed = g.Count(x => x.State == "PARSED"),
+            }).OrderByDescending(x => x.routines).Take(limit).ToListAsync(ctx.Ct);
+
+        var md = $"**Modules in {corpus.Name}** (top {rows.Count} by routine count)\n\n| Module | Routines | Lines | Signed+ | Untouched |\n|---|---:|---:|---:|---:|\n" +
+                 string.Join("\n", rows.Select(r => $"| `{r.path}` | {r.routines} | {r.lines} | {r.signed} | {r.parsed} |"));
+        return ToolResult.Success(new { corpusId = corpus.Id, modules = rows }, $"{rows.Count} modules",
+            ToolResult.Artifact("text", corpus.Id.ToString(), new { title = "Modules", markdown = md, href = $"/projects/{corpus.Id}" }));
+    }
+
+    private static async Task<ToolResult> ExplainClaimAsync(JsonElement input, ToolContext ctx)
+    {
+        var spec = await ResolveSpecAsync(input, ctx);
+        if (spec is null) return NoSpec(input);
+        var claimId = Read(input, "claimId")?.Trim();
+        if (string.IsNullOrEmpty(claimId)) return ToolResult.Failure("claim.id_required", "Which claim? Give its id (e.g. INV-2).");
+
+        var schemas = ctx.Services.GetRequiredService<SpecSchemaProvider>();
+        var (_, _, claims) = await ArtifactBuilders.SpecSummaryAsync(ctx.Db, schemas, spec, ctx.Ct);
+        var claim = claims.FirstOrDefault(c => string.Equals(c.Id, claimId, StringComparison.OrdinalIgnoreCase));
+        if (claim is null)
+            return ToolResult.Failure("claim.not_found", $"No claim `{claimId}` in this spec. Ids: {string.Join(", ", claims.Select(c => c.Id).Take(30))}.");
+
+        var sub = spec.Subroutine ?? await ctx.Db.Subroutines.AsNoTracking().Include(s => s.SourceFile).FirstAsync(s => s.Id == spec.SubroutineId, ctx.Ct);
+        if (sub.SourceFile is null) sub.SourceFile = await ctx.Db.SourceFiles.AsNoTracking().FirstAsync(f => f.Id == sub.SourceFileId, ctx.Ct);
+        var blob = ctx.Services.GetRequiredService<IBlobClient>();
+
+        // Citation "L120-134" / "L120–134" / "L120" → absolute lines; fall back to the routine's own range.
+        int from = sub.LineStart, to = sub.LineEnd;
+        var cit = (claim.Citation ?? "").Replace("L", "").Replace("–", "-");
+        var first = cit.Split(',')[0].Trim();
+        var parts = first.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 1 && int.TryParse(parts[0], out var a))
+        {
+            from = a;
+            to = parts.Length > 1 && int.TryParse(parts[1], out var b) ? b : a;
+        }
+        string excerpt;
+        try
+        {
+            var text = await blob.GetTextAsync(sub.SourceFile.BlobUri, ctx.Ct);
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            var s0 = Math.Max(1, from - 15);
+            var e0 = Math.Min(lines.Length, to + 15);
+            excerpt = string.Join("\n", Enumerable.Range(s0, Math.Max(0, e0 - s0 + 1)).Select(n => $"{n,5}  {lines[n - 1]}"));
+        }
+        catch (Exception ex)
+        {
+            excerpt = $"(source unavailable: {ex.Message})";
+        }
+
         var payload = new
         {
-            planId = plan.Id,
-            plan.Status,
-            plan.StrategyName,
-            plan.TotalRoutines,
-            plan.TotalWaves,
-            plan.Summary,
-            plan.CreatedAt,
-            plan.ApprovedAt,
-            waves = waves.Select(w => new { w.WaveNumber, w.Name, w.RoutineCount, w.Status }),
+            specId = spec.Id,
+            routineName = sub.Name,
+            claim = new { claim.Id, claim.Section, claim.Text, claim.Review, claim.Citation },
+            citedLines = new { from, to },
+            sourceExcerpt = excerpt,
+            note = "Explain what the cited lines do and why the claim follows (or doesn't). Quote line numbers.",
         };
-        var md = $"**Migration plan** ({plan.Status}, {plan.StrategyName}) — {plan.TotalWaves} waves, {plan.TotalRoutines} routines.\n\n" +
-                 string.Join("\n", waves.Select(w => $"- Wave {w.WaveNumber} — {w.Name}: {w.RoutineCount} routines ({w.Status})"));
-        return ToolResult.Success(payload, $"plan: {plan.TotalWaves} waves ({plan.Status})",
-            ToolResult.Artifact("text", plan.Id.ToString(), new { title = "Migration plan", markdown = md, href = $"/corpora/{corpus.Id}/migration-plan" }));
+        var artifact = ToolResult.Artifact("routine", sub.Id.ToString(), new
+        {
+            name = sub.Name,
+            signature = sub.Signature,
+            path = sub.SourceFile.RelativePath,
+            lineStart = sub.LineStart,
+            lineEnd = sub.LineEnd,
+            sourceLanguage = sub.SourceLanguage,
+            state = sub.State,
+            callees = ArtifactBuilders.ReadStringArray(sub.CalledSubroutines),
+            callerCount = 0,
+            corpusId = ctx.CorpusId,
+            specId = spec.Id,
+            source = excerpt,
+            highlight = new { from, to },
+            claimId = claim.Id,
+        });
+        return ToolResult.Success(payload, $"claim {claim.Id} with lines {from}–{to}", artifact);
     }
+
+    private static async Task<ToolResult> RunAssessmentAsync(JsonElement input, ToolContext ctx)
+    {
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        if (corpus.LatestVersionId is null) return ToolResult.Failure("corpus.no_version", "No ingested version yet.");
+        var conversations = ctx.Services.GetRequiredService<ConversationService>();
+        var thread = await conversations.EnsureProgrammeAsync(corpus.Id, ctx.Ct);
+        var svc = ctx.Services.GetRequiredService<Astra.Api.Assessment.AssessmentService>();
+        var runId = svc.Start(corpus.Id, corpus.Name, thread.Id, ctx.Actor.Persona, ctx.Actor.DisplayName);
+        var props = new
+        {
+            kind = "assessment",
+            corpusId = corpus.Id,
+            label = $"Assessment · {corpus.Name}",
+            agent = "architecture",
+            state = "RUNNING",
+            startedAt = DateTimeOffset.UtcNow,
+            links = new[] { new { label = "Open full view", href = $"/projects/{corpus.Id}/assessment" } },
+        };
+        return new ToolResult(true,
+            new { runId, corpusId = corpus.Id, status = "started", note = "About a minute; the Architecture agent will post the assessment card." },
+            $"assessment started for {corpus.Name}",
+            new[] { ToolResult.Artifact("runProgress", runId.ToString(), props) }, runId);
+    }
+
+    private static string Pretty(string kind) => kind switch
+    {
+        "routine-summary" => "Routine summary",
+        "business-rule" => "Business rule",
+        "data-dictionary" => "Data dictionary",
+        "assessment" => "Assessment",
+        _ => char.ToUpperInvariant(kind[0]) + kind[1..].Replace('-', ' '),
+    };
 
     private static async Task<ToolResult> GetValidationResultsAsync(JsonElement input, ToolContext ctx)
     {
@@ -797,13 +1109,8 @@ public sealed class CopilotToolRegistry
         try
         {
             var plan = await planner.GenerateDraftAsync(corpus.Id, strategy, ctx.Actor, ctx.Ct);
-            var waves = await ctx.Db.MigrationWaves.AsNoTracking()
-                .Where(w => w.MigrationPlanId == plan.Id).OrderBy(w => w.WaveNumber).ToListAsync(ctx.Ct);
-            var md = $"**Draft migration plan** ({plan.StrategyName}) — {plan.TotalWaves} waves, {plan.TotalRoutines} routines. {plan.Summary}\n\n" +
-                     string.Join("\n", waves.Select(w => $"- Wave {w.WaveNumber} — {w.Name}: {w.RoutineCount} routines"));
-            return ToolResult.Success(new { planId = plan.Id, plan.Status, plan.StrategyName, plan.TotalWaves, plan.TotalRoutines, plan.Summary },
-                $"drafted a {plan.TotalWaves}-wave plan",
-                ToolResult.Artifact("text", plan.Id.ToString(), new { title = "Migration plan (draft)", markdown = md, href = $"/corpora/{corpus.Id}/migration-plan" }));
+            var (artifact, payload) = await ArtifactBuilders.PlanWavesAsync(ctx.Db, plan, ctx.Ct);
+            return ToolResult.Success(payload, $"drafted a {plan.TotalWaves}-wave plan", artifact);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -860,7 +1167,13 @@ public sealed class CopilotToolRegistry
         if (!string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out var id))
             return await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine).FirstOrDefaultAsync(s => s.Id == id, ctx.Ct);
         var sub = await ResolveRoutineAsync(input, ctx);
-        if (sub is null) return null;
+        if (sub is null)
+        {
+            // In a spec thread the spec is implied.
+            if (ctx.SpecId is { } implied)
+                return await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine).FirstOrDefaultAsync(s => s.Id == implied, ctx.Ct);
+            return null;
+        }
         return await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine)
             .Where(s => s.SubroutineId == sub.Id)
             .OrderByDescending(s => s.CreatedAt)

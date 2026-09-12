@@ -382,18 +382,21 @@ services:
       Llm__PatternAnalysis__AutoResume: "${PATTERN_ANALYSIS_AUTO_RESUME:-true}"
       # WS2 — the Workspace orchestrator ("Astra"). Empty = Llm__Anthropic__Model.
       Llm__Copilot__Model: "${COPILOT_MODEL:-}"
-      # Phase 11.0 — documentation generation (per ADR-038). Generator
-      # rides the same Llm__Provider abstraction (mock | anthropic) with
-      # per-tier model overrides so the long-tail routine-summary stage
-      # can use Haiku while headline routines escalate to Sonnet/Opus.
+      # Phase 11.0 — documentation generation (per ADR-038). The generator
+      # provider (mock | anthropic) follows Llm__Provider unless overridden,
+      # so a real extraction run also writes real docs. Two model tiers:
+      # Sonnet for the standard tier, Opus for headline routines, modules
+      # that contain one, and the system overview. Defaults match the
+      # DocsOptions code defaults; override per environment. WS6 quality
+      # knobs (input budget, source-slice cap, critic threshold) bind from
+      # Docs__Generator__* too — see Docs/DocsOptions.cs.
       # GitMirror is the on-sign push to a dedicated astra-docs/<corpus-id>
       # branch; disabled by default so a fresh clone never tries to push
       # anywhere unintended.
-      Docs__Generator__Provider: "${DOCS_GENERATOR_PROVIDER:-mock}"
-      Docs__Generator__HaikuModel: "${DOCS_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
-      Docs__Generator__SonnetModel: "${DOCS_SONNET_MODEL:-claude-sonnet-4-5-20250929}"
-      Docs__Generator__OpusModel: "${DOCS_OPUS_MODEL:-claude-opus-4-5}"
-      Docs__Generator__BatchSize: "${DOCS_BATCH_SIZE:-20}"
+      Docs__Generator__Provider: "${DOCS_GENERATOR_PROVIDER:-${LLM_PROVIDER:-mock}}"
+      Docs__Generator__SonnetModel: "${DOCS_SONNET_MODEL:-claude-sonnet-4-6}"
+      Docs__Generator__OpusModel: "${DOCS_OPUS_MODEL:-claude-opus-4-8}"
+      Docs__Generator__CriticThreshold: "${DOCS_CRITIC_THRESHOLD:-16}"
       Docs__GitMirror__Enabled: "${DOCS_GIT_MIRROR_ENABLED:-false}"
       Docs__GitMirror__BranchPattern: "${DOCS_GIT_MIRROR_BRANCH:-astra-docs/{corpusId}}"
       Docs__GitMirror__AuthorName: "${DOCS_GIT_MIRROR_AUTHOR_NAME:-Astra Documentation Bot}"

@@ -116,6 +116,12 @@ export function nextStepFor(state: string | null | undefined): NextStep {
   }
 }
 
+/**
+ * Slim status strip. The current stage is the one volt element; finished
+ * stages carry a check in secondary ink, pending ones sit in tertiary ink.
+ * Test ids (`workflow-rail`, `workflow-step-<key>`, `data-step-state`) are
+ * unchanged from v1.
+ */
 export function WorkflowRail({
   state,
   persona,
@@ -135,34 +141,45 @@ export function WorkflowRail({
     <nav
       aria-label="Migration workflow"
       data-testid="workflow-rail"
-      className={clsx('flex flex-wrap items-center gap-1.5', className)}
+      className={clsx('flex flex-wrap items-center gap-x-1 gap-y-1 text-caption', className)}
     >
       {WORKFLOW_STEPS.map((step, i) => {
         const done = allDone || i < currentIdx;
         const active = !allDone && i === currentIdx;
         const notYours = active && !!persona && persona !== step.owner;
         return (
-          <div key={step.key} className="flex items-center gap-1.5">
-            {i > 0 && <span aria-hidden="true" className="text-ink-tertiary">›</span>}
+          <div key={step.key} className="flex items-center gap-x-1">
+            {i > 0 && (
+              <span
+                aria-hidden="true"
+                className={clsx('mx-1 h-px w-4', done || active ? 'bg-line-strong' : 'bg-line-subtle')}
+              />
+            )}
             <span
               data-testid={`workflow-step-${step.key}`}
               data-step-state={done ? 'done' : active ? 'active' : 'pending'}
               title={notYours ? `${step.label} is the ${step.ownerLabel}'s step` : undefined}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-caption',
-                done && 'border-status-signed/40 bg-[#DCE6F5]/50 text-status-signed',
-                active && 'border-accent bg-accent-muted font-semibold text-ink-primary',
-                !done && !active && 'border-border-subtle bg-canvas text-ink-tertiary',
+                'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 transition-colors duration-fast',
+                done && 'text-ink-secondary',
+                active && 'bg-volt/10 font-semibold text-ink-primary ring-1 ring-inset ring-volt/40',
+                !done && !active && 'text-ink-tertiary',
               )}
             >
               {done ? (
-                <Check className="h-3 w-3" aria-hidden="true" />
+                <Check className="h-3 w-3 text-status-ok" aria-hidden="true" />
               ) : (
-                <span className="text-[10px] tabular-nums">{i + 1}</span>
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    'inline-block h-1.5 w-1.5 rounded-full',
+                    active ? 'bg-volt motion-safe:animate-pulse' : 'bg-line-strong',
+                  )}
+                />
               )}
               {step.label}
               {active && (
-                <span className={clsx('text-[10px] uppercase', notYours ? 'text-status-scaffolded' : 'text-ink-tertiary')}>
+                <span className={clsx('text-micro', notYours ? 'text-status-warn' : 'text-ink-tertiary')}>
                   {step.ownerLabel}
                 </span>
               )}

@@ -121,11 +121,11 @@ export function PlatformIndexPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="platform-index-page">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Platform configuration
         </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Platform</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Platform</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Every Nous-shipped asset that makes this deployment audit-grade —
           tuned prompts, multi-language schemas, validation gates, signature
           drift, role assignments — is configured from here.
@@ -149,7 +149,7 @@ function TileCard({ tile }: { tile: Tile }) {
       <CardHeader
         title={
           <span className="inline-flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               <Icon className="h-4 w-4" aria-hidden="true" />
             </span>
             {tile.title}
@@ -168,7 +168,7 @@ function TileCard({ tile }: { tile: Tile }) {
         {isLive ? (
           <Link
             to={tile.to}
-            className="inline-flex items-center gap-1 text-caption font-medium text-accent hover:underline"
+            className="inline-flex items-center gap-1 text-caption font-medium text-volt-ink hover:underline"
           >
             Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>

@@ -7,24 +7,25 @@ using Microsoft.Extensions.Options;
 namespace Astra.Api.Docs;
 
 /// <summary>
-/// Phase 11.0.a — picks a routine's model tier (headline | standard) for
-/// the doc-summary pipeline. Tier drives which model handles the routine
-/// (Opus for headline, Sonnet for standard).
+/// Picks a routine's model tier (headline | standard) for the doc pipelines.
+/// Tier drives which model handles the routine (Opus for headline, Sonnet
+/// for standard); files that contain a headline routine get their module
+/// document on Opus too.
 ///
-/// Phase 11.0.f quality upgrade: Haiku/batch/utility tier removed entirely.
-/// All routines now run single-shot; the only question is Opus vs. Sonnet.
-/// The top <see cref="DocsOptions.HeadlinePercentile"/> percent by composite
-/// importance score go to Opus; the rest get Sonnet.
+/// Importance score = (callerCount × 3 + loc / 5) × complexity weight. The
+/// multipliers weight reach (how many routines call this one) more heavily
+/// than raw size, since a large leaf routine is less load-bearing than a
+/// small widely-called one. Calibrated on LAPACK BLAS: with
+/// HeadlinePercentile=10 the top tier captures DGEMM, DTRSM and the main
+/// BLAS-3 kernels.
 ///
-/// Importance score = callerCount × 3 + (loc / 5). The multipliers weight
-/// reach (how many routines call this one) more heavily than raw size, since
-/// a large but leaf-level routine is less load-bearing than a small but
-/// widely-called one. Calibrated on LAPACK BLAS: with HeadlinePercentile=10
-/// the top tier captures DGEMM, DTRSM, and the main BLAS-3 kernels.
+/// WS6: when the pattern-analysis survey has left a <see cref="RoutineDigest"/>
+/// with a complexity rating, the score is weighted by it — complex ×1.5,
+/// moderate ×1.0, simple ×0.75 — and trivial routines (accessors,
+/// one-line wrappers) are never promoted to the headline tier however many
+/// callers they have. Corpora without digests classify exactly as before.
 ///
-/// CallerNames are included in TierAssignment so the pipeline can pass them
-/// into the doc-summary prompt as additional context, helping the model
-/// understand which higher-level routines depend on this one.
+/// CallerNames are included so the pipelines can pass them into prompts.
 /// </summary>
 public sealed class RoutineTierClassifier
 {
@@ -41,7 +42,17 @@ public sealed class RoutineTierClassifier
         string Tier,
         int CallerCount,
         int Loc,
-        IReadOnlyList<string> CallerNames);
+        IReadOnlyList<string> CallerNames,
+        string? Complexity = null);
+
+    public static double ComplexityWeight(string? complexity) => (complexity ?? "").ToLowerInvariant() switch
+    {
+        "complex" => 1.5,
+        "moderate" => 1.0,
+        "simple" => 0.75,
+        "trivial" => 0.0,
+        _ => 1.0,
+    };
 
     public async Task<IReadOnlyDictionary<Guid, TierAssignment>> ClassifyForCorpusAsync(
         Guid corpusId, Guid sourceVersionId, CancellationToken ct)
@@ -52,9 +63,18 @@ public sealed class RoutineTierClassifier
             .Where(s => s.SourceFile != null && s.SourceFile.SourceVersionId == sourceVersionId)
             .ToListAsync(ct);
 
-        // Build reverse-call maps: callee name → caller names, and callee name → caller count.
-        // Subroutine.Name is not unique across files (Fortran allows duplicate names in
-        // different source units) so we count by name and accept the noise.
+        // Survey complexity, when the pattern-analysis survey has run.
+        var digestRows = await _db.RoutineDigests
+            .AsNoTracking()
+            .Where(d => d.SourceVersionId == sourceVersionId && d.Complexity != null)
+            .Select(d => new { d.SubroutineId, d.Complexity })
+            .ToListAsync(ct);
+        var complexity = new Dictionary<Guid, string>();
+        foreach (var d in digestRows)
+            complexity[d.SubroutineId] = d.Complexity!;
+
+        // Reverse-call maps: callee name → caller names / count. Subroutine.Name
+        // is not unique across files, so this counts by name and accepts the noise.
         var callerCountMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var callerNamesMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -78,32 +98,37 @@ public sealed class RoutineTierClassifier
             catch { /* malformed jsonb on a single row is non-fatal */ }
         }
 
-        // Compute composite importance score for each routine.
         var scored = subs.Select(sub =>
         {
             var calls = callerCountMap.TryGetValue(sub.Name, out var c) ? c : 0;
             var loc = sub.LineEnd > sub.LineStart ? sub.LineEnd - sub.LineStart + 1 : 0;
-            var score = calls * 3 + loc / 5;
-            return (sub, calls, loc, score);
+            var cx = complexity.TryGetValue(sub.Id, out var cxv) ? cxv : null;
+            var weight = ComplexityWeight(cx);
+            var score = (calls * 3 + loc / 5) * weight;
+            var eligible = weight > 0;
+            return (sub, calls, loc, cx, score, eligible);
         }).ToList();
 
         // Top HeadlinePercentile % → Opus ("headline"); rest → Sonnet ("standard").
         var pct = Math.Clamp(_opts.HeadlinePercentile, 1, 50);
         var headlineCount = Math.Max(1, (int)Math.Ceiling(scored.Count * pct / 100.0));
-        var headlineIds = scored
+        var eligibleScored = scored.Where(x => x.eligible).ToList();
+        var pool = eligibleScored.Count > 0 ? eligibleScored : scored;
+        var headlineIds = pool
             .OrderByDescending(x => x.score)
+            .ThenByDescending(x => x.loc)
             .Take(headlineCount)
             .Select(x => x.sub.Id)
             .ToHashSet();
 
         var result = new Dictionary<Guid, TierAssignment>(subs.Count);
-        foreach (var (sub, calls, loc, _) in scored)
+        foreach (var (sub, calls, loc, cx, _, _) in scored)
         {
             var tier = headlineIds.Contains(sub.Id) ? "headline" : "standard";
             var callerNames = callerNamesMap.TryGetValue(sub.Name, out var cn)
                 ? (IReadOnlyList<string>)cn
                 : Array.Empty<string>();
-            result[sub.Id] = new TierAssignment(tier, calls, loc, callerNames);
+            result[sub.Id] = new TierAssignment(tier, calls, loc, callerNames, cx);
         }
         return result;
     }

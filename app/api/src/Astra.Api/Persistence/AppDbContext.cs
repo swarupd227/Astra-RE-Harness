@@ -175,6 +175,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.Id).HasColumnName("id");
             b.Property(x => x.CorpusId).HasColumnName("corpus_id");
             b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(24).IsRequired();
+            b.Property(x => x.RefId).HasColumnName("ref_id");
             b.Property(x => x.Title).HasColumnName("title").HasMaxLength(240).IsRequired();
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -183,6 +184,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.MessageCount).HasColumnName("message_count");
             b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.CorpusId, x.Kind });
+            b.HasIndex(x => new { x.Kind, x.RefId });
         });
 
         modelBuilder.Entity<ConversationMessage>(b =>
@@ -605,6 +607,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             b.Property(x => x.PreviousSectionId).HasColumnName("previous_section_id");
+            b.Property(x => x.QualityJson).HasColumnName("quality_json").HasColumnType("jsonb");
 
             b.HasOne(x => x.Corpus).WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Subroutine).WithMany().HasForeignKey(x => x.SubroutineId).OnDelete(DeleteBehavior.SetNull);

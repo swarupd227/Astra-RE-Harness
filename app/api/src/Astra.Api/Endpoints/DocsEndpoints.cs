@@ -221,6 +221,8 @@ public static class DocsEndpoints
                 subroutineId = s.SubroutineId,
                 renderedMarkdown = s.RenderedMarkdown,
                 payload = s.PayloadJson.RootElement,
+                // WS6 — critic score + deterministic checks, when the section was quality-checked.
+                quality = s.QualityJson == null ? null : (System.Text.Json.JsonElement?)System.Text.Json.JsonDocument.Parse(s.QualityJson).RootElement,
                 generationRunId = s.GenerationRunId,
                 llmCallId = s.LlmCallId,
                 createdAt = s.CreatedAt,

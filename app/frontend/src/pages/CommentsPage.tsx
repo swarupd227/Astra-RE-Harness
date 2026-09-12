@@ -39,11 +39,11 @@ export function CommentsPage() {
     <div className="mx-auto max-w-[900px] space-y-6 p-6 lg:p-10">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <p className="label">
             Mentions inbox
           </p>
-          <h1 className="mt-2 text-display font-semibold text-ink-primary">Comments</h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+          <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Comments</h1>
+          <p className="mt-2 max-w-2xl text-body text-ink-secondary">
             Threaded comments on specs and claims live alongside the review surface. This page is your
             inbox — every <span className="font-mono">@{inbox.data?.persona ?? '…'}</span> mention
             dispatched from any spec lands here.
@@ -89,7 +89,7 @@ export function CommentsPage() {
             description={`${unread} unread`}
           />
           <CardBody className="p-0">
-            <ul className="divide-y divide-border-subtle" data-testid="inbox-list">
+            <ul className="divide-y divide-line-subtle" data-testid="inbox-list">
               {data.map((n) => (
                 <InboxRow key={n.id} n={n} qc={qc} />
               ))}
@@ -117,7 +117,7 @@ function InboxRow({ n, qc }: { n: NotificationItem; qc: ReturnType<typeof useQue
     <li
       className={
         'group relative px-6 py-4 transition-colors duration-fast hover:bg-sunken ' +
-        (unread ? 'bg-accent-muted/20' : '')
+        (unread ? 'bg-volt/10' : '')
       }
       data-testid={`inbox-row-${n.id}`}
     >
@@ -153,7 +153,7 @@ function InboxRow({ n, qc }: { n: NotificationItem; qc: ReturnType<typeof useQue
               <Link
                 to={`/specs/${specId}/audit`}
                 onClick={() => unread && markRead.mutate()}
-                className="text-caption font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-ink-primary"
+                className="text-caption font-medium text-volt-ink hover:underline focus-visible:outline-2 focus-visible:outline-ink-primary"
                 data-testid={`view-${n.id}`}
               >
                 Open spec audit

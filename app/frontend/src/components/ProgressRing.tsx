@@ -1,7 +1,9 @@
+import { themeHex, useTheme } from '@/theme';
+
 /**
- * Marvell-style SVG progress ring. Inspired by the CUDE compliance ring:
- * stroke-dasharray animates as `score` changes, label colour-codes by
- * threshold, big tabular-nums percentage centred inside.
+ * SVG progress ring. stroke-dasharray animates as `score` changes, the
+ * colour codes by threshold, big tabular-nums percentage centred inside.
+ * Every colour comes from the theme table so the ring follows the toggle.
  */
 export function ProgressRing({
   score,
@@ -15,15 +17,15 @@ export function ProgressRing({
   label?: string;
   size?: number;
 }) {
+  const { theme } = useTheme();
   const r = (size - 28) / 2;
   const circ = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(100, score));
   const dash = circ * (clamped / 100);
-  // Light-theme friendly emerald / amber / rose set.
   const colour =
-    clamped >= thresholds.good ? '#059669' :
-    clamped >= thresholds.warn ? '#d97706' :
-    '#e11d48';
+    clamped >= thresholds.good ? themeHex('status-ok', theme) :
+    clamped >= thresholds.warn ? themeHex('status-warn', theme) :
+    themeHex('status-fail', theme);
   const stateLabel =
     clamped >= thresholds.good ? 'ON TRACK' :
     clamped >= thresholds.warn ? 'NEEDS ATTENTION' :
@@ -31,10 +33,8 @@ export function ProgressRing({
 
   return (
     <div className="flex flex-col items-center justify-center gap-1">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Track — light slate-200 on white, much subtler than the
-            previous dark slate-800 track. */}
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={12} />
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${Math.round(clamped)}% ${label.toLowerCase()}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={themeHex('line-subtle', theme)} strokeWidth={12} />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -51,10 +51,10 @@ export function ProgressRing({
           x={size / 2}
           y={size / 2 - 4}
           textAnchor="middle"
-          fill="#0f172a"
+          fill={themeHex('ink-primary', theme)}
           fontSize="24"
           fontWeight={800}
-          fontFamily="Inter"
+          fontFamily="Inter Variable, Inter, sans-serif"
         >
           {Math.round(clamped)}%
         </text>
@@ -62,9 +62,9 @@ export function ProgressRing({
           x={size / 2}
           y={size / 2 + 14}
           textAnchor="middle"
-          fill="#94a3b8"
+          fill={themeHex('ink-tertiary', theme)}
           fontSize="8"
-          fontFamily="Inter"
+          fontFamily="Inter Variable, Inter, sans-serif"
           fontWeight={500}
         >
           {label}

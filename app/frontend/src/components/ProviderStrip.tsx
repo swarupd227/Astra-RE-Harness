@@ -15,7 +15,7 @@ export function ProviderStrip({ info, latencyMs, tokens }: {
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-border-subtle bg-sunken/60 px-4 py-1.5 font-mono text-[11px] text-ink-tertiary">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-line-subtle bg-sunken/60 px-4 py-1.5 font-mono text-[11px] text-ink-tertiary">
       <span className="inline-flex items-center gap-1.5">
         <Cpu className="h-3 w-3" aria-hidden="true" />
         <span>{info.name}</span>

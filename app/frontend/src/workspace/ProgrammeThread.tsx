@@ -29,6 +29,8 @@ export function ProgrammeThread({
   onDecline,
   before,
   empty,
+  expandInline = false,
+  compact = false,
 }: {
   messages: ConversationMessage[];
   messageKey?: (m: ConversationMessage) => string;
@@ -45,6 +47,10 @@ export function ProgrammeThread({
   before?: ReactNode;
   /** Friendly starter shown when the thread has no messages. */
   empty?: ReactNode;
+  /** No artifact pane in this host: the selected card expands in place. */
+  expandInline?: boolean;
+  /** Narrow host (a side panel): tighter gutters, no max-width. */
+  compact?: boolean;
 }) {
   const reduced = useReducedMotion();
   const now = useTick(60_000);
@@ -109,13 +115,13 @@ export function ProgrammeThread({
         onScroll={onScroll}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
       >
-        <div className="mx-auto w-full max-w-[880px] px-5 pb-8 pt-6 sm:px-8">
+        <div className={clsx('w-full', compact ? 'px-4 pb-6 pt-4' : 'mx-auto max-w-[880px] px-5 pb-8 pt-6 sm:px-8')}>
           {before}
 
           {loading ? (
             <ThreadSkeleton />
           ) : (
-            <div data-testid="thread" className="space-y-7" aria-live="polite">
+            <div data-testid="thread" className={compact ? 'space-y-5' : 'space-y-7'} aria-live="polite">
               {messages.length === 0 && !working && empty}
               <AnimatePresence initial={false}>
                 {messages.map((m) => (
@@ -135,6 +141,7 @@ export function ProgrammeThread({
                       onDecline={onDecline}
                       confirming={confirmingId === m.id}
                       disabled={streaming}
+                      expandInline={expandInline}
                     />
                   </motion.div>
                 ))}

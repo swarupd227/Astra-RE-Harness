@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { PanelRightOpen, RefreshCw } from 'lucide-react';
+import { PanelRightOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getPersona } from '@/lib/api';
 import { conversationsApi, type Artifact, type Conversation, type Suggestion } from '@/lib/conversations';
@@ -15,8 +15,8 @@ import { ArtifactPane } from './ArtifactPane';
 import { Composer } from './Composer';
 import { MissionControl } from './MissionControl';
 import { ProgrammeThread } from './ProgrammeThread';
-import { SuggestionChips } from './SuggestionChips';
-import { AgentAvatar } from './AgentAvatar';
+import { EmptyThread, LoadError } from './ThreadPanel';
+import { ThreadActionsProvider, type ThreadActions } from './ThreadActions';
 import type { ArtifactSelection } from './MessageBubble';
 import { useConversation } from './useConversation';
 import { useMediaQuery, useViewportFill } from './hooks';
@@ -131,6 +131,26 @@ export function WorkspacePage() {
     if (text) void send(text);
   }, [pendingIntent, conversationId, conv.conversation, conv.streaming, send]);
 
+  // What cards may ask of this thread: send an intent, or open a card that
+  // is already here (a citation chip opening the routine's source).
+  const threadActions = useMemo<ThreadActions>(
+    () => ({
+      sendIntent: onSuggestion,
+      openArtifact: (kind, refId) => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const m = messages[i];
+          const idx = (m.artifacts ?? []).findIndex((a) => a.kind === kind && a.refId === refId);
+          if (idx >= 0) {
+            selectArtifact({ messageId: m.id, index: idx });
+            return true;
+          }
+        }
+        return false;
+      },
+    }),
+    [onSuggestion, messages, selectArtifact],
+  );
+
   // ── Derived header bits ───────────────────────────────────────────
   const persona = getPersona();
   const programme = conversation?.programme ?? null;
@@ -141,6 +161,7 @@ export function WorkspacePage() {
   const loadError = (!conversationId ? (globalQuery.error as Error | null) : conv.error) ?? null;
 
   return (
+    <ThreadActionsProvider value={threadActions}>
     <div
       ref={rootRef}
       style={fill}
@@ -224,8 +245,9 @@ export function WorkspacePage() {
               }
               empty={
                 <EmptyThread
-                  global={isGlobal}
-                  programmeName={programme?.name ?? null}
+                  lead
+                  title={isGlobal ? 'Ask about any programme.' : `Ask about ${programme?.name ?? 'this programme'}.`}
+                  body="Astra routes what you ask to Discovery, Spec, Migration, Validation and the rest — and they answer here with cards you can open."
                   starters={starters}
                   onPick={onSuggestion}
                   disabled={conv.streaming || !conversationId}
@@ -248,62 +270,25 @@ export function WorkspacePage() {
         </section>
 
         {isXl && paneOpen && (
-          <ArtifactPane mode="docked" artifact={selectedArtifact} onClose={() => setPaneOpen(false)} />
+          <ArtifactPane
+            mode="docked"
+            artifact={selectedArtifact}
+            onClose={() => setPaneOpen(false)}
+            onIntent={conv.streaming ? undefined : onSuggestion}
+          />
         )}
       </div>
 
       {!isXl && (
-        <ArtifactPane mode="overlay" artifact={selectedArtifact} open={overlayOpen} onClose={() => setOverlayOpen(false)} />
+        <ArtifactPane
+          mode="overlay"
+          artifact={selectedArtifact}
+          open={overlayOpen}
+          onClose={() => setOverlayOpen(false)}
+          onIntent={conv.streaming ? undefined : onSuggestion}
+        />
       )}
     </div>
-  );
-}
-
-function EmptyThread({
-  global,
-  programmeName,
-  starters,
-  onPick,
-  disabled,
-}: {
-  global: boolean;
-  programmeName: string | null;
-  starters: Suggestion[];
-  onPick: (intent: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-start gap-4 py-2" data-testid="thread-empty">
-      <div className="flex items-center gap-3">
-        <AgentAvatar agent="orchestrator" size="lg" />
-        <div>
-          <p className="text-body font-medium text-ink-primary">
-            {global ? 'Ask about any programme.' : `Ask about ${programmeName ?? 'this programme'}.`}
-          </p>
-          <p className="text-caption text-ink-secondary">
-            Astra routes what you ask to Discovery, Spec, Migration, Validation and the rest — and they answer here
-            with cards you can open.
-          </p>
-        </div>
-      </div>
-      <SuggestionChips suggestions={starters} onPick={onPick} disabled={disabled} lead />
-    </div>
-  );
-}
-
-function LoadError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center" data-testid="thread-error">
-      <p className="text-body text-ink-primary">Couldn’t open this thread.</p>
-      <p className="max-w-md text-caption text-ink-secondary">{error.message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-caption font-medium text-ink-secondary hover:border-line-strong hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
-      >
-        <RefreshCw size={13} aria-hidden="true" />
-        Try again
-      </button>
-    </div>
+    </ThreadActionsProvider>
   );
 }

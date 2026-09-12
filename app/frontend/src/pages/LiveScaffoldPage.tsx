@@ -162,15 +162,15 @@ export function LiveScaffoldPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col">
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               <Cog className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <p className="label">
                 Scaffold generation
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
@@ -216,9 +216,9 @@ export function LiveScaffoldPage() {
         <div className="px-6 py-3"><ErrorBlock title="Scaffold failed" message={errorMessage} /></div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,400px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-line-subtle overflow-y-auto bg-canvas lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,400px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         <div className="h-52 min-h-0 overflow-y-auto bg-raised lg:h-auto">
-          <div className="border-b border-border-subtle px-3 py-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <div className="border-b border-line-subtle px-3 py-2 label">
             Generated files
           </div>
           {treeFiles.length === 0 ? (
@@ -237,7 +237,7 @@ export function LiveScaffoldPage() {
         </div>
 
         <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
-          <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
+          <div className="shrink-0 flex items-center justify-between border-b border-line-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{active?.path ?? 'Awaiting first file…'}</span>
             <span className="text-ink-tertiary">{active?.lineCount ? `${active.lineCount} lines` : '—'}</span>
           </div>
@@ -248,6 +248,7 @@ export function LiveScaffoldPage() {
                 language={active.language as any}
                 height="100%"
                 todoMarkers={todoMarkers}
+                theme="astra-dark"
               />
             </div>
           ) : (
@@ -262,7 +263,7 @@ export function LiveScaffoldPage() {
           {active && active.derivedFrom.length > 0 ? (
             <ul className="mt-3 space-y-1.5">
               {active.derivedFrom.map((id) => (
-                <li key={id} className="rounded-sm border border-border-subtle bg-canvas px-2 py-1 uppercase">
+                <li key={id} className="rounded-sm border border-line-subtle bg-canvas px-2 py-1 uppercase">
                   {id}
                 </li>
               ))}
@@ -287,9 +288,9 @@ function StagePill({ stage }: { stage: string | null }) {
             <span
               className={clsx(
                 'flex h-5 w-5 items-center justify-center rounded-full border font-mono text-[10px]',
-                state === 'done' && 'border-status-review bg-status-review text-white',
-                state === 'active' && 'border-accent bg-accent text-white motion-safe:animate-pulse',
-                (state === 'pending' || state === 'idle') && 'border-border-subtle bg-canvas text-ink-tertiary',
+                state === 'done' && 'border-status-ok bg-status-ok text-ink-inverse',
+                state === 'active' && 'border-volt bg-volt text-on-volt motion-safe:animate-pulse',
+                (state === 'pending' || state === 'idle') && 'border-line-subtle bg-canvas text-ink-tertiary',
               )}
             >
               {i + 1}
@@ -297,7 +298,7 @@ function StagePill({ stage }: { stage: string | null }) {
             <span className="hidden font-mono text-micro uppercase tracking-wide xl:inline">
               {s.label}
             </span>
-            {i < STAGES.length - 1 && <span className="mx-0.5 h-px w-3 bg-border-subtle" aria-hidden="true" />}
+            {i < STAGES.length - 1 && <span className="mx-0.5 h-px w-3 bg-line-subtle" aria-hidden="true" />}
           </li>
         );
       })}

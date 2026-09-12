@@ -12,6 +12,7 @@ import { MonacoSource } from '@/components/MonacoSource';
 import { TargetSelector } from '@/components/TargetSelector';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { WorkflowRail, nextStepFor } from '@/components/WorkflowRail';
+import { PageHero } from '@/components/PageHero';
 import { useTargetStack } from '@/hooks/useTargetStack';
 import { prettySchema, prettyStack } from '@/lib/targetStacks';
 import { formatState } from '@/lib/labels';
@@ -83,21 +84,19 @@ export function SubroutineDetailPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+      <PageHero
+        eyebrow={
+          <span className="font-mono normal-case tracking-normal">
             <Link to={`/projects/${s.corpus.id}`} className="hover:text-ink-primary">
               {s.corpus.name}
             </Link>
             <span className="mx-1 text-ink-tertiary">›</span>
             <span className="text-ink-secondary">{s.file.relativePath}</span>
-          </p>
-          <h1 className="mt-2 font-mono text-display font-semibold text-ink-primary">
-            {s.name}
-          </h1>
-          <p className="mt-1 font-mono text-caption text-ink-tertiary">{s.signature}</p>
-        </div>
-        <div className="flex items-center gap-2">
+          </span>
+        }
+        title={<span className="font-mono">{s.name}</span>}
+        lead={<span className="font-mono text-caption text-ink-tertiary">{s.signature}</span>}
+        actions={<>
           <Badge tone={badgeToneForState(s.state)}>{formatState(s.state)}</Badge>
           {(s.state === 'DRAFT' || s.state === 'IN_REVIEW' || s.state === 'SIGNED') && (
             <Link to={s.state === 'DRAFT' ? `/subroutines/${s.id}/spec` : `/subroutines/${s.id}/review`}>
@@ -122,11 +121,11 @@ export function SubroutineDetailPage() {
             <Sparkles className="h-4 w-4" />
             {hasExistingSpec ? 'Re-extract spec' : 'Extract spec'}
           </Button>
-        </div>
-      </header>
+        </>}
+      />
 
       {/* Where this routine is in the workflow, and what happens next. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-md border border-border-subtle bg-raised px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-line-subtle bg-raised px-4 py-2.5">
         <WorkflowRail state={s.state} persona={whoami.data?.persona as any} />
         <p className="text-caption text-ink-secondary">
           Next: <strong className="text-ink-primary">{next.action}</strong>
@@ -136,7 +135,7 @@ export function SubroutineDetailPage() {
 
       {help && (
         <div
-          className={`rounded-md border-l-4 ${help.borderClass} bg-raised px-4 py-3`}
+          className={`rounded-lg border border-line-subtle border-l-4 ${help.borderClass} bg-raised px-4 py-3`}
           data-testid={`extraction-help-${help.id}`}
         >
           <p className="flex flex-wrap items-baseline gap-2 text-body text-ink-secondary">
@@ -171,6 +170,7 @@ export function SubroutineDetailPage() {
               value={source.data!.content}
               height={560}
               highlightLine={s.lineStart}
+              theme="astra-dark"
             />
           </CardBody>
         </Card>
@@ -234,7 +234,7 @@ function TargetStackCard({ sourceLanguage }: { sourceLanguage: string | null }) 
         />
         {overriddenFrom && (
           <p
-            className="flex items-start gap-1.5 rounded-md border border-status-scaffolded/40 bg-[#F2E5C2]/40 px-2.5 py-2 text-caption text-ink-primary"
+            className="flex items-start gap-1.5 rounded-md border border-status-scaffolded/40 bg-status-warn/10 px-2.5 py-2 text-caption text-ink-primary"
             data-testid="target-overridden-notice"
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
@@ -252,7 +252,7 @@ function TargetStackCard({ sourceLanguage }: { sourceLanguage: string | null }) 
             <button
               type="button"
               onClick={() => setTargetStack(savedOverridesRecommended)}
-              className="underline decoration-dotted underline-offset-2 hover:text-accent"
+              className="underline decoration-dotted underline-offset-2 hover:text-volt-ink"
               data-testid="use-recommended-target"
             >
               Use recommended
@@ -296,18 +296,18 @@ function Group({ title, items }: { title: string; items: string[] }) {
   if (!items || items.length === 0) {
     return (
       <div>
-        <h4 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{title}</h4>
+        <h4 className="label">{title}</h4>
         <p className="mt-1 text-caption text-ink-tertiary">—</p>
       </div>
     );
   }
   return (
     <div>
-      <h4 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{title}</h4>
+      <h4 className="label">{title}</h4>
       <ul className="mt-1.5 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <li key={item}>
-            <span className="inline-flex items-center rounded-sm border border-border-subtle bg-canvas px-1.5 py-0.5 font-mono text-caption text-ink-primary">
+            <span className="inline-flex items-center rounded-sm border border-line-subtle bg-canvas px-1.5 py-0.5 font-mono text-caption text-ink-primary">
               {item}
             </span>
           </li>
@@ -326,16 +326,16 @@ function Group({ title, items }: { title: string; items: string[] }) {
 function NextStepCard({ subroutineId, state }: { subroutineId: string; state: string }) {
   const next = nextStepFor(state);
   return (
-    <Card className="border-accent/40 bg-accent-muted/40">
+    <Card className="border-volt/40 bg-volt/10">
       <CardBody>
-        <p className="text-caption font-medium uppercase tracking-wider text-accent">
+        <p className="text-caption font-medium uppercase tracking-wider text-volt-ink">
           {next.done ? 'Done' : 'Up next'}
         </p>
         <p className="mt-2 text-body font-semibold text-ink-primary">{next.action}</p>
         <p className="mt-1 text-caption text-ink-secondary">{next.hint}</p>
         <Link
           to={next.href(subroutineId)}
-          className="mt-3 inline-flex items-center gap-1.5 text-caption font-medium text-accent hover:underline"
+          className="mt-3 inline-flex items-center gap-1.5 text-caption font-medium text-volt-ink hover:underline"
           data-testid="next-step-cta"
         >
           {next.done ? 'Open it' : 'Go there'}
@@ -410,11 +410,11 @@ function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<type
               <Badge tone={q.data.planStatus === 'approved' ? 'success' : 'review'}>
                 {q.data.planStatus}
               </Badge>
-              <span className="font-mono text-body-sm text-ink-primary">
+              <span className="font-mono text-caption text-ink-primary">
                 Wave {q.data.waveNumber} of {q.data.totalWaves}
               </span>
             </div>
-            <p className="text-body-sm text-ink-secondary">{q.data.waveName}</p>
+            <p className="text-caption text-ink-secondary">{q.data.waveName}</p>
             <p className="font-mono text-caption text-ink-tertiary">{q.data.strategyName}</p>
           </div>
         )}
@@ -435,7 +435,7 @@ function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType
         {q.data && (
           <>
             <Badge tone={readinessTone(q.data.classification)}>{q.data.classification}</Badge>
-            <ul className="space-y-1 text-body-sm text-ink-secondary">
+            <ul className="space-y-1 text-caption text-ink-secondary">
               {q.data.reasons.map((r) => <li key={r}>{r}</li>)}
             </ul>
             <p className="font-mono text-caption text-ink-tertiary">
@@ -445,7 +445,7 @@ function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType
               )}
             </p>
             {q.data.blockingRoutineIds.length > 0 && (
-              <p className="font-mono text-caption text-amber-700">
+              <p className="font-mono text-caption text-status-warn">
                 Blocked by {q.data.blockingRoutineIds.length} routine{q.data.blockingRoutineIds.length === 1 ? '' : 's'}
               </p>
             )}
@@ -477,7 +477,7 @@ function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnTy
         )}
         {q.data && (
           <>
-            <p className="font-mono text-body-sm text-ink-primary">
+            <p className="font-mono text-caption text-ink-primary">
               {q.data.transitiveCallerCount} downstream
               {q.data.directCallerCount > 0 && (
                 <> ({q.data.directCallerCount} direct)</>
@@ -487,19 +487,19 @@ function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnTy
               )}
             </p>
             {q.data.affected.length === 0 && (
-              <p className="text-body-sm text-ink-secondary">
+              <p className="text-caption text-ink-secondary">
                 Nothing in this corpus depends on this routine.
               </p>
             )}
             {q.data.affected.length > 0 && (
               <details>
-                <summary className="cursor-pointer text-body-sm text-accent hover:underline">
+                <summary className="cursor-pointer text-caption text-volt-ink hover:underline">
                   Show {q.data.affected.length} affected routine{q.data.affected.length === 1 ? '' : 's'}
                 </summary>
                 <ul className="mt-2 space-y-1 font-mono text-caption">
                   {q.data.affected.map((a) => (
                     <li key={a.id} className="flex items-center justify-between gap-2">
-                      <Link to={`/subroutines/${a.id}`} className="truncate text-accent hover:underline">
+                      <Link to={`/subroutines/${a.id}`} className="truncate text-volt-ink hover:underline">
                         {a.name}
                       </Link>
                       <span className="flex items-center gap-1 text-ink-tertiary">
@@ -540,36 +540,36 @@ const HELP_FORTRAN: ExtractionHelp = {
   id: 'fortran-f77',
   label: 'Fortran extraction',
   body: 'The extractor will look for invariants, section contracts, I/O side effects, and edge cases. COMMON-block reads, IMPLICIT typing surprises, and BLOCK DATA initialisers are first-class concerns; expect 3–6 invariants and 1–3 open questions on a typical routine.',
-  borderClass: 'border-l-[#6366F1]',
-  labelTextClass: 'text-[#3730A3]',
+  borderClass: 'border-l-status-info',
+  labelTextClass: 'text-status-info',
 };
 const HELP_COBOL: ExtractionHelp = {
   id: 'cobol',
   label: 'COBOL extraction',
   body: 'The extractor will look for invariants, section contracts, and I/O side effects with focus on VSAM keys, CICS interactions, and PIC field truncation. EVALUATE WHEN OTHER fall-through and copybook redefines are common open questions.',
-  borderClass: 'border-l-[#14B8A6]',
-  labelTextClass: 'text-[#0F766E]',
+  borderClass: 'border-l-status-ok',
+  labelTextClass: 'text-status-ok',
 };
 const HELP_DELPHI: ExtractionHelp = {
   id: 'delphi',
   label: 'Delphi extraction',
   body: 'Cleanest mapping of the four — the curated RTL table (per ADR-025) means object lifetimes, properties, and events translate to .NET / Java with few open questions. Expect a tight extraction surface; SME review is usually short.',
-  borderClass: 'border-l-[#10B981]',
-  labelTextClass: 'text-[#065F46]',
+  borderClass: 'border-l-wave-2',
+  labelTextClass: 'text-wave-2',
 };
 const HELP_CPP: ExtractionHelp = {
   id: 'cpp',
   label: 'C++ extraction — expect more open questions',
   body: 'Templates, ownership models, undefined behaviour, and noexcept contracts each get their own claim kind. Many routines surface 2–3 open questions per extraction because the source under-specifies ownership or relies on UB that does not map cleanly. Per ADR-027, the Java target may suggest a JNA fallback when template constraints exceed what generics can express.',
-  borderClass: 'border-l-[#F59E0B]',
-  labelTextClass: 'text-[#92400E]',
+  borderClass: 'border-l-status-warn',
+  labelTextClass: 'text-status-warn',
 };
 const HELP_VB6: ExtractionHelp = {
   id: 'vb6',
   label: 'VB6 extraction — flag the swallows + the COM',
   body: 'On Error Resume Next blocks become on_error_handler claims; the extractor surfaces narrow Err.Number filters as Open Questions because most "intentional" swallows turn out to mask real errors at scale. Every CreateObject / GetObject site becomes a com_interop_contract claim — the customer must source modern equivalents during Discovery, not the harness. Default-property access (rs!Field, txtCustomer in a String context) explodes into typed reads in the .NET 10 port.',
-  borderClass: 'border-l-[#0EA5E9]',
-  labelTextClass: 'text-[#075985]',
+  borderClass: 'border-l-sand-300',
+  labelTextClass: 'text-ink-secondary',
 };
 
 function helpForSchemaId(schemaId: string | null): ExtractionHelp | null {

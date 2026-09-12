@@ -147,9 +147,9 @@ export function MigrationPlanPage() {
               />
             </button>
             {pickerOpen && (
-              <div className="space-y-3 border-t border-border-subtle pt-3">
+              <div className="space-y-3 border-t border-line-subtle pt-3">
                 <div className="space-y-1">
-                  <label className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+                  <label className="label">
                     Strategy
                   </label>
                   <select
@@ -160,7 +160,7 @@ export function MigrationPlanPage() {
                       setOptionsError(null);
                     }}
                     disabled={strategiesQuery.isPending}
-                    className="w-full rounded border border-border-subtle bg-raised px-2 py-1 font-mono text-body-sm text-ink-primary"
+                    className="w-full rounded border border-line-subtle bg-raised px-2 py-1 font-mono text-caption text-ink-primary"
                     data-testid="strategy-select"
                   >
                     {strategies.map((s) => (
@@ -171,14 +171,14 @@ export function MigrationPlanPage() {
                     ))}
                   </select>
                   {selectedStrategyDef && (
-                    <p className="text-body-sm text-ink-secondary">
+                    <p className="text-caption text-ink-secondary">
                       {selectedStrategyDef.description}
                     </p>
                   )}
                 </div>
                 {selectedStrategyDef && strategyHasFields(selectedStrategyDef) && (
                   <div className="space-y-1">
-                    <label className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+                    <label className="label">
                       Options (JSON)
                     </label>
                     <textarea
@@ -189,7 +189,7 @@ export function MigrationPlanPage() {
                       }}
                       rows={6}
                       placeholder={placeholderFor(selectedStrategyDef.name)}
-                      className="w-full rounded border border-border-subtle bg-raised px-2 py-1 font-mono text-caption text-ink-primary"
+                      className="w-full rounded border border-line-subtle bg-raised px-2 py-1 font-mono text-caption text-ink-primary"
                       data-testid="strategy-options-textarea"
                     />
                     <details className="text-caption text-ink-tertiary">
@@ -220,7 +220,7 @@ export function MigrationPlanPage() {
           <CardBody className="space-y-3 text-center">
             <Layers className="mx-auto h-8 w-8 text-ink-tertiary" />
             <p className="text-body text-ink-primary">No migration plan yet for this corpus.</p>
-            <p className="text-body-sm text-ink-secondary">
+            <p className="text-caption text-ink-secondary">
               The planner reads the dependency graph and assigns every routine to a wave based
               on what it CALLs. Same graph in → same plan out, every time.
             </p>
@@ -335,13 +335,13 @@ export function MigrationPlanPage() {
 
       <Card>
         <CardBody>
-          <Link to={`/corpora/${corpusId}`} className="text-body-sm text-accent hover:underline">
+          <Link to={`/corpora/${corpusId}`} className="text-caption text-volt-ink hover:underline">
             ← Back to corpus
           </Link>
           {' · '}
           <Link
             to={`/corpora/${corpusId}/dependency-graph`}
-            className="text-body-sm text-accent hover:underline"
+            className="text-caption text-volt-ink hover:underline"
           >
             Open dependency graph
           </Link>
@@ -397,11 +397,11 @@ function WaveCard({
     5: 'bg-wave-5',
   };
   const eyebrow: Record<1 | 2 | 3 | 4 | 5, string> = {
-    1: 'text-emerald-ink',
-    2: 'text-teal-ink',
-    3: 'text-indigo-ink',
-    4: 'text-violet-ink',
-    5: 'text-amber-ink',
+    1: 'text-wave-1',
+    2: 'text-wave-2',
+    3: 'text-wave-3',
+    4: 'text-wave-4',
+    5: 'text-wave-5',
   };
   return (
     <Card data-testid={`migration-wave-${wave.waveNumber}`} className="relative overflow-hidden">
@@ -451,9 +451,9 @@ function RoutinePill({
     <li>
       <button
         onClick={onClick}
-        className="group flex w-full items-center justify-between gap-2 rounded border border-border-subtle bg-raised px-2 py-1 text-left hover:bg-sunken"
+        className="group flex w-full items-center justify-between gap-2 rounded border border-line-subtle bg-raised px-2 py-1 text-left hover:bg-sunken"
       >
-        <span className="truncate font-mono text-body-sm text-ink-primary">{routine.name}</span>
+        <span className="truncate font-mono text-caption text-ink-primary">{routine.name}</span>
         <span className="flex items-center gap-1">
           <Badge tone={tone}>{routine.state}</Badge>
           <ArrowRight className="h-3 w-3 text-ink-tertiary opacity-0 group-hover:opacity-100" />

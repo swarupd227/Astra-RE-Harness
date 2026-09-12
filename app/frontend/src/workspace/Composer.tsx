@@ -16,6 +16,8 @@ export function Composer({
   hint,
   placeholder = 'Ask Astra anything about this programme… (⏎ to send, ⇧⏎ newline)',
   autoFocus = false,
+  compact = false,
+  prefill = null,
 }: {
   onSend: (text: string) => void;
   onCancel: () => void;
@@ -24,6 +26,13 @@ export function Composer({
   hint?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Narrow host (a side panel): no centred max-width, tighter padding. */
+  compact?: boolean;
+  /**
+   * Put text in the box without sending it (a starter the user completes,
+   * e.g. "Accept all except …"). Bump `nonce` to apply the same text again.
+   */
+  prefill?: { text: string; nonce: number } | null;
 }) {
   const [text, setText] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -40,6 +49,17 @@ export function Composer({
   useEffect(() => {
     grow();
   }, [text, grow]);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setText(prefill.text);
+    window.requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }, [prefill]);
 
   const submit = useCallback(() => {
     const t = text.trim();
@@ -85,7 +105,7 @@ export function Composer({
   return (
     <div className="shrink-0 border-t border-line-subtle bg-canvas/95 backdrop-blur-sm">
       <form
-        className="mx-auto w-full max-w-[880px] px-5 pb-4 pt-3 sm:px-8"
+        className={clsx('w-full', compact ? 'px-4 pb-3 pt-2.5' : 'mx-auto max-w-[880px] px-5 pb-4 pt-3 sm:px-8')}
         onSubmit={(e) => {
           e.preventDefault();
           submit();

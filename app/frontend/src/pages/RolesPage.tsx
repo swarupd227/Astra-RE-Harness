@@ -61,11 +61,11 @@ export function RolesPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="roles-page">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Roles &amp; permissions
         </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Roles &amp; Permissions</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Roles &amp; Permissions</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Four personas with clear separation of duty — Engineer, SME,
           Observer, Admin. Permissions are enforced at the API; the matrix
           below shows the canonical capability set every action falls into.
@@ -178,7 +178,7 @@ function UsersPanel() {
       <CardBody className="space-y-4">
         {adding && (
           <div
-            className="rounded-md border border-border-subtle bg-sunken/40 p-4"
+            className="rounded-md border border-line-subtle bg-sunken/40 p-4"
             data-testid="user-add-form"
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -239,7 +239,7 @@ function UsersPanel() {
             No users yet. Click "Add user" to create the first one.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border-subtle">
+          <div className="overflow-x-auto rounded-md border border-line-subtle">
             <table className="w-full text-body">
               <thead className="bg-sunken/60 text-caption text-ink-tertiary">
                 <tr>
@@ -288,7 +288,7 @@ function UserRowItem({
   pending: boolean;
 }) {
   return (
-    <tr className="border-t border-border-subtle" data-testid={`user-row-${user.id}`}>
+    <tr className="border-t border-line-subtle" data-testid={`user-row-${user.id}`}>
       <td className="px-3 py-2 text-ink-primary">{user.displayName}</td>
       <td className="px-3 py-2 font-mono text-caption text-ink-secondary">{user.email}</td>
       <td className="px-3 py-2">
@@ -297,7 +297,7 @@ function UserRowItem({
           onChange={(e) => onPersonaChange(e.target.value as PersonaId)}
           disabled={pending}
           aria-label="Persona"
-          className="rounded-md border border-border-subtle bg-raised px-2 py-1 text-caption text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="rounded-md border border-line-subtle bg-raised px-2 py-1 text-caption text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
         >
           <option value="engineer">Engineer</option>
           <option value="sme">SME</option>
@@ -343,7 +343,7 @@ function LabelledInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
       />
     </label>
   );
@@ -366,7 +366,7 @@ function LabelledSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -410,7 +410,7 @@ function CategoryBlock({
   return (
     <div data-testid={`matrix-category-${category.toLowerCase()}`}>
       <div className="mb-2 text-caption uppercase tracking-wide text-ink-tertiary">{category}</div>
-      <div className="overflow-x-auto rounded-md border border-border-subtle">
+      <div className="overflow-x-auto rounded-md border border-line-subtle">
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>
@@ -422,7 +422,7 @@ function CategoryBlock({
           </thead>
           <tbody>
             {actions.map((a) => (
-              <tr key={a.id} className="border-t border-border-subtle">
+              <tr key={a.id} className="border-t border-line-subtle">
                 <td className="px-3 py-1.5">
                   <div className="text-ink-primary">{a.label}</div>
                   <div className="text-caption text-ink-tertiary">{a.description}</div>

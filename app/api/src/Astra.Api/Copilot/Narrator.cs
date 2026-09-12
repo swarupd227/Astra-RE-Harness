@@ -44,6 +44,11 @@ public sealed class Narrator
         _ = Task.Run(() => FollowAsync(t));
     }
 
+    /// <summary>Runs currently being followed, grouped by agent — the rail's
+    /// "who is busy" signal.</summary>
+    public IReadOnlyDictionary<string, List<Tracked>> ActiveByAgent() =>
+        _tracked.Values.GroupBy(t => t.Agent).ToDictionary(g => g.Key, g => g.ToList());
+
     private async Task FollowAsync(Tracked t)
     {
         var ct = _lifetime.ApplicationStopping;
@@ -130,7 +135,16 @@ public sealed class Narrator
             case "pattern-analysis":
             {
                 var run = await db.PatternAnalysisRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == t.RunId, ct);
-                markdown = PatternAnalysisSummary(run, state, summary);
+                var multi = 0;
+                var singles = 0;
+                if (run is not null)
+                {
+                    var sizes = await db.PatternClusters.AsNoTracking()
+                        .Where(c => c.PatternAnalysisRunId == run.Id).Select(c => c.MemberCount).ToListAsync(ct);
+                    multi = sizes.Count(s => s > 1);
+                    singles = sizes.Count(s => s <= 1);
+                }
+                markdown = PatternAnalysisSummary(run, state, summary, multi, singles);
                 if (state is "SUCCEEDED" or "PARTIAL" && t.CorpusId is { } cid)
                 {
                     var grid = await ArtifactBuilders.ClusterGridAsync(db, cid, ct);
@@ -223,6 +237,33 @@ public sealed class Narrator
                 markdown = $"Documentation run {StateWord(state)}: {summary}";
                 suggestions.Add(new("Open the docs", "Show me the generated documentation"));
                 break;
+            case "assessment":
+            {
+                var item = await LatestItemAsync(t.RunId, "assessment", ct);
+                Guid? sectionId = item.TryGetProperty("sectionId", out var sid) && Guid.TryParse(sid.GetString(), out var g) ? g : null;
+                var section = sectionId is { } id ? await db.DocSections.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct) : null;
+                var card = section is null ? null : Astra.Api.Assessment.AssessmentService.CardOf(section);
+                if (state == "SUCCEEDED" && section is not null && card is { } c)
+                {
+                    artifacts.Add(new ArtifactDto("assessment", section.CorpusId.ToString(), c.Clone()));
+                    string Str(string a, string b) => c.TryGetProperty(a, out var x) && x.TryGetProperty(b, out var y) && y.ValueKind == JsonValueKind.String ? y.GetString() ?? "" : "";
+                    var mode = Str("recommendation", "mode");
+                    var target = Str("recommendation", "targetStack");
+                    var effortBand = Str("effort", "band");
+                    var riskBand = Str("risk", "band");
+                    markdown = $"Assessment ready for **{t.Label}**: effort **{effortBand}**, risk **{riskBand}** — I recommend **{mode}** on **{target}**. " +
+                               Str("recommendation", "summary") + " The full write-up is in the card; open it for the fact sheet.";
+                    suggestions.Add(new("Why that mode?", $"Why do you recommend {mode} for {t.Label}, and what would change the answer?"));
+                    suggestions.Add(new("Riskiest routines", $"Show me the riskiest routines in {t.Label}"));
+                    suggestions.Add(new("Draft the waves", $"Draft a migration plan for {t.Label}"));
+                }
+                else
+                {
+                    markdown = $"Assessment for `{t.Label}` {StateWord(state)}: {summary}";
+                    suggestions.Add(new("Run it again", $"Run the assessment for {t.Label}"));
+                }
+                break;
+            }
             default:
                 markdown = $"{t.Label} {StateWord(state)}: {summary}";
                 break;
@@ -249,7 +290,7 @@ public sealed class Narrator
         _ => state.ToLowerInvariant(),
     };
 
-    private static string PatternAnalysisSummary(PatternAnalysisRun? run, string state, string? summary)
+    private static string PatternAnalysisSummary(PatternAnalysisRun? run, string state, string? summary, int multiMember = 0, int singletons = 0)
     {
         if (run is null) return $"Pattern analysis {StateWord(state)}. {summary}";
         var mins = run.CompletedAt is { } c ? (c - run.StartedAt).TotalMinutes : (DateTimeOffset.UtcNow - run.StartedAt).TotalMinutes;
@@ -287,7 +328,9 @@ public sealed class Narrator
                 parts.Add($"{total:N0} routines: I read {read:N0}, propagated {propagated:N0} from structural duplicates and skipped {trivial:N0} trivial accessors" +
                           (cost > 0 ? $" (≈ ${cost:0.00})." : "."));
             }
-            if (clusters > 0) parts.Add($"**{clusters:N0} distinct patterns** — each is a candidate archetype for the migration.");
+            if (multiMember > 0 || singletons > 0)
+                parts.Add($"**{multiMember:N0} shared patterns** (2+ routines each — the archetype candidates) and {singletons:N0} one-off routines to handle case by case.");
+            else if (clusters > 0) parts.Add($"**{clusters:N0} distinct patterns** — each is a candidate archetype for the migration.");
             else if (!string.IsNullOrWhiteSpace(summary)) parts.Add(summary);
             return string.Join(" ", parts);
         }

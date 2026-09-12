@@ -106,18 +106,18 @@ export function ScaffoldArtifactPage() {
   const isCommitted = sc.state === 'COMMITTED';
 
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col">
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link to={`/`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F2E5C2] text-status-scaffolded">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-status-warn/10 text-status-scaffolded">
               <Cog className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <p className="label">
                 Scaffolded package
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
@@ -129,7 +129,7 @@ export function ScaffoldArtifactPage() {
           <div className="flex items-center gap-2">
             <Link
               to={`/scaffolds/${sc.id}/validation`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
               data-testid="open-validation-report"
               title="Validation: compile · test pack · cross-runtime equivalence"
             >
@@ -143,7 +143,7 @@ export function ScaffoldArtifactPage() {
             <button
               type="button"
               onClick={() => setRegenTarget(sc.targetPlatform)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
               data-testid="regenerate-cta"
             >
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -153,7 +153,7 @@ export function ScaffoldArtifactPage() {
               <Button variant="primary" size="md" onClick={onCommit} loading={committing}>
                 <GitCommit className="h-4 w-4" />
                 Commit to Git
-                <span className="ml-2 rounded-sm border border-white/30 bg-white/15 px-1.5 py-0.5 font-mono text-micro uppercase">
+                <span className="ml-2 rounded-sm border border-on-volt/30 bg-on-volt/10 px-1.5 py-0.5 font-mono text-micro uppercase">
                   stub
                 </span>
               </Button>
@@ -164,7 +164,7 @@ export function ScaffoldArtifactPage() {
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.preventDefault()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
                 title={`Simulated commit\n${sc.git.commitUrl}`}
               >
                 <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
@@ -196,13 +196,13 @@ export function ScaffoldArtifactPage() {
         tokens={sc.llmCall ? { in: sc.llmCall.inputTokens, out: sc.llmCall.outputTokens } : undefined}
       />
 
-      <div className="border-b border-border-subtle bg-canvas/40 px-6 py-2">
+      <div className="border-b border-line-subtle bg-canvas/40 px-6 py-2">
         <ProviderSettingsCard compact />
       </div>
 
       {/* Signed-spec banner reminding the engineer this is a contract derivative */}
       {spec.data?.signature && (
-        <div className="border-b border-status-signed/30 bg-[#DCE6F5]/40 px-6 py-2">
+        <div className="border-b border-status-signed/30 bg-status-info/10 px-6 py-2">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-caption text-ink-secondary">
             <span className="inline-flex items-center gap-1.5 text-status-signed">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -215,10 +215,10 @@ export function ScaffoldArtifactPage() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,360px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-line-subtle overflow-y-auto bg-canvas lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,360px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         {/* File tree */}
         <div className="h-52 min-h-0 overflow-y-auto bg-raised lg:h-auto">
-          <div className="border-b border-border-subtle px-3 py-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <div className="border-b border-line-subtle px-3 py-2 label">
             Package
           </div>
           <ScaffoldFileTree files={treeFiles} activePath={active?.path ?? null} onSelect={setActivePath} />
@@ -226,7 +226,7 @@ export function ScaffoldArtifactPage() {
 
         {/* Code editor */}
         <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
-          <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
+          <div className="shrink-0 flex items-center justify-between border-b border-line-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{active?.path}</span>
             <span className="text-ink-tertiary">{active?.lineCount ?? '—'} lines · {active?.todoCount ?? 0} TODOs</span>
           </div>
@@ -237,6 +237,7 @@ export function ScaffoldArtifactPage() {
                 language={active.language as any}
                 height="100%"
                 todoMarkers={todoMarkers}
+                theme="astra-dark"
               />
             </div>
           ) : (

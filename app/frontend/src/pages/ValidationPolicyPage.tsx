@@ -110,11 +110,11 @@ export function ValidationPolicyPage() {
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10 fadeup" data-testid="validation-policy-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <p className="label">
             Validation policy
           </p>
-          <h1 className="mt-1 text-display font-semibold text-ink-primary">Validation Policy</h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+          <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Validation Policy</h1>
+          <p className="mt-2 max-w-2xl text-body text-ink-secondary">
             Three independent gates run against every generated scaffold.
             The commit-to-Git action is blocked until each required gate
             reports PASSED on the same scaffold revision.
@@ -371,14 +371,14 @@ function EditableMeta({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={2}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none"
         />
       ) : (
         <input
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+          className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none"
         />
       )}
     </label>

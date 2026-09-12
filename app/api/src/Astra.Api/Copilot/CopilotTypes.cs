@@ -15,6 +15,8 @@ public sealed class ToolContext
     public required DevPersonaContext Actor { get; init; }
     public required Guid ConversationId { get; init; }
     public Guid? CorpusId { get; init; }
+    /// <summary>Set in a spec thread: tools that take a spec default to it.</summary>
+    public Guid? SpecId { get; init; }
     public required CancellationToken Ct { get; init; }
 }
 

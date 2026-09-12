@@ -13,6 +13,8 @@ import { Skeleton } from '@/components/Skeleton';
 import { StateBadge } from '@/components/StateBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { AwaitingDataIllustration } from '@/illustrations/AwaitingData';
+import { chartTheme } from '@/theme/charts';
+import { themeHex, useTheme } from '@/theme';
 
 cytoscape.use(fcose);
 
@@ -35,6 +37,18 @@ export function DependencyGraphPage() {
 
   const [hideSharedStorage, setHideSharedStorage] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  // Every canvas colour comes from the theme table; the effect below re-runs
+  // on toggle so the graph repaints for the new palette.
+  const { theme } = useTheme();
+  const ct = useMemo(() => chartTheme(theme), [theme]);
+  const stateDot = useMemo<Record<string, string>>(() => ({
+    PARSED:     ct.state.parsed,
+    DRAFT:      ct.state.draft,
+    IN_REVIEW:  ct.state.draft,
+    SIGNED:     ct.state.signed,
+    SCAFFOLDED: ct.state.scaffolded,
+    COMMITTED:  ct.state.committed,
+  }), [ct]);
 
   const graph = useQuery({
     queryKey: ['dependency-graph', corpusId],
@@ -80,7 +94,7 @@ export function DependencyGraphPage() {
     const elements: cytoscape.ElementDefinition[] = [
       ...graph.data.nodes.map((n) => {
         const wave = waveByRoutine.get(n.id);
-        const accent = wave !== undefined ? WAVE_FILL[Math.min(5, wave) as 1 | 2 | 3 | 4 | 5] : '#94a3b8';
+        const accent = wave !== undefined ? ct.wave[Math.min(5, wave) as 1 | 2 | 3 | 4 | 5] : ct.neutral;
         return {
           data: {
             id: n.id,
@@ -88,7 +102,7 @@ export function DependencyGraphPage() {
             wave: wave ?? null,
             state: n.state,
             accent,
-            statedot: STATE_DOT[n.state] ?? '#94a3b8',
+            statedot: stateDot[n.state] ?? ct.neutral,
           },
         };
       }),
@@ -103,6 +117,8 @@ export function DependencyGraphPage() {
       })),
     ];
 
+    const ink = themeHex('ink-primary', theme);
+    const edge = themeHex('line-strong', theme);
     const cy = cytoscape({
       container: containerRef.current,
       elements,
@@ -117,7 +133,7 @@ export function DependencyGraphPage() {
             'border-opacity': 0.9,
             label: 'data(label)',
             'font-size': 9,
-            color: '#0f172a',
+            color: ink,
             'font-weight': 600,
             'text-valign': 'bottom',
             'text-halign': 'center',
@@ -145,10 +161,10 @@ export function DependencyGraphPage() {
           selector: 'edge',
           style: {
             width: 1.4,
-            'line-color': '#cbd5e1',
+            'line-color': edge,
             'curve-style': 'bezier',
             'target-arrow-shape': 'triangle',
-            'target-arrow-color': '#cbd5e1',
+            'target-arrow-color': edge,
             'arrow-scale': 0.9,
           } as cytoscape.Css.Edge,
         },
@@ -164,12 +180,12 @@ export function DependencyGraphPage() {
           selector: '.faded',
           style: { opacity: 0.12 } as cytoscape.Css.Node,
         },
-        // Highlighted-edge class — bright brand orange.
+        // Highlighted-edge class — volt (the agent-working / focus accent).
         {
           selector: 'edge.hl',
           style: {
-            'line-color': '#f26722',
-            'target-arrow-color': '#f26722',
+            'line-color': ct.volt,
+            'target-arrow-color': ct.volt,
             width: 2.6,
             opacity: 1,
           } as cytoscape.Css.Edge,
@@ -180,17 +196,17 @@ export function DependencyGraphPage() {
           selector: 'node.hl',
           style: {
             'border-width': 3,
-            'border-color': '#f26722',
+            'border-color': ct.volt,
             opacity: 1,
           } as cytoscape.Css.Node,
         },
-        // Selected node — bigger, brand-bordered, slight shadow.
+        // Selected node — bigger, volt-bordered.
         {
           selector: 'node:selected',
           style: {
             'border-width': 4,
-            'border-color': '#f26722',
-            'background-color': '#f26722',
+            'border-color': ct.volt,
+            'background-color': ct.volt,
             'background-opacity': 0.22,
             width: 42,
             height: 42,
@@ -257,7 +273,7 @@ export function DependencyGraphPage() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [graph.data, waveByRoutine, hideSharedStorage, navigate]);
+  }, [graph.data, waveByRoutine, hideSharedStorage, navigate, theme, ct, stateDot]);
 
   const focused = selected ? nodeById.get(selected) : null;
 
@@ -316,10 +332,10 @@ export function DependencyGraphPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <Card className="overflow-hidden">
           <CardBody className="p-0">
-            <div className="relative" style={{ height: 640, background: '#f8fafc' }}>
+            <div className="relative bg-sunken" style={{ height: 640 }}>
               <div ref={containerRef} className="absolute inset-0" data-testid="dep-graph-canvas" />
               {/* Floating control cluster — top-right. */}
-              <div className="absolute right-3 top-3 flex flex-col gap-1 rounded-lg border border-border-subtle bg-white/95 p-1 shadow-card">
+              <div className="absolute right-3 top-3 flex flex-col gap-1 rounded-lg border border-line-subtle bg-raised/95 p-1 shadow-card">
                 <button
                   type="button"
                   onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 1.25)}
@@ -346,14 +362,14 @@ export function DependencyGraphPage() {
                 </button>
               </div>
               {/* Floating wave + state legend — bottom-left. */}
-              <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-border-subtle bg-white/95 p-2.5 shadow-card">
+              <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-line-subtle bg-raised/95 p-2.5 shadow-card">
                 <p className="label mb-1.5">Wave</p>
                 <div className="space-y-1">
                   {[1, 2, 3, 4, 5].map((w) => (
                     <div key={w} className="flex items-center gap-2">
                       <span
                         className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{ background: WAVE_FILL[w as 1 | 2 | 3 | 4 | 5] }}
+                        style={{ background: ct.wave[w as 1 | 2 | 3 | 4 | 5] }}
                       />
                       <span className="font-mono text-[10px] text-ink-secondary">{w}</span>
                     </div>
@@ -367,13 +383,13 @@ export function DependencyGraphPage() {
                     setSelected(null);
                     cyRef.current?.elements().removeClass('faded hl');
                   }}
-                  className="pointer-events-auto absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-ink-secondary shadow-card hover:text-ink-primary"
+                  className="pointer-events-auto absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-raised/95 px-2.5 py-1 text-[11px] font-semibold text-ink-secondary shadow-card hover:text-ink-primary"
                 >
                   <X size={12} /> Clear focus
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-sunken px-3 py-2 font-mono text-[11px] text-ink-tertiary">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-subtle bg-sunken px-3 py-2 font-mono text-[11px] text-ink-tertiary">
               <span>
                 {focused
                   ? <>Focused on <span className="font-semibold text-ink-primary">{focused.name}</span> · click background to clear · double-click to drill in</>
@@ -429,7 +445,7 @@ export function DependencyGraphPage() {
                 type="checkbox"
                 checked={hideSharedStorage}
                 onChange={(e) => setHideSharedStorage(e.target.checked)}
-                className="rounded border-border accent-brand-500"
+                className="rounded border-line accent-volt"
               />
               Hide shared-storage edges
             </label>
@@ -442,7 +458,7 @@ export function DependencyGraphPage() {
               <div className="mt-2 flex items-center gap-2">
                 <StateBadge state={focused.state} />
                 {selected && waveByRoutine.has(selected) && (
-                  <span className="pill bg-ace-50 text-ace-700 ring-1 ring-ace-100">
+                  <span className="pill bg-status-info/10 text-status-info ring-1 ring-status-info/25">
                     wave {waveByRoutine.get(selected)}
                   </span>
                 )}
@@ -453,7 +469,7 @@ export function DependencyGraphPage() {
               </ul>
               <Link
                 to={`/subroutines/${selected}`}
-                className="mt-2 inline-block text-[12px] font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                className="mt-2 inline-block text-[12px] font-semibold text-volt-ink hover:underline hover:underline"
               >
                 Open routine →
               </Link>
@@ -478,7 +494,7 @@ export function DependencyGraphPage() {
           <div className="card p-4">
             <Link
               to={`/corpora/${corpusId}`}
-              className="text-[12px] font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+              className="text-[12px] font-semibold text-volt-ink hover:underline hover:underline"
             >
               ← Back to corpus
             </Link>
@@ -489,21 +505,5 @@ export function DependencyGraphPage() {
   );
 }
 
-// ── Wave-coloured palette (matches Tailwind wave-* tokens). ────────
-const WAVE_FILL: Record<1 | 2 | 3 | 4 | 5, string> = {
-  1: '#059669', // emerald
-  2: '#0d9488', // teal
-  3: '#4f46e5', // indigo
-  4: '#7c3aed', // violet
-  5: '#d97706', // amber
-};
-
-// Migration-state colours for the corner dot — light-theme adjusted.
-const STATE_DOT: Record<string, string> = {
-  PARSED:     '#94a3b8',
-  DRAFT:      '#d97706',
-  IN_REVIEW:  '#d97706',
-  SIGNED:     '#4f46e5',
-  SCAFFOLDED: '#7c3aed',
-  COMMITTED:  '#059669',
-};
+// Wave + state colours come from `chartTheme()` (src/theme/charts.ts) so the
+// canvas follows the theme toggle like every Tailwind-styled element does.

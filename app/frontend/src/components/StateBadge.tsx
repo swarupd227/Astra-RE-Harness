@@ -4,9 +4,9 @@ import { formatState } from '@/lib/labels';
 type State = 'PARSED' | 'DRAFT' | 'IN_REVIEW' | 'SIGNED' | 'SCAFFOLDED' | 'COMMITTED' | string;
 
 /**
- * ACE-style status pill with a coloured leading dot. Encapsulates the
- * routine / spec / scaffold state → colour mapping so the lane colours
- * stay consistent across every table cell in the product.
+ * Status pill with a coloured leading dot. Encapsulates the routine / spec /
+ * scaffold state → colour mapping so the lane colours stay consistent across
+ * every table cell in the product. Every value is a theme token.
  */
 export function StateBadge({ state, className }: { state: State; className?: string }) {
   const c = colours(state);
@@ -21,16 +21,16 @@ export function StateBadge({ state, className }: { state: State; className?: str
 function colours(state: State) {
   switch (state) {
     case 'COMMITTED':
-      return { bg: 'bg-emerald-100', text: 'text-emerald-700', ring: 'ring-emerald-200', dot: 'bg-emerald-600' };
+      return { bg: 'bg-status-ok/10',   text: 'text-status-ok',   ring: 'ring-status-ok/25',   dot: 'bg-status-ok' };
     case 'SIGNED':
-      return { bg: 'bg-ace-50',     text: 'text-ace-700',     ring: 'ring-ace-100',     dot: 'bg-ace-600' };
+      return { bg: 'bg-status-info/10', text: 'text-status-info', ring: 'ring-status-info/25', dot: 'bg-status-info' };
     case 'SCAFFOLDED':
-      return { bg: 'bg-amber-50',   text: 'text-amber-700',   ring: 'ring-amber-200',   dot: 'bg-amber-600' };
+      return { bg: 'bg-status-warn/10', text: 'text-status-warn', ring: 'ring-status-warn/25', dot: 'bg-status-warn' };
     case 'IN_REVIEW':
     case 'DRAFT':
-      return { bg: 'bg-amber-50',   text: 'text-amber-700',   ring: 'ring-amber-200',   dot: 'bg-amber-500' };
+      return { bg: 'bg-status-warn/10', text: 'text-status-warn', ring: 'ring-status-warn/25', dot: 'bg-status-warn' };
     case 'PARSED':
     default:
-      return { bg: 'bg-slate-100',  text: 'text-slate-600',   ring: 'ring-slate-200',   dot: 'bg-slate-400' };
+      return { bg: 'bg-sunken',         text: 'text-ink-secondary', ring: 'ring-line',         dot: 'bg-ink-tertiary' };
   }
 }

@@ -41,6 +41,8 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: '/corpora/:id/pattern-analysis', title: 'Pattern analysis', crumbs: [PROJECTS, PROJECT, { label: 'Pattern analysis' }] },
   { pattern: '/corpora/:id/dependency-graph', title: 'Dependency graph', crumbs: [PROJECTS, PROJECT, { label: 'Dependency graph' }] },
   { pattern: '/corpora/:id/migration-plan', title: 'Migration plan', crumbs: [PROJECTS, PROJECT, { label: 'Migration plan' }] },
+  { pattern: '/projects/:id/assessment', title: 'Assessment', crumbs: [PROJECTS, PROJECT, { label: 'Assessment' }] },
+  { pattern: '/corpora/:id/assessment', title: 'Assessment', crumbs: [PROJECTS, PROJECT, { label: 'Assessment' }] },
 
   { pattern: '/subroutines', title: 'Routines', crumbs: [{ label: 'Routines' }] },
   { pattern: '/subroutines/:id', title: 'Routine', crumbs: [ROUTINES, { label: 'Routine' }] },

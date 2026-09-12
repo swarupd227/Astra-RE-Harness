@@ -141,7 +141,7 @@ export function StreamingSpecPanel({
         <Section title="Open questions" count={draft.open_questions!.length} tone="warning">
           <ul className="space-y-2">
             {draft.open_questions!.map((q) => (
-              <li key={q.id} className="rounded-md border border-status-scaffolded/40 bg-[#FBF1D9] p-3">
+              <li key={q.id} className="rounded-md border border-status-scaffolded/40 bg-status-warn/10 p-3">
                 <div className="flex items-center gap-2 text-caption">
                   <span className="rounded-sm bg-status-scaffolded/20 px-1.5 py-0.5 font-mono uppercase text-status-scaffolded">
                     {q.id}
@@ -205,7 +205,7 @@ function ParamList({
       {items.map((p) => (
         <li
           key={p.id}
-          className="flex items-baseline gap-3 rounded-md border border-border-subtle bg-raised px-3 py-2"
+          className="flex items-baseline gap-3 rounded-md border border-line-subtle bg-raised px-3 py-2"
         >
           <span className="font-mono text-body font-semibold text-ink-primary">{p.name}</span>
           <span className="font-mono text-caption text-ink-tertiary">{p.type}</span>
@@ -234,7 +234,7 @@ function ClaimCard({
   active?: string | null;
 }) {
   return (
-    <li className="rounded-md border border-border-subtle bg-raised p-3 motion-safe:animate-fade-in">
+    <li className="rounded-md border border-line-subtle bg-raised p-3 motion-safe:animate-fade-in">
       <div className="flex items-center gap-2 text-caption">
         <span className="rounded-sm bg-sunken px-1.5 py-0.5 font-mono uppercase text-ink-secondary">
           {id}
@@ -243,9 +243,9 @@ function ClaimCard({
           <span
             className={clsx(
               'rounded-sm px-1.5 py-0.5 font-mono uppercase',
-              confidence === 'high' && 'bg-[#DAEFE9] text-status-review',
-              confidence === 'medium' && 'bg-accent-muted text-status-draft',
-              confidence === 'low' && 'bg-[#F4D8D7] text-status-failed',
+              confidence === 'high' && 'bg-status-ok/10 text-status-review',
+              confidence === 'medium' && 'bg-volt/10 text-status-draft',
+              confidence === 'low' && 'bg-status-fail/10 text-status-failed',
             )}
           >
             {confidence}
@@ -263,10 +263,10 @@ function ClaimCard({
             type="button"
             onClick={() => onCite?.(c.lines)}
             className={clsx(
-              'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] transition-colors duration-fast hover:bg-accent-muted',
+              'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] transition-colors duration-fast hover:bg-volt/10',
               active === c.lines
-                ? 'border-accent bg-accent-muted text-status-draft'
-                : 'border-border-subtle bg-canvas text-ink-secondary',
+                ? 'border-volt bg-volt/10 text-volt-ink'
+                : 'border-line-subtle bg-canvas text-ink-secondary',
             )}
             aria-label={`Cited lines ${c.lines}`}
           >

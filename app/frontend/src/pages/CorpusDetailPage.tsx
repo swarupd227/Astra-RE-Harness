@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { ReingestModal } from '@/components/ReingestModal';
+import { PageHero } from '@/components/PageHero';
 import { formatState } from '@/lib/labels';
 
 export function CorpusDetailPage() {
@@ -70,19 +71,17 @@ export function CorpusDetailPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-            Project
-          </p>
-          <h1 className="mt-2 text-display font-semibold text-ink-primary">{c.name}</h1>
-          <p className="mt-2 font-mono text-caption text-ink-tertiary">
+      <PageHero
+        eyebrow="Project"
+        title={c.name}
+        lead={
+          <span className="font-mono text-caption text-ink-tertiary">
             {c.sourceType.toUpperCase()} · {c.fileCount} file{c.fileCount === 1 ? '' : 's'} ·{' '}
             {c.totalLoc.toLocaleString()} LOC ·{' '}
             ingested {c.latestVersion ? new Date(c.latestVersion.ingestedAt).toLocaleString() : '—'}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+          </span>
+        }
+        actions={<>
           <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{formatState(c.state)}</Badge>
           <Button variant="secondary" onClick={() => navigate(`/corpora/${id}/docs`)} data-testid="open-docs">
             <BookOpen className="h-4 w-4" aria-hidden="true" />
@@ -116,7 +115,7 @@ export function CorpusDetailPage() {
                 disabled={exporting}
                 aria-label="Export project artifacts"
                 data-testid="export-project"
-                className="appearance-none cursor-pointer rounded border border-border-subtle bg-raised py-1.5 pl-8 pr-7 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-10 cursor-pointer appearance-none rounded-lg border border-line bg-raised py-1.5 pl-8 pr-7 text-body text-ink-secondary transition-colors hover:border-line-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">{exporting ? 'Exporting…' : 'Export…'}</option>
                 <option value="artifacts">Artifacts (.zip)</option>
@@ -126,8 +125,8 @@ export function CorpusDetailPage() {
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-tertiary" />
             </div>
           )}
-        </div>
-      </header>
+        </>}
+      />
 
       {c.state === 'FAILED' && (
         // The specific reason isn't persisted anywhere retrievable — only
@@ -143,7 +142,7 @@ export function CorpusDetailPage() {
       )}
 
       {exportError && (
-        <p className="text-xs text-rose-600" data-testid="export-project-error">{exportError}</p>
+        <p className="text-caption text-status-fail" data-testid="export-project-error">{exportError}</p>
       )}
 
       <ReingestModal
@@ -168,7 +167,7 @@ export function CorpusDetailPage() {
           description="Select a routine to open its details."
         />
         <CardBody className="p-0">
-          <ul className="divide-y divide-border-subtle">
+          <ul className="divide-y divide-line-subtle">
             {files.map((file) => (
               <li key={file.id}>
                 <FileBlock file={file} />
@@ -210,7 +209,7 @@ function FileBlock({ file }: { file: NonNullable<ReturnType<typeof useFiles>>[nu
                   </Badge>
                   {sub.carriedForward && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-sm border border-status-signed/40 bg-[#DCE6F5]/40 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-status-signed"
+                      className="inline-flex items-center gap-1 rounded-sm border border-status-signed/40 bg-status-info/10 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-status-signed"
                       title="Spec carried forward from a previous source version (file hash unchanged)"
                       data-testid={`carried-${sub.id}`}
                     >

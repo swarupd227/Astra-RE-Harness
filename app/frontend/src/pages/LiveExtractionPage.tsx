@@ -191,16 +191,16 @@ export function LiveExtractionPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <p className="label">
                 Extraction in progress
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
@@ -252,10 +252,10 @@ export function LiveExtractionPage() {
           on the mock provider (which emits zero `token` events) and after
           the run finishes so the structured spec is the focus. */}
       {status === 'streaming' && tokenChunkCount > 0 && (
-        <div className="border-b border-border-subtle bg-sunken px-6 py-2">
+        <div className="border-b border-line-subtle bg-sunken px-6 py-2">
           <div className="flex items-center justify-between gap-3 text-caption text-ink-secondary">
             <span className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-accent motion-safe:animate-pulse" aria-hidden="true" />
+              <span className="inline-block h-2 w-2 rounded-full bg-volt motion-safe:animate-pulse" aria-hidden="true" />
               <span className="font-mono uppercase tracking-wider">Claude is writing</span>
             </span>
             <span className="font-mono">
@@ -277,7 +277,7 @@ export function LiveExtractionPage() {
       )}
 
       {/* Body — two-pane */}
-      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-border-subtle overflow-y-auto bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-line-subtle overflow-y-auto bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
         {/* Streaming spec */}
         <div className="h-[420px] min-h-0 overflow-y-auto bg-raised lg:h-auto">
           {status === 'idle' && (
@@ -288,7 +288,7 @@ export function LiveExtractionPage() {
           {status !== 'idle' && (
             <>
               {warnings.length > 0 && (
-                <div className="border-b border-status-scaffolded/40 bg-[#FBF1D9] px-6 py-3">
+                <div className="border-b border-status-scaffolded/40 bg-status-warn/10 px-6 py-3">
                   {warnings.map((w, i) => (
                     <p key={i} className="flex items-start gap-2 text-caption text-status-scaffolded">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -314,7 +314,7 @@ export function LiveExtractionPage() {
 
         {/* Source pane */}
         <div className="h-[420px] min-h-0 flex flex-col bg-canvas lg:h-auto">
-          <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
+          <div className="shrink-0 flex items-center justify-between border-b border-line-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{s.file.relativePath}</span>
             <span className="text-ink-tertiary">{source.data!.lineCount} lines</span>
           </div>
@@ -324,6 +324,7 @@ export function LiveExtractionPage() {
               height="100%"
               citations={citations}
               highlightLine={activeLine}
+              theme="astra-dark"
             />
           </div>
         </div>

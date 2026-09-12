@@ -51,17 +51,17 @@ export function ConfirmModal({
       onClick={onClose}
       data-testid={testId ?? 'confirm-modal'}
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-line-subtle bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div className="flex items-start gap-3">
             <span
               className={clsx(
                 'flex h-9 w-9 items-center justify-center rounded-md',
-                tone === 'danger' ? 'bg-[#F4D8D7]/60 text-status-failed' : 'bg-accent-muted text-accent',
+                tone === 'danger' ? 'bg-status-fail/10 text-status-failed' : 'bg-volt/10 text-volt-ink',
               )}
             >
               <AlertTriangle className="h-5 w-5" aria-hidden="true" />
@@ -86,7 +86,7 @@ export function ConfirmModal({
         {(consequences?.length || children) && (
           <div className="space-y-4 px-6 py-5">
             {consequences && consequences.length > 0 && (
-              <ul className="list-disc space-y-1 rounded-md border border-border-subtle bg-canvas p-4 pl-8 text-body text-ink-primary">
+              <ul className="list-disc space-y-1 rounded-md border border-line-subtle bg-canvas p-4 pl-8 text-body text-ink-primary">
                 {consequences.map((c) => (
                   <li key={c}>{c}</li>
                 ))}
@@ -96,7 +96,7 @@ export function ConfirmModal({
           </div>
         )}
 
-        <footer className="flex items-center justify-end gap-2 border-t border-border-subtle bg-canvas px-6 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-line-subtle bg-canvas px-6 py-3">
           <Button variant="ghost" size="md" onClick={onClose}>
             Cancel
           </Button>

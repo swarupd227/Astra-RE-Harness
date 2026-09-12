@@ -10,6 +10,7 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
+import { PageHero } from '@/components/PageHero';
 import type { ArchetypeProposal, PatternAnalysisProgress, PatternCluster } from '@/lib/api';
 
 const RUNNING_STATES = new Set(['QUEUED', 'RUNNING']);
@@ -88,7 +89,7 @@ function ArchetypeProposalSection({
   if (persona !== 'admin' && !proposal) return null;
 
   return (
-    <div className="mt-3 border-t border-border-subtle pt-3">
+    <div className="mt-3 border-t border-line-subtle pt-3">
       {!proposal && (
         <Button
           variant="secondary"
@@ -103,7 +104,7 @@ function ArchetypeProposalSection({
         </Button>
       )}
       {proposeMutation.isError && (
-        <p className="mt-2 text-xs text-rose-600">{(proposeMutation.error as Error).message}</p>
+        <p className="mt-2 text-xs text-status-fail">{(proposeMutation.error as Error).message}</p>
       )}
 
       {proposal && (
@@ -144,7 +145,7 @@ function ArchetypeProposalSection({
                 value={rejectReason}
                 onChange={e => setRejectReason(e.target.value)}
                 placeholder="Why is this proposal being rejected?"
-                className="flex-1 rounded border border-border-subtle bg-raised px-2 py-1 text-sm"
+                className="flex-1 rounded border border-line bg-raised px-2 py-1 text-sm text-ink-primary placeholder:text-ink-tertiary"
               />
               <Button
                 variant="secondary"
@@ -157,19 +158,19 @@ function ArchetypeProposalSection({
           )}
 
           {expanded && detail.data && (
-            <div className="space-y-2 rounded border border-border-subtle bg-raised p-3">
+            <div className="space-y-2 rounded border border-line-subtle bg-raised p-3">
               <p className="text-sm text-ink-secondary">{detail.data.description}</p>
               <p className="font-mono text-caption text-ink-tertiary">
                 Matches: {detail.data.matches.join(', ') || '—'}
               </p>
               {detail.data.state === 'VERIFICATION_FAILED' && detail.data.compileLog && (
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-900 p-3 font-mono text-xs text-slate-200">
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-codebg p-3 font-mono text-xs text-sand-100">
                   {detail.data.compileLog}
                 </pre>
               )}
               <div className="space-y-1">
                 {detail.data.files.map(f => (
-                  <details key={f.path} className="rounded border border-border-subtle">
+                  <details key={f.path} className="rounded border border-line-subtle">
                     <summary className="cursor-pointer px-2 py-1 font-mono text-xs text-ink-secondary">
                       {f.path}
                     </summary>
@@ -358,29 +359,23 @@ export function PatternAnalysisPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/corpora/${id}`}
-            className="rounded p-1 text-ink-tertiary transition-colors hover:text-ink-primary"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-              Pattern Analysis
-            </p>
-            <h1 className="mt-1 text-display font-semibold text-ink-primary">{c.name}</h1>
-            <p className="mt-2 font-mono text-caption text-ink-tertiary">
-              How many distinct behavioural patterns does this corpus contain, and which
-              routines share one — the question that determines how many archetypes a
-              migration engagement needs to build.
-            </p>
-          </div>
-        </div>
-
-        {persona === 'admin' && (
-          <div className="flex shrink-0 items-center gap-2">
+      <PageHero
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            <Link
+              to={`/corpora/${id}`}
+              className="rounded text-ink-tertiary transition-colors hover:text-ink-primary"
+              aria-label="Back to project"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            Pattern Analysis
+          </span>
+        }
+        title={c.name}
+        lead="How many distinct behavioural patterns does this corpus contain, and which routines share one — the question that determines how many archetypes a migration engagement needs to build."
+        actions={persona === 'admin' && (
+          <>
             <Button
               variant="secondary"
               onClick={() => runMutation.mutate(false)}
@@ -399,20 +394,20 @@ export function PatternAnalysisPage() {
                 disabled={isRunning}
                 data-testid="force-pattern-analysis"
                 title="Discards this project's survey digests and re-surveys every routine. A few minutes on a large project; signed specs are never touched."
-                className="rounded border border-border-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-line-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-status-fail hover:text-status-fail disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {confirmForce ? 'Confirm full re-survey' : 'Re-survey all routines…'}
               </button>
             )}
-          </div>
+          </>
         )}
-      </header>
+      />
 
       {runError && (
-        <div className="flex items-start gap-3 rounded border border-rose-500/30 bg-rose-500/10 px-4 py-3">
-          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-          <span className="flex-1 text-sm text-rose-700">{runError}</span>
-          <button onClick={() => setRunError(null)} className="shrink-0 text-xs text-rose-500 hover:text-rose-700">
+        <div className="flex items-start gap-3 rounded-lg border border-status-fail/30 bg-status-fail/10 px-4 py-3">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-status-fail" />
+          <span className="flex-1 text-sm text-status-fail">{runError}</span>
+          <button onClick={() => setRunError(null)} className="shrink-0 text-xs text-status-fail hover:underline">
             Dismiss
           </button>
         </div>
@@ -420,10 +415,10 @@ export function PatternAnalysisPage() {
 
       {resumableRun && (
         <div
-          className="flex flex-wrap items-center gap-3 rounded border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-status-warn/30 bg-status-warn/10 px-4 py-3"
           data-testid="pattern-analysis-resumable"
         >
-          <Pause className="h-4 w-4 shrink-0 text-amber-600" />
+          <Pause className="h-4 w-4 shrink-0 text-status-warn" />
           <div className="flex-1">
             <p className="text-sm font-medium text-ink-primary">A previous run is paused</p>
             <p className="font-mono text-caption text-ink-tertiary">
@@ -446,7 +441,7 @@ export function PatternAnalysisPage() {
                 onClick={() => cancelMutation.mutate(resumableRun.id, {
                   onSuccess: () => qc.invalidateQueries({ queryKey: ['pattern-analysis-runs', id] }),
                 })}
-                className="font-mono text-caption text-ink-tertiary hover:text-rose-600"
+                className="font-mono text-caption text-ink-tertiary hover:text-status-fail"
               >
                 Discard
               </button>
@@ -513,7 +508,7 @@ export function PatternAnalysisPage() {
                 data-testid="pattern-analysis-progress"
               >
                 <div
-                  className="h-full rounded-full bg-accent transition-[width] duration-500"
+                  className="h-full rounded-full bg-volt transition-[width] duration-500"
                   style={{ width: `${percent}%` }}
                 />
               </div>
@@ -521,7 +516,7 @@ export function PatternAnalysisPage() {
           </CardBody>
           {logLines.length > 0 && (
             <div
-              className="max-h-48 overflow-y-auto border-t border-border-subtle bg-sunken px-4 py-2 font-mono text-[11px] leading-relaxed text-ink-tertiary"
+              className="max-h-48 overflow-y-auto border-t border-line-subtle bg-sunken px-4 py-2 font-mono text-[11px] leading-relaxed text-ink-tertiary"
               data-testid="pattern-analysis-log"
             >
               {logLines.map((line, i) => (
@@ -553,19 +548,19 @@ export function PatternAnalysisPage() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardBody>
-                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Routines analysed</p>
+                <p className="label">Routines analysed</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{totalRoutines}</p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Core patterns (2+ routines)</p>
+                <p className="label">Core patterns (2+ routines)</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{coreClusters}</p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Singletons (long tail)</p>
+                <p className="label">Singletons (long tail)</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{singletons}</p>
               </CardBody>
             </Card>
@@ -614,7 +609,7 @@ export function PatternAnalysisPage() {
                       <Link
                         key={m.subroutineId}
                         to={`/subroutines/${m.subroutineId}`}
-                        className="rounded border border-border-subtle px-2 py-1 font-mono text-xs text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary"
+                        className="rounded border border-line-subtle px-2 py-1 font-mono text-xs text-ink-secondary transition-colors hover:border-line-strong hover:text-ink-primary"
                       >
                         {m.subroutineName}
                       </Link>

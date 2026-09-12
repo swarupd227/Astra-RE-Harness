@@ -97,11 +97,11 @@ export function PromptCatalogPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="prompt-catalog-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <p className="label">
             Prompt asset library
           </p>
-          <h1 className="mt-1 text-display font-semibold text-ink-primary">Prompt Catalog</h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+          <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Prompt Catalog</h1>
+          <p className="mt-2 max-w-2xl text-body text-ink-secondary">
             Calibrated prompts shipped per source language × target stack × kind.
             Every Claude call records the exact prompt id @ version it used, so
             spec provenance carries forward into every audit pull.
@@ -189,7 +189,7 @@ function PromptCard({ prompt, onOpen }: { prompt: PromptSummary; onOpen: () => v
         {prompt.owner && (
           <div className="font-mono text-caption text-ink-tertiary">owner: {prompt.owner}</div>
         )}
-        <div className="inline-flex items-center gap-1 text-caption text-accent">
+        <div className="inline-flex items-center gap-1 text-caption text-volt-ink">
           View body <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </div>
       </CardBody>
@@ -251,12 +251,12 @@ function PromptDetailDrawer({
       onClick={onClose}
       data-testid="prompt-detail-drawer"
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative ml-auto flex h-full w-full max-w-[800px] flex-col bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-6 py-4">
           <div>
             <h3 id="prompt-drawer-title" className="text-h-md font-semibold text-ink-primary">
               {prompt.promptId} <span className="text-ink-tertiary">@ {prompt.version}</span>
@@ -341,7 +341,7 @@ function PromptDetailDrawer({
                 onChange={(e) => setDraft(e.target.value)}
                 rows={28}
                 spellCheck={false}
-                className="mt-2 w-full rounded-md border border-border-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-accent focus:outline-none"
+                className="mt-2 w-full rounded-md border border-line-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-volt focus:outline-none"
                 data-testid="prompt-edit-textarea"
               />
             </div>
@@ -387,12 +387,12 @@ function NewPromptModal({
       onClick={onClose}
       data-testid="prompt-new-modal"
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative flex h-[90vh] w-full max-w-[960px] flex-col rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative flex h-[90vh] w-full max-w-[960px] flex-col rounded-lg border border-line-subtle bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-6 py-4">
           <h3 className="text-h-md font-semibold text-ink-primary">Add a prompt version</h3>
           <button
             type="button"
@@ -429,13 +429,13 @@ function NewPromptModal({
               onChange={(e) => setMarkdown(e.target.value)}
               rows={22}
               spellCheck={false}
-              className="mt-2 w-full rounded-md border border-border-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-accent focus:outline-none"
+              className="mt-2 w-full rounded-md border border-line-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary focus:border-volt focus:outline-none"
               data-testid="prompt-new-textarea"
             />
           </div>
           {error && <ErrorBlock title="Could not create prompt" message={error} />}
         </div>
-        <footer className="flex items-center justify-end gap-2 border-t border-border-subtle px-6 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-line-subtle px-6 py-3">
           <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
@@ -460,11 +460,11 @@ function FrontmatterTable({ rows }: { rows: Record<string, string> }) {
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Frontmatter</div>
-      <div className="mt-2 overflow-x-auto rounded-md border border-border-subtle">
+      <div className="mt-2 overflow-x-auto rounded-md border border-line-subtle">
         <table className="w-full text-body">
           <tbody>
             {entries.map(([k, v]) => (
-              <tr key={k} className="border-t border-border-subtle first:border-t-0">
+              <tr key={k} className="border-t border-line-subtle first:border-t-0">
                 <td className="bg-sunken/40 px-3 py-1.5 font-mono text-caption text-ink-secondary">{k}</td>
                 <td className="px-3 py-1.5 text-ink-primary">{v}</td>
               </tr>
@@ -480,7 +480,7 @@ function TemplateBlock({ label, body }: { label: string; body: string }) {
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</div>
-      <pre className="mt-2 max-h-[40vh] overflow-auto rounded-md border border-border-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary">
+      <pre className="mt-2 max-h-[40vh] overflow-auto rounded-md border border-line-subtle bg-sunken/40 p-3 font-mono text-[12px] leading-relaxed text-ink-primary">
         {body}
       </pre>
     </div>
@@ -505,8 +505,8 @@ function Filter({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={clsx(
-          'rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary',
-          'focus:border-accent focus:outline-none',
+          'rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary',
+          'focus:border-volt focus:outline-none',
         )}
       >
         {options.map((o) => (
@@ -536,7 +536,7 @@ function LabelledInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-accent focus:outline-none"
+        className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary focus:border-volt focus:outline-none"
       />
     </label>
   );

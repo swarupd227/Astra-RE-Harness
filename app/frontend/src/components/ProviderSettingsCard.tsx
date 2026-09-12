@@ -108,7 +108,7 @@ export function ProviderSettingsCard({
     return (
       <div
         data-testid="provider-settings-card"
-        className="flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-sunken/60 px-3 py-2"
+        className="flex flex-wrap items-center gap-2 rounded-md border border-line-subtle bg-sunken/60 px-3 py-2"
       >
         <span className="inline-flex items-center gap-1.5 text-caption font-medium text-ink-secondary">
           <Cpu className="h-3.5 w-3.5" aria-hidden="true" />

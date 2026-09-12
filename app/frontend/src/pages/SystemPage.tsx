@@ -20,11 +20,11 @@ export function SystemPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           System
         </p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">Status</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Status</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Live status of every service this application depends on.
         </p>
       </header>
@@ -113,7 +113,7 @@ export function SystemPage() {
               />
             </div>
           ) : (
-            <ul className="divide-y divide-border-subtle">
+            <ul className="divide-y divide-line-subtle">
               {readiness.data.dependencies.map((d) => (
                 <DependencyRow key={d.name} dep={d} pulsing={readiness.isFetching} />
               ))}

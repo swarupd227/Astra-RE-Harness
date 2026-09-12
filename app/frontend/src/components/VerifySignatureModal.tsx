@@ -173,14 +173,14 @@ export function VerifySignatureModal({
       onClick={onClose}
       data-testid="verify-modal"
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-line-subtle bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
@@ -205,10 +205,10 @@ export function VerifySignatureModal({
         <div className="space-y-3 px-6 py-5">
           <ul className="space-y-2">
             {steps.map((s) => (
-              <li key={s.id} className="rounded-md border border-border-subtle bg-canvas p-3">
+              <li key={s.id} className="rounded-md border border-line-subtle bg-canvas p-3">
                 <div className="flex items-center gap-2">
                   <StepIcon state={s.state} />
-                  <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{s.id}</span>
+                  <span className="label">{s.id}</span>
                   <span className="text-body font-medium text-ink-primary">{s.label}</span>
                 </div>
                 {s.detail && <p className="mt-1.5 pl-6 text-caption text-ink-secondary">{s.detail}</p>}
@@ -217,7 +217,7 @@ export function VerifySignatureModal({
           </ul>
 
           {overall === 'ok' && (
-            <div className="rounded-md border border-status-signed/40 bg-[#DCE6F5]/30 px-3 py-2">
+            <div className="rounded-md border border-status-signed/40 bg-status-info/10 px-3 py-2">
               <p className="flex items-center gap-2 text-caption text-status-signed">
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 <span className="font-semibold">Verified.</span>
@@ -229,7 +229,7 @@ export function VerifySignatureModal({
             </div>
           )}
           {overall === 'fail' && (
-            <div className="rounded-md border border-status-failed/40 bg-[#F4D8D7]/30 px-3 py-2">
+            <div className="rounded-md border border-status-failed/40 bg-status-fail/10 px-3 py-2">
               <p className="flex items-center gap-2 text-caption text-status-failed">
                 <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                 <span className="font-semibold">Verification failed.</span>
@@ -240,7 +240,7 @@ export function VerifySignatureModal({
             </div>
           )}
 
-          <details className="rounded-md border border-border-subtle bg-sunken/40 p-3">
+          <details className="rounded-md border border-line-subtle bg-sunken/40 p-3">
             <summary className="cursor-pointer text-caption font-medium text-ink-primary">
               Verify offline with <code className="font-mono">openssl</code>
             </summary>
@@ -261,7 +261,7 @@ openssl dgst -sha256 -verify astra.pub.pem -signature signature.bin canonical.js
           </details>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-border-subtle bg-sunken px-6 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-line-subtle bg-sunken px-6 py-3">
           <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
           <Button
             variant="primary"
@@ -291,9 +291,9 @@ function buildInitialSteps(): Step[] {
 function StepIcon({ state }: { state: Step['state'] }) {
   if (state === 'ok') return <CheckCircle2 className="h-4 w-4 text-status-signed" aria-hidden="true" />;
   if (state === 'fail') return <AlertTriangle className="h-4 w-4 text-status-failed" aria-hidden="true" />;
-  if (state === 'running') return <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden="true" />;
+  if (state === 'running') return <Loader2 className="h-4 w-4 animate-spin text-volt-ink" aria-hidden="true" />;
   if (state === 'skip') return <ExternalLink className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />;
-  return <span className="h-4 w-4 rounded-full border border-border" aria-hidden="true" />;
+  return <span className="h-4 w-4 rounded-full border border-line" aria-hidden="true" />;
 }
 
 function shortenPem(pem: string): string {

@@ -90,10 +90,10 @@ function NodeView({
         <FileCode className="h-3.5 w-3.5 shrink-0 text-ink-tertiary" aria-hidden="true" />
         <span className="truncate font-mono">{node.name}</span>
         {node.loading && (
-          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-accent motion-safe:animate-pulse" aria-hidden="true" />
+          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-volt motion-safe:animate-pulse" aria-hidden="true" />
         )}
         {!node.loading && (node.todoCount ?? 0) > 0 && (
-          <span className="ml-auto rounded-sm bg-[#F2E5C2] px-1.5 py-0.5 font-mono text-micro uppercase text-status-scaffolded">
+          <span className="ml-auto rounded-sm bg-status-warn/10 px-1.5 py-0.5 font-mono text-micro uppercase text-status-scaffolded">
             TODO {node.todoCount}
           </span>
         )}

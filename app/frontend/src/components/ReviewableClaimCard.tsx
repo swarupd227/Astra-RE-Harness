@@ -6,6 +6,12 @@ import { Button } from '@/components/Button';
 
 type Action = 'accept' | 'edit' | 'reject' | 'question';
 
+/**
+ * One claim on the spec review page. Restyled to the v2 tokens (every
+ * colour is a theme variable, so it reads in the dark shell and inside the
+ * light wrapper alike). Labels, `article#claim-<id>` and the textbox stay as
+ * the demo specs expect them.
+ */
 export function ReviewableClaimCard({
   id,
   section,
@@ -77,26 +83,27 @@ export function ReviewableClaimCard({
     <article
       id={`claim-${id}`}
       className={clsx(
-        'scroll-mt-24 rounded-md border bg-raised p-4 transition-all duration-medium motion-safe:animate-fade-in',
-        tone === 'accent' && 'border-status-draft/40 bg-accent-muted/30',
-        tone === 'success' && 'border-status-review/40 bg-[#DAEFE9]/30',
-        tone === 'reject' && 'border-status-failed/40 bg-[#F4D8D7]/30',
-        tone === 'q' && 'border-status-scaffolded/40 bg-[#FBF1D9]/40',
-        !tone && 'border-border-subtle',
+        'scroll-mt-24 rounded-xl border bg-raised p-4 transition-colors duration-medium motion-safe:animate-fade-in',
+        tone === 'accent' && 'border-status-warn/40 bg-status-warn/[.06]',
+        tone === 'success' && 'border-status-ok/40 bg-status-ok/[.06]',
+        tone === 'reject' && 'border-status-fail/40 bg-status-fail/[.06]',
+        tone === 'q' && 'border-status-info/40 bg-status-info/[.06]',
+        !tone && 'border-line-subtle',
       )}
       aria-labelledby={`claim-${id}-heading`}
+      data-review={review?.action ?? 'none'}
     >
       <header className="flex flex-wrap items-center gap-2">
-        <span id={`claim-${id}-heading`} className="rounded-sm bg-sunken px-1.5 py-0.5 font-mono text-caption uppercase text-ink-secondary">
+        <span id={`claim-${id}-heading`} className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-micro uppercase text-ink-secondary">
           {id}
         </span>
         {claim.confidence && (
           <span
             className={clsx(
-              'rounded-sm px-1.5 py-0.5 font-mono text-caption uppercase',
-              claim.confidence === 'high' && 'bg-[#DAEFE9] text-status-review',
-              claim.confidence === 'medium' && 'bg-accent-muted text-status-draft',
-              claim.confidence === 'low' && 'bg-[#F4D8D7] text-status-failed',
+              'rounded-md px-1.5 py-0.5 font-mono text-micro uppercase',
+              claim.confidence === 'high' && 'bg-status-ok/10 text-status-ok',
+              claim.confidence === 'medium' && 'bg-status-warn/10 text-status-warn',
+              claim.confidence === 'low' && 'bg-status-fail/10 text-status-fail',
             )}
           >
             {claim.confidence}
@@ -105,12 +112,13 @@ export function ReviewableClaimCard({
         {review && (
           <span
             className={clsx(
-              'ml-auto rounded-sm px-1.5 py-0.5 font-mono text-caption uppercase',
-              review.action === 'accept' && 'bg-[#DAEFE9] text-status-review',
-              review.action === 'edit' && 'bg-accent-muted text-status-draft',
-              review.action === 'reject' && 'bg-[#F4D8D7] text-status-failed',
-              review.action === 'question' && 'bg-[#FBF1D9] text-status-scaffolded',
+              'ml-auto rounded-md px-1.5 py-0.5 font-mono text-micro uppercase',
+              review.action === 'accept' && 'bg-status-ok/10 text-status-ok',
+              review.action === 'edit' && 'bg-status-warn/10 text-status-warn',
+              review.action === 'reject' && 'bg-status-fail/10 text-status-fail',
+              review.action === 'question' && 'bg-status-info/10 text-status-info',
             )}
+            data-testid="claim-review-badge"
           >
             {review.action}
           </span>
@@ -130,7 +138,7 @@ export function ReviewableClaimCard({
           </details>
         )}
         {review?.reason && (
-          <p className="mt-2 rounded-sm border-l-2 border-ink-tertiary bg-sunken/60 px-2 py-1 text-caption text-ink-secondary">
+          <p className="mt-2 rounded-md border-l-2 border-line-strong bg-sunken/60 px-2 py-1 text-caption text-ink-secondary">
             {review.action === 'reject' ? 'Reason: ' : review.action === 'question' ? 'Question: ' : ''}
             {review.reason}
           </p>
@@ -146,11 +154,13 @@ export function ReviewableClaimCard({
               type="button"
               onClick={() => onCite?.(c.lines)}
               className={clsx(
-                'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] transition-colors duration-fast hover:bg-accent-muted',
+                'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-micro transition-colors duration-fast',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt',
                 activeCitation === c.lines
-                  ? 'border-accent bg-accent-muted text-status-draft'
-                  : 'border-border-subtle bg-canvas text-ink-secondary',
+                  ? 'border-volt/60 bg-volt/10 text-volt-ink'
+                  : 'border-line-subtle bg-sunken text-ink-secondary hover:border-line hover:text-ink-primary',
               )}
+              title={`Highlight source lines ${c.lines}`}
             >
               L{c.lines}
             </button>
@@ -167,7 +177,7 @@ export function ReviewableClaimCard({
                 variant="secondary"
                 onClick={accept}
                 loading={busy === 'accept'}
-                className={review?.action === 'accept' ? 'border-status-review/60' : ''}
+                className={review?.action === 'accept' ? 'border-status-ok/60' : ''}
               >
                 <Check className="h-4 w-4" /> Accept
               </Button>
@@ -202,10 +212,10 @@ export function ReviewableClaimCard({
                       ? 'Reason for rejection (≥ 20 characters)…'
                       : 'Resolution / clarification…'
                 }
-                className="w-full rounded-md border border-border-subtle bg-raised p-2 font-mono text-body text-ink-primary focus:border-accent focus:outline-none"
+                className="w-full rounded-lg border border-line bg-sunken p-2 font-mono text-body text-ink-primary outline-none placeholder:text-ink-tertiary focus:border-line-strong focus:ring-1 focus:ring-volt/60"
               />
               {editing.kind === 'reject' && draft.length > 0 && draft.length < 20 && (
-                <p className="text-caption text-status-failed">Reason must be at least 20 characters.</p>
+                <p className="text-caption text-status-fail">Reason must be at least 20 characters.</p>
               )}
               <div className="flex gap-2">
                 <Button

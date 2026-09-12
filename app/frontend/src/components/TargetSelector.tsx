@@ -121,8 +121,8 @@ function TargetCard({
         'group relative flex flex-col items-start gap-2 rounded-md border p-3 text-left transition-all',
         compact ? 'w-full sm:w-60' : 'w-72',
         selected
-          ? 'border-accent bg-accent-muted shadow-e1'
-          : 'border-border-subtle bg-raised hover:border-border hover:shadow-e1',
+          ? 'border-volt bg-volt/10 shadow-e1'
+          : 'border-line-subtle bg-raised hover:border-line hover:shadow-e1',
         !selectable && 'cursor-not-allowed opacity-70',
       )}
     >
@@ -131,7 +131,7 @@ function TargetCard({
           {prettyStack(option.stack)}
         </span>
         {selected && selectable && (
-          <CheckCircle2 className="h-4 w-4 text-accent" aria-hidden="true" />
+          <CheckCircle2 className="h-4 w-4 text-volt-ink" aria-hidden="true" />
         )}
         {!selectable && <Lock className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />}
       </div>

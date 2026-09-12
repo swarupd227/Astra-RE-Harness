@@ -112,7 +112,7 @@ function ProgrammeLink({
       aria-label={collapsed ? title : undefined}
     >
       <span
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-sand-200/15 font-mono text-[10px] font-semibold text-sand-200"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-sand-300/15 font-mono text-[10px] font-semibold text-ink-secondary"
         aria-hidden="true"
       >
         {initials || '·'}

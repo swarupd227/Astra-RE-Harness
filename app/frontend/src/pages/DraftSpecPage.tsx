@@ -94,8 +94,8 @@ export function DraftSpecPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col">
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
@@ -106,7 +106,7 @@ export function DraftSpecPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <p className="label">
                 Draft spec
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
@@ -165,11 +165,11 @@ export function DraftSpecPage() {
         tokens={sp.llmCall ? { in: sp.llmCall.inputTokens, out: sp.llmCall.outputTokens } : undefined}
       />
 
-      <div className="border-b border-border-subtle bg-canvas/40 px-6 py-2">
+      <div className="border-b border-line-subtle bg-canvas/40 px-6 py-2">
         <ProviderSettingsCard compact />
       </div>
 
-      <div className="grid flex-1 min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,560px)] divide-x divide-border-subtle">
+      <div className="grid flex-1 min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,560px)] divide-x divide-line-subtle">
         <div className="min-h-0 overflow-y-auto bg-raised">
           <SpecHeader spec={draft} />
           <StreamingSpecPanel
@@ -179,7 +179,7 @@ export function DraftSpecPage() {
           />
         </div>
         <div className="min-h-0 flex flex-col bg-canvas">
-          <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
+          <div className="shrink-0 flex items-center justify-between border-b border-line-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
             <span>{s.file.relativePath}</span>
             <span className="text-ink-tertiary">{source.data!.lineCount} lines</span>
           </div>
@@ -189,6 +189,7 @@ export function DraftSpecPage() {
               height="100%"
               citations={citations}
               highlightLine={activeLine}
+              theme="astra-dark"
             />
           </div>
         </div>
@@ -199,7 +200,7 @@ export function DraftSpecPage() {
 
 function SpecHeader({ spec }: { spec: DraftSpec }) {
   return (
-    <div className="border-b border-border-subtle bg-canvas/40 px-6 py-4">
+    <div className="border-b border-line-subtle bg-canvas/40 px-6 py-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 font-mono text-caption text-ink-tertiary">
         <span><Sparkles className="mr-1 inline h-3 w-3" aria-hidden="true" />routine <span className="text-ink-primary">{spec.routine}</span></span>
         <span>source <span className="text-ink-secondary">{spec.source_path}</span></span>

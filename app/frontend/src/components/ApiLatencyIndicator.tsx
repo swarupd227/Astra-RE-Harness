@@ -62,7 +62,7 @@ export function ApiLatencyIndicator() {
       <Link
         to="/system"
         className={clsx(
-          'inline-flex items-center gap-2 rounded-md border border-border-subtle bg-canvas px-2.5 py-1.5 font-mono text-caption transition-colors duration-fast hover:bg-sunken',
+          'inline-flex items-center gap-2 rounded-md border border-line-subtle bg-canvas px-2.5 py-1.5 font-mono text-caption transition-colors duration-fast hover:bg-sunken',
           !sample.ok ? 'text-status-failed' : 'text-ink-secondary hover:text-ink-primary',
         )}
         aria-label={`API ${label}`}

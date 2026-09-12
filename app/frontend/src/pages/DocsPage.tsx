@@ -53,11 +53,11 @@ const DELIVERY_LABELS: Record<string, string> = {
 
 function deliveryTone(status: string): string {
   switch (status) {
-    case 'verified': return 'text-emerald-600';
-    case 'built':    return 'text-ace-600';
-    case 'signed':   return 'text-ace-700';
-    case 'failed':   return 'text-rose-600';
-    case 'untraceable': return 'text-amber-600';
+    case 'verified': return 'text-status-ok';
+    case 'built':    return 'text-status-info';
+    case 'signed':   return 'text-status-info';
+    case 'failed':   return 'text-status-fail';
+    case 'untraceable': return 'text-status-warn';
     default:         return 'text-ink-tertiary';
   }
 }
@@ -327,10 +327,10 @@ export function DocsPage() {
   const logFailed = logComplete && !!runError;
 
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col fadeup">
+    <div className="flex h-full min-h-0 flex-col fadeup">
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
@@ -340,7 +340,7 @@ export function DocsPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <p className="label">
                 Documentation
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{c.name}</h1>
@@ -389,7 +389,7 @@ export function DocsPage() {
                     onChange={e => { if (e.target.value) handleExport(e.target.value); }}
                     disabled={!!exportLoading || kindsWithData.length === 0}
                     aria-label="Export documentation"
-                    className="appearance-none cursor-pointer rounded border border-border-subtle bg-raised py-1.5 pl-8 pr-7 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-10 cursor-pointer appearance-none rounded-lg border border-line bg-raised py-1.5 pl-8 pr-7 text-body text-ink-secondary transition-colors hover:border-line-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">{exportLoading ? `Exporting ${exportLoading}…` : 'Export…'}</option>
                     <option value="mkdocs">MkDocs site (.zip)</option>
@@ -425,7 +425,7 @@ export function DocsPage() {
 
         {/* Inline errors */}
         {exportError && (
-          <p className="mt-1 text-xs text-rose-600">{exportError}</p>
+          <p className="mt-1 text-xs text-status-fail">{exportError}</p>
         )}
 
         {/* Phase C — requirements completeness. Shown while reviewing the
@@ -434,22 +434,22 @@ export function DocsPage() {
             cannot answer it on its own. */}
         {isRequirementKind && cov && cov.requirementCount > 0 && (
           <div
-            className="mt-3 rounded border border-border-subtle bg-raised p-3"
+            className="mt-3 rounded border border-line-subtle bg-raised p-3"
             data-testid="requirements-coverage"
           >
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
               <span className="font-medium text-ink-primary">Completeness</span>
-              <span className={cov.businessRules.percent === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+              <span className={cov.businessRules.percent === 100 ? 'text-status-ok' : 'text-status-warn'}>
                 Business rules {cov.businessRules.covered}/{cov.businessRules.total} ({cov.businessRules.percent}%)
               </span>
-              <span className={cov.capabilities.percent === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+              <span className={cov.capabilities.percent === 100 ? 'text-status-ok' : 'text-status-warn'}>
                 Capabilities {cov.capabilities.covered}/{cov.capabilities.total} ({cov.capabilities.percent}%)
               </span>
               <span className="font-mono text-caption text-ink-tertiary">
                 {cov.requirementCount} requirements · {cov.nfrCount} NFRs
               </span>
               {cov.complete && (
-                <span className="inline-flex items-center gap-1 text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-status-ok">
                   <CheckCircle2 className="h-3.5 w-3.5" /> no gaps
                 </span>
               )}
@@ -457,7 +457,7 @@ export function DocsPage() {
 
             {cov.businessRules.uncovered.length > 0 && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                <summary className="cursor-pointer text-xs text-status-warn">
                   {cov.businessRules.uncovered.length} business rule(s) not represented by any requirement
                 </summary>
                 <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
@@ -470,7 +470,7 @@ export function DocsPage() {
 
             {cov.capabilities.uncovered.length > 0 && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                <summary className="cursor-pointer text-xs text-status-warn">
                   {cov.capabilities.uncovered.length} capability(ies) with no requirement
                 </summary>
                 <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
@@ -483,7 +483,7 @@ export function DocsPage() {
 
             {cov.requirementGaps.length > 0 && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-500">
+                <summary className="cursor-pointer text-xs text-status-warn">
                   {cov.requirementGaps.length} requirement(s) missing traceability or acceptance criteria
                 </summary>
                 <ul className="mt-1 space-y-1 pl-4 text-xs text-ink-secondary">
@@ -504,7 +504,7 @@ export function DocsPage() {
             built yet?" rather than only "is it written down?". */}
         {isRequirementKind && del && del.requirementCount > 0 && (
           <div
-            className="mt-3 rounded border border-border-subtle bg-raised p-3"
+            className="mt-3 rounded border border-line-subtle bg-raised p-3"
             data-testid="requirements-delivery"
           >
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
@@ -518,14 +518,14 @@ export function DocsPage() {
                 type="button"
                 onClick={handleBacklog}
                 data-testid="download-backlog"
-                className="ml-auto inline-flex items-center gap-1.5 rounded border border-border-subtle px-2 py-1 text-caption text-ink-secondary transition-colors hover:border-brand hover:text-ink-primary"
+                className="ml-auto inline-flex items-center gap-1.5 rounded border border-line-subtle px-2 py-1 text-caption text-ink-secondary transition-colors hover:border-line-strong hover:text-ink-primary"
               >
                 <Download className="h-3.5 w-3.5" /> Backlog (.csv)
               </button>
             </div>
 
             {(del.requirementsWithoutTraceableRoutine > 0 || del.routineNamesUnresolved > 0) && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+              <p className="mt-2 text-xs text-status-warn">
                 {del.requirementsWithoutTraceableRoutine > 0 && (
                   <>{del.requirementsWithoutTraceableRoutine} requirement(s) trace to no routine in this project. </>
                 )}
@@ -552,7 +552,7 @@ export function DocsPage() {
                   </thead>
                   <tbody>
                     {del.requirements.map((r) => (
-                      <tr key={r.reference} className="border-t border-border-subtle align-top">
+                      <tr key={r.reference} className="border-t border-line-subtle align-top">
                         <td className="py-1 pr-3 font-mono text-ink-tertiary">{r.reference}</td>
                         <td className="py-1 pr-3 text-ink-primary">{r.statement}</td>
                         <td className={`py-1 pr-3 whitespace-nowrap ${deliveryTone(r.status)}`}>
@@ -573,7 +573,7 @@ export function DocsPage() {
           </div>
         )}
         {generateMutation.error && (
-          <p className="mt-1 text-xs text-rose-600">
+          <p className="mt-1 text-xs text-status-fail">
             {(generateMutation.error as Error).message}
           </p>
         )}
@@ -581,12 +581,12 @@ export function DocsPage() {
 
       {/* ── Run error banner ────────────────────────────────────── */}
       {runError && (
-        <div className="flex items-start gap-3 border-b border-rose-500/30 bg-rose-500/10 px-6 py-2">
-          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-          <span className="flex-1 text-sm text-rose-700 dark:text-rose-400">{runError}</span>
+        <div className="flex items-start gap-3 border-b border-status-fail/30 bg-status-fail/10 px-6 py-2">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-status-fail" />
+          <span className="flex-1 text-sm text-status-fail">{runError}</span>
           <button
             onClick={() => setRunError(null)}
-            className="shrink-0 text-xs text-rose-500 hover:text-rose-700"
+            className="shrink-0 text-xs text-status-fail hover:text-status-fail"
           >
             Dismiss
           </button>
@@ -595,7 +595,7 @@ export function DocsPage() {
 
       {/* ── SSE log strip ───────────────────────────────────────── */}
       {(isGenerating || hasLog) && (
-        <div className="border-b border-border-subtle bg-slate-900">
+        <div className="border-b border-line-subtle bg-sunken">
 
           {/* Header row — toggle button + separate Clear button, never nested */}
           <div className="flex items-center gap-2 px-4 py-2">
@@ -605,12 +605,12 @@ export function DocsPage() {
               className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
             >
               {isGenerating
-                ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-400" />
+                ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-status-ok" />
                 : logFailed
-                  ? <XCircle className="h-3 w-3 shrink-0 text-rose-400" />
-                  : <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />}
+                  ? <XCircle className="h-3 w-3 shrink-0 text-status-fail" />
+                  : <CheckCircle2 className="h-3 w-3 shrink-0 text-status-ok" />}
 
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/60">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-secondary">
                 {isGenerating
                   ? (runStatus.data?.summary ?? 'Generating documentation…')
                   : logFailed
@@ -620,7 +620,7 @@ export function DocsPage() {
 
               {hasLog && (
                 <ChevronRight
-                  className={`h-3 w-3 shrink-0 text-white/30 transition-transform duration-150 ${logExpanded ? 'rotate-90' : ''}`}
+                  className={`h-3 w-3 shrink-0 text-ink-tertiary transition-transform duration-150 ${logExpanded ? 'rotate-90' : ''}`}
                 />
               )}
             </button>
@@ -628,7 +628,7 @@ export function DocsPage() {
             {hasLog && (
               <button
                 onClick={() => { setLogLines([]); setLogExpanded(false); }}
-                className="rounded px-1.5 py-0.5 font-mono text-[10px] text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
+                className="rounded px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary transition-colors hover:bg-raised hover:text-ink-primary"
               >
                 Clear
               </button>
@@ -637,15 +637,15 @@ export function DocsPage() {
 
           {/* Expanded log body */}
           {logExpanded && hasLog && (
-            <div className="max-h-48 overflow-y-auto border-t border-white/5 px-4 pb-3 pt-2">
+            <div className="max-h-48 overflow-y-auto border-t border-line-subtle px-4 pb-3 pt-2">
               {logLines.map((line, i) => (
                 <div
                   key={i}
                   className={`whitespace-pre-wrap font-mono text-[11px] leading-relaxed ${
-                    line.startsWith('✗') ? 'text-rose-400'    :
-                    line.startsWith('✓') ? 'text-emerald-400' :
-                    line.startsWith('▶') ? 'text-sky-400'     :
-                    'text-white/60'
+                    line.startsWith('✗') ? 'text-status-fail'    :
+                    line.startsWith('✓') ? 'text-status-ok' :
+                    line.startsWith('▶') ? 'text-status-info'     :
+                    'text-ink-secondary'
                   }`}
                 >
                   {line}
@@ -658,7 +658,7 @@ export function DocsPage() {
       )}
 
       {/* ── Three-pane body ─────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-[220px_280px_minmax(0,1fr)] divide-x divide-border-subtle">
+      <div className="grid min-h-0 flex-1 grid-cols-[220px_280px_minmax(0,1fr)] divide-x divide-line-subtle">
 
         {/* Pane 1 — Kind selector */}
         <nav className="overflow-y-auto bg-raised py-2">
@@ -683,7 +683,7 @@ export function DocsPage() {
 
           {kindsWithData.length === 0 && isGenerating && (
             <div className="px-4 py-8 text-center">
-              <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-brand opacity-50" />
+              <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-volt opacity-50" />
               <p className="text-sm text-ink-tertiary">Generating…</p>
             </div>
           )}
@@ -715,9 +715,9 @@ export function DocsPage() {
                 </div>
 
                 {/* Thin signed progress bar */}
-                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border-subtle">
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-line-subtle">
                   <div
-                    className="h-full rounded-full bg-emerald-500/70 transition-all duration-300"
+                    className="h-full rounded-full bg-status-ok/70 transition-all duration-300"
                     style={{ width: `${signedPct}%` }}
                   />
                 </div>
@@ -731,7 +731,7 @@ export function DocsPage() {
 
         {/* Pane 2 — Section list */}
         <div className="flex min-h-0 flex-col">
-          <div className="sticky top-0 z-10 border-b border-border-subtle bg-raised px-4 py-2.5">
+          <div className="sticky top-0 z-10 border-b border-line-subtle bg-raised px-4 py-2.5">
             <h2 className="font-mono text-sm font-semibold text-ink-primary">
               {KIND_LABELS[selectedKind] ?? selectedKind}
             </h2>
@@ -758,7 +758,7 @@ export function DocsPage() {
                 <button
                   key={s.id}
                   onClick={() => setSelectedSectionId(s.id)}
-                  className={`w-full border-b border-border-subtle px-4 py-3 text-left transition-colors hover:bg-sunken ${
+                  className={`w-full border-b border-line-subtle px-4 py-3 text-left transition-colors hover:bg-sunken ${
                     isActive ? 'bg-sunken' : ''
                   }`}
                 >
@@ -788,7 +788,7 @@ export function DocsPage() {
 
           {/* Pagination */}
           {sections.data && sections.data.total > 50 && (
-            <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2">
+            <div className="flex items-center justify-between border-t border-line-subtle px-4 py-2">
               <Button
                 variant="secondary"
                 onClick={() => setSectionPage(p => Math.max(1, p - 1))}
@@ -832,7 +832,7 @@ export function DocsPage() {
           {detail && (
             <>
               {/* Sticky action bar */}
-              <div className="sticky top-0 z-10 border-b border-border-subtle bg-raised px-6 py-3">
+              <div className="sticky top-0 z-10 border-b border-line-subtle bg-raised px-6 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <Badge tone={stateTone(detail.state)}>{stateLabel(detail.state)}</Badge>
@@ -872,7 +872,7 @@ export function DocsPage() {
                 </div>
 
                 {mutationError && (
-                  <p className="mt-1 text-xs text-rose-600">
+                  <p className="mt-1 text-xs text-status-fail">
                     {(mutationError as Error).message}
                   </p>
                 )}
@@ -907,8 +907,8 @@ export function DocsPage() {
                     prose-headings:font-mono prose-headings:text-ink-primary
                     prose-code:rounded prose-code:bg-sunken prose-code:px-1 prose-code:font-mono
                     prose-pre:rounded prose-pre:bg-sunken prose-pre:p-4
-                    prose-table:border-collapse prose-th:border prose-th:border-border-subtle prose-th:px-3 prose-th:py-1
-                    prose-td:border prose-td:border-border-subtle prose-td:px-3 prose-td:py-1">
+                    prose-table:border-collapse prose-th:border prose-th:border-line-subtle prose-th:px-3 prose-th:py-1
+                    prose-td:border prose-td:border-line-subtle prose-td:px-3 prose-td:py-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {detail.renderedMarkdown ?? '*(no content)*'}
                     </ReactMarkdown>

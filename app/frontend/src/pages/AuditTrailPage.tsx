@@ -52,12 +52,12 @@ const EVENT_META: Record<string, { label: string; icon: any; tone: ToneKey; bran
 
 // Per-tone styling — kept as static class names so Tailwind sees them at build time.
 const TONE_STYLES: Record<ToneKey, { dot: string; ring: string; icon: string; edge: string }> = {
-  neutral:    { dot: 'bg-sunken',                ring: 'ring-border-subtle',           icon: 'text-ink-secondary',     edge: 'border-l-border' },
-  draft:      { dot: 'bg-accent-muted',          ring: 'ring-status-draft/40',         icon: 'text-status-draft',      edge: 'border-l-status-draft' },
-  review:     { dot: 'bg-[#DAEFE9]',             ring: 'ring-status-review/40',        icon: 'text-status-review',     edge: 'border-l-status-review' },
-  signed:     { dot: 'bg-[#DCE6F5]',             ring: 'ring-status-signed/40',        icon: 'text-status-signed',     edge: 'border-l-status-signed' },
-  scaffolded: { dot: 'bg-[#FBF1D9]',             ring: 'ring-status-scaffolded/40',    icon: 'text-status-scaffolded', edge: 'border-l-status-scaffolded' },
-  failed:     { dot: 'bg-[#F4D8D7]',             ring: 'ring-status-failed/40',        icon: 'text-status-failed',     edge: 'border-l-status-failed' },
+  neutral:    { dot: 'bg-sunken',                ring: 'ring-line-subtle',           icon: 'text-ink-secondary',     edge: 'border-l-border' },
+  draft:      { dot: 'bg-volt/10',          ring: 'ring-status-draft/40',         icon: 'text-status-draft',      edge: 'border-l-status-draft' },
+  review:     { dot: 'bg-status-ok/10',             ring: 'ring-status-review/40',        icon: 'text-status-review',     edge: 'border-l-status-review' },
+  signed:     { dot: 'bg-status-info/10',             ring: 'ring-status-signed/40',        icon: 'text-status-signed',     edge: 'border-l-status-signed' },
+  scaffolded: { dot: 'bg-status-warn/10',             ring: 'ring-status-scaffolded/40',    icon: 'text-status-scaffolded', edge: 'border-l-status-scaffolded' },
+  failed:     { dot: 'bg-status-fail/10',             ring: 'ring-status-failed/40',        icon: 'text-status-failed',     edge: 'border-l-status-failed' },
   superseded: { dot: 'bg-sunken',                ring: 'ring-status-superseded/40',    icon: 'text-status-superseded', edge: 'border-l-status-superseded' },
 };
 
@@ -101,9 +101,9 @@ export function AuditTrailPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Provenance</p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">Audit trail</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <p className="label">Provenance</p>
+        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Audit trail</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Every event recorded for this specification, in order. Records are never edited or deleted.
         </p>
       </header>
@@ -153,12 +153,12 @@ export function AuditTrailPage() {
         <ol className="relative space-y-8 pl-6">
           {/* The vertical rail — slight gradient from neutral to a hint of accent. */}
           <span
-            className="absolute left-2 top-1 bottom-1 w-[2px] rounded-full bg-gradient-to-b from-border to-border-subtle"
+            className="absolute left-2 top-1 bottom-1 w-[2px] rounded-full bg-gradient-to-b from-line to-line-subtle"
             aria-hidden="true"
           />
           {grouped.map(([date, events]) => (
             <li key={date}>
-              <h3 className="mb-3 -ml-6 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+              <h3 className="mb-3 -ml-6 label">
                 <HistoryIcon className="mr-1 inline h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
                 {date}
               </h3>
@@ -189,7 +189,7 @@ function FilterGroup({ label, value, options, onChange }: {
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
+      <span className="label">{label}</span>
       <div className="flex flex-wrap gap-1">
         {options.map((o) => (
           <button
@@ -200,7 +200,7 @@ function FilterGroup({ label, value, options, onChange }: {
               'rounded-sm border px-2 py-0.5 font-mono text-caption transition-colors duration-fast',
               value === o.v
                 ? 'border-ink-primary bg-ink-primary text-ink-inverse'
-                : 'border-border-subtle bg-canvas text-ink-secondary hover:bg-sunken',
+                : 'border-line-subtle bg-canvas text-ink-secondary hover:bg-sunken',
             )}
           >
             {o.label}

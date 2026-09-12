@@ -116,11 +116,11 @@ export function NewCorpusPage() {
   return (
     <div className="mx-auto max-w-[820px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Ingest
         </p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">Connect a new project</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Connect a new project</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Upload source files (or a <span className="font-mono">.zip</span> archive) or
           point at a Git repository. Every file is parsed to build an inventory of
           its routines. Pick a source language to narrow the file filter, or
@@ -217,7 +217,7 @@ export function NewCorpusPage() {
                 }}
                 className={
                   'rounded-md border-2 border-dashed transition-colors duration-fast ' +
-                  (dragging ? 'border-accent bg-accent/5' : 'border-border bg-sunken')
+                  (dragging ? 'border-volt bg-volt/5' : 'border-line bg-sunken')
                 }
                 data-testid="dropzone"
               >
@@ -228,7 +228,7 @@ export function NewCorpusPage() {
                     <button
                       type="button"
                       onClick={() => inputRef.current?.click()}
-                      className="font-medium text-accent underline-offset-2 hover:underline"
+                      className="font-medium text-volt-ink underline-offset-2 hover:underline"
                     >
                       browse
                     </button>
@@ -249,7 +249,7 @@ export function NewCorpusPage() {
               {rejected.length > 0 && (
                 <div
                   role="alert"
-                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-[#FBF1D9] px-4 py-3 text-caption text-status-scaffolded"
+                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-status-warn/10 px-4 py-3 text-caption text-status-scaffolded"
                   data-testid="rejected-files"
                 >
                   <p className="font-medium">
@@ -263,7 +263,7 @@ export function NewCorpusPage() {
                 </div>
               )}
               {files.length > 0 && (
-                <ul className="mt-3 divide-y divide-border-subtle rounded-md border border-border-subtle bg-raised">
+                <ul className="mt-3 divide-y divide-line-subtle rounded-md border border-line-subtle bg-raised">
                   {files.map((f, i) => (
                     <li key={`${f.name}:${i}`} className="flex items-center gap-3 px-4 py-2 text-body">
                       <FileCode className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
@@ -379,13 +379,13 @@ function tabClass(active: boolean): string {
   return (
     'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-body font-medium transition-colors duration-fast ' +
     (active
-      ? 'border-accent bg-accent/10 text-accent'
-      : 'border-border bg-raised text-ink-secondary hover:bg-sunken')
+      ? 'border-volt bg-volt/10 text-volt-ink'
+      : 'border-line bg-raised text-ink-secondary hover:bg-sunken')
   );
 }
 
 const inputClass =
-  'mt-1 w-full rounded-md border border-border bg-raised px-3 py-2 font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
+  'mt-1 w-full rounded-md border border-line bg-raised px-3 py-2 font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20 disabled:cursor-not-allowed disabled:opacity-60';
 
 function FieldRow({
   label,
@@ -424,7 +424,7 @@ function ProgressCard({ label }: { label: string }) {
     <Card>
       <CardBody>
         <div className="flex items-center gap-3" role="status" aria-live="polite">
-          <Loader2 className="h-5 w-5 animate-spin text-accent" aria-hidden="true" />
+          <Loader2 className="h-5 w-5 animate-spin text-volt-ink" aria-hidden="true" />
           <p className="text-body text-ink-secondary">{label}</p>
         </div>
       </CardBody>
@@ -456,7 +456,7 @@ function ResultCard({ result, onOpen }: { result: IngestResult; onOpen: () => vo
           <Stat label="Routines" value={result.subroutineCount.toString()} />
         </dl>
         {result.warnings.length > 0 && (
-          <details className="mt-4 rounded-md border border-border-subtle bg-sunken p-3">
+          <details className="mt-4 rounded-md border border-line-subtle bg-sunken p-3">
             <summary className="cursor-pointer text-body font-medium text-ink-primary">
               {result.warnings.length} parse warning{result.warnings.length === 1 ? '' : 's'}
             </summary>

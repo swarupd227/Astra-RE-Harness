@@ -177,6 +177,8 @@ builder.Services.AddScoped<Astra.Api.Copilot.CopilotToolRegistry>();
 builder.Services.AddScoped<Astra.Api.Copilot.CopilotOrchestrator>();
 builder.Services.AddSingleton<Astra.Api.Copilot.BackgroundRunService>();
 builder.Services.AddSingleton<Astra.Api.Copilot.Narrator>();
+// WS5 — the 10-minute Assessment (deterministic facts + one narrative call).
+builder.Services.AddSingleton<Astra.Api.Assessment.AssessmentService>();
 
 // Task #178 — runtime LLM key management. Remember the boot-time key so a
 // database override can be reverted, and make sure the plain HttpClient
@@ -240,6 +242,9 @@ builder.Services.AddSingleton<Astra.Api.Docs.CatalogPipeline>();
 // Phase 11.0.d — sequence + dependency diagrams.
 builder.Services.AddSingleton<Astra.Api.Docs.DiagramPipeline>();
 builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
+// WS6 — model-authored prose, style guide + exemplars, critic/revise pass
+// (IDocWriter, DocPromptAssets, DocCriticPass; see Docs/DocsQualityRegistration.cs).
+Astra.Api.Docs.DocsQualityRegistration.AddDocsQuality(builder.Services);
 // Phase 11.0.f — in-process SSE log bus for generation runs.
 builder.Services.AddSingleton<Astra.Api.Docs.DocRunLogger>();
 
@@ -714,6 +719,9 @@ using (var scope = app.Services.CreateScope())
               ON doc_generation_runs (corpus_id, started_at);
             """);
 
+        // WS6 — doc_sections.quality_json (critic score + deterministic checks).
+        await Astra.Api.Docs.DocsQualityRegistration.ApplyDocsSchemaAsync(db);
+
         // Phase 12.0 — Pattern analysis (bulk extraction + claim-kind
         // clustering). Additive DDL so dev databases pick up without
         // RecreateOnStartup. Column types mirror the EF model in
@@ -907,6 +915,12 @@ using (var scope = app.Services.CreateScope())
                 created_at            timestamptz  NOT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_conversation_messages_conv_created ON conversation_messages (conversation_id, created_at);
+            """);
+
+        // WS2 Increment 2 — spec review threads reference their spec.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ref_id uuid NULL;
+            CREATE INDEX IF NOT EXISTS ix_conversations_kind_ref ON conversations (kind, ref_id);
             """);
 
         // Phase 14.0 — merge any already-approved (PRODUCTION) archetype

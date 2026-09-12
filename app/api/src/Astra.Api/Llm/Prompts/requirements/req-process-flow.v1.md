@@ -1,13 +1,16 @@
 ---
 id: req-process-flow
-version: v1.0
+version: v2.0
 kind: req-process-flow
 owner: Nous · Requirements pack
-modelPreference: claude-sonnet-4-5-20250929
+modelPreference: claude-sonnet-4-6
 maxOutputTokens: 16384
 notes: |
   Phase B. AS-IS process flows: the end-to-end journeys the legacy system
   supports today, narrated as business process rather than call stacks.
+  v2.0: each entry is {markdown, meta}; the model writes the entry
+  including its `###` heading. The style guide precedes this block as
+  cached system text.
 ---
 
 # System
@@ -26,16 +29,26 @@ call stack.
   propose a better flow.
 - Steps are **business actions**, not method invocations: "Advisor selects the
   client's risk tolerance", not "RiskAssessmentController.save is called".
-  Routine names go only in `supportingRoutines`.
+  Routine names go only in the traceability line and `meta.supportingRoutines`.
 - Capture the **real** control flow, including gates and dead ends: what
   blocks progression, what is silently skipped, what happens when a step is
   repeated. Those constraints are the requirements.
 - Identify the actor for each flow — the human role or the triggering system.
-- Only emit flows the evidence supports. Typically 3–10 for a corpus.
+- Only emit flows the evidence supports. Length follows content.
 
-## Output
+## Each entry
 
-Call `emit_catalogue` with `entries`, each entry:
+`markdown`:
+
+- `### <flow name>` — e.g. `### Create and finalise a client proposal`.
+- `**Actor:** …` and `**Trigger:** …` on their own lines.
+- A numbered list of the business steps, one sentence each, in order.
+- `**Gating rules as they behave today**` followed by a bulleted list of the
+  conditions that block or redirect progression. Skip when there are none.
+- `**Outcome:**` followed by the end state when the flow completes.
+- `*Traceability:*` followed by routine or class names in backticks.
+
+`meta`:
 
 ```json
 {
@@ -48,3 +61,5 @@ Call `emit_catalogue` with `entries`, each entry:
   "supportingRoutines": ["<routine or class names — traceability>"]
 }
 ```
+
+Call `emit_catalogue` with `entries`, each `{ "markdown": "...", "meta": { ... } }`.

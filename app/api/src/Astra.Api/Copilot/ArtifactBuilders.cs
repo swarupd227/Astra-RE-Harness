@@ -179,7 +179,8 @@ public static class ArtifactBuilders
             .ToDictionaryAsync(r => r.ClaimPath, r => r.Action, ct);
         var signature = await db.Signatures.AsNoTracking().FirstOrDefaultAsync(s => s.SpecId == spec.Id, ct);
 
-        var claims = ExtractClaims(spec.SpecJson.RootElement, schemas.GetById(sub.SourceLanguage), reviews);
+        var schema = schemas.GetById(sub.SourceLanguage);
+        var claims = ExtractClaims(spec.SpecJson.RootElement, schema, reviews);
         int count(string section) => claims.Count(c => c.Section == section);
         var counts = new
         {
@@ -194,6 +195,14 @@ public static class ArtifactBuilders
             ? s.GetString()
             : null;
 
+        // Section → human label from the schema (falls back to Title Case of the field).
+        var sectionLabels = claims.Select(c => c.Section).Distinct().ToDictionary(
+            sec => sec,
+            sec => schema?.ClaimKinds.FirstOrDefault(k => k.SpecJsonField == sec)?.Label
+                   ?? string.Join(' ', sec.Split('_').Select(w => w.Length == 0 ? w : char.ToUpperInvariant(w[0]) + w[1..])));
+        var sourceFile = sub.SourceFile ?? await db.SourceFiles.AsNoTracking().FirstOrDefaultAsync(f => f.Id == sub.SourceFileId, ct);
+        var allReviewed = claims.Count > 0 && claims.All(c => c.Review is not null && !(c.Section == "open_questions" && c.Review == "question"));
+
         var props = new
         {
             subroutineId = sub.Id,
@@ -201,7 +210,22 @@ public static class ArtifactBuilders
             state = spec.State,
             summary,
             counts,
-            claims = claims.Select(c => new { section = c.Section, id = c.Id, text = c.Text, review = c.Review, citation = c.Citation }),
+            sectionLabels,
+            sourceFilePath = sourceFile?.RelativePath,
+            lineStart = sub.LineStart,
+            lineEnd = sub.LineEnd,
+            canRoute = spec.State == "DRAFT",
+            canReview = spec.State == "IN_REVIEW",
+            canSign = spec.State == "IN_REVIEW" && allReviewed,
+            claims = claims.Select(c => new
+            {
+                section = c.Section,
+                id = c.Id,
+                text = c.Text,
+                review = c.Review,
+                citation = c.Citation,
+                citationLines = c.Citation is null ? null : c.Citation.Replace("L", ""),
+            }),
             signedAt = signature?.SignedAt,
             signerDisplay = signature?.SignerDisplay,
         };
@@ -440,6 +464,55 @@ public static class ArtifactBuilders
         var props = new { specId = scaffold.SpecId, routineName, targetPlatform = scaffold.TargetPlatform, gates };
         var payload = new { scaffoldId, specId = scaffold.SpecId, routineName, targetPlatform = scaffold.TargetPlatform, gates };
         return (ToolResult.Artifact("gateResults", scaffoldId.ToString(), props), payload);
+    }
+
+    // ── planWaves / docSection ───────────────────────────────────────────
+
+    public static async Task<(ArtifactDto Artifact, object Payload)> PlanWavesAsync(
+        AppDbContext db, MigrationPlan plan, CancellationToken ct)
+    {
+        var waves = await db.MigrationWaves.AsNoTracking()
+            .Where(w => w.MigrationPlanId == plan.Id).OrderBy(w => w.WaveNumber).ToListAsync(ct);
+        var rendered = waves.Select(w => new { w.WaveNumber, name = w.Name, w.RoutineCount, status = w.Status }).ToList();
+        var props = new
+        {
+            corpusId = plan.CorpusId,
+            status = plan.Status,
+            strategyName = plan.StrategyName,
+            totalWaves = plan.TotalWaves,
+            totalRoutines = plan.TotalRoutines,
+            summary = plan.Summary,
+            waves = rendered.Select(w => new { waveNumber = w.WaveNumber, w.name, routineCount = w.RoutineCount, w.status }),
+        };
+        var payload = new
+        {
+            planId = plan.Id,
+            plan.Status,
+            plan.StrategyName,
+            plan.TotalWaves,
+            plan.TotalRoutines,
+            plan.Summary,
+            plan.CreatedAt,
+            plan.ApprovedAt,
+            waves = rendered.Select(w => new { w.WaveNumber, w.name, w.RoutineCount, w.status }),
+        };
+        return (ToolResult.Artifact("planWaves", plan.Id.ToString(), props), payload);
+    }
+
+    public const int DocMarkdownCap = 8_000;
+
+    public static ArtifactDto DocSection(DocSection section, string title, string href)
+    {
+        var md = section.RenderedMarkdown ?? "";
+        if (md.Length > DocMarkdownCap) md = md[..DocMarkdownCap] + "\n\n…";
+        return ToolResult.Artifact("docSection", section.Id.ToString(), new
+        {
+            title,
+            kind = section.SectionKind,
+            markdown = md,
+            corpusId = section.CorpusId,
+            href,
+        });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────

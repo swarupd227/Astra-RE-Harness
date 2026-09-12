@@ -24,7 +24,7 @@ const variants: Record<Variant, string> = {
   primary: 'bg-volt text-on-volt hover:brightness-95 active:brightness-90',
   secondary: 'bg-raised text-ink-primary border border-line hover:bg-sunken',
   ghost: 'text-ink-secondary hover:bg-sunken hover:text-ink-primary',
-  destructive: 'bg-status-fail text-white hover:brightness-95 active:brightness-90',
+  destructive: 'bg-status-fail text-ink-inverse hover:brightness-95 active:brightness-90',
 };
 
 const sizes: Record<Size, string> = {

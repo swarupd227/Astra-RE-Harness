@@ -12,7 +12,7 @@ import { absoluteTime, formatDuration, personaLabel, pretty, relativeTime, TONE_
 export type ArtifactSelection = { messageId: string; index: number };
 
 /** Kinds that need the full column width when rendered as a card. */
-const WIDE_KINDS = new Set(['routineList', 'clusterGrid', 'routine', 'specSummary']);
+const WIDE_KINDS = new Set(['routineList', 'clusterGrid', 'routine', 'specSummary', 'assessment', 'planWaves', 'docSection']);
 
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -24,6 +24,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDecline,
   confirming = false,
   disabled = false,
+  expandInline = false,
 }: {
   message: ConversationMessage;
   now: number;
@@ -34,6 +35,8 @@ export const MessageBubble = memo(function MessageBubble({
   onDecline: (messageId: string) => void;
   confirming?: boolean;
   disabled?: boolean;
+  /** No artifact pane in this host: the selected card expands in place. */
+  expandInline?: boolean;
 }) {
   const when = relativeTime(message.createdAt, now);
   const whenTitle = absoluteTime(message.createdAt);
@@ -99,14 +102,19 @@ export const MessageBubble = memo(function MessageBubble({
 
         {artifacts.length > 0 && (
           <div className={clsx('grid gap-3', twoUp && 'md:grid-cols-2')}>
-            {artifacts.map((a, i) => (
-              <ArtifactCard
-                key={`${a.kind}-${a.refId ?? i}-${i}`}
-                artifact={a}
-                selected={selected?.messageId === message.id && selected.index === i}
-                onSelect={() => onSelectArtifact({ messageId: message.id, index: i })}
-              />
-            ))}
+            {artifacts.map((a, i) => {
+              const isSelected = selected?.messageId === message.id && selected.index === i;
+              return (
+                <ArtifactCard
+                  key={`${a.kind}-${a.refId ?? i}-${i}`}
+                  artifact={a}
+                  selected={isSelected}
+                  expanded={expandInline && isSelected}
+                  onSelect={() => onSelectArtifact({ messageId: message.id, index: i })}
+                  onIntent={disabled ? undefined : onSuggestion}
+                />
+              );
+            })}
           </div>
         )}
 

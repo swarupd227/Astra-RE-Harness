@@ -29,6 +29,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
+import { PageHero } from '@/components/PageHero';
 
 // Source languages whose EQUIVALENCE gate (CrossRuntimeValidator.cs) is
 // unconditionally a smoke test — proving a reference sidecar is reachable
@@ -180,31 +181,24 @@ export function ValidationReportPage() {
   const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun]);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link
-            to={`/scaffolds/${id}`}
-            className="inline-flex items-center gap-1 text-caption text-ink-tertiary hover:text-ink-secondary"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to scaffold
-          </Link>
-          <p className="mt-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+      <PageHero
+        eyebrow={
+          <span className="inline-flex items-center gap-3">
+            <Link
+              to={`/scaffolds/${id}`}
+              className="inline-flex items-center gap-1 text-ink-tertiary hover:text-ink-primary"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to scaffold
+            </Link>
+            <span aria-hidden="true">·</span>
             Post-migration validation
-          </p>
-          <h1 className="mt-1 text-display font-semibold text-ink-primary">
-            Validation report
-          </h1>
-          <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
-            Four independent gates run against the generated scaffold:
-            buildability, claim-mapped test coverage, cross-runtime
-            equivalence to the original source, and a property-based
-            search for falsifying inputs against the signed spec. All
-            four must be green before the scaffold can be committed.
-          </p>
-        </div>
-        <OverallBadge verdict={overall} />
-      </header>
+          </span>
+        }
+        title="Validation report"
+        lead="Four independent gates run against the generated scaffold: buildability, claim-mapped test coverage, cross-runtime equivalence to the original source, and a property-based search for falsifying inputs against the signed spec. All four must be green before the scaffold can be committed."
+        actions={<OverallBadge verdict={overall} />}
+      />
 
       {scaffold.data?.llmCall && (
         <ProviderSettingsCard
@@ -274,7 +268,7 @@ export function ValidationReportPage() {
               No validation runs yet. Use the cards above to start.
             </div>
           ) : (
-            <ul className="divide-y divide-border-subtle">
+            <ul className="divide-y divide-line-subtle">
               {allRuns.map((r) => <RunRow key={r.id} run={r} />)}
             </ul>
           )}
@@ -322,7 +316,7 @@ function StageCard({
       <CardBody className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               {icon}
             </span>
             <div>
@@ -368,7 +362,7 @@ function StageCard({
         )}
 
         {errorMessage && (
-          <p className="rounded-sm bg-[#F4D8D7] px-3 py-2 text-caption text-status-failed">
+          <p className="rounded-sm bg-status-fail/10 px-3 py-2 text-caption text-status-failed">
             {errorMessage}
           </p>
         )}
@@ -464,7 +458,7 @@ function FalsifyingClaimRow({ claim }: { claim: FalsifyingMetrics['perClaim'][nu
 
   return (
     <li
-      className="rounded-sm border border-border-subtle bg-raised px-3 py-2"
+      className="rounded-sm border border-line-subtle bg-raised px-3 py-2"
       data-testid={`falsifying-claim-${claim.claimId}`}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -508,7 +502,7 @@ function FalsifyingClaimRow({ claim }: { claim: FalsifyingMetrics['perClaim'][nu
 function ShadowModeBadge() {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-sm bg-accent-muted px-2 py-0.5 font-mono text-caption text-status-draft"
+      className="inline-flex items-center gap-1 rounded-sm bg-volt/10 px-2 py-0.5 font-mono text-caption text-status-draft"
       title="Sidecar exercised Hypothesis end-to-end, but candidate-binary comparison is not yet wired. Verdicts are based on the reference path only."
       data-testid="falsifying-shadow-mode"
     >
@@ -527,7 +521,7 @@ function ShadowModeBadge() {
 function LiveModeBadge() {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-sm bg-[#DAEFE9] px-2 py-0.5 font-mono text-caption text-status-review"
+      className="inline-flex items-center gap-1 rounded-sm bg-status-ok/10 px-2 py-0.5 font-mono text-caption text-status-review"
       title="Validator compiled both a reference binary and the candidate, then drove both with each Hypothesis-generated input and compared outputs. Falsifiers in this mode are real semantic disagreements."
       data-testid="falsifying-live-mode"
     >
@@ -570,7 +564,7 @@ function LogLink({ runId }: { runId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-caption font-medium text-accent hover:underline"
+        className="text-caption font-medium text-volt-ink hover:underline"
       >
         View log
       </button>
@@ -582,12 +576,12 @@ function LogLink({ runId }: { runId: string }) {
           aria-labelledby="validation-log-title"
           onClick={() => setOpen(false)}
         >
-          <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div
-            className="relative max-h-[80vh] w-[900px] max-w-[92vw] overflow-hidden rounded-lg border border-border-subtle bg-raised shadow-e3"
+            className="relative max-h-[80vh] w-[900px] max-w-[92vw] overflow-hidden rounded-lg border border-line-subtle bg-raised shadow-e3"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="flex items-center justify-between border-b border-border-subtle px-6 py-3">
+            <header className="flex items-center justify-between border-b border-line-subtle px-6 py-3">
               <h3 id="validation-log-title" className="text-h-sm font-semibold text-ink-primary">Validation log</h3>
               <button
                 type="button"
@@ -622,7 +616,7 @@ function LogLink({ runId }: { runId: string }) {
 function StatusGlyph({ status }: { status: ValidationStatus | undefined }) {
   if (!status) return <CircleDashed className="h-5 w-5 text-ink-tertiary" aria-hidden="true" />;
   if (status === 'RUNNING')
-    return <Loader2 className="h-5 w-5 animate-spin text-accent" aria-hidden="true" />;
+    return <Loader2 className="h-5 w-5 animate-spin text-volt-ink" aria-hidden="true" />;
   if (status === 'PASSED')
     return <CheckCircle2 className="h-5 w-5 text-status-review" aria-hidden="true" />;
   if (status === 'FAILED')
@@ -655,19 +649,19 @@ function OverallBadge({
 }) {
   if (verdict === 'all-green')
     return (
-      <span className="inline-flex items-center gap-2 rounded-md bg-[#DAEFE9] px-4 py-2 text-h-sm font-semibold text-status-review">
+      <span className="inline-flex items-center gap-2 rounded-md bg-status-ok/10 px-4 py-2 text-h-sm font-semibold text-status-review">
         <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> All 4 gates green — commit-ready
       </span>
     );
   if (verdict === 'red')
     return (
-      <span className="inline-flex items-center gap-2 rounded-md bg-[#F4D8D7] px-4 py-2 text-h-sm font-semibold text-status-failed">
+      <span className="inline-flex items-center gap-2 rounded-md bg-status-fail/10 px-4 py-2 text-h-sm font-semibold text-status-failed">
         <XCircle className="h-5 w-5" aria-hidden="true" /> Blocked — fix the red gates
       </span>
     );
   if (verdict === 'partial')
     return (
-      <span className="inline-flex items-center gap-2 rounded-md bg-accent-muted px-4 py-2 text-h-sm font-semibold text-status-draft">
+      <span className="inline-flex items-center gap-2 rounded-md bg-volt/10 px-4 py-2 text-h-sm font-semibold text-status-draft">
         <CircleDashed className="h-5 w-5" aria-hidden="true" /> Some gates pending
       </span>
     );

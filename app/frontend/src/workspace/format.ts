@@ -22,6 +22,15 @@ export function arr<T = unknown>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
+export function bool(v: unknown, fallback = false): boolean {
+  return typeof v === 'boolean' ? v : fallback;
+}
+
+/** Strings only, dropping empties — for `drivers: string[]` style props. */
+export function strs(v: unknown): string[] {
+  return arr(v).map((x) => str(x)).filter(Boolean);
+}
+
 export function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }

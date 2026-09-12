@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TopBar } from '@/shell/TopBar';
 import { LeftNav } from '@/shell/LeftNav';
 import { MobileNav } from '@/shell/MobileNav';
-import { LegacyView } from '@/shell/LegacyView';
 import { WorkspacePage } from '@/workspace/WorkspacePage';
 import { CommandPalette } from '@/copilot/CommandPalette';
 import { HomePage } from '@/pages/HomePage';
@@ -39,10 +38,8 @@ import { SignatureHealthPage } from '@/pages/SignatureHealthPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { DocsPage } from '@/pages/DocsPage';
 import { PatternAnalysisPage } from '@/pages/PatternAnalysisPage';
+import { AssessmentPage } from '@/pages/AssessmentPage';
 import { KeyboardOverlay } from '@/components/KeyboardOverlay';
-
-/** Pre-v2 pages render inside the light wrapper until Increment 2 restyles them. */
-const legacy = (page: ReactElement) => <LegacyView>{page}</LegacyView>;
 
 export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
@@ -117,46 +114,49 @@ export function App() {
             {/* The conversation is the primary surface. */}
             <Route path="/" element={<WorkspacePage />} />
             <Route path="/w/:conversationId" element={<WorkspacePage />} />
-            <Route path="/home" element={legacy(<HomePage />)} />
-            <Route path="/system" element={legacy(<SystemPage />)} />
+            <Route path="/home" element={<HomePage />} />
+            <Route path="/system" element={<SystemPage />} />
             {/* User-facing routes use /projects; /corpora kept as legacy
                 aliases so existing e2e tests and bookmarks still resolve. */}
-            <Route path="/projects" element={legacy(<CorporaPage />)} />
-            <Route path="/projects/new" element={legacy(<NewCorpusPage />)} />
-            <Route path="/projects/:id" element={legacy(<CorpusDetailPage />)} />
-            <Route path="/corpora" element={legacy(<CorporaPage />)} />
-            <Route path="/corpora/new" element={legacy(<NewCorpusPage />)} />
-            <Route path="/corpora/:id" element={legacy(<CorpusDetailPage />)} />
-            <Route path="/corpora/:id/dependency-graph" element={legacy(<DependencyGraphPage />)} />
-            <Route path="/corpora/:id/migration-plan" element={legacy(<MigrationPlanPage />)} />
-            <Route path="/corpora/:id/docs" element={legacy(<DocsPage />)} />
-            <Route path="/projects/:id/docs" element={legacy(<DocsPage />)} />
-            <Route path="/corpora/:id/pattern-analysis" element={legacy(<PatternAnalysisPage />)} />
-            <Route path="/projects/:id/pattern-analysis" element={legacy(<PatternAnalysisPage />)} />
-            <Route path="/subroutines" element={legacy(<SubroutinesPage />)} />
-            <Route path="/subroutines/:id" element={legacy(<SubroutineDetailPage />)} />
-            <Route path="/subroutines/:id/extract" element={legacy(<LiveExtractionPage />)} />
-            <Route path="/subroutines/:id/spec" element={legacy(<DraftSpecPage />)} />
-            <Route path="/subroutines/:id/review" element={legacy(<SpecReviewPage />)} />
-            <Route path="/specs/:id/audit" element={legacy(<AuditTrailPage />)} />
-            <Route path="/specs/:id/scaffold" element={legacy(<LiveScaffoldPage />)} />
-            <Route path="/scaffolds" element={legacy(<ScaffoldsPage />)} />
-            <Route path="/scaffolds/:id" element={legacy(<ScaffoldArtifactPage />)} />
-            <Route path="/scaffolds/:id/validation" element={legacy(<ValidationReportPage />)} />
-            <Route path="/my-reviews" element={legacy(<MyReviewsPage />)} />
-            <Route path="/comments" element={legacy(<CommentsPage />)} />
-            <Route path="/compliance" element={legacy(<CompliancePage />)} />
-            <Route path="/platform" element={legacy(<PlatformIndexPage />)} />
-            <Route path="/platform/prompts" element={legacy(<PromptCatalogPage />)} />
-            <Route path="/platform/golden-dataset" element={legacy(<GoldenDatasetPage />)} />
-            <Route path="/platform/harmonisation" element={legacy(<HarmonisationPage />)} />
-            <Route path="/platform/portfolio" element={legacy(<PortfolioDashboardPage />)} />
-            <Route path="/platform/languages" element={legacy(<LanguagesPage />)} />
-            <Route path="/platform/roles" element={legacy(<RolesPage />)} />
-            <Route path="/platform/validation" element={legacy(<ValidationPolicyPage />)} />
-            <Route path="/platform/llm" element={legacy(<LlmSettingsPage />)} />
-            <Route path="/platform/signatures" element={legacy(<SignatureHealthPage />)} />
-            <Route path="*" element={legacy(<NotFoundPage />)} />
+            <Route path="/projects" element={<CorporaPage />} />
+            <Route path="/projects/new" element={<NewCorpusPage />} />
+            <Route path="/projects/:id" element={<CorpusDetailPage />} />
+            <Route path="/corpora" element={<CorporaPage />} />
+            <Route path="/corpora/new" element={<NewCorpusPage />} />
+            <Route path="/corpora/:id" element={<CorpusDetailPage />} />
+            <Route path="/corpora/:id/dependency-graph" element={<DependencyGraphPage />} />
+            <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
+            <Route path="/corpora/:id/docs" element={<DocsPage />} />
+            <Route path="/projects/:id/docs" element={<DocsPage />} />
+            <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />
+            <Route path="/projects/:id/pattern-analysis" element={<PatternAnalysisPage />} />
+            {/* WS2 Inc 2 — dark-first, no legacy wrapper. */}
+            <Route path="/projects/:id/assessment" element={<AssessmentPage />} />
+            <Route path="/corpora/:id/assessment" element={<AssessmentPage />} />
+            <Route path="/subroutines" element={<SubroutinesPage />} />
+            <Route path="/subroutines/:id" element={<SubroutineDetailPage />} />
+            <Route path="/subroutines/:id/extract" element={<LiveExtractionPage />} />
+            <Route path="/subroutines/:id/spec" element={<DraftSpecPage />} />
+            <Route path="/subroutines/:id/review" element={<SpecReviewPage />} />
+            <Route path="/specs/:id/audit" element={<AuditTrailPage />} />
+            <Route path="/specs/:id/scaffold" element={<LiveScaffoldPage />} />
+            <Route path="/scaffolds" element={<ScaffoldsPage />} />
+            <Route path="/scaffolds/:id" element={<ScaffoldArtifactPage />} />
+            <Route path="/scaffolds/:id/validation" element={<ValidationReportPage />} />
+            <Route path="/my-reviews" element={<MyReviewsPage />} />
+            <Route path="/comments" element={<CommentsPage />} />
+            <Route path="/compliance" element={<CompliancePage />} />
+            <Route path="/platform" element={<PlatformIndexPage />} />
+            <Route path="/platform/prompts" element={<PromptCatalogPage />} />
+            <Route path="/platform/golden-dataset" element={<GoldenDatasetPage />} />
+            <Route path="/platform/harmonisation" element={<HarmonisationPage />} />
+            <Route path="/platform/portfolio" element={<PortfolioDashboardPage />} />
+            <Route path="/platform/languages" element={<LanguagesPage />} />
+            <Route path="/platform/roles" element={<RolesPage />} />
+            <Route path="/platform/validation" element={<ValidationPolicyPage />} />
+            <Route path="/platform/llm" element={<LlmSettingsPage />} />
+            <Route path="/platform/signatures" element={<SignatureHealthPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
       </div>

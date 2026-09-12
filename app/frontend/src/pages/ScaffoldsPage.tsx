@@ -86,7 +86,7 @@ export function ScaffoldsPage() {
               value={queryText}
               onChange={(e) => setQueryText(e.target.value)}
               placeholder="Filter by routine, project, or path…"
-              className="h-9 w-72 rounded-md border border-border-subtle bg-raised px-3 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
+              className="h-9 w-72 rounded-md border border-line-subtle bg-raised px-3 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none"
               data-testid="scaffolds-search"
             />
             <div className="flex items-center gap-1.5" role="tablist" aria-label="Filter by target stack">
@@ -142,7 +142,7 @@ function FilterPill({
       onClick={onClick}
       className={
         active
-          ? 'rounded-full bg-accent-muted px-3 py-1 font-mono text-caption font-semibold text-accent'
+          ? 'rounded-full bg-volt/10 px-3 py-1 font-mono text-caption font-semibold text-volt-ink'
           : 'rounded-full px-3 py-1 font-mono text-caption text-ink-tertiary hover:bg-sunken hover:text-ink-secondary'
       }
     >
@@ -158,14 +158,14 @@ function ScaffoldRow({ scaffold: s }: { scaffold: ScaffoldSummary }) {
         <CardBody>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#F2E5C2] text-status-scaffolded">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-status-warn/10 text-status-scaffolded">
                 <Cog className="h-5 w-5" aria-hidden="true" />
               </span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-mono text-h-md font-semibold text-ink-primary">{s.routineName}</h2>
                   <span
-                    className="rounded-sm bg-accent-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-accent"
+                    className="rounded-sm bg-volt/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-volt-ink"
                     data-testid={`scaffold-stack-${s.targetPlatform}`}
                   >
                     {prettyStack(s.targetPlatform)}

@@ -3,41 +3,21 @@ import type { ReactNode } from 'react';
 
 type HeroTone = 'indigo' | 'emerald' | 'amber' | 'violet' | 'teal' | 'orange';
 
-// Light-theme hero washes — subtle gradient that fades to white. The
-// outer border picks up a faint tint of the page's accent colour so
-// the hero reads as a coloured panel without dominating.
-const toneClass: Record<HeroTone, string> = {
-  indigo:  'bg-hero-indigo  border-ace-100',
-  emerald: 'bg-hero-emerald border-emerald-100',
-  amber:   'bg-hero-amber   border-amber-100',
-  violet:  'bg-hero-violet  border-violet-100',
-  teal:    'bg-hero-teal    border-teal-100',
-  orange:  'bg-hero-orange  border-brand-100',
-};
-
-const eyebrowToneClass: Record<HeroTone, string> = {
-  indigo:  'text-ace-700',
-  emerald: 'text-emerald-700',
-  amber:   'text-amber-700',
-  violet:  'text-violet-700',
-  teal:    'text-teal-700',
-  orange:  'text-brand-700',
-};
-
 /**
- * Coloured page hero block. Renders an eyebrow (section / breadcrumb),
- * a display-size title, and an optional lead paragraph + slot for
- * actions, on a subtle gradient backdrop keyed to a brand tone.
+ * Compact page header — eyebrow, title, a one-line subtitle, and the page's
+ * actions on the right. This replaced the v1 gradient hero: in the dark-first
+ * shell the conversation is the hero, and an artifact view just needs to say
+ * what it is and hand you the controls.
  *
- * Pages opt in by tone — the same component standardises the
- * spacing, type ramp and gradient choice across the product so the
- * colour story stays consistent.
+ * `tone` is accepted for source compatibility with the v1 call sites but no
+ * longer paints anything — volt is the single accent and is reserved for
+ * agent-working / primary CTA / focus.
  */
 export function PageHero({
   eyebrow,
   title,
   lead,
-  tone = 'indigo',
+  tone: _tone,
   actions,
   children,
   className,
@@ -50,34 +30,18 @@ export function PageHero({
   children?: ReactNode;
   className?: string;
 }) {
+  void _tone;
   return (
-    <div
-      className={clsx(
-        'rounded-lg border px-5 py-5 lg:px-7 lg:py-6',
-        toneClass[tone],
-        className,
-      )}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          {eyebrow && (
-            <p
-              className={clsx(
-                'text-caption font-medium uppercase tracking-wider',
-                eyebrowToneClass[tone],
-              )}
-            >
-              {eyebrow}
-            </p>
-          )}
-          <h1 className="text-display font-semibold text-ink-primary">{title}</h1>
-          {lead && (
-            <p className="max-w-3xl text-body-lg text-ink-secondary">{lead}</p>
-          )}
+    <header className={clsx('border-b border-line-subtle pb-4', className)}>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          {eyebrow && <p className="label">{eyebrow}</p>}
+          <h1 className="text-h-lg font-semibold tracking-tight text-ink-primary">{title}</h1>
+          {lead && <p className="max-w-3xl text-body text-ink-secondary">{lead}</p>}
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children && <div className="mt-3">{children}</div>}
-    </div>
+    </header>
   );
 }

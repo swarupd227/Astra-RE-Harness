@@ -1,11 +1,13 @@
 /**
  * Per-kind metadata for artifact cards: icon, human label, and the
- * "Open full view" route (contract §3).
+ * "Open full view" route (contract §3, Increment 2 additions).
  */
 import {
   BarChart3,
+  BookOpen,
   Boxes,
   Braces,
+  ClipboardList,
   FileCheck2,
   FileText,
   FolderTree,
@@ -13,6 +15,7 @@ import {
   LayoutGrid,
   ListTree,
   ShieldCheck,
+  Waves,
   type LucideIcon,
 } from 'lucide-react';
 import type { Artifact } from '@/lib/conversations';
@@ -31,6 +34,9 @@ const KINDS: Record<string, KindMeta> = {
   gateResults: { label: 'Validation gates', icon: ShieldCheck },
   scaffoldTree: { label: 'Generated code', icon: FolderTree },
   text: { label: 'Note', icon: FileText },
+  assessment: { label: 'Assessment', icon: ClipboardList },
+  planWaves: { label: 'Migration plan', icon: Waves },
+  docSection: { label: 'Documentation', icon: BookOpen },
 };
 
 export function artifactKindLabel(kind: string): string {
@@ -67,12 +73,18 @@ export function artifactTitle(artifact: Artifact): string {
       return str(p.routineName) ? `Generated · ${str(p.routineName)}` : 'Generated code';
     case 'text':
       return str(p.title, 'Note');
+    case 'assessment':
+      return str(p.corpusName) ? `Assessment · ${str(p.corpusName)}` : 'Assessment';
+    case 'planWaves':
+      return str(p.strategyName) ? `Migration plan · ${str(p.strategyName)}` : 'Migration plan';
+    case 'docSection':
+      return str(p.title, 'Documentation');
     default:
       return artifact.kind;
   }
 }
 
-/** "Open full view" target per contract §3. Null when there is none. */
+/** "Open full view" target per contract §3 (+ Increment 2). Null when there is none. */
 export function artifactLink(artifact: Artifact): { label: string; href: string } | null {
   const p = artifact.props ?? {};
   const ref = artifact.refId;
@@ -97,7 +109,22 @@ export function artifactLink(artifact: Artifact): { label: string; href: string 
       if (kind === 'pattern-analysis' && corpusId) {
         return { label: 'Open pattern analysis', href: `/projects/${corpusId}/pattern-analysis` };
       }
+      if (kind === 'assessment' && corpusId) {
+        return { label: 'Open assessment', href: `/projects/${corpusId}/assessment` };
+      }
       return null;
+    }
+    case 'assessment': {
+      const href = str(p.href) || (ref ? `/projects/${ref}/assessment` : '');
+      return href ? { label: 'Open assessment', href } : null;
+    }
+    case 'planWaves': {
+      const corpusId = str(p.corpusId);
+      return corpusId ? { label: 'Open migration plan', href: `/corpora/${corpusId}/migration-plan` } : null;
+    }
+    case 'docSection': {
+      const href = str(p.href) || (str(p.corpusId) ? `/projects/${str(p.corpusId)}/docs` : '');
+      return href ? { label: 'Open documentation', href } : null;
     }
     default:
       return null;

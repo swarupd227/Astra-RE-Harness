@@ -158,8 +158,80 @@ public sealed class ConversationService
                 programme = new ProgrammeSummaryDto(corpus.Name, language, routines, files);
             }
         }
-        return new ConversationDto(conv.Id, conv.CorpusId, conv.Kind, conv.Title, conv.CreatedAt, conv.UpdatedAt,
+        return new ConversationDto(conv.Id, conv.CorpusId, conv.Kind, conv.RefId, conv.Title, conv.CreatedAt, conv.UpdatedAt,
             conv.LastMessageAt, conv.LastMessagePreview, conv.MessageCount, programme);
+    }
+
+    /// <summary>The review thread for one spec (kind "spec", RefId = specId),
+    /// created lazily with a welcome from the Spec agent.</summary>
+    public async Task<Conversation> EnsureSpecThreadAsync(Guid specId, CancellationToken ct)
+    {
+        var existing = await _db.Conversations
+            .FirstOrDefaultAsync(c => c.Kind == "spec" && c.RefId == specId, ct);
+        if (existing is not null) return existing;
+
+        var spec = await _db.Specs.AsNoTracking()
+            .Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile)
+            .FirstOrDefaultAsync(s => s.Id == specId, ct)
+            ?? throw new InvalidOperationException($"Spec {specId} not found.");
+        var version = await _db.SourceVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == spec.SourceVersionId, ct);
+        var routineName = spec.Subroutine?.Name ?? "routine";
+
+        var now = DateTimeOffset.UtcNow;
+        var conv = new Conversation
+        {
+            Id = Guid.NewGuid(), CorpusId = version?.CorpusId, Kind = "spec", RefId = specId, Title = routineName,
+            CreatedAt = now, UpdatedAt = now,
+        };
+        _db.Conversations.Add(conv);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var claimCount = CountClaims(spec.SpecJson.RootElement);
+            var state = spec.State switch
+            {
+                "DRAFT" => "It's a draft — route it for review when the claims look right.",
+                "IN_REVIEW" => "It's in review — accept, reject or edit each claim, then sign.",
+                "SIGNED" => "It's signed and authoritative.",
+                _ => $"It's {spec.State}.",
+            };
+            await AppendAsync(new ConversationMessage
+            {
+                ConversationId = conv.Id,
+                Role = "agent",
+                Agent = "spec",
+                AuthorDisplay = "Spec",
+                Markdown = $"This is the review thread for `{routineName}` — {claimCount} claims drafted from `{spec.Subroutine?.SourceFile?.RelativePath}` " +
+                           $"lines {spec.Subroutine?.LineStart}–{spec.Subroutine?.LineEnd}. {state}\n\n" +
+                           "Ask me to explain any claim, or tell me what to accept, reject or change.",
+                SuggestionsJson = ConversationJson.Serialize(new[]
+                {
+                    new SuggestionDto("Explain the claims", $"Explain the claims in the spec for {routineName} in plain language"),
+                    new SuggestionDto("Which claims are risky?", $"Which claims in the spec for {routineName} are risky or uncertain, and why?"),
+                    new SuggestionDto("Accept all except…", $"Accept every claim in the spec for {routineName} except "),
+                    new SuggestionDto("Show the source", $"Show me the source of {routineName}"),
+                }),
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed the spec thread welcome for {SpecId}", specId);
+        }
+        return conv;
+    }
+
+    private static int CountClaims(System.Text.Json.JsonElement root)
+    {
+        if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        var n = 0;
+        foreach (var p in root.EnumerateObject())
+        {
+            if (p.Value.ValueKind != System.Text.Json.JsonValueKind.Array || p.Name is "inputs" or "outputs") continue;
+            foreach (var item in p.Value.EnumerateArray())
+                if (item.ValueKind == System.Text.Json.JsonValueKind.Object && item.TryGetProperty("id", out _)) n++;
+        }
+        return n;
     }
 
     // ── Messages ─────────────────────────────────────────────────────────

@@ -16,6 +16,10 @@ public sealed class Conversation
     /// <summary>"global" | "programme" | "spec" | "blueprint" | "wave".</summary>
     public string Kind { get; set; } = "programme";
 
+    /// <summary>What a non-programme thread is about: the spec id for
+    /// <c>spec</c> threads (later: blueprint / wave ids). Null otherwise.</summary>
+    public Guid? RefId { get; set; }
+
     public string Title { get; set; } = "";
 
     public DateTimeOffset CreatedAt { get; set; }

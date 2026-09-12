@@ -29,6 +29,8 @@ export type Conversation = {
   id: string;
   corpusId: string | null;
   kind: ConversationKind;
+  /** What the thread is about beyond its corpus: the specId for `spec` threads. */
+  refId: string | null;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -53,7 +55,10 @@ export type ArtifactKind =
   | 'routine'
   | 'gateResults'
   | 'scaffoldTree'
-  | 'text';
+  | 'text'
+  | 'assessment'
+  | 'planWaves'
+  | 'docSection';
 
 export type Artifact = {
   kind: ArtifactKind;
@@ -127,6 +132,25 @@ export type Overview = {
   };
 };
 
+/** One row of `GET /api/v1/copilot/agents` — who is busy and what they last said. */
+export type AgentActivity = {
+  id: AgentId;
+  name: string;
+  activeRuns: number;
+  /** Labels of up to three runs the agent is currently following (optional on the wire). */
+  activeLabels?: string[];
+  lastActivityAt: string | null;
+  lastMessage: string | null;
+  lastConversationId: string | null;
+};
+
+/** `GET /api/v1/corpora/{id}/assessment` — the persisted 10-minute Assessment. */
+export type AssessmentResponse = {
+  section: { id: string; state: string; generatedAt: string; renderedMarkdown: string };
+  /** Props of the `assessment` artifact card (see contract §"New artifact cards"). */
+  card: Record<string, unknown>;
+};
+
 // ─── SSE event shapes ────────────────────────────────────────────────
 
 export type CopilotStreamEvent =
@@ -156,6 +180,9 @@ export const conversationsApi = {
       `/api/v1/conversations${corpusId ? `?corpusId=${encodeURIComponent(corpusId)}` : ''}`,
     ),
   global: () => apiFetch<Conversation>('/api/v1/conversations/global'),
+  /** One thread per spec (kind `spec`, created lazily). Returns the list shape for symmetry with `list`. */
+  forSpec: (specId: string) =>
+    apiFetch<{ data: Conversation[] }>(`/api/v1/conversations?specId=${encodeURIComponent(specId)}`),
   get: (id: string) =>
     apiFetch<{ conversation: Conversation; messages: ConversationMessage[] }>(`/api/v1/conversations/${id}`),
   decline: (conversationId: string, messageId: string) =>
@@ -164,6 +191,14 @@ export const conversationsApi = {
       { method: 'POST' },
     ),
   overview: () => apiFetch<Overview>('/api/v1/copilot/overview'),
+  agents: () => apiFetch<{ agents: AgentActivity[] }>('/api/v1/copilot/agents'),
+};
+
+/** The 10-minute Assessment (WS5). `run` is Admin-only and returns the run to follow. */
+export const assessmentApi = {
+  get: (corpusId: string) => apiFetch<AssessmentResponse>(`/api/v1/corpora/${corpusId}/assessment`),
+  run: (corpusId: string) =>
+    apiFetch<{ runId: string }>(`/api/v1/corpora/${corpusId}/assessment`, { method: 'POST' }),
 };
 
 // ─── SSE over POST (fetch + ReadableStream) ──────────────────────────

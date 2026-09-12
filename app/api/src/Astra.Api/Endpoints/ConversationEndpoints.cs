@@ -27,8 +27,73 @@ public static class ConversationEndpoints
 
     public static IEndpointRouteBuilder MapConversationEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/v1/conversations", async (Guid? corpusId, ConversationService conversations, CancellationToken ct) =>
-            Results.Ok(new { data = await conversations.ListAsync(corpusId, ct) }));
+        app.MapGet("/api/v1/conversations", async (Guid? corpusId, Guid? specId, ConversationService conversations, CancellationToken ct) =>
+        {
+            if (specId is { } sid)
+            {
+                Persistence.Entities.Conversation thread;
+                try { thread = await conversations.EnsureSpecThreadAsync(sid, ct); }
+                catch (InvalidOperationException) { return Results.NotFound(new { error = new { code = "spec.not_found" } }); }
+                return Results.Ok(new { data = new[] { await conversations.RenderAsync(thread, ct) } });
+            }
+            return Results.Ok(new { data = await conversations.ListAsync(corpusId, ct) });
+        });
+
+        // Who is busy: runs the Narrator is following, plus each agent's last post.
+        app.MapGet("/api/v1/copilot/agents", async (Narrator narrator, AppDbContext db, CancellationToken ct) =>
+        {
+            var active = narrator.ActiveByAgent();
+            var lastPosts = await db.ConversationMessages.AsNoTracking()
+                .Where(m => m.Role == "agent" && m.Agent != null)
+                .GroupBy(m => m.Agent!)
+                .Select(g => g.OrderByDescending(m => m.CreatedAt).Select(m => new { m.Agent, m.CreatedAt, m.Markdown, m.ConversationId }).First())
+                .ToListAsync(ct);
+            var ids = new[] { "orchestrator", "discovery", "spec", "migration", "validation", "planning", "architecture", "data", "release", "programme" };
+            var agents = ids.Select(id =>
+            {
+                var last = lastPosts.FirstOrDefault(p => p.Agent == id);
+                var runs = active.TryGetValue(id, out var list) ? list : new List<Narrator.Tracked>();
+                var preview = last?.Markdown.Replace("\n", " ").Replace("**", "").Replace("`", "");
+                return new
+                {
+                    id,
+                    name = Narrator.AgentName(id),
+                    activeRuns = runs.Count,
+                    activeLabels = runs.Select(r => r.Label).Take(3),
+                    lastActivityAt = last?.CreatedAt,
+                    lastMessage = preview is null ? null : preview.Length > 140 ? preview[..140] + "…" : preview,
+                    lastConversationId = last?.ConversationId,
+                };
+            });
+            return Results.Ok(new { agents });
+        });
+
+        // WS5 — the 10-minute Assessment.
+        app.MapPost("/api/v1/corpora/{id:guid}/assessment", async (
+            Guid id, AppDbContext db, ConversationService conversations, Astra.Api.Assessment.AssessmentService assessments,
+            DevPersonaContext actor, CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
+            var corpus = await db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
+            if (corpus is null) return Results.NotFound(new { error = new { code = "corpus.not_found" } });
+            if (corpus.LatestVersionId is null)
+                return Results.BadRequest(new { error = new { code = "corpus.no_version", message = "No ingested version yet." } });
+            var thread = await conversations.EnsureProgrammeAsync(id, ct);
+            var runId = assessments.Start(id, corpus.Name, thread.Id, actor.Persona, actor.DisplayName);
+            return Results.Accepted($"/api/v1/runs/{runId}/events", new { runId, statusUrl = $"/api/v1/runs/{runId}/events" });
+        });
+
+        app.MapGet("/api/v1/corpora/{id:guid}/assessment", async (Guid id, AppDbContext db, CancellationToken ct) =>
+        {
+            var section = await Astra.Api.Assessment.AssessmentService.LatestAsync(db, id, ct);
+            if (section is null) return Results.NotFound(new { error = new { code = "assessment.not_found" } });
+            return Results.Ok(new
+            {
+                section = new { section.Id, section.State, generatedAt = section.CreatedAt, section.RenderedMarkdown },
+                card = Astra.Api.Assessment.AssessmentService.CardOf(section),
+            });
+        });
 
         app.MapGet("/api/v1/conversations/global", async (ConversationService conversations, CancellationToken ct) =>
         {

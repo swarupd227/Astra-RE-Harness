@@ -33,7 +33,10 @@ export function ConfirmCard({
           <ShieldAlert size={15} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-body text-ink-primary">{action.summary || 'Astra wants to take an action.'}</p>
+          {/* The summary arrives as plain text (no markdown) — render it verbatim. */}
+          <p className="whitespace-pre-wrap text-body text-ink-primary [overflow-wrap:anywhere]" data-testid="confirm-summary">
+            {action.summary || 'Astra wants to take an action.'}
+          </p>
           <div className="flex flex-wrap items-center gap-2 text-caption">
             <span className="rounded-md border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-[12.5px] text-ink-secondary">
               {action.toolName}

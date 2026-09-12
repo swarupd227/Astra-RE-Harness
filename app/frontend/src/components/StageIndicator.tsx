@@ -29,10 +29,10 @@ export function StageIndicator({ currentStage }: { currentStage: string | null }
             <span
               className={clsx(
                 'flex h-5 w-5 items-center justify-center rounded-full border font-mono text-[10px] transition-colors duration-fast',
-                state === 'done' && 'border-status-review bg-status-review text-white',
-                state === 'active' && 'border-accent bg-accent text-white motion-safe:animate-pulse',
-                state === 'pending' && 'border-border-subtle bg-canvas text-ink-tertiary',
-                state === 'idle' && 'border-border-subtle bg-canvas text-ink-tertiary',
+                state === 'done' && 'border-status-ok bg-status-ok text-ink-inverse',
+                state === 'active' && 'border-volt bg-volt text-on-volt motion-safe:animate-pulse',
+                state === 'pending' && 'border-line-subtle bg-canvas text-ink-tertiary',
+                state === 'idle' && 'border-line-subtle bg-canvas text-ink-tertiary',
               )}
               aria-current={state === 'active' ? 'step' : undefined}
             >
@@ -54,7 +54,7 @@ export function StageIndicator({ currentStage }: { currentStage: string | null }
               <span
                 className={clsx(
                   'mx-1 h-px w-6 transition-colors duration-fast',
-                  state === 'done' ? 'bg-status-review' : 'bg-border-subtle',
+                  state === 'done' ? 'bg-status-ok' : 'bg-line-subtle',
                 )}
                 aria-hidden="true"
               />

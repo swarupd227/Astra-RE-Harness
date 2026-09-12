@@ -185,6 +185,11 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "list_programmes" => "listing the programmes",
         "read_routine" => "reading the routine",
         "get_spec" => "loading the spec",
+        "rank_routines" => "ranking the routines",
+        "run_assessment" => "starting the assessment",
+        "explain_claim" => "pulling up the claim and its source",
+        "search_docs" => "searching the documentation",
+        "list_modules" => "listing the modules",
         _ => "working on it",
     };
 
@@ -197,6 +202,17 @@ public sealed class MockCopilotBrain : ICopilotBrain
         string? name = quoted ?? (dottedMatch.Length > 0 ? dottedMatch : null);
 
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
+        if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
+        if (Regex.IsMatch(t, @"\b(riskiest|most (called|depended)|biggest|largest|hotspots?)\b"))
+            return ("rank_routines", new { by = t.Contains("called") || t.Contains("depended") ? "fan_in" : t.Contains("biggest") || t.Contains("largest") ? "size" : "risk", limit = 10 });
+        if (Regex.IsMatch(t, @"\bexplain (claim )?([A-Z]{1,3}-\d+)\b|\bwhy\b.*\b([A-Z]{1,3}-\d+)\b", RegexOptions.IgnoreCase))
+        {
+            var cm = Regex.Match(text, @"\b([A-Za-z]{1,3}-\d+)\b");
+            return ("explain_claim", new { claimId = cm.Success ? cm.Groups[1].Value.ToUpperInvariant() : "", subroutineId = name ?? "" });
+        }
+        if (Regex.IsMatch(t, @"\b(docs|documentation|documented)\b"))
+            return ("search_docs", new { query = quoted ?? Regex.Match(text, @"(?:about|mention|for)\s+([A-Za-z0-9_.]+)").Groups[1].Value });
+        if (Regex.IsMatch(t, @"\bmodules?\b|\bwhat'?s in\b")) return ("list_modules", new { });
         if (Regex.IsMatch(t, @"\bsurvey\b|\bpattern analysis\b|\banaly[sz]e the patterns\b|\brun the pattern")) return ("survey_corpus", new { });
         if (Regex.IsMatch(t, @"\bclusters?\b|\bpatterns\b")) return ("get_pattern_clusters", new { });
         if (Regex.IsMatch(t, @"\bsign\b")) return ("sign_spec", new { subroutineId = name ?? "" });

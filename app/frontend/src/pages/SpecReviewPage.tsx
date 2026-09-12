@@ -1,8 +1,20 @@
+/**
+ * Spec review — claims on the left, the Spec agent on the right.
+ *
+ * WS2 Increment 2: the page keeps every element, label and test id the demo
+ * specs rely on (Sign spec, Accept, Resolve in spec, Save, Generate
+ * scaffold …) and gains a compact `ThreadPanel` bound to the spec's own
+ * conversation. Restyled to the v2 tokens and stamped with the real theme so
+ * it reads dark-first even while the route still sits in the legacy wrapper.
+ */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, ArrowRight, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
+import { clsx } from 'clsx';
+import { AlertTriangle, ArrowLeft, ArrowRight, Code2, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
 import { api, ApiError, claimPathFor, commentsApi, type ClaimReview, type SpecClaim } from '@/lib/api';
+import { conversationsApi } from '@/lib/conversations';
+import { useTheme } from '@/theme';
 import { CommentsThread } from '@/components/CommentsThread';
 import { EvidenceTrail } from '@/components/EvidenceTrail';
 import { Skeleton } from '@/components/Skeleton';
@@ -21,22 +33,50 @@ import { OutlinePane, type OutlineItem } from '@/components/OutlinePane';
 import { ReviewableClaimCard } from '@/components/ReviewableClaimCard';
 import { SignOffModal } from '@/components/SignOffModal';
 import { formatState } from '@/lib/labels';
+import { ThreadPanel, type Starter } from '@/workspace/ThreadPanel';
+import { AgentAvatar } from '@/workspace/AgentAvatar';
+import { useMediaQuery, useViewportFill } from '@/workspace/hooks';
 
 type Section = { key: string; label: string; claims: SpecClaim[] };
+
+const SPEC_STARTERS: Starter[] = [
+  { label: 'Explain the claims in plain language', intent: 'Explain the claims in plain language' },
+  { label: 'Which claims are risky?', intent: 'Which claims are risky?' },
+  { label: 'Accept all except …', intent: 'Accept all claims except ', prefill: true },
+];
 
 export function SpecReviewPage() {
   const { id = '' } = useParams();
   const queryClient = useQueryClient();
+  const { theme } = useTheme();
 
   const sub = useQuery({ queryKey: ['subroutine', id], queryFn: () => api.getSubroutine(id), enabled: !!id });
   const source = useQuery({ queryKey: ['subroutine-source', id], queryFn: () => api.getSubroutineSource(id), enabled: !!id });
   const spec = useQuery({ queryKey: ['spec', id], queryFn: () => api.getSpecForSubroutine(id), enabled: !!id });
   const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
 
+  // The spec's own thread (kind "spec", created lazily by the API).
+  const specId = spec.data?.id;
+  const specThread = useQuery({
+    queryKey: ['conversations', 'spec', specId],
+    queryFn: () => conversationsApi.forSpec(specId as string),
+    enabled: !!specId,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const specConversationId = specThread.data?.data?.[0]?.id;
+
   const [activeCitation, setActiveCitation] = useState<string | null>(null);
   const [activeLine, setActiveLine] = useState<number | undefined>(undefined);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [signOpen, setSignOpen] = useState(false);
+
+  // Right column: the Spec agent and the source. Stacked when there is room
+  // (2xl), tabbed otherwise; a citation click always reveals the source.
+  const stacked = useMediaQuery('(min-width: 1536px)');
+  const [rightTab, setRightTab] = useState<'agent' | 'source'>('agent');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fill = useViewportFill(rootRef);
 
   // Phase #4 / value-add #3 — engineer-chosen target stack. The hook keeps
   // the saved choice only while it is actually buildable for this routine's
@@ -128,6 +168,7 @@ export function SpecReviewPage() {
     setActiveCitation(lines);
     const r = parseRange(lines);
     if (r) setActiveLine(r[0]);
+    if (!stacked) setRightTab('source');
     // Hold the pulse for 1.8s to match the CSS animation in index.css.
     window.setTimeout(() => setActiveCitation((cur) => (cur === lines ? null : cur)), 1800);
   };
@@ -159,13 +200,18 @@ export function SpecReviewPage() {
   }, [sections, activeId, spec.data?.state, whoami.data?.persona]);
 
   if (sub.isPending || source.isPending || spec.isPending) {
-    return <div className="mx-auto max-w-[1600px] space-y-4 p-6 lg:p-10"><Skeleton className="h-12 w-96" /><Skeleton className="h-[600px] w-full" /></div>;
+    return (
+      <div data-theme={theme} className="mx-auto max-w-[1600px] space-y-4 bg-canvas p-6 text-ink-primary lg:p-10">
+        <Skeleton className="h-12 w-96" />
+        <Skeleton className="h-[600px] w-full" />
+      </div>
+    );
   }
   if (sub.isError || source.isError) {
-    return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
+    return <div data-theme={theme} className="mx-auto max-w-[1400px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
   }
   if (spec.isError) {
-    return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
+    return <div data-theme={theme} className="mx-auto max-w-[1400px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
   }
 
   const s = sub.data;
@@ -198,17 +244,65 @@ export function SpecReviewPage() {
     setSignOpen(false);
   };
 
+  const sourcePane = (
+    <div className="flex min-h-0 flex-1 flex-col bg-canvas" data-testid="spec-source">
+      <div className="flex shrink-0 items-center justify-between border-b border-line-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
+        <span className="truncate">{s.file.relativePath}</span>
+        <span className="shrink-0 text-ink-tertiary">{source.data!.lineCount} lines</span>
+      </div>
+      <div className="min-h-0 flex-1">
+        <MonacoSource
+          value={source.data!.content}
+          height="100%"
+          citations={citations}
+          highlightLine={activeLine}
+          theme={theme === 'dark' ? 'astra-dark' : 'astra-light'}
+        />
+      </div>
+    </div>
+  );
+
+  const agentPane = (
+    <ThreadPanel
+      testid="spec-thread"
+      className="min-h-0 flex-1"
+      conversationId={specConversationId}
+      resolving={specThread.isPending}
+      resolveError={(specThread.error as Error | null) ?? null}
+      onRetryResolve={() => void specThread.refetch()}
+      starters={SPEC_STARTERS}
+      agent="spec"
+      emptyTitle={`Ask the Spec agent about ${s.name}.`}
+      emptyBody="It reads the claims, the source and the reviews, and answers here with cards you can act on."
+      hint={`Spec agent · ${s.name}`}
+      placeholder="Ask about this spec… (⏎ to send, ⇧⏎ newline)"
+      actions={{
+        onCitation: (subroutineId, lines) => {
+          if (subroutineId !== s.id) return false;
+          onCite(lines);
+          return true;
+        },
+      }}
+    />
+  );
+
   return (
-    <div className="flex h-[calc(100vh-110px)] flex-col">
+    <div
+      ref={rootRef}
+      style={fill}
+      data-theme={theme}
+      className="flex min-h-[560px] flex-col bg-canvas text-ink-primary"
+      data-testid="spec-review-page"
+    >
       {/* Header */}
-      <header className="border-b border-border-subtle bg-raised px-6 py-3">
+      <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back to routine">
+            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt" aria-label="Back to routine">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Spec review</p>
+              <p className="text-micro font-medium uppercase tracking-wider text-ink-tertiary">Spec review</p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">{s.name}</h1>
             </div>
             <Badge tone={signed ? 'signed' : inReview ? 'review' : 'draft'}>{formatState(sp.state)}</Badge>
@@ -216,7 +310,7 @@ export function SpecReviewPage() {
           </div>
           <div className="flex items-center gap-3 font-mono text-caption text-ink-secondary">
             <span><span className="text-ink-primary">{processed}</span> / {total} processed</span>
-            <Link to={`/specs/${sp.id}/audit`} className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary">
+            <Link to={`/specs/${sp.id}/audit`} className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt">
               <History className="h-3.5 w-3.5" aria-hidden="true" />
               Audit trail
             </Link>
@@ -230,7 +324,7 @@ export function SpecReviewPage() {
                     type="button"
                     onClick={() => onJump(firstUndecidedId)}
                     data-testid="jump-to-undecided"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
                   >
                     Next undecided
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -306,26 +400,26 @@ export function SpecReviewPage() {
         tokens={sp.llmCall ? { in: sp.llmCall.inputTokens, out: sp.llmCall.outputTokens } : undefined}
       />
 
-      <div className="border-b border-border-subtle bg-canvas/40 px-6 py-2">
+      <div className="border-b border-line-subtle bg-sunken/40 px-6 py-2">
         <ProviderSettingsCard compact />
       </div>
 
       {signed && whoami.data?.persona === 'engineer' && (
-        <div className="space-y-2 border-b border-border-subtle bg-canvas/40 px-6 py-3">
+        <div className="space-y-2 border-b border-line-subtle bg-sunken/40 px-6 py-3">
           <TargetSelector value={targetStack} onChange={onTargetChange} sourceLanguage={schema} />
           {overriddenFrom && (
             <p
-              className="flex flex-wrap items-center gap-x-2 rounded-md border border-status-scaffolded/40 bg-[#F2E5C2]/40 px-3 py-2 text-caption text-ink-primary"
+              className="flex flex-wrap items-center gap-x-2 rounded-md border border-status-warn/40 bg-status-warn/10 px-3 py-2 text-caption text-ink-primary"
               data-testid="target-overridden-notice"
             >
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-warn" aria-hidden="true" />
               Your saved target <strong className="font-mono">{prettyStack(overriddenFrom)}</strong> has no
               production archetype for {prettySchema(schema ?? '')} sources — using{' '}
               <strong className="font-mono">{prettyStack(targetStack)}</strong> instead.
               <button
                 type="button"
                 onClick={() => onTargetChange(targetStack)}
-                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-accent"
+                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-volt-ink"
               >
                 Keep {prettyStack(targetStack)}
               </button>
@@ -342,7 +436,7 @@ export function SpecReviewPage() {
               <button
                 type="button"
                 onClick={() => onTargetChange(savedOverridesRecommended)}
-                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-accent"
+                className="rounded-sm underline decoration-dotted underline-offset-2 hover:text-volt-ink"
                 data-testid="use-recommended-target"
               >
                 Use recommended
@@ -358,15 +452,15 @@ export function SpecReviewPage() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-[280px_minmax(0,1fr)_minmax(0,560px)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_minmax(0,520px)]">
         <OutlinePane items={outlineItems} reviews={sp.claimReviews ?? []} activeId={activeId} onJump={onJump} />
 
         <div className="min-h-0 overflow-y-auto bg-canvas">
           <div className="space-y-6 p-6">
             {sections.map((sec) => (
               <section key={sec.key}>
-                <h3 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
-                  {sec.label} <span className="ml-1 rounded-sm bg-sunken px-1.5 py-0.5 text-[10px] text-ink-secondary">{sec.claims.length}</span>
+                <h3 className="mb-2 text-micro font-medium uppercase tracking-wider text-ink-tertiary">
+                  {sec.label} <span className="ml-1 rounded-sm bg-sunken px-1.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-ink-secondary">{sec.claims.length}</span>
                 </h3>
                 <ul className="space-y-3">
                   {sec.claims.map((c) => {
@@ -393,14 +487,34 @@ export function SpecReviewPage() {
           </div>
         </div>
 
-        <div className="min-h-0 flex flex-col bg-canvas">
-          <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-raised px-4 py-2 font-mono text-caption text-ink-secondary">
-            <span>{s.file.relativePath}</span>
-            <span className="text-ink-tertiary">{source.data!.lineCount} lines</span>
-          </div>
-          <div className="flex-1 min-h-0">
-            <MonacoSource value={source.data!.content} height="100%" citations={citations} highlightLine={activeLine} />
-          </div>
+        {/* Right column: the Spec agent + the source. */}
+        <div className="flex min-h-0 flex-col border-l border-line-subtle bg-canvas" data-testid="spec-right-column">
+          {stacked ? (
+            <>
+              <div className="flex min-h-0 flex-[3] flex-col border-b border-line-subtle">
+                <RightHeader icon={<AgentAvatar agent="spec" size="sm" />} title="Spec agent" hint={s.name} />
+                {agentPane}
+              </div>
+              <div className="flex min-h-0 flex-[2] flex-col">
+                <RightHeader icon={<Code2 size={14} className="text-ink-tertiary" aria-hidden="true" />} title="Source" hint={s.file.relativePath} />
+                {sourcePane}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center gap-1 border-b border-line-subtle bg-raised px-2 py-1.5" role="tablist" aria-label="Right column">
+                <RightTab active={rightTab === 'agent'} onClick={() => setRightTab('agent')} testid="spec-tab-agent">
+                  <AgentAvatar agent="spec" size="sm" />
+                  Spec agent
+                </RightTab>
+                <RightTab active={rightTab === 'source'} onClick={() => setRightTab('source')} testid="spec-tab-source">
+                  <Code2 size={14} aria-hidden="true" />
+                  Source
+                </RightTab>
+              </div>
+              {rightTab === 'agent' ? agentPane : sourcePane}
+            </>
+          )}
         </div>
       </div>
 
@@ -412,6 +526,44 @@ export function SpecReviewPage() {
         preconditionFailures={preconditionFailures}
       />
     </div>
+  );
+}
+
+function RightHeader({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line-subtle bg-raised px-3">
+      {icon}
+      <span className="text-caption font-medium text-ink-primary">{title}</span>
+      {hint && <span className="min-w-0 truncate font-mono text-micro text-ink-tertiary">{hint}</span>}
+    </div>
+  );
+}
+
+function RightTab({
+  active,
+  onClick,
+  testid,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  testid: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      data-testid={testid}
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-caption font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt',
+        active ? 'bg-sunken text-ink-primary' : 'text-ink-secondary hover:text-ink-primary',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -432,14 +584,14 @@ function ClaimCommentsToggle({ specId, claimPath }: { specId: string; claimPath:
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-caption text-ink-tertiary hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-ink-primary"
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-caption text-ink-tertiary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
         data-testid="claim-comments-toggle"
       >
         <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
         {count === 0 ? 'Comment' : `${count} comment${count === 1 ? '' : 's'}`}
       </button>
       {open && (
-        <div className="mt-2 rounded-md border border-border-subtle bg-sunken/50 p-3">
+        <div className="mt-2 rounded-lg border border-line-subtle bg-sunken/50 p-3">
           <CommentsThread specId={specId} claimPath={claimPath} />
         </div>
       )}
@@ -494,4 +646,3 @@ function parseRange(s: string): [number, number] | null {
   if (single) return [Number(single[1]), Number(single[1])];
   return null;
 }
-

@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { ArrowUpRight, Maximize2 } from 'lucide-react';
+import { ArrowUpRight, Maximize2, Minimize2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Artifact } from '@/lib/conversations';
 import { artifactIcon, artifactKindLabel, artifactLink, artifactTitle } from './meta';
@@ -7,17 +7,24 @@ import { renderArtifact } from './registry';
 
 /**
  * Card wrapper rendered inside a message. Clicking anywhere selects the
- * artifact in the right pane; inner links stop propagation.
+ * artifact in the right pane; inner links stop propagation. Where there is
+ * no pane (a compact ThreadPanel) `expanded` renders the pane-size body in
+ * place instead.
  */
 export function ArtifactCard({
   artifact,
   selected = false,
+  expanded = false,
   onSelect,
+  onIntent,
   className,
 }: {
   artifact: Artifact;
   selected?: boolean;
+  /** Render the pane-size body inline (hosts without an artifact pane). */
+  expanded?: boolean;
   onSelect?: (artifact: Artifact) => void;
+  onIntent?: (intent: string) => void;
   className?: string;
 }) {
   const Icon = artifactIcon(artifact.kind);
@@ -32,6 +39,7 @@ export function ArtifactCard({
       data-testid="artifact-card"
       data-kind={artifact.kind}
       data-ref-id={artifact.refId ?? undefined}
+      data-expanded={expanded ? 'true' : undefined}
       onClick={select}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
@@ -70,13 +78,13 @@ export function ArtifactCard({
           <span
             className="inline-flex items-center rounded-md p-1 text-ink-tertiary opacity-0 transition-opacity group-hover/card:opacity-100"
             aria-hidden="true"
-            title="Show in pane"
+            title={expanded ? 'Collapse' : 'Show in pane'}
           >
-            <Maximize2 size={12} />
+            {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </span>
         </span>
       </div>
-      <div className="px-3.5 py-3">{renderArtifact(artifact, { size: 'card' })}</div>
+      <div className="px-3.5 py-3">{renderArtifact(artifact, { size: expanded ? 'pane' : 'card', onIntent })}</div>
     </div>
   );
 }

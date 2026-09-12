@@ -78,11 +78,11 @@ export function LlmSettingsPage() {
   return (
     <div className="mx-auto max-w-[900px] space-y-6 p-6 lg:p-10 fadeup" data-testid="llm-settings-page">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Task #178 · Provider configuration
         </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">LLM Provider</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">LLM Provider</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           The Anthropic API key used for extraction, generation, and documentation.
           The key is write-only — once saved, the platform only ever shows a masked hint.
         </p>
@@ -96,7 +96,7 @@ export function LlmSettingsPage() {
         <CardBody>
           <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
             <div>
-              <dt className="text-caption uppercase tracking-wider text-ink-tertiary">Provider</dt>
+              <dt className="label">Provider</dt>
               <dd className="mt-0.5 flex items-center gap-2 font-mono text-sm text-ink-primary">
                 {s.configuredProvider}
                 {s.activeProvider === s.configuredProvider
@@ -105,15 +105,15 @@ export function LlmSettingsPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-caption uppercase tracking-wider text-ink-tertiary">Model</dt>
+              <dt className="label">Model</dt>
               <dd className="mt-0.5 font-mono text-sm text-ink-primary">{s.model}</dd>
             </div>
             <div>
-              <dt className="text-caption uppercase tracking-wider text-ink-tertiary">Endpoint</dt>
+              <dt className="label">Endpoint</dt>
               <dd className="mt-0.5 font-mono text-sm text-ink-primary">{s.baseUrl}</dd>
             </div>
             <div>
-              <dt className="text-caption uppercase tracking-wider text-ink-tertiary">API key</dt>
+              <dt className="label">API key</dt>
               <dd className="mt-0.5 flex items-center gap-2 font-mono text-sm text-ink-primary">
                 {s.keyConfigured ? (
                   <>
@@ -130,7 +130,7 @@ export function LlmSettingsPage() {
           </dl>
 
           {s.requiresRestart && (
-            <p className="mt-4 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+            <p className="mt-4 rounded border border-status-warn/40 bg-status-warn/10 px-3 py-2 text-sm text-status-warn">
               A key is saved, but the API started without one and is running the mock
               provider. Restart the API service to activate real Claude calls.
             </p>
@@ -156,7 +156,7 @@ export function LlmSettingsPage() {
                   onChange={(e) => setDraftKey(e.target.value)}
                   placeholder="sk-ant-…"
                   aria-label="Anthropic API key"
-                  className="min-w-0 flex-1 rounded border border-border-subtle bg-raised px-3 py-2 font-mono text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+                  className="min-w-0 flex-1 rounded border border-line-subtle bg-raised px-3 py-2 font-mono text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
                 />
                 <Button
                   variant="primary"
@@ -215,8 +215,8 @@ export function LlmSettingsPage() {
               <div
                 className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${
                   testResult.ok
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                    : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                    ? 'border-status-ok/40 bg-status-ok/10 text-status-ok'
+                    : 'border-status-fail/40 bg-status-fail/10 text-status-fail'
                 }`}
                 data-testid="llm-test-result"
               >

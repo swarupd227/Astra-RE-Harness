@@ -4,6 +4,14 @@ import { Button } from '@/components/Button';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import type { SpecResponse } from '@/lib/api';
 
+/** The modal only needs the spec's id and the source version its sentence binds to. */
+export type SignOffSpec = Pick<SpecResponse, 'id' | 'sourceVersionId'>;
+
+/**
+ * Irrevocable sign-off. Posts the canonical confirmation sentence through
+ * `onConfirm`; used by the spec review page and by the specSummary card in a
+ * thread. v2 tokens throughout.
+ */
 export function SignOffModal({
   spec,
   open,
@@ -11,7 +19,7 @@ export function SignOffModal({
   onConfirm,
   preconditionFailures,
 }: {
-  spec: SpecResponse | null;
+  spec: SignOffSpec | null;
   open: boolean;
   onClose: () => void;
   onConfirm: (sentence: string) => Promise<void>;
@@ -51,15 +59,16 @@ export function SignOffModal({
       aria-modal="true"
       aria-labelledby="sign-modal-title"
       onClick={guardedClose}
+      data-testid="sign-off-modal"
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative w-[640px] max-w-[92vw] overflow-hidden rounded-xl border border-line bg-raised text-ink-primary shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-volt/15 text-volt">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
@@ -75,7 +84,7 @@ export function SignOffModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
               aria-label="Close"
             >
               <X className="h-4 w-4" aria-hidden="true" />
@@ -85,11 +94,11 @@ export function SignOffModal({
 
         <div className="space-y-4 px-6 py-5">
           {/* Citation integrity check */}
-          <section className="rounded-md border border-status-review/30 bg-[#DAEFE9]/30 p-3">
+          <section className="rounded-lg border border-status-ok/30 bg-status-ok/10 p-3">
             <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-status-review" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 text-status-ok" aria-hidden="true" />
               <div>
-                <p className="text-caption font-medium uppercase tracking-wider text-status-review">
+                <p className="text-micro font-medium uppercase tracking-wider text-status-ok">
                   Citation integrity
                 </p>
                 <p className="mt-1 text-caption text-ink-primary">
@@ -101,11 +110,11 @@ export function SignOffModal({
 
           {/* Preconditions */}
           {blocked && (
-            <section className="rounded-md border border-status-failed/30 bg-[#F4D8D7]/30 p-3">
+            <section className="rounded-lg border border-status-fail/30 bg-status-fail/10 p-3">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 text-status-failed" aria-hidden="true" />
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-status-fail" aria-hidden="true" />
                 <div>
-                  <p className="text-caption font-medium uppercase tracking-wider text-status-failed">
+                  <p className="text-micro font-medium uppercase tracking-wider text-status-fail">
                     Preconditions unmet
                   </p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5 text-caption text-ink-primary">
@@ -122,13 +131,13 @@ export function SignOffModal({
           )}
 
           {/* Canonical sentence + checkbox */}
-          <section className="rounded-md border border-border-subtle bg-canvas p-4">
-            <p className="text-caption text-ink-tertiary">Canonical confirmation sentence</p>
+          <section className="rounded-lg border border-line-subtle bg-sunken p-4">
+            <p className="text-micro uppercase tracking-wide text-ink-tertiary">Canonical confirmation sentence</p>
             <p className="mt-1 text-body text-ink-primary">{sentence}</p>
             <label className="mt-3 flex cursor-pointer items-start gap-2">
               <input
                 type="checkbox"
-                className="mt-0.5"
+                className="mt-0.5 accent-volt"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
                 disabled={blocked || submitting}
@@ -140,13 +149,13 @@ export function SignOffModal({
           </section>
 
           {error && (
-            <p className="rounded-md border border-status-failed/30 bg-[#F4D8D7]/30 p-2 text-caption text-status-failed">
+            <p className="rounded-lg border border-status-fail/30 bg-status-fail/10 p-2 text-caption text-status-fail">
               {error}
             </p>
           )}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-border-subtle bg-canvas px-6 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-line-subtle bg-sunken/60 px-6 py-3">
           <Button variant="ghost" size="md" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>

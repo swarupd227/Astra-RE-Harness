@@ -68,11 +68,11 @@ export function HarmonisationPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="harmonisation-page">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <p className="label">
           Cross-routine consistency
         </p>
-        <h1 className="mt-1 text-display font-semibold text-ink-primary">Harmonisation</h1>
-        <p className="mt-2 max-w-2xl text-body-lg text-ink-secondary">
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Harmonisation</h1>
+        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Compares signed specifications across the project and flags inconsistencies — conflicting descriptions, mismatched data layouts, differing terminology. Each finding is a suggestion for a reviewer to confirm or dismiss.
         </p>
       </header>
@@ -80,11 +80,11 @@ export function HarmonisationPage() {
       <Card>
         <CardBody className="flex flex-wrap items-end justify-between gap-4">
           <label className="block">
-            <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+            <span className="label">
               Corpus
             </span>
             <select
-              className="mt-1 rounded border border-border-subtle bg-raised px-2 py-1 text-body-sm"
+              className="mt-1 rounded border border-line-subtle bg-raised px-2 py-1 text-caption"
               value={corpusId ?? ''}
               onChange={(e) => setSelectedCorpusId(e.target.value)}
               data-testid="harmonisation-corpus-select"
@@ -117,7 +117,7 @@ export function HarmonisationPage() {
       )}
 
       <section data-testid="harmonisation-run-list">
-        <h2 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+        <h2 className="mb-2 label">
           Recent runs
         </h2>
         {runs.isPending && <Skeleton className="h-24" />}
@@ -163,7 +163,7 @@ function RunCard({ run, onOpen }: { run: HarmonisationRunSummary; onOpen: () => 
             <Badge tone="neutral">{run.modelName}</Badge>
           </div>
           <p className="mt-1 text-body text-ink-primary">{run.summary}</p>
-          <p className="text-body-sm text-ink-secondary">
+          <p className="text-caption text-ink-secondary">
             {run.specCount} signed specs · {run.findingCount} findings · prompt {run.promptId}@{run.promptVersion}
           </p>
         </div>
@@ -201,8 +201,8 @@ function RunDrawer({
         className="flex h-full w-full max-w-2xl flex-col overflow-y-auto bg-raised shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border-subtle bg-raised p-4">
-          <h2 className="font-mono text-body-sm text-ink-secondary">Run {runId.slice(0, 8)}…</h2>
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line-subtle bg-raised p-4">
+          <h2 className="font-mono text-caption text-ink-secondary">Run {runId.slice(0, 8)}…</h2>
           <button
             className="rounded p-1 hover:bg-sunken"
             onClick={onClose}
@@ -279,7 +279,7 @@ function FindingCard({
           <Badge tone={statusTone}>{finding.status}</Badge>
         </div>
         <p className="mt-2 text-body-lg font-semibold text-ink-primary">{finding.title}</p>
-        <pre className="mt-2 whitespace-pre-wrap rounded bg-sunken p-2 font-mono text-body-sm">
+        <pre className="mt-2 whitespace-pre-wrap rounded bg-sunken p-2 font-mono text-caption">
           {finding.detail}
         </pre>
         {finding.affectedSpecIds.length > 0 && (
@@ -290,7 +290,7 @@ function FindingCard({
         {isAdmin && (
           <div className="mt-3 space-y-2">
             <textarea
-              className="w-full rounded border border-border-subtle bg-raised p-2 font-mono text-body-sm"
+              className="w-full rounded border border-line-subtle bg-raised p-2 font-mono text-caption"
               rows={2}
               placeholder="Optional admin note…"
               value={note}

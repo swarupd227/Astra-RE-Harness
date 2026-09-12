@@ -295,28 +295,10 @@ public sealed class DocsExtractionService
         return doc.RootElement.TryGetProperty("summary", out var s) ? (s.GetString() ?? "") : "";
     }
 
-    private static string RenderMarkdown(string payloadJson, string routineName)
-    {
-        using var doc = JsonDocument.Parse(payloadJson);
-        var root = doc.RootElement;
-        var summary = root.TryGetProperty("summary", out var s) ? s.GetString() : "";
-        var sb = new StringBuilder();
-        sb.Append("### ").Append(routineName).Append("\n\n").Append(summary).Append("\n\n");
-        AppendList(sb, root, "inputs", "**Inputs**");
-        AppendList(sb, root, "outputs", "**Outputs**");
-        AppendList(sb, root, "sideEffects", "**Side effects**");
-        return sb.ToString();
-    }
-
-    private static void AppendList(StringBuilder sb, JsonElement root, string prop, string heading)
-    {
-        if (!root.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
-            return;
-        sb.Append(heading).Append('\n');
-        foreach (var item in arr.EnumerateArray())
-            sb.Append("- ").Append(item.GetString()).Append('\n');
-        sb.Append('\n');
-    }
+    // Same prose renderer as the production pipeline, so the dev slice reads
+    // like the real thing (paragraphs, not a table per list).
+    private static string RenderMarkdown(string payloadJson, string routineName) =>
+        RoutineSummaryMarkdown.Render(payloadJson, routineName);
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 }

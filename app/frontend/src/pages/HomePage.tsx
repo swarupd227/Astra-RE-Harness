@@ -99,24 +99,24 @@ function Hero({
 
   return (
     <section>
-      <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Astra RE Harness</p>
-      <h1 className="mt-2 max-w-4xl text-display font-semibold leading-tight text-ink-primary">
+      <p className="label">Astra RE Harness</p>
+      <h1 className="mt-2 max-w-4xl text-h-lg font-semibold tracking-tight leading-tight text-ink-primary">
         {copy.title}
       </h1>
-      <p className="mt-3 max-w-3xl text-body-lg text-ink-secondary">{copy.subtitle}</p>
+      <p className="mt-3 max-w-3xl text-body text-ink-secondary">{copy.subtitle}</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-caption">
         {loading ? (
           <Skeleton className="h-7 w-72" />
         ) : (
           <>
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-raised px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-2.5 py-1">
               <span className="text-ink-tertiary">Signed in as</span>
               <span className="font-mono font-semibold capitalize text-ink-primary">{persona}</span>
             </span>
             {provider && (
               <span
-                className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-raised px-2.5 py-1"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-2.5 py-1"
                 title={model}
               >
                 <Cpu className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
@@ -195,11 +195,11 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
   // Kept as a fully-written-out object so Tailwind picks the class names up at
   // build time (it can't see dynamically-constructed class names).
   const toneStyles: Record<string, { icon: string; bg: string; value: string }> = {
-    corpora:    { icon: 'text-ink-link',          bg: 'bg-[#E4ECF8]', value: 'text-ink-primary' },
-    draft:      { icon: 'text-status-draft',      bg: 'bg-accent-muted', value: 'text-status-draft' },
-    review:     { icon: 'text-status-review',     bg: 'bg-[#DAEFE9]', value: 'text-ink-primary' },
-    signed:     { icon: 'text-status-signed',     bg: 'bg-[#DCE6F5]', value: 'text-status-signed' },
-    scaffolded: { icon: 'text-status-scaffolded', bg: 'bg-[#FBF1D9]', value: 'text-ink-primary' },
+    corpora:    { icon: 'text-ink-link',          bg: 'bg-status-info/10', value: 'text-ink-primary' },
+    draft:      { icon: 'text-status-draft',      bg: 'bg-volt/10', value: 'text-status-draft' },
+    review:     { icon: 'text-status-review',     bg: 'bg-status-ok/10', value: 'text-ink-primary' },
+    signed:     { icon: 'text-status-signed',     bg: 'bg-status-info/10', value: 'text-status-signed' },
+    scaffolded: { icon: 'text-status-scaffolded', bg: 'bg-status-warn/10', value: 'text-ink-primary' },
     neutral:    { icon: 'text-ink-secondary',     bg: 'bg-sunken',    value: 'text-ink-primary' },
   };
 
@@ -210,15 +210,15 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
         const ts = toneStyles[k.tone] ?? toneStyles.neutral;
         const tile = (
           <div
-            className={`flex h-full flex-col rounded-md border border-border-subtle bg-raised p-3 shadow-e1 transition-all duration-medium ${k.href ? 'hover:-translate-y-0.5 hover:shadow-e2' : ''}`}
+            className={`flex h-full flex-col rounded-md border border-line-subtle bg-raised p-3 shadow-e1 transition-all duration-medium ${k.href ? 'hover:-translate-y-0.5 hover:shadow-e2' : ''}`}
           >
             <div className="flex items-center gap-2">
               <span className={`flex h-6 w-6 items-center justify-center rounded-md ${ts.bg}`}>
                 <Icon className={`h-3.5 w-3.5 ${ts.icon}`} aria-hidden="true" />
               </span>
-              <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{k.label}</span>
+              <span className="label">{k.label}</span>
             </div>
-            <span className={`mt-2 font-mono text-display font-semibold leading-none ${ts.value}`}>
+            <span className={`mt-2 font-mono text-h-lg font-semibold tracking-tight leading-none ${ts.value}`}>
               {k.value}
             </span>
             <span className="mt-1 truncate font-mono text-caption text-ink-tertiary" title={k.sub}>{k.sub}</span>
@@ -262,7 +262,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
         <Card data-testid="next-steps">
           <CardHeader
             titleAs="h2"
-            title={<span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> What's next</span>}
+            title={<span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-volt-ink" aria-hidden="true" /> What's next</span>}
             description="What needs your attention now."
           />
           <CardBody>
@@ -271,9 +271,9 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
                 <li key={s.label}>
                   <Link
                     to={s.href}
-                    className="group flex items-center gap-3 rounded-md border border-border-subtle bg-raised px-4 py-3 transition-colors duration-fast hover:bg-sunken focus-visible:outline-2 focus-visible:outline-ink-primary"
+                    className="group flex items-center gap-3 rounded-md border border-line-subtle bg-raised px-4 py-3 transition-colors duration-fast hover:bg-sunken focus-visible:outline-2 focus-visible:outline-ink-primary"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-muted text-accent">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
                       <s.icon className="h-3.5 w-3.5" aria-hidden="true" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -309,7 +309,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
                 <span className="font-mono"> .f / .for / .f90</span> files.
               </p>
             ) : (
-              <ul className="divide-y divide-border-subtle">
+              <ul className="divide-y divide-line-subtle">
                 {corpora.data!.data.slice(0, 5).map((c) => (
                   <li key={c.id}>
                     <Link
@@ -413,7 +413,7 @@ function SmeHome() {
               estimated review time, and the routing note.
             </p>
           ) : (
-            <ul className="divide-y divide-border-subtle">
+            <ul className="divide-y divide-line-subtle">
               {reviews.data!.awaiting.slice(0, 5).map((r) => <ReviewRow key={r.specId} r={r} />)}
             </ul>
           )}
@@ -432,7 +432,7 @@ function SmeHome() {
           ) : (inbox.data?.data.length ?? 0) === 0 ? (
             <p className="p-6 text-body text-ink-secondary">No mentions. When an engineer @-mentions you in a spec or claim comment, it lands here.</p>
           ) : (
-            <ul className="divide-y divide-border-subtle">
+            <ul className="divide-y divide-line-subtle">
               {inbox.data!.data.slice(0, 5).map((n) => (
                 <li key={n.id} className="px-6 py-3">
                   <div className="flex items-center gap-2 text-caption">
@@ -507,7 +507,7 @@ function AdminHome({
           description="The model currently in use. Every call is recorded for audit."
         />
         <CardBody className="space-y-3">
-          <div className="rounded-md border border-border-subtle bg-sunken p-3 font-mono text-body">
+          <div className="rounded-md border border-line-subtle bg-sunken p-3 font-mono text-body">
             <div className="flex items-center justify-between">
               <span className="text-ink-tertiary">Provider</span>
               <span className="font-semibold text-ink-primary">{llmProvider ?? '—'}</span>
@@ -529,7 +529,7 @@ function AdminHome({
               <span className="text-ink-primary">{stats?.llm.avgLatencyMs ? `${(stats.llm.avgLatencyMs / 1000).toFixed(1)}s` : '—'}</span>
             </div>
           </div>
-          <Link to="/system" className="inline-flex items-center gap-1 text-caption font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-ink-primary">
+          <Link to="/system" className="inline-flex items-center gap-1 text-caption font-medium text-volt-ink hover:underline focus-visible:outline-2 focus-visible:outline-ink-primary">
             Open system page <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         </CardBody>
@@ -566,7 +566,7 @@ function RecentActivityCard({
         ) : activity.length === 0 ? (
           <p className="p-6 text-body text-ink-secondary">No events yet. Activity appears the moment the first ingest or extraction runs.</p>
         ) : (
-          <ul className="divide-y divide-border-subtle">
+          <ul className="divide-y divide-line-subtle">
             {activity.slice(0, limit).map((e) => (
               <li key={e.id} className={dense ? 'px-6 py-2' : 'px-6 py-3'}>
                 <div className="flex items-center gap-2 text-caption">
@@ -604,7 +604,7 @@ function SignedSpecsCard() {
             No signed specs yet. Once an SME signs a draft, it appears here with the signer + algorithm + canonical hash.
           </p>
         ) : (
-          <ul className="divide-y divide-border-subtle">
+          <ul className="divide-y divide-line-subtle">
             {signed.data!.data.slice(0, 6).map((e) => {
               const payload = (e.payload ?? {}) as Record<string, unknown>;
               const hash = typeof payload.specCanonicalHash === 'string' ? payload.specCanonicalHash : '';

@@ -32,8 +32,8 @@ export function MyReviewsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
       <header>
-        <p className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">Review queue</p>
-        <h1 className="mt-2 text-display font-semibold text-ink-primary">My reviews</h1>
+        <p className="label">Review queue</p>
+        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">My reviews</h1>
         <div className="mt-3 flex flex-wrap gap-2 font-mono text-caption">
           <CountChip n={r.counts.awaiting} label="awaiting" tone="draft" />
           <CountChip n={r.counts.inProgress} label="in progress" tone="review" />
@@ -51,7 +51,7 @@ export function MyReviewsPage() {
 function Section({ title, items, emptyTitle, emptyDesc }: { title: string; items: MyReviewItem[]; emptyTitle: string; emptyDesc: string }) {
   return (
     <section>
-      <h2 className="mb-2 text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+      <h2 className="mb-2 label">
         {title} <span className="ml-1 rounded-sm bg-sunken px-1.5 py-0.5 text-[10px] text-ink-secondary">{items.length}</span>
       </h2>
       {items.length === 0 ? (
@@ -70,7 +70,7 @@ function SignedGroup({ items }: { items: MyReviewItem[] }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 text-left text-caption font-medium uppercase tracking-wider text-ink-tertiary hover:text-ink-secondary"
+        className="flex w-full items-center gap-2 text-left label hover:text-ink-secondary"
       >
         <ChevronRight className={clsx('h-3.5 w-3.5 transition-transform', open && 'rotate-90')} />
         Signed
@@ -91,9 +91,9 @@ function CountChip({ n, label, tone }: { n: number; label: string; tone: 'draft'
   return (
     <span className={clsx(
       'inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5',
-      tone === 'draft' && 'border-status-draft/40 bg-accent-muted text-status-draft',
-      tone === 'review' && 'border-status-review/40 bg-[#DAEFE9] text-status-review',
-      tone === 'signed' && 'border-status-signed/40 bg-[#DCE6F5] text-status-signed',
+      tone === 'draft' && 'border-status-draft/40 bg-volt/10 text-status-draft',
+      tone === 'review' && 'border-status-review/40 bg-status-ok/10 text-status-review',
+      tone === 'signed' && 'border-status-signed/40 bg-status-info/10 text-status-signed',
     )}>
       <span className="font-semibold">{n}</span>
       <span className="text-ink-tertiary">{label}</span>
@@ -112,7 +112,7 @@ function ReviewCard({ item }: { item: MyReviewItem }) {
             <div className="flex items-center gap-3">
               <span className={clsx(
                 'flex h-10 w-10 items-center justify-center rounded-md',
-                isSigned ? 'bg-[#DCE6F5] text-status-signed' : 'bg-accent-muted text-accent',
+                isSigned ? 'bg-status-info/10 text-status-signed' : 'bg-volt/10 text-volt-ink',
               )}>
                 {isSigned ? <ShieldCheck className="h-5 w-5" /> : <ClipboardCheck className="h-5 w-5" />}
               </span>

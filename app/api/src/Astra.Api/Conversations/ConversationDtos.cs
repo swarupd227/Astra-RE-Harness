@@ -43,6 +43,7 @@ public sealed record ConversationDto(
     Guid Id,
     Guid? CorpusId,
     string Kind,
+    Guid? RefId,
     string Title,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,

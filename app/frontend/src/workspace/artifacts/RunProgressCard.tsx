@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { openRunStream, type AgentId } from '@/lib/conversations';
 import { AgentAvatar } from '../AgentAvatar';
 import { StatePill } from '../StatePill';
+import { useThreadActions } from '../ThreadActions';
 import {
   arr,
   formatEta,
@@ -49,11 +50,13 @@ function initial(p: Record<string, unknown>): Live {
  * `runProgress` — a live run. Subscribes to `GET /api/v1/runs/{runId}/events`
  * and updates itself from `progress` / `stage` / `state` / `done`.
  */
-export function RunProgressCard({ artifact, size }: ArtifactRenderProps) {
+export function RunProgressCard({ artifact, size, onIntent }: ArtifactRenderProps) {
   const p = artifact.props;
   const runId = artifact.refId;
   const [live, setLive] = useState<Live>(() => initial(p));
   const pane = size === 'pane';
+  const threadActions = useThreadActions();
+  const sendIntent = onIntent ?? threadActions.sendIntent;
 
   // Re-seed if the backend re-emits the card with fresher props.
   useEffect(() => {
@@ -111,8 +114,15 @@ export function RunProgressCard({ artifact, size }: ArtifactRenderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  const active = !live.ended && !isTerminalRunState(live.state);
+  // RESUMABLE is a pause, not a terminal state: the bar stops, and a chip
+  // offers to pick the run back up through the thread.
+  const resumable = live.state.toUpperCase() === 'RESUMABLE';
+  const active = !live.ended && !resumable && !isTerminalRunState(live.state);
   const tone = stateTone(live.state);
+  const resumeIntent =
+    str(p.kind) === 'pattern-analysis' || !str(p.kind)
+      ? 'Resume the pattern analysis'
+      : `Resume the ${formatState(str(p.kind)).toLowerCase()}${str(p.label) ? ` for ${str(p.label)}` : ''}`;
   const pct =
     live.total && live.total > 0 && live.done != null
       ? Math.min(100, Math.round((live.done / live.total) * 100))
@@ -162,9 +172,30 @@ export function RunProgressCard({ artifact, size }: ArtifactRenderProps) {
           )}
           {live.stage && <span className="truncate">{live.stage}</span>}
           {active && eta && <span className="text-ink-tertiary">{eta}</span>}
-          {!active && !live.summary && <span className="text-ink-tertiary">{formatState(live.state)}</span>}
+          {!active && !live.summary && !resumable && <span className="text-ink-tertiary">{formatState(live.state)}</span>}
         </div>
       </div>
+
+      {resumable && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="run-resumable">
+          <span className="text-caption text-status-warn">Paused — the run can be resumed where it stopped.</span>
+          {sendIntent && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                sendIntent(resumeIntent);
+              }}
+              data-testid="run-resume-chip"
+              data-intent={resumeIntent}
+              className="inline-flex items-center gap-1.5 rounded-full border border-volt/40 bg-volt/10 px-2.5 py-1 text-micro font-medium text-volt transition-colors hover:bg-volt/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+            >
+              <Play size={11} aria-hidden="true" />
+              Resumable — resume?
+            </button>
+          )}
+        </div>
+      )}
 
       {live.summary && (
         <p className={clsx('text-caption text-ink-secondary', !pane && 'line-clamp-3')}>{live.summary}</p>

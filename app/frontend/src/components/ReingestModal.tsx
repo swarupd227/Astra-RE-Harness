@@ -127,14 +127,14 @@ export function ReingestModal({
       aria-labelledby="reingest-modal-title"
       onClick={handleClose}
     >
-      <div className="absolute inset-0 bg-ink-primary/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-[720px] max-w-[92vw] overflow-hidden rounded-lg border border-border-subtle bg-raised shadow-e3"
+        className="relative w-[720px] max-w-[92vw] overflow-hidden rounded-lg border border-line-subtle bg-raised shadow-e3"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between border-b border-border-subtle px-6 py-4">
+        <header className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-muted text-accent">
+            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
               <RefreshCw className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
@@ -194,7 +194,7 @@ export function ReingestModal({
                 }}
                 className={
                   'rounded-md border-2 border-dashed transition-colors duration-fast ' +
-                  (dragging ? 'border-accent bg-accent/5' : 'border-border bg-sunken')
+                  (dragging ? 'border-volt bg-volt/5' : 'border-line bg-sunken')
                 }
                 data-testid="reingest-dropzone"
               >
@@ -205,7 +205,7 @@ export function ReingestModal({
                     <button
                       type="button"
                       onClick={() => inputRef.current?.click()}
-                      className="font-medium text-accent underline-offset-2 hover:underline"
+                      className="font-medium text-volt-ink underline-offset-2 hover:underline"
                     >
                       browse
                     </button>
@@ -225,7 +225,7 @@ export function ReingestModal({
               {rejected.length > 0 && (
                 <div
                   role="alert"
-                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-[#FBF1D9] px-4 py-3 text-caption text-status-scaffolded"
+                  className="mt-3 rounded-md border border-status-scaffolded/40 bg-status-warn/10 px-4 py-3 text-caption text-status-scaffolded"
                   data-testid="reingest-rejected-files"
                 >
                   <p className="font-medium">
@@ -239,7 +239,7 @@ export function ReingestModal({
                 </div>
               )}
               {files.length > 0 && (
-                <ul className="mt-3 max-h-48 overflow-y-auto divide-y divide-border-subtle rounded-md border border-border-subtle bg-raised">
+                <ul className="mt-3 max-h-48 overflow-y-auto divide-y divide-line-subtle rounded-md border border-line-subtle bg-raised">
                   {files.map((f, i) => (
                     <li key={`${f.name}:${i}`} className="flex items-center gap-3 px-4 py-2 text-body">
                       <FileCode className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
@@ -312,7 +312,7 @@ export function ReingestModal({
           {reingest.isSuccess && <Outcome result={reingest.data} />}
         </div>
 
-        <footer className="flex items-center justify-end gap-3 border-t border-border-subtle bg-sunken px-6 py-4">
+        <footer className="flex items-center justify-end gap-3 border-t border-line-subtle bg-sunken px-6 py-4">
           {reingest.isSuccess ? (
             <Button
               variant="primary"
@@ -350,13 +350,13 @@ function tabClass(active: boolean): string {
   return (
     'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-body font-medium transition-colors duration-fast ' +
     (active
-      ? 'border-accent bg-accent/10 text-accent'
-      : 'border-border bg-raised text-ink-secondary hover:bg-sunken')
+      ? 'border-volt bg-volt/10 text-volt-ink'
+      : 'border-line bg-raised text-ink-secondary hover:bg-sunken')
   );
 }
 
 const inputClass =
-  'mt-1 w-full rounded-md border border-border bg-raised px-3 py-2 font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
+  'mt-1 w-full rounded-md border border-line bg-raised px-3 py-2 font-mono text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20 disabled:cursor-not-allowed disabled:opacity-60';
 
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
@@ -372,7 +372,7 @@ function Field({ label, id, children }: { label: string; id: string; children: R
 function Outcome({ result }: { result: ReingestResult }) {
   return (
     <div
-      className="rounded-md border border-status-signed/40 bg-[#DCE6F5]/40 p-4"
+      className="rounded-md border border-status-signed/40 bg-status-info/10 p-4"
       data-testid="reingest-outcome"
     >
       <div className="flex items-center gap-2">

@@ -91,13 +91,6 @@
   .glass {
     @apply border-b border-line-subtle bg-white/[.04] backdrop-blur-md;
   }
-
-  /* Wrapper for pre-v2 pages: pair with data-theme="light" so the page's
-     hard-coded bg-white / text-slate-* keep reading correctly inside the
-     dark shell until Increment 2 restyles them. */
-  .legacy-surface {
-    @apply min-h-full bg-canvas text-ink-primary;
-  }
 }
 
 @layer utilities {

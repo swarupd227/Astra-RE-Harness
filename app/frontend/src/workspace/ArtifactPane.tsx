@@ -14,11 +14,14 @@ export function ArtifactPane({
   mode,
   open = true,
   onClose,
+  onIntent,
 }: {
   artifact: Artifact | null;
   mode: 'docked' | 'overlay';
   open?: boolean;
   onClose: () => void;
+  /** Lets cards in the pane send an intent to the thread ("Why?", "Resume"). */
+  onIntent?: (intent: string) => void;
 }) {
   const reduced = useReducedMotion();
 
@@ -30,7 +33,12 @@ export function ArtifactPane({
         className="hidden w-[440px] shrink-0 flex-col border-l border-line-subtle bg-canvas xl:flex"
         aria-label="Artifact"
       >
-        <PaneBody artifact={artifact} onClose={onClose} closeIcon={<PanelRightClose size={16} aria-hidden="true" />} />
+        <PaneBody
+          artifact={artifact}
+          onClose={onClose}
+          onIntent={onIntent}
+          closeIcon={<PanelRightClose size={16} aria-hidden="true" />}
+        />
       </aside>
     );
   }
@@ -56,7 +64,12 @@ export function ArtifactPane({
             exit={reduced ? { opacity: 0 } : { x: 32, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
-            <PaneBody artifact={artifact} onClose={onClose} closeIcon={<X size={16} aria-hidden="true" />} />
+            <PaneBody
+              artifact={artifact}
+              onClose={onClose}
+              onIntent={onIntent}
+              closeIcon={<X size={16} aria-hidden="true" />}
+            />
           </motion.aside>
         </div>
       )}
@@ -67,10 +80,12 @@ export function ArtifactPane({
 function PaneBody({
   artifact,
   onClose,
+  onIntent,
   closeIcon,
 }: {
   artifact: Artifact | null;
   onClose: () => void;
+  onIntent?: (intent: string) => void;
   closeIcon: React.ReactNode;
 }) {
   const Icon = artifact ? artifactIcon(artifact.kind) : null;
@@ -113,7 +128,7 @@ function PaneBody({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {artifact ? (
           <div key={`${artifact.kind}:${artifact.refId ?? ''}`} data-testid="artifact-pane-body" data-kind={artifact.kind}>
-            {renderArtifact(artifact, { size: 'pane' })}
+            {renderArtifact(artifact, { size: 'pane', onIntent })}
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">

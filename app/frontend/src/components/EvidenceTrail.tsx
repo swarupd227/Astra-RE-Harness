@@ -51,14 +51,14 @@ export function EvidenceTrail({ specId }: { specId: string }) {
 
   return (
     <section
-      className="rounded-md border border-border-subtle bg-raised"
+      className="rounded-md border border-line-subtle bg-raised"
       aria-label="Evidence trail"
       data-testid="evidence-trail"
     >
-      <header className="border-b border-border-subtle px-5 py-3">
+      <header className="border-b border-line-subtle px-5 py-3">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
-          <h2 className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">
+          <h2 className="label">
             Evidence trail · {e.subroutine?.name ?? 'spec'}
           </h2>
         </div>
@@ -153,7 +153,7 @@ function AstBlock({ e }: { e: EvidenceResponse }) {
           value={
             <div className="flex flex-wrap gap-1">
               {calls.map((c) => (
-                <span key={c} className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-secondary">
+                <span key={c} className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-secondary">
                   {c}
                 </span>
               ))}
@@ -167,7 +167,7 @@ function AstBlock({ e }: { e: EvidenceResponse }) {
           value={
             <div className="flex flex-wrap gap-1">
               {commons.map((c) => (
-                <span key={c} className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-secondary">
+                <span key={c} className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-secondary">
                   /{c}/
                 </span>
               ))}
@@ -240,7 +240,7 @@ function ReviewBlock({ e }: { e: EvidenceResponse }) {
               return (
                 <span
                   key={k}
-                  className="rounded-sm border border-border-subtle bg-sunken px-1.5 py-0.5 text-caption font-medium uppercase tracking-wider text-ink-secondary"
+                  className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 text-caption font-medium uppercase tracking-wider text-ink-secondary"
                 >
                   <span className="font-semibold text-ink-primary">{n}</span> {k}
                 </span>
@@ -269,7 +269,7 @@ function SignatureBlock({ e, onVerify }: { e: EvidenceResponse; onVerify: () => 
       <HashRow label="Source hash" value={sig.sourceVersionHash} />
       <HashRow label="Signature" value={sig.signatureBase64} truncate={32} />
 
-      <div className="mt-2 rounded-sm border border-status-scaffolded/40 bg-[#FBF1D9]/40 px-2.5 py-1.5">
+      <div className="mt-2 rounded-sm border border-status-scaffolded/40 bg-status-warn/10 px-2.5 py-1.5">
         <div className="flex items-start gap-1.5 text-caption">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
           <p className="text-ink-secondary">
@@ -284,7 +284,7 @@ function SignatureBlock({ e, onVerify }: { e: EvidenceResponse; onVerify: () => 
         <button
           type="button"
           onClick={onVerify}
-          className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-caption font-medium text-accent hover:bg-accent/20 focus-visible:outline-2 focus-visible:outline-ink-primary"
+          className="inline-flex items-center gap-1.5 rounded-md border border-volt bg-volt/10 px-3 py-1.5 text-caption font-medium text-volt-ink hover:bg-volt/20 focus-visible:outline-2 focus-visible:outline-ink-primary"
           data-testid="verify-signature"
         >
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Verify signature
@@ -292,7 +292,7 @@ function SignatureBlock({ e, onVerify }: { e: EvidenceResponse; onVerify: () => 
         <a
           href={`/api/v1/specs/${e.id}/signed-manifest`}
           download={`signed-${e.subroutine?.name ?? 'spec'}.json`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-raised px-3 py-1.5 text-caption font-medium text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-ink-primary"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-caption font-medium text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-ink-primary"
           data-testid="download-manifest"
         >
           <Link2 className="h-3.5 w-3.5" aria-hidden="true" /> Download signed.json
@@ -335,11 +335,11 @@ function ScaffoldBlock({ e }: { e: EvidenceResponse }) {
 // ─── Building blocks ────────────────────────────────────────────────
 
 const toneClass: Record<string, string> = {
-  neutral: 'border-border-subtle bg-canvas',
-  draft: 'border-status-draft/40 bg-accent-muted/30',
-  review: 'border-status-review/40 bg-[#DAEFE9]/30',
-  signed: 'border-status-signed/40 bg-[#DCE6F5]/30',
-  scaffolded: 'border-status-scaffolded/40 bg-[#FBF1D9]/30',
+  neutral: 'border-line-subtle bg-canvas',
+  draft: 'border-status-draft/40 bg-volt/10',
+  review: 'border-status-review/40 bg-status-ok/10',
+  signed: 'border-status-signed/40 bg-status-info/10',
+  scaffolded: 'border-status-scaffolded/40 bg-status-warn/10',
 };
 
 const toneIcon: Record<string, string> = {
@@ -370,7 +370,7 @@ function Block({
         <span className={`flex h-6 w-6 items-center justify-center rounded ${toneIcon[tone]}`}>
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
-        <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
+        <span className="label">{label}</span>
       </header>
       <dl className="space-y-1">{children}</dl>
     </div>
@@ -379,9 +379,9 @@ function Block({
 
 function BlockMissing({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="rounded-md border border-dashed border-border bg-sunken/40 p-3.5">
+    <div className="rounded-md border border-dashed border-line bg-sunken/40 p-3.5">
       <header className="mb-1 flex items-center gap-2">
-        <span className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</span>
+        <span className="label">{label}</span>
         <span className="font-mono text-caption text-ink-tertiary italic">pending</span>
       </header>
       {hint && <p className="text-caption text-ink-tertiary">{hint}</p>}
@@ -392,7 +392,7 @@ function BlockMissing({ label, hint }: { label: string; hint?: string }) {
 function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="grid grid-cols-[120px_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</dt>
+      <dt className="label">{label}</dt>
       <dd className={'min-w-0 text-caption text-ink-primary ' + (mono ? 'font-mono' : '')}>{value}</dd>
     </div>
   );
@@ -401,7 +401,7 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
 function HashRow({ label, value, truncate = 22 }: { label: string; value: string; truncate?: number }) {
   return (
     <div className="grid grid-cols-[120px_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="text-caption font-medium uppercase tracking-wider text-ink-tertiary">{label}</dt>
+      <dt className="label">{label}</dt>
       <dd className="flex min-w-0 items-center gap-1.5">
         <code
           className="truncate rounded-sm bg-sunken px-1.5 py-0.5 font-mono text-caption text-ink-primary"

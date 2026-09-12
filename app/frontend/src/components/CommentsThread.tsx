@@ -80,7 +80,7 @@ export function CommentsThread({
                 onReply={(body) => post.mutate({ body, parentCommentId: node.comment.id })}
               />
               {node.replies.length > 0 && (
-                <ul className="mt-2 space-y-2 border-l border-border-subtle pl-4">
+                <ul className="mt-2 space-y-2 border-l border-line-subtle pl-4">
                   {node.replies.map((reply) => (
                     <li key={reply.id}>
                       <CommentBubble
@@ -152,7 +152,7 @@ function CommentBubble({
     <article
       className={
         'rounded-md border bg-raised p-3 ' +
-        (resolved ? 'border-status-review/40 bg-[#DAEFE9]/20' : 'border-border-subtle')
+        (resolved ? 'border-status-review/40 bg-status-ok/10' : 'border-line-subtle')
       }
       data-testid={`comment-${comment.id}`}
     >
@@ -232,7 +232,7 @@ function CommentBubble({
       )}
 
       {replying && (
-        <div className="mt-3 border-l border-border-subtle pl-3">
+        <div className="mt-3 border-l border-line-subtle pl-3">
           <CommentComposer
             placeholder="Reply…"
             onSubmit={async (body) => { onReply(body); setReplying(false); }}
@@ -323,13 +323,13 @@ export function CommentComposer({
           rows={3}
           placeholder={placeholder ?? 'Add a comment…'}
           autoFocus={autoFocus}
-          className="block w-full resize-y rounded-md border border-border bg-raised px-3 py-2 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="block w-full resize-y rounded-md border border-line bg-raised px-3 py-2 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20"
           data-testid="comment-body"
         />
         {suggestion && (
           <ul
             role="listbox"
-            className="absolute left-3 z-20 mt-1 max-h-40 w-48 overflow-auto rounded-md border border-border bg-raised shadow-e2"
+            className="absolute left-3 z-20 mt-1 max-h-40 w-48 overflow-auto rounded-md border border-line bg-raised shadow-e2"
             data-testid="mention-suggest"
           >
             {suggestion.matches.map((p) => (
@@ -340,7 +340,7 @@ export function CommentComposer({
                   className="block w-full px-3 py-1.5 text-left text-body text-ink-primary hover:bg-sunken focus-visible:outline-2 focus-visible:outline-ink-primary"
                   data-testid={`mention-${p}`}
                 >
-                  <span className="font-mono text-accent">@{p}</span>
+                  <span className="font-mono text-volt-ink">@{p}</span>
                 </button>
               </li>
             ))}
@@ -390,7 +390,7 @@ function BodyWithMentions({ body, muted }: { body: string; muted?: boolean }) {
     <p className={'whitespace-pre-wrap text-body ' + (muted ? 'italic text-ink-tertiary' : 'text-ink-primary')}>
       {parts.map((part, i) =>
         MENTION_RE.test(part)
-          ? <span key={i} className="font-mono font-medium text-accent">{part}</span>
+          ? <span key={i} className="font-mono font-medium text-volt-ink">{part}</span>
           : <span key={i}>{part}</span>,
       )}
     </p>
