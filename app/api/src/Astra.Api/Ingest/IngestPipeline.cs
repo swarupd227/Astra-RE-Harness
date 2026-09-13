@@ -36,6 +36,7 @@ public sealed class IngestPipeline
     private readonly DevPersonaContext _persona;
     private readonly DriftDetectionService _drift;
     private readonly ILogger<IngestPipeline> _logger;
+    private readonly IHostApplicationLifetime? _lifetime;
 
     public IngestPipeline(
         AppDbContext db,
@@ -45,7 +46,8 @@ public sealed class IngestPipeline
         IAuditLogger audit,
         DevPersonaContext persona,
         DriftDetectionService drift,
-        ILogger<IngestPipeline> logger)
+        ILogger<IngestPipeline> logger,
+        IHostApplicationLifetime? lifetime = null)
     {
         _db = db;
         _blob = blob;
@@ -55,7 +57,19 @@ public sealed class IngestPipeline
         _persona = persona;
         _drift = drift;
         _logger = logger;
+        _lifetime = lifetime;
     }
+
+    /// <summary>
+    /// Once the files are accepted the work runs to completion even if the
+    /// HTTP client goes away. Azure App Service cuts a request at 230 s and
+    /// a whole-corpus parse can take longer; aborting with the client used
+    /// to leave a half-built version behind that every "newest version"
+    /// query then picked up as an empty corpus. Only application shutdown
+    /// cancels an ingest.
+    /// </summary>
+    private CancellationToken WorkToken(CancellationToken requestToken)
+        => _lifetime?.ApplicationStopping ?? requestToken;
 
     public sealed record IncomingFile(string RelativePath, string Content);
 
@@ -139,6 +153,7 @@ public sealed class IngestPipeline
 
     public async Task<IngestResult> IngestAsync(IngestRequest req, CancellationToken ct = default)
     {
+        ct = WorkToken(ct);
         if (string.IsNullOrWhiteSpace(req.Name))
             throw new ArgumentException("Corpus name is required.", nameof(req));
         if (req.Files.Count == 0)
@@ -378,6 +393,9 @@ public sealed class IngestPipeline
     {
         if (req.Files.Count == 0)
             throw new ArgumentException("At least one source file is required.", nameof(req));
+        ct = WorkToken(ct);
+
+        await RemoveAbandonedVersionsAsync(req.CorpusId, ct);
 
         var corpus = await _db.Corpora
             .Include(c => c.Versions)
@@ -387,12 +405,12 @@ public sealed class IngestPipeline
             ?? throw new InvalidOperationException($"Corpus {req.CorpusId} not found.");
 
         // Build the prior-version index: (relativePath, subroutineName) → (subroutine, file).
-        // Phase C.3 considers only the current LatestVersion as the baseline
-        // — earlier versions stay archived; supersession lineage is a chain
-        // of at most one hop per re-sync.
-        var priorVersion = corpus.Versions
-            .OrderByDescending(v => v.IngestedAt)
-            .FirstOrDefault();
+        // The baseline is the version the corpus actually points at — the
+        // one the funnel, the specs and the docs were built on — not merely
+        // the newest row. Earlier versions stay archived; supersession
+        // lineage is a chain of at most one hop per re-sync.
+        var priorVersion = corpus.Versions.FirstOrDefault(v => v.Id == corpus.LatestVersionId)
+            ?? corpus.Versions.OrderByDescending(v => v.IngestedAt).FirstOrDefault();
 
         var priorIndex = new Dictionary<(string Path, string Name), (Subroutine Sub, SourceFile File)>();
         if (priorVersion is not null)
@@ -611,17 +629,20 @@ public sealed class IngestPipeline
                 Warnings: warnings,
                 ErrorMessage: null);
         }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException)
+        {
+            // Application shutdown: leave no half-built version behind.
+            await RollbackNewVersionAsync(corpus.Id, newVersionId, CancellationToken.None);
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Re-sync failed for corpus {Corpus}", corpus.Id);
+            _logger.LogError(ex, "Re-sync failed for corpus {Corpus}; rolling back version {Version}", corpus.Id, newVersionId);
+            await RollbackNewVersionAsync(corpus.Id, newVersionId, ct);
             corpus.State = "FAILED";
-            corpus.UpdatedAt = DateTimeOffset.UtcNow;
-            try { await _db.SaveChangesAsync(ct); }
-            catch (Exception saveEx) { _logger.LogError(saveEx, "Failed to mark corpus FAILED"); }
 
             await _audit.LogAsync("corpus.reingest_failed", "corpus", corpus.Id, actor: _persona,
-                payload: new { error = ex.Message }, ct: ct);
+                payload: new { error = ex.Message, rolledBackVersionId = newVersionId }, ct: ct);
 
             return new ReingestResult(
                 CorpusId: corpus.Id,
@@ -634,6 +655,79 @@ public sealed class IngestPipeline
                 Warnings: warnings,
                 ErrorMessage: ClientSafeErrorMessage(corpus.Id));
         }
+    }
+
+    /// <summary>
+    /// A re-sync that died mid-way (client gone, process restarted) used to
+    /// leave its half-built version behind: newest by IngestedAt, no
+    /// routines, never made LatestVersionId. Everything that picks "the
+    /// newest version" (dependency graph, corpus list, harmonisation) then
+    /// saw an empty corpus while the funnel, which follows LatestVersionId,
+    /// still saw the old one. Remove such leftovers before building on the
+    /// real baseline. Only versions at or after the baseline are touched;
+    /// older archived versions are never deleted.
+    /// </summary>
+    private async Task RemoveAbandonedVersionsAsync(Guid corpusId, CancellationToken ct)
+    {
+        var latestId = await _db.Corpora
+            .Where(c => c.Id == corpusId)
+            .Select(c => c.LatestVersionId)
+            .FirstOrDefaultAsync(ct);
+        DateTimeOffset? baselineAt = latestId is null
+            ? null
+            : await _db.SourceVersions
+                .Where(v => v.Id == latestId)
+                .Select(v => (DateTimeOffset?)v.IngestedAt)
+                .FirstOrDefaultAsync(ct);
+
+        var abandoned = await _db.SourceVersions
+            .Where(v => v.CorpusId == corpusId
+                        && v.Id != latestId
+                        && (baselineAt == null || v.IngestedAt >= baselineAt)
+                        && !v.Files.Any(f => f.Subroutines.Any()))
+            .Select(v => new { v.Id, v.IngestedAt })
+            .ToListAsync(ct);
+
+        foreach (var v in abandoned)
+        {
+            await DeleteVersionRowsAsync(v.Id, ct);
+            _logger.LogWarning(
+                "Re-sync: removed abandoned version {Version} of corpus {Corpus} (ingested {At:u}, no routines — an earlier re-sync was interrupted)",
+                v.Id, corpusId, v.IngestedAt);
+        }
+    }
+
+    /// <summary>
+    /// Undo a re-sync that failed after its files were saved: drop every
+    /// pending change (new routines, carried specs, supersession marks) and
+    /// the rows already written for the new version, and mark the corpus
+    /// FAILED. LatestVersionId is untouched, so the previous version stays
+    /// the one every view reads.
+    /// </summary>
+    private async Task RollbackNewVersionAsync(Guid corpusId, Guid newVersionId, CancellationToken ct)
+    {
+        try
+        {
+            _db.ChangeTracker.Clear();
+            await DeleteVersionRowsAsync(newVersionId, ct);
+            await _db.Corpora
+                .Where(c => c.Id == corpusId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.State, "FAILED")
+                    .SetProperty(c => c.UpdatedAt, DateTimeOffset.UtcNow), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rollback of version {Version} for corpus {Corpus} failed", newVersionId, corpusId);
+        }
+    }
+
+    private async Task DeleteVersionRowsAsync(Guid versionId, CancellationToken ct)
+    {
+        var fileIds = _db.SourceFiles.Where(f => f.SourceVersionId == versionId).Select(f => f.Id);
+        await _db.Subroutines.Where(s => fileIds.Contains(s.SourceFileId)).ExecuteDeleteAsync(ct);
+        await _db.SourceFiles.Where(f => f.SourceVersionId == versionId).ExecuteDeleteAsync(ct);
+        await _db.SourceVersions.Where(v => v.Id == versionId).ExecuteDeleteAsync(ct);
     }
 
     /// <summary>
