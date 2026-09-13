@@ -116,11 +116,34 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         //     user message without re-engineering this call site.
         // Anthropic's cache_control schema requires content blocks
         // (array form), not bare strings.
+        // Forced tool use for the spec object. As free text the model wrote
+        // C++ fragments with unescaped quotes inside JSON strings ("sets
+        // "Content-Type" header"), and about one C++ routine in ten came
+        // back as provider.malformed_json, deterministically. A tool call's
+        // input is serialised by the API, so it is always valid JSON; the
+        // prompt still defines the shape, the schema here is deliberately
+        // open, and the streamed `input_json_delta` chunks feed the live
+        // "Claude is writing" feed exactly as the text deltas did.
         var requestBody = new Dictionary<string, object?>
         {
             ["model"] = model,
             ["max_tokens"] = maxOutputTokens,
             ["stream"] = true,
+            ["tools"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name"] = SpecToolName,
+                    ["description"] = "Return the behavioural spec as the JSON object the system prompt defines, " +
+                                      "with exactly the fields and claim sections it lists.",
+                    ["input_schema"] = new Dictionary<string, object?>
+                    {
+                        ["type"] = "object",
+                        ["additionalProperties"] = true,
+                    },
+                },
+            },
+            ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = SpecToolName },
             ["system"] = new[]
             {
                 new Dictionary<string, object?>
@@ -248,10 +271,8 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                     break;
 
                 case "content_block_delta":
-                    if (evRoot.TryGetProperty("delta", out var delta) &&
-                        delta.TryGetProperty("text", out var txt))
+                    if (evRoot.TryGetProperty("delta", out var delta) && DeltaText(delta) is { Length: > 0 } chunk)
                     {
-                        var chunk = txt.GetString() ?? "";
                         textBuffer.Append(chunk);
                         // Forward as a token event so the UI shows live progress
                         yield return new("token", new { path = "$", text = chunk });
@@ -460,6 +481,22 @@ public sealed class AnthropicLlmProvider : ILlmProvider
     /// surrounding prose or accidental markdown fences, despite the prompt
     /// asking for clean JSON. Returns the original buffer if it already parses.
     /// </summary>
+    internal const string SpecToolName = "emit_spec";
+
+    /// <summary>
+    /// The streamed text of a content-block delta: `text` for a text block,
+    /// `partial_json` for the tool-input block a forced tool call streams.
+    /// Both concatenate to the model's output; only the wrapper differs.
+    /// </summary>
+    public static string? DeltaText(JsonElement delta)
+    {
+        if (delta.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+            return text.GetString();
+        if (delta.TryGetProperty("partial_json", out var partial) && partial.ValueKind == JsonValueKind.String)
+            return partial.GetString();
+        return null;
+    }
+
     private static string ExtractJsonObject(string raw)
     {
         var trimmed = raw.TrimStart('﻿', ' ', '\n', '\r', '\t');
