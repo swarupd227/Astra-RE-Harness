@@ -156,6 +156,29 @@ struct Client {
 """
 
 
+def test_one_line_definition_beats_its_declaration():
+    """An in-class declaration and a one-line out-of-line definition tie
+    on source span; the definition (the cursor with the body) must win,
+    or the routine loses its calls and refs."""
+    text = """\
+namespace app {
+int counter = 0;
+struct Store { static int hits; void save(int v); int load() const; };
+int Store::hits = 0;
+int helper(int x) { return x + 1; }
+void Store::save(int v) { counter += v; hits++; }
+int Store::load() const { return helper(counter); }
+}
+"""
+    out = parse_source("one_line.cpp", text)
+    by_name = {s.name: s for s in out.subroutines}
+    assert by_name["app::Store::load"].called_subroutines == ("app::helper",)
+    assert set(by_name["app::Store::load"].common_block_refs) == {"app::counter"}
+    assert set(by_name["app::Store::save"].common_block_refs) == {"app::counter", "app::Store::hits"}
+    # The definition's line, not the declaration's.
+    assert by_name["app::Store::load"].line_start == 7
+
+
 def test_qualified_calls_and_shared_state():
     out = parse_source("two_classes.cpp", _TWO_CLASSES)
     by_name = {s.name: s for s in out.subroutines}

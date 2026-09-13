@@ -90,6 +90,9 @@ class SubroutineSummary:
     line_end: int
     common_block_refs: Tuple[str, ...]
     called_subroutines: Tuple[str, ...]
+    # True for the cursor that carries the body. Dedup prefers it over an
+    # in-class declaration of the same qualified name, whatever the spans.
+    is_definition: bool = False
 
 
 @dataclass
@@ -349,6 +352,11 @@ def _build_summary(cursor) -> Optional[SubroutineSummary]:
     called = tuple(c for c in called if c != name and c != bare_self)
     shared = _collect_shared_state(cursor)
 
+    try:
+        is_definition = bool(cursor.is_definition())
+    except Exception:  # noqa: BLE001
+        is_definition = False
+
     return SubroutineSummary(
         name=name,
         signature=signature,
@@ -356,6 +364,7 @@ def _build_summary(cursor) -> Optional[SubroutineSummary]:
         line_end=line_end,
         common_block_refs=shared,
         called_subroutines=called,
+        is_definition=is_definition,
     )
 
 
@@ -503,13 +512,24 @@ def _collect_shared_state(routine_cursor) -> Tuple[str, ...]:
 
 
 def _dedup_by_name(routines: List[SubroutineSummary]) -> List[SubroutineSummary]:
-    """Mirror v0's dedup: when the same qualified name appears multiple
-    times (e.g. in-class declaration + out-of-line definition), keep
-    the one with the larger source span. Preserve discovery order."""
+    """When the same qualified name appears more than once (in-class
+    declaration + out-of-line definition, forward declaration + body), keep
+    the DEFINITION — it is the cursor whose body yielded the calls and the
+    shared-state refs. Only among equals (two declarations, two overload
+    bodies) does the larger source span win. Preserve discovery order.
+
+    Span alone was the old rule; a one-line `int load() const;` and a
+    one-line `int Store::load() const { return helper(counter); }` tie on
+    span, so the declaration — first in file order — silently won and the
+    routine lost every call edge and every ref."""
     best: dict[str, SubroutineSummary] = {}
+
+    def rank(r: SubroutineSummary) -> Tuple[int, int]:
+        return (1 if r.is_definition else 0, r.line_end - r.line_start)
+
     for r in routines:
         cur = best.get(r.name)
-        if cur is None or (r.line_end - r.line_start) > (cur.line_end - cur.line_start):
+        if cur is None or rank(r) > rank(cur):
             best[r.name] = r
     seen: set[str] = set()
     result: List[SubroutineSummary] = []

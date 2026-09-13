@@ -85,5 +85,11 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
             Warnings: resp.Warnings.ToArray());
     }
 
+    public async Task<ParserPing> PingAsync(CancellationToken ct = default)
+    {
+        var reply = await _client.PingAsync(new PingRequest(), cancellationToken: ct);
+        return new ParserPing(reply.Service, reply.Version);
+    }
+
     public void Dispose() => _channel.Dispose();
 }

@@ -14,7 +14,17 @@ public interface IFortranParserClient
     /// can't break a multi-file corpus ingest.
     /// </summary>
     Task<ParseOutcome> ParseAsync(string filename, string content, string? form = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Liveness + identity probe. Returns the sidecar's service name and
+    /// version (e.g. "astra-parser 0.2.0") so /health/ready can prove
+    /// which build is actually serving — a TCP connect cannot tell a
+    /// stale container from a fresh one.
+    /// </summary>
+    Task<ParserPing> PingAsync(CancellationToken ct = default);
 }
+
+public sealed record ParserPing(string Service, string Version);
 
 public sealed record ParseOutcome(
     string Filename,

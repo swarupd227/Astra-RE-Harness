@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using Astra.Api.Auth;
 using Astra.Api.Llm;
+using Astra.Api.Parser;
 using Astra.Api.Persistence;
 using Astra.Api.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,7 @@ public static class HealthEndpoints
             IBlobClient blob,
             IConfiguration cfg,
             IHttpClientFactory httpFactory,
+            IFortranParserClient parser,
             CancellationToken ct) =>
         {
             var checks = new List<DependencyCheck>();
@@ -49,8 +51,10 @@ public static class HealthEndpoints
                 checks.Add(new("minio", "down", ex.Message));
             }
 
-            // Parser sidecar — TCP probe (gRPC HTTP/2 setup is heavier; TCP is enough for Phase A)
-            checks.Add(await TcpProbe("parser", cfg["Parser:GrpcEndpoint"], ct));
+            // Parser sidecar — gRPC Ping so the check reports the build that is
+            // actually serving (name + version); falls back to a TCP probe when
+            // the RPC fails so a half-up container still shows as reachable.
+            checks.Add(await ParserProbe(parser, cfg["Parser:GrpcEndpoint"], ct));
 
             var allOk = checks.All(c => c.Status == "ok");
             var payload = new
@@ -107,5 +111,25 @@ public static class HealthEndpoints
         }
     }
 
-    private sealed record DependencyCheck(string Name, string Status, string? Error);
+    private static async Task<DependencyCheck> ParserProbe(IFortranParserClient parser, string? url, CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            var ping = await parser.PingAsync(cts.Token);
+            return new DependencyCheck("parser", "ok", null, $"{ping.Service} {ping.Version}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // A port that accepts TCP but cannot answer Ping is a half-up
+            // container (stale image, crashed interpreter): report it down,
+            // but say which of the two it was.
+            var tcp = await TcpProbe("parser", url, ct);
+            var reach = tcp.Status == "ok" ? "tcp reachable" : tcp.Error;
+            return new DependencyCheck("parser", "down", $"ping failed: {ex.Message} ({reach})");
+        }
+    }
+
+    private sealed record DependencyCheck(string Name, string Status, string? Error, string? Version = null);
 }
