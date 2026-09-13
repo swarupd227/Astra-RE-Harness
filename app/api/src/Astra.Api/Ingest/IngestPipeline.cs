@@ -527,6 +527,19 @@ public sealed class IngestPipeline
                 foreach (var w in outcome.Warnings)
                     warnings.Add($"{fileRow.RelativePath}: {w}");
 
+                // Same language stamping as a first ingest. Re-sync used to
+                // leave SourceLanguage at the entity default ("fortran-f77"),
+                // so every re-synced C++ or Delphi routine was extracted
+                // with the Fortran schema and priced at Fortran throughput.
+                var sourceLanguage = SourceLanguageDetector.FromFilename(fileRow.RelativePath);
+                if (sourceLanguage is null)
+                {
+                    warnings.Add(
+                        $"{fileRow.RelativePath}: no language mapping for this extension — " +
+                        $"routines skipped. Supported: {SourceLanguageDetector.SupportedLanguagesDescription()}");
+                    continue;
+                }
+
                 foreach (var sub in outcome.Subroutines)
                 {
                     var newSubId = Guid.NewGuid();
@@ -544,6 +557,7 @@ public sealed class IngestPipeline
                         CalledSubroutines = JsonDocument.Parse(calls),
                         IoPatterns = null,
                         State = "PARSED",
+                        SourceLanguage = sourceLanguage,
                     };
                     _db.Subroutines.Add(newSub);
                     totalSubs++;

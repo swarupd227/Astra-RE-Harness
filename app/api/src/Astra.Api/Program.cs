@@ -722,6 +722,11 @@ using (var scope = app.Services.CreateScope())
         // WS6 — doc_sections.quality_json (critic score + deterministic checks).
         await Astra.Api.Docs.DocsQualityRegistration.ApplyDocsSchemaAsync(db);
 
+        // Re-sync never stamped source_language (rows sat at the column
+        // default 'fortran-f77'); repair from the file extension, the same
+        // mapping ingest uses. Idempotent, logs only when it changes rows.
+        await Astra.Api.Ingest.SourceLanguageBackfill.ApplyAsync(db);
+
         // Phase 12.0 — Pattern analysis (bulk extraction + claim-kind
         // clustering). Additive DDL so dev databases pick up without
         // RecreateOnStartup. Column types mirror the EF model in
