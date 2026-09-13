@@ -55,14 +55,14 @@ formatter::~formatter() {}
 """
 
 
-def test_includes_recorded_as_common_block_refs():
+def test_includes_are_not_shared_storage():
+    """`common_block_refs` means shared mutable state. Recording the file's
+    `#include`s there made every routine in a file "share" every header
+    and blew the dependency graph up to O(n²) shared-storage edges."""
     out = parse_source("fmt_like.cpp", _FMT_LIKE)
-    refs = set(s.common_block_refs for s in out.subroutines)
-    assert len(refs) == 1
-    only = next(iter(refs))
-    assert "string" in only
-    assert "vector" in only
-    assert "fmt/core.h" in only
+    assert out.subroutines
+    for s in out.subroutines:
+        assert s.common_block_refs == (), f"{s.name} carries {s.common_block_refs}"
 
 
 def test_finds_free_function_with_template():

@@ -18,7 +18,8 @@ without touching callers.
 
 What v0 handles
 ---------------
-- `#include "x.h"` / `#include <x>` directives (recorded as `common_block_refs`)
+- `#include "x.h"` / `#include <x>` directives (collected for diagnostics only —
+  no longer recorded as `common_block_refs`, which is reserved for shared state)
 - `namespace NAME { ... }` blocks (tracked to qualify routines)
 - `class NAME` / `struct NAME` declarations
 - Free function definitions: `int foo(int x) { ... }`
@@ -336,7 +337,12 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
                 signature=_collapse_whitespace(signature),
                 line_start=line_start,
                 line_end=line_end,
-                common_block_refs=includes_tuple,
+                # Includes are NOT shared storage: every routine in a file
+                # would "share" the same headers and the dependency graph
+                # pairs every such routine with every other (O(n²)). The v0
+                # tokenizer cannot see globals, so it records none; the
+                # libclang parser records real shared mutable state.
+                common_block_refs=(),
                 called_subroutines=called,
             )
         )

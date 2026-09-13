@@ -67,15 +67,16 @@ formatter::~formatter() {}
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_includes_recorded_as_common_block_refs():
+def test_includes_are_not_shared_storage():
+    """`common_block_refs` is reserved for shared mutable state (the C++
+    analogue of a COMMON block). The fixture has no globals or static
+    members, so every routine's list must be empty — in particular no
+    `#include` name may appear (that made the graph builder pair every
+    routine in a file with every other one)."""
     out = parse_source("fmt_like.cpp", _FMT_LIKE)
     assert out.subroutines, "no routines found at all — parse must have collapsed"
-    refs = out.subroutines[0].common_block_refs
-    # libclang strips angle/quote characters and we keep the trailing
-    # path component, so we look for the short forms.
-    assert any("string" in r for r in refs)
-    assert any("vector" in r for r in refs)
-    assert any("core.h" in r for r in refs)
+    for s in out.subroutines:
+        assert s.common_block_refs == (), f"{s.name} carries {s.common_block_refs}"
 
 
 def test_finds_free_function_with_template():
@@ -100,11 +101,85 @@ def test_finds_class_methods_and_constructor():
 
 
 def test_call_detection_inside_bodies():
+    """Callees are recorded by the QUALIFIED name of the resolved
+    declaration — the same spelling this parser gives definitions — so
+    the dependency graph can join call → definition even when the bare
+    method name is ambiguous corpus-wide."""
     out = parse_source("fmt_like.cpp", _FMT_LIKE)
     by_suffix = {s.name.rsplit("::", 1)[-1]: s for s in out.subroutines}
-    assert "parse_int" in by_suffix["parse_arg"].called_subroutines
+    assert "fmt::detail::parse_int" in by_suffix["parse_arg"].called_subroutines
     # The `format` method (inside `formatter`) calls parse_arg via ctx.
-    assert "parse_arg" in by_suffix["format"].called_subroutines
+    assert "fmt::detail::format_context::parse_arg" in by_suffix["format"].called_subroutines
+
+
+_TWO_CLASSES = """\
+#include <string>
+
+namespace app {
+
+int counter = 0;                 // namespace-scope mutable → shared state
+const int LIMIT = 10;            // const → not shared state
+static int file_local = 0;       // still namespace-scope mutable → shared state
+
+struct Store {
+    static int hits;             // static data member → shared state
+    int cache = 0;               // per-instance field → not shared
+    void save(int v);
+    int load() const;
+};
+int Store::hits = 0;
+
+int helper(int x) { return x + 1; }
+
+void Store::save(int v) {
+    counter += v;
+    hits++;
+    cache = v;
+}
+
+int Store::load() const {
+    int local = LIMIT;           // local + const global → neither is shared
+    return helper(counter) + local + file_local;
+}
+
+struct Client {
+    Store store;
+    void run() {
+        store.save(1);
+        store.load();
+        helper(2);
+        std::string s("x");     // std:: call → not part of the corpus graph
+    }
+};
+
+}  // namespace app
+"""
+
+
+def test_qualified_calls_and_shared_state():
+    out = parse_source("two_classes.cpp", _TWO_CLASSES)
+    by_name = {s.name: s for s in out.subroutines}
+    assert {"app::helper", "app::Store::save", "app::Store::load", "app::Client::run"} <= set(by_name), set(by_name)
+
+    run = by_name["app::Client::run"]
+    assert {"app::Store::save", "app::Store::load", "app::helper"} <= set(run.called_subroutines), run.called_subroutines
+    # Calls into libstdc++ are not corpus calls.
+    assert not any(c.startswith("std::") for c in run.called_subroutines), run.called_subroutines
+    assert not any("basic_string" in c for c in run.called_subroutines), run.called_subroutines
+    # A member (`store`) is per-instance state, not shared.
+    assert run.common_block_refs == (), run.common_block_refs
+
+    load = by_name["app::Store::load"]
+    assert load.called_subroutines == ("app::helper",), load.called_subroutines
+    assert set(load.common_block_refs) == {"app::counter", "app::file_local"}, load.common_block_refs
+
+    save = by_name["app::Store::save"]
+    assert set(save.common_block_refs) == {"app::counter", "app::Store::hits"}, save.common_block_refs
+    assert save.called_subroutines == (), save.called_subroutines
+
+    # No include name leaks into shared state anywhere.
+    for s in out.subroutines:
+        assert not any(r in ("string", "vector") for r in s.common_block_refs), (s.name, s.common_block_refs)
 
 
 def test_line_ranges_monotonic_and_within_file():

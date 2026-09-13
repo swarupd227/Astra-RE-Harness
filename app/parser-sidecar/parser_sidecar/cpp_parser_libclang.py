@@ -17,9 +17,20 @@ cursor kinds:
     `DESTRUCTOR`              C++ class lifetime hooks
   - `FUNCTION_TEMPLATE`       template function declarations
   - `NAMESPACE`               traversed transparently
-  - `CALL_EXPR` /
-    `CXX_NEW_EXPR`            call-site identifier collection
-  - `INCLUSION_DIRECTIVE`     `#include` edges (analogue of `uses`)
+  - `CALL_EXPR`               call sites, resolved through `cursor.referenced`
+                              to the callee's *qualified* name so the
+                              dependency graph can join them to definitions
+  - `DECL_REF_EXPR` /
+    `MEMBER_REF_EXPR`         references to shared mutable state
+                              (namespace-scope non-const variables, static
+                              data members) — the C++ analogue of a COMMON
+                              block, recorded as `common_block_refs`
+
+`#include` directives are deliberately NOT recorded as `common_block_refs`
+any more: every routine in a file shares the same headers, so the graph
+builder paired every routine with every other one (785k "shared-storage"
+edges on fmt, 309k on oatpp) and the call graph — which resolved only bare
+`CALL_EXPR` spellings — was nearly empty. Both are fixed here.
 
 Compile-flag handling
 ---------------------
@@ -206,57 +217,13 @@ def parse_source(
         if diag.severity >= cindex.Diagnostic.Error:
             warnings.append(f"libclang: {diag.spelling}")
 
-    includes = _collect_includes(tu, filename)
-    includes_tuple = tuple(includes)
-
-    routines = _collect_routines(tu.cursor, filename, includes_tuple)
+    routines = _collect_routines(tu.cursor, filename)
     return ParseOutcome(
         line_count=line_count,
         subroutines=routines,
         warnings=warnings,
         filename=filename,
     )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Include walker
-# ──────────────────────────────────────────────────────────────────────
-
-
-def _collect_includes(tu, filename: str) -> List[str]:
-    """Walk the TU for INCLUSION_DIRECTIVE cursors and return the include
-    names (without angle-brackets / quotes) in source-order, de-duplicated.
-
-    Using cursors instead of `tu.get_includes()` because the latter only
-    returns includes that successfully resolved — when libclang can't
-    find `<fmt/core.h>` because the corpus didn't supply -I flags, the
-    directive itself is still present as a cursor but won't appear in
-    `get_includes()`. The harness's `common_block_refs` should reflect
-    what the SOURCE asked for, not what libclang found.
-    """
-    seen: List[str] = []
-    seen_set: set[str] = set()
-
-    def visit(cursor):
-        loc = cursor.location.file
-        if loc is not None and loc.name != filename:
-            return
-        if cursor.kind == cindex.CursorKind.INCLUSION_DIRECTIVE:
-            name = cursor.spelling or ""
-            if name:
-                # `name` may include a directory prefix (`fmt/core.h`);
-                # keep it as-is — the planner treats the qualified name
-                # as the include identity.
-                if name not in seen_set:
-                    seen.append(name)
-                    seen_set.add(name)
-            return
-        for child in cursor.get_children():
-            visit(child)
-
-    for child in tu.cursor.get_children():
-        visit(child)
-    return seen
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -267,7 +234,6 @@ def _collect_includes(tu, filename: str) -> List[str]:
 def _collect_routines(
     root_cursor,
     filename: str,
-    common_block_refs: Tuple[str, ...],
 ) -> List[SubroutineSummary]:
     """Recursively walk the cursor tree, collecting routine summaries.
 
@@ -287,7 +253,7 @@ def _collect_routines(
         if loc is not None and loc.name != filename:
             return
         if cursor.kind in _ROUTINE_CURSOR_KINDS:
-            summary = _build_summary(cursor, common_block_refs)
+            summary = _build_summary(cursor)
             if summary is not None:
                 raw_entries.append(summary)
             # Recurse into the routine to pick up nested routines and
@@ -316,10 +282,7 @@ def _collect_routines(
     return _dedup_by_name(raw_entries)
 
 
-def _build_summary(
-    cursor,
-    common_block_refs: Tuple[str, ...],
-) -> Optional[SubroutineSummary]:
+def _build_summary(cursor) -> Optional[SubroutineSummary]:
     """Build a `SubroutineSummary` from a routine cursor.
 
     The qualified name comes from `_qualified_name(cursor)` which walks
@@ -381,16 +344,17 @@ def _build_summary(
         line_end = line_start
 
     called = _collect_calls(cursor)
-    # Strip the routine's own bare-name from its call list (matches v0).
+    # Strip self-recursion (qualified or bare spelling) from the call list.
     bare_self = name.rsplit("::", 1)[-1]
-    called = tuple(c for c in called if c != bare_self)
+    called = tuple(c for c in called if c != name and c != bare_self)
+    shared = _collect_shared_state(cursor)
 
     return SubroutineSummary(
         name=name,
         signature=signature,
         line_start=line_start,
         line_end=line_end,
-        common_block_refs=common_block_refs,
+        common_block_refs=shared,
         called_subroutines=called,
     )
 
@@ -420,22 +384,111 @@ def _qualified_name(cursor) -> str:
 # ──────────────────────────────────────────────────────────────────────
 
 
+_SYSTEM_PATH_MARKERS = ("/usr/include", "/usr/lib/gcc", "/usr/local/include", "include/c++")
+
+
+def _is_system_location(location) -> bool:
+    """True when a cursor lives in a compiler / libstdc++ header. Calls
+    into `std::` are not part of the corpus's own call graph; recording
+    them only inflates the "external callees" list with `std::basic_string::c_str`."""
+    f = location.file if location is not None else None
+    if f is None:
+        return False
+    name = (f.name or "").replace("\\", "/")
+    return any(marker in name for marker in _SYSTEM_PATH_MARKERS)
+
+
 def _collect_calls(routine_cursor) -> Tuple[str, ...]:
-    """Walk the routine body recursively, collecting every CALL_EXPR's
-    callee identifier in discovery order, de-duplicated."""
+    """Walk the routine body recursively and collect the callee of every
+    CALL_EXPR, in discovery order, de-duplicated.
+
+    The callee is the *qualified* name of the declaration libclang
+    resolved (`cursor.referenced`) — `fmt::detail::format_context::parse_arg`,
+    not `parse_arg` — which is exactly how this parser names definitions,
+    so `DependencyGraphBuilder` can join call → definition by name even
+    when the bare method name (`write`, `on_x`) is ambiguous corpus-wide.
+    Calls into system headers are skipped; unresolved calls (no
+    `referenced`, e.g. a symbol from a header libclang could not find)
+    fall back to the bare spelling so a unique bare name can still match.
+    """
+    seen: List[str] = []
+    seen_set: set[str] = set()
+
+    def add(name: str) -> None:
+        if name and name not in seen_set:
+            seen.append(name)
+            seen_set.add(name)
+
+    def visit(cursor):
+        if cursor.kind in _CALL_CURSOR_KINDS:
+            ref = None
+            try:
+                ref = cursor.referenced
+            except Exception:  # noqa: BLE001 — libclang can throw on odd cursors
+                ref = None
+            if ref is not None and ref.kind in _ROUTINE_CURSOR_KINDS:
+                if not _is_system_location(ref.location):
+                    add(_qualified_name(ref))
+            else:
+                callee = cursor.spelling
+                if callee:
+                    # Unresolved: the spelling may carry template args
+                    # (`Func<int>`); strip them and keep the bare name.
+                    add(callee.split("<")[0])
+        for child in cursor.get_children():
+            visit(child)
+
+    for child in routine_cursor.get_children():
+        visit(child)
+    return tuple(seen)
+
+
+_CLASS_CURSOR_KINDS = frozenset({
+    cindex.CursorKind.CLASS_DECL,
+    cindex.CursorKind.STRUCT_DECL,
+    cindex.CursorKind.CLASS_TEMPLATE,
+    cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
+    cindex.CursorKind.UNION_DECL,
+})
+
+_SHARED_SCOPE_KINDS = frozenset({
+    cindex.CursorKind.NAMESPACE,
+    cindex.CursorKind.TRANSLATION_UNIT,
+})
+
+
+def _collect_shared_state(routine_cursor) -> Tuple[str, ...]:
+    """The C++ analogue of COMMON-block references: qualified names of the
+    genuinely shared mutable state this routine touches — namespace-scope
+    (or global) non-const variables and static data members. Locals,
+    parameters, non-static fields (per-instance) and const/constexpr
+    values are not shared state and are skipped, as is anything that
+    lives in a system header.
+    """
     seen: List[str] = []
     seen_set: set[str] = set()
 
     def visit(cursor):
-        if cursor.kind in _CALL_CURSOR_KINDS:
-            callee = cursor.spelling
-            if callee:
-                # The callee spelling may include template args for
-                # function-template calls (`Func<int>`); strip them.
-                bare = callee.split("<")[0]
-                if bare and bare not in seen_set:
-                    seen.append(bare)
-                    seen_set.add(bare)
+        if cursor.kind in (cindex.CursorKind.DECL_REF_EXPR, cindex.CursorKind.MEMBER_REF_EXPR):
+            ref = None
+            try:
+                ref = cursor.referenced
+            except Exception:  # noqa: BLE001
+                ref = None
+            if ref is not None and ref.kind == cindex.CursorKind.VAR_DECL and not _is_system_location(ref.location):
+                parent = ref.semantic_parent
+                parent_kind = parent.kind if parent is not None else None
+                is_shared_scope = parent_kind in _SHARED_SCOPE_KINDS or parent_kind in _CLASS_CURSOR_KINDS
+                if is_shared_scope:
+                    try:
+                        is_const = ref.type.is_const_qualified()
+                    except Exception:  # noqa: BLE001
+                        is_const = False
+                    if not is_const:
+                        qn = _qualified_name(ref)
+                        if qn and qn not in seen_set:
+                            seen.append(qn)
+                            seen_set.add(qn)
         for child in cursor.get_children():
             visit(child)
 
