@@ -409,8 +409,24 @@ public sealed class IngestPipeline
         // one the funnel, the specs and the docs were built on — not merely
         // the newest row. Earlier versions stay archived; supersession
         // lineage is a chain of at most one hop per re-sync.
-        var priorVersion = corpus.Versions.FirstOrDefault(v => v.Id == corpus.LatestVersionId)
-            ?? corpus.Versions.OrderByDescending(v => v.IngestedAt).FirstOrDefault();
+        // If the version the corpus points at holds no routines (a re-sync
+        // whose parse came back empty), the last version that does is the
+        // real baseline: that is where the specs live.
+        var pointed = corpus.Versions.FirstOrDefault(v => v.Id == corpus.LatestVersionId);
+        var priorVersion = pointed is not null && pointed.Files.Any(f => f.Subroutines.Count > 0)
+            ? pointed
+            : corpus.Versions
+                .Where(v => v.Files.Any(f => f.Subroutines.Count > 0))
+                .OrderByDescending(v => v.IngestedAt)
+                .FirstOrDefault()
+              ?? pointed
+              ?? corpus.Versions.OrderByDescending(v => v.IngestedAt).FirstOrDefault();
+        if (pointed is not null && priorVersion is not null && priorVersion.Id != pointed.Id)
+        {
+            _logger.LogWarning(
+                "Re-sync: corpus {Corpus} points at version {Pointed} which has no routines; using {Baseline} as the baseline",
+                corpus.Id, pointed.Id, priorVersion.Id);
+        }
 
         var priorIndex = new Dictionary<(string Path, string Name), (Subroutine Sub, SourceFile File)>();
         if (priorVersion is not null)
@@ -489,6 +505,19 @@ public sealed class IngestPipeline
             // Parse + reconcile each new subroutine.
             var seenPriorKeys = new HashSet<(string, string)>();
             var outcomes = await ParseFilesAsync(newFileRows.Select(r => r.Incoming).ToList(), warnings, ct);
+
+            // A parse that failed outright — every file degraded by a parser
+            // RPC failure, nothing found — must not become the version the
+            // corpus points at: that would empty every view and orphan the
+            // specs. Fail the re-sync instead; the rollback keeps the
+            // previous version active.
+            if (priorIndex.Count > 0
+                && outcomes.All(o => o.Subroutines.Count == 0)
+                && outcomes.Any(o => o.Warnings.Any(w => w.StartsWith("parser_rpc_failed", StringComparison.Ordinal))))
+            {
+                var reason = outcomes.SelectMany(o => o.Warnings).First(w => w.StartsWith("parser_rpc_failed", StringComparison.Ordinal));
+                throw new InvalidOperationException($"Parser sidecar failed for the whole corpus: {reason}");
+            }
             for (var i = 0; i < newFileRows.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -528,6 +557,29 @@ public sealed class IngestPipeline
                     var unchanged = prior.File.FileHash == fileRow.FileHash;
                     if (unchanged)
                     {
+                        // A spec superseded by an earlier re-sync although its
+                        // source never changed (that re-sync's parse came back
+                        // empty, so every routine looked "removed") is still
+                        // the spec for this exact source: restore the state
+                        // the routine's own lifecycle still records.
+                        if (priorSpec.State == "SUPERSEDED")
+                        {
+                            var restored = RestoreSpecStateFromSubroutine(prior.Sub.State);
+                            priorSpec.State = restored;
+                            priorSpec.UpdatedAt = DateTimeOffset.UtcNow;
+                            await _audit.LogAsync(
+                                "spec.restored", "spec", priorSpec.Id, actor: _persona,
+                                payload: new
+                                {
+                                    reason = "source_unchanged_after_supersession",
+                                    subroutine = sub.Name,
+                                    relativePath = fileRow.RelativePath,
+                                    fileHash = fileRow.FileHash,
+                                    restoredState = restored,
+                                },
+                                ct: ct);
+                        }
+
                         // Carry forward: clone spec + claim reviews + signature.
                         var carried = await CarrySpecForwardAsync(priorSpec, newSubId, newVersionId, ct);
                         // Match the new subroutine's lifecycle state to where the
@@ -549,6 +601,7 @@ public sealed class IngestPipeline
                     }
                     else
                     {
+                        var priorState = priorSpec.State;
                         priorSpec.State = "SUPERSEDED";
                         priorSpec.UpdatedAt = DateTimeOffset.UtcNow;
                         superseded++;
@@ -561,7 +614,7 @@ public sealed class IngestPipeline
                                 relativePath = fileRow.RelativePath,
                                 priorFileHash = prior.File.FileHash,
                                 newFileHash = fileRow.FileHash,
-                                priorState = priorSpec.State,
+                                priorState,
                             },
                             ct: ct);
                     }
@@ -576,6 +629,7 @@ public sealed class IngestPipeline
                 if (!priorSpecs.TryGetValue(prior.Sub.Id, out var priorSpec)) continue;
                 if (priorSpec.State == "SUPERSEDED") continue;
 
+                var removedState = priorSpec.State;
                 priorSpec.State = "SUPERSEDED";
                 priorSpec.UpdatedAt = DateTimeOffset.UtcNow;
                 superseded++;
@@ -586,7 +640,7 @@ public sealed class IngestPipeline
                         reason = "subroutine_removed",
                         subroutine = name,
                         relativePath = path,
-                        priorState = priorSpec.State,
+                        priorState = removedState,
                     },
                     ct: ct);
             }
@@ -595,6 +649,11 @@ public sealed class IngestPipeline
             corpus.State = "PARSED";
             corpus.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
+
+            // The corpus now points at a real version; an empty one it may
+            // have pointed at (a re-sync whose parse came back empty) has no
+            // reason to stay.
+            await DeleteEmptyVersionsAsync(corpus.Id, priorVersion?.IngestedAt, keepId: newVersionId, ct);
 
             await _audit.LogAsync(
                 "corpus.reingested", "corpus", corpus.Id, actor: _persona,
@@ -680,19 +739,31 @@ public sealed class IngestPipeline
                 .Select(v => (DateTimeOffset?)v.IngestedAt)
                 .FirstOrDefaultAsync(ct);
 
-        var abandoned = await _db.SourceVersions
+        await DeleteEmptyVersionsAsync(corpusId, baselineAt, keepId: latestId, ct);
+    }
+
+    /// <summary>
+    /// Delete every version of the corpus that holds no routines, was
+    /// ingested at or after <paramref name="sinceInclusive"/> (null = any
+    /// time) and is not <paramref name="keepId"/>. Used before a re-sync
+    /// (leftovers of interrupted runs) and after a successful one (an empty
+    /// version the corpus used to point at, now superseded by a real one).
+    /// </summary>
+    private async Task DeleteEmptyVersionsAsync(Guid corpusId, DateTimeOffset? sinceInclusive, Guid? keepId, CancellationToken ct)
+    {
+        var empty = await _db.SourceVersions
             .Where(v => v.CorpusId == corpusId
-                        && v.Id != latestId
-                        && (baselineAt == null || v.IngestedAt >= baselineAt)
+                        && v.Id != keepId
+                        && (sinceInclusive == null || v.IngestedAt >= sinceInclusive)
                         && !v.Files.Any(f => f.Subroutines.Any()))
             .Select(v => new { v.Id, v.IngestedAt })
             .ToListAsync(ct);
 
-        foreach (var v in abandoned)
+        foreach (var v in empty)
         {
             await DeleteVersionRowsAsync(v.Id, ct);
             _logger.LogWarning(
-                "Re-sync: removed abandoned version {Version} of corpus {Corpus} (ingested {At:u}, no routines — an earlier re-sync was interrupted)",
+                "Re-sync: removed empty version {Version} of corpus {Corpus} (ingested {At:u}, no routines — left by an interrupted or failed re-sync)",
                 v.Id, corpusId, v.IngestedAt);
         }
     }
@@ -815,6 +886,19 @@ public sealed class IngestPipeline
     /// (the scaffold still references the prior spec id and is therefore
     /// still accessible via that id).
     /// </summary>
+    /// <summary>
+    /// Inverse of <see cref="MapSpecStateToSubroutineState"/> for a spec whose
+    /// own state was lost to a wrongful supersession: the routine's lifecycle
+    /// state still says where the spec sat.
+    /// </summary>
+    private static string RestoreSpecStateFromSubroutine(string subroutineState) =>
+        subroutineState switch
+        {
+            "IN_REVIEW" => "IN_REVIEW",
+            "SIGNED" or "SCAFFOLDED" or "COMMITTED" => "SIGNED",
+            _ => "DRAFT",
+        };
+
     private static string MapSpecStateToSubroutineState(string priorSpecState, string priorSubroutineState) =>
         priorSpecState switch
         {
