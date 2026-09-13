@@ -177,6 +177,7 @@ builder.Services.AddScoped<Astra.Api.Copilot.CopilotToolRegistry>();
 builder.Services.AddScoped<Astra.Api.Copilot.CopilotOrchestrator>();
 builder.Services.AddSingleton<Astra.Api.Copilot.BackgroundRunService>();
 builder.Services.AddSingleton<Astra.Api.Copilot.Narrator>();
+builder.Services.AddSingleton<Astra.Api.Ingest.IngestRunService>();
 // WS5 — the 10-minute Assessment (deterministic facts + one narrative call).
 builder.Services.AddSingleton<Astra.Api.Assessment.AssessmentService>();
 
@@ -926,6 +927,41 @@ using (var scope = app.Services.CreateScope())
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ref_id uuid NULL;
             CREATE INDEX IF NOT EXISTS ix_conversations_kind_ref ON conversations (kind, ref_id);
+            """);
+
+        // One programme thread per corpus. Two concurrent first touches (the
+        // Narrator's ingest summary, the UI's thread list, the copilot
+        // overview) used to create two threads with two welcome posts. Merge
+        // any duplicates into the thread with the most messages, then make
+        // the rule a partial unique index so it cannot happen again.
+        await db.Database.ExecuteSqlRawAsync("""
+            WITH ranked AS (
+                SELECT id, corpus_id,
+                       row_number() OVER (PARTITION BY corpus_id ORDER BY message_count DESC, created_at) AS rn
+                FROM conversations
+                WHERE kind = 'programme' AND corpus_id IS NOT NULL
+            ),
+            dups AS (
+                SELECT r.id AS dup_id,
+                       (SELECT k.id FROM ranked k WHERE k.corpus_id = r.corpus_id AND k.rn = 1) AS keep_id
+                FROM ranked r WHERE r.rn > 1
+            )
+            UPDATE conversation_messages m SET conversation_id = d.keep_id
+            FROM dups d WHERE m.conversation_id = d.dup_id;
+            """);
+        await db.Database.ExecuteSqlRawAsync("""
+            DELETE FROM conversations c
+            USING (
+                SELECT id FROM (
+                    SELECT id, row_number() OVER (PARTITION BY corpus_id ORDER BY message_count DESC, created_at) AS rn
+                    FROM conversations WHERE kind = 'programme' AND corpus_id IS NOT NULL
+                ) r WHERE r.rn > 1
+            ) d WHERE c.id = d.id;
+            UPDATE conversations c
+               SET message_count = (SELECT count(*) FROM conversation_messages m WHERE m.conversation_id = c.id)
+             WHERE c.kind = 'programme';
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_conversations_programme_corpus
+              ON conversations (corpus_id) WHERE kind = 'programme';
             """);
 
         // Phase 14.0 — merge any already-approved (PRODUCTION) archetype

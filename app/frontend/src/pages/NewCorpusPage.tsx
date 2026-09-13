@@ -354,7 +354,9 @@ export function NewCorpusPage() {
         </CardBody>
       </Card>
 
-      {ingest.isPending && <ProgressCard label="Hashing, uploading, calling parser…" />}
+      {ingest.isPending && (
+        <ProgressCard label="Storing files and parsing… A large repository takes a few minutes; the Discovery agent narrates progress in the programme thread." />
+      )}
 
       {ingest.isError && (
         <ErrorBlock

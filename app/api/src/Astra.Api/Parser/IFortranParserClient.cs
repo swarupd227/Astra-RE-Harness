@@ -30,7 +30,10 @@ public interface IFortranParserClient
     /// parse. Results keep the input order. Against a sidecar that predates
     /// the RPC the client parses file by file and says so in the warnings.
     /// </summary>
-    Task<CorpusParseOutcome> ParseCorpusAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default);
+    Task<CorpusParseOutcome> ParseCorpusAsync(
+        IReadOnlyList<CorpusFile> files,
+        CancellationToken ct = default,
+        Action<int, int>? onProgress = null);
 }
 
 public sealed record ParserPing(string Service, string Version);

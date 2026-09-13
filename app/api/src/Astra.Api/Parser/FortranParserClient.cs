@@ -69,7 +69,10 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
         return ToOutcome(resp);
     }
 
-    public async Task<CorpusParseOutcome> ParseCorpusAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default)
+    public async Task<CorpusParseOutcome> ParseCorpusAsync(
+        IReadOnlyList<CorpusFile> files,
+        CancellationToken ct = default,
+        Action<int, int>? onProgress = null)
     {
         var req = new Astra.Api.Parser.Grpc.ParseCorpusRequest();
         foreach (var f in files)
@@ -78,7 +81,7 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
         Astra.Api.Parser.Grpc.ParseCorpusReply reply;
         try
         {
-            reply = await ParseCorpusStreamingAsync(req, ct);
+            reply = await ParseCorpusStreamingAsync(req, ct, onProgress);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
         {
@@ -117,7 +120,7 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
     /// the reply. A sidecar without the streaming RPC gets the unary call.
     /// </summary>
     private async Task<Astra.Api.Parser.Grpc.ParseCorpusReply> ParseCorpusStreamingAsync(
-        Astra.Api.Parser.Grpc.ParseCorpusRequest req, CancellationToken ct)
+        Astra.Api.Parser.Grpc.ParseCorpusRequest req, CancellationToken ct, Action<int, int>? onProgress)
     {
         try
         {
@@ -133,6 +136,7 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
                 }
                 var p = evt.Progress;
                 if (p is null || p.TotalFiles == 0) continue;
+                onProgress?.Invoke(p.ParsedFiles, p.TotalFiles);
                 var pct = p.ParsedFiles * 100 / p.TotalFiles;
                 if (pct >= nextLogAt)
                 {

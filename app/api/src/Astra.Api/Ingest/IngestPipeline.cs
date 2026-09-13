@@ -79,7 +79,25 @@ public sealed class IngestPipeline
         string? SourceUrl,
         string? Branch,
         string? SourceRoot,
-        IReadOnlyList<IncomingFile> Files);
+        IReadOnlyList<IncomingFile> Files,
+        // Lets a caller that runs the ingest in the background hand the
+        // corpus id to its client before the row exists.
+        Guid? CorpusId = null);
+
+    /// <summary>One progress tick: a stage name, a human line, and done/total
+    /// where the stage counts something (files uploaded, files parsed).</summary>
+    public sealed record IngestProgress(string Stage, string Message, int Done, int Total);
+
+    /// <summary>Optional progress sink. The background run service sets it
+    /// so the Discovery agent can narrate an ingest; a synchronous caller
+    /// leaves it null.</summary>
+    public Action<IngestProgress>? Progress { get; set; }
+
+    private void Report(string stage, string message, int done = 0, int total = 0)
+    {
+        try { Progress?.Invoke(new IngestProgress(stage, message, done, total)); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Ingest progress sink threw"); }
+    }
 
     public sealed record IngestResult(
         Guid CorpusId,
@@ -125,8 +143,10 @@ public sealed class IngestPipeline
         var totalBytes = files.Sum(f => (long)Encoding.UTF8.GetByteCount(f.Content));
         if (IngestParseRouting.UseCorpusMode(files.Select(f => f.RelativePath), totalBytes))
         {
+            Report("parsing", $"Parsing {files.Count:N0} files as one corpus so calls resolve across headers", 0, files.Count);
             var corpus = await _parser.ParseCorpusAsync(
-                files.Select(f => new CorpusFile(f.RelativePath, NormaliseNewlines(f.Content))).ToList(), ct);
+                files.Select(f => new CorpusFile(f.RelativePath, NormaliseNewlines(f.Content))).ToList(), ct,
+                onProgress: (done, total) => Report("parsing", $"Parsed {done:N0} / {total:N0} files", done, total));
             warnings.AddRange(corpus.Warnings);
             _logger.LogInformation(
                 "Ingest: corpus parse of {Files} files ({Bytes} bytes), cross-file resolved={Resolved}",
@@ -142,11 +162,14 @@ public sealed class IngestPipeline
                 "C++ files parsed in isolation, cross-file calls unresolved");
         }
 
+        Report("parsing", $"Parsing {files.Count:N0} files", 0, files.Count);
         var results = new List<ParseOutcome>(files.Count);
         foreach (var f in files)
         {
             ct.ThrowIfCancellationRequested();
             results.Add(await _parser.ParseAsync(f.RelativePath, NormaliseNewlines(f.Content), form: null, ct: ct));
+            if (results.Count % 25 == 0 || results.Count == files.Count)
+                Report("parsing", $"Parsed {results.Count:N0} / {files.Count:N0} files", results.Count, files.Count);
         }
         return results;
     }
@@ -167,7 +190,7 @@ public sealed class IngestPipeline
                 $"A corpus named '{req.Name}' already exists. Choose a different name.");
 
         var now = DateTimeOffset.UtcNow;
-        var corpusId = Guid.NewGuid();
+        var corpusId = req.CorpusId ?? Guid.NewGuid();
         var versionId = Guid.NewGuid();
 
         // 1) Persist corpus + version in INGESTING state so partial failures
@@ -238,6 +261,8 @@ public sealed class IngestPipeline
                 };
                 _db.SourceFiles.Add(fileRow);
                 fileEntities.Add(fileRow);
+                if (fileEntities.Count % 50 == 0 || fileEntities.Count == req.Files.Count)
+                    Report("uploading", $"Stored {fileEntities.Count:N0} / {req.Files.Count:N0} files", fileEntities.Count, req.Files.Count);
             }
 
             // Commit files before we start parsing — keeps blob + DB in sync
@@ -248,6 +273,7 @@ public sealed class IngestPipeline
             await _db.SaveChangesAsync(ct);
 
             var outcomes = await ParseFilesAsync(req.Files, warnings, ct);
+            Report("persisting", "Recording the routines");
             for (var i = 0; i < fileEntities.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -494,6 +520,8 @@ public sealed class IngestPipeline
                 };
                 _db.SourceFiles.Add(fileRow);
                 newFileRows.Add((f, fileRow));
+                if (newFileRows.Count % 50 == 0 || newFileRows.Count == req.Files.Count)
+                    Report("uploading", $"Stored {newFileRows.Count:N0} / {req.Files.Count:N0} files", newFileRows.Count, req.Files.Count);
             }
 
             corpus.State = "PARSING";
@@ -505,6 +533,7 @@ public sealed class IngestPipeline
             // Parse + reconcile each new subroutine.
             var seenPriorKeys = new HashSet<(string, string)>();
             var outcomes = await ParseFilesAsync(newFileRows.Select(r => r.Incoming).ToList(), warnings, ct);
+            Report("persisting", "Recording the routines and carrying specs forward");
 
             // A parse that failed outright — every file degraded by a parser
             // RPC failure, nothing found — must not become the version the

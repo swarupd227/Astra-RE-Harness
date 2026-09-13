@@ -309,6 +309,13 @@ export function ReingestModal({
             />
           )}
 
+          {reingest.isPending && (
+            <p className="text-caption text-ink-tertiary" role="status" aria-live="polite">
+              Storing files and parsing… A large repository takes a few minutes; the Discovery agent
+              narrates progress in the programme thread.
+            </p>
+          )}
+
           {reingest.isSuccess && <Outcome result={reingest.data} />}
         </div>
 

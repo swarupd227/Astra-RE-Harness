@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using Astra.Api.Auth;
 using Astra.Api.Ingest;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Mvc;
@@ -13,11 +14,17 @@ namespace Astra.Api.Endpoints;
 ///   POST /api/v1/ingest/git      json: { name, url, branch?, sourceRoot? }
 ///   POST /api/v1/ingest/text     json: { name, files: [{ path, content }] }  (for tests + curl)
 ///
-/// All three call into <see cref="IngestPipeline"/> synchronously and return
-/// the resulting <see cref="Corpus"/> id + state when parse completes.
+/// All three hand the files to <see cref="IngestRunService"/>, which runs the
+/// <see cref="IngestPipeline"/> detached and narrates it. When the run ends
+/// inside <see cref="SyncDeadline"/> the response is the finished result, as
+/// it always was; otherwise it is 202 with a run id to poll at
+/// GET /api/v1/ingest/runs/{runId} — Azure App Service cuts any request at
+/// 230 s, and a whole-corpus parse can run longer than that.
 /// </summary>
 public static class IngestEndpoints
 {
+    private static readonly TimeSpan SyncDeadline = TimeSpan.FromSeconds(60);
+
     // Keep in sync with the Kestrel/FormOptions ceiling in Program.cs
     // (640 MiB) — the transport limit must stay ABOVE this value or big
     // uploads die with a bare 413 before this friendly check runs.
@@ -40,7 +47,29 @@ public static class IngestEndpoints
         // ────────────────────────────────────────────────────────────────
         // 1) multipart upload (.zip OR a set of .f / .for / .f90 files)
         // ────────────────────────────────────────────────────────────────
-        grp.MapPost("upload", async (HttpRequest request, IngestPipeline pipeline, CancellationToken ct) =>
+        // Poll target for a 202: the run's state and, once it ends, the same
+        // result body the synchronous answer would have carried.
+        grp.MapGet("runs/{runId:guid}", (Guid runId, IngestRunService runs) =>
+        {
+            var s = runs.Get(runId);
+            if (s is null)
+                return Results.NotFound(new { error = new { code = "ingest.run_not_found", message = "Unknown or expired ingest run." } });
+            object? result = s.Result switch
+            {
+                IngestPipeline.IngestResult r => IngestBody(r),
+                IngestPipeline.ReingestResult r => ReingestBody(r),
+                _ => null,
+            };
+            return Results.Ok(new
+            {
+                runId = s.RunId, corpusId = s.CorpusId, kind = s.Kind, state = s.State,
+                result, errorCode = s.ErrorCode, error = s.Error, startedAt = s.StartedAt, completedAt = s.CompletedAt,
+                eventsUrl = $"/api/v1/runs/{s.RunId}/events",
+            });
+        })
+        .WithName("ingestRunStatus");
+
+        grp.MapPost("upload", async (HttpRequest request, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
                 return BadRequest("ingest.invalid_form", "Expected multipart/form-data.");
@@ -97,26 +126,14 @@ public static class IngestEndpoints
                 return BadRequest("ingest.no_supported_files",
                     $"Archive contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
-            try
-            {
-                var result = await pipeline.IngestAsync(new IngestPipeline.IngestRequest(
-                    Name: name,
-                    SourceType: "upload",
-                    SourceUrl: null,
-                    Branch: null,
-                    SourceRoot: null,
-                    Files: collected), ct);
-
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
-            {
-                return BadRequest("ingest.duplicate_name", ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest("ingest.invalid_request", ex.Message);
-            }
+            var runId = runs.StartIngest(new IngestPipeline.IngestRequest(
+                Name: name,
+                SourceType: "upload",
+                SourceUrl: null,
+                Branch: null,
+                SourceRoot: null,
+                Files: collected), actor.Persona, actor.DisplayName);
+            return await AwaitIngestRunAsync(runs, runId, r => Results.Ok(IngestBody((IngestPipeline.IngestResult)r)), ct);
         })
         .DisableAntiforgery()
         .WithName("ingestUpload");
@@ -124,7 +141,7 @@ public static class IngestEndpoints
         // ────────────────────────────────────────────────────────────────
         // 2) Git URL clone
         // ────────────────────────────────────────────────────────────────
-        grp.MapPost("git", async (IngestGitRequest body, IngestPipeline pipeline, ILoggerFactory lf, CancellationToken ct) =>
+        grp.MapPost("git", async (IngestGitRequest body, IngestRunService runs, DevPersonaContext actor, ILoggerFactory lf, CancellationToken ct) =>
         {
             var log = lf.CreateLogger("ingest.git");
 
@@ -163,35 +180,35 @@ public static class IngestEndpoints
                 }
                 catch (Exception ex) { log.LogWarning(ex, "Could not read HEAD sha"); }
 
-                var result = await pipeline.IngestAsync(new IngestPipeline.IngestRequest(
+                var runId = runs.StartIngest(new IngestPipeline.IngestRequest(
                     Name: body.Name,
                     SourceType: "git",
                     SourceUrl: body.Url,
                     Branch: body.Branch,
                     SourceRoot: rootRel,
-                    Files: files), ct);
+                    Files: files), actor.Persona, actor.DisplayName);
 
-                return Results.Ok(new
+                return await AwaitIngestRunAsync(runs, runId, r =>
                 {
-                    corpusId = result.CorpusId,
-                    state = result.State,
-                    fileCount = result.FileCount,
-                    totalLoc = result.TotalLoc,
-                    subroutineCount = result.SubroutineCount,
-                    warnings = result.Warnings,
-                    errorMessage = result.ErrorMessage,
-                    gitCommitHash = commitHash,
-                });
+                    var result = (IngestPipeline.IngestResult)r;
+                    return Results.Ok(new
+                    {
+                        corpusId = result.CorpusId,
+                        state = result.State,
+                        fileCount = result.FileCount,
+                        totalLoc = result.TotalLoc,
+                        subroutineCount = result.SubroutineCount,
+                        warnings = result.Warnings,
+                        errorMessage = result.ErrorMessage,
+                        gitCommitHash = commitHash,
+                    });
+                }, ct);
             }
             catch (LibGit2SharpException ex)
             {
                 log.LogError(ex, "Git clone failed for {Url}", body.Url);
                 return BadRequest("ingest.git_clone_failed",
                     $"Git clone failed: {ex.Message}. Verify the URL, branch, and that the API container can reach the host.");
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
-            {
-                return BadRequest("ingest.duplicate_name", ex.Message);
             }
             finally
             {
@@ -213,7 +230,7 @@ public static class IngestEndpoints
         // ────────────────────────────────────────────────────────────────
         // 3) text / JSON ingest — for tests and curl-driven workflows
         // ────────────────────────────────────────────────────────────────
-        grp.MapPost("text", async (IngestTextRequest body, IngestPipeline pipeline, CancellationToken ct) =>
+        grp.MapPost("text", async (IngestTextRequest body, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Name))
                 return BadRequest("ingest.name_required", "Corpus name is required.");
@@ -238,26 +255,14 @@ public static class IngestEndpoints
                 RelativePath: f.Path,
                 Content: f.Content ?? "")).ToList();
 
-            try
-            {
-                var result = await pipeline.IngestAsync(new IngestPipeline.IngestRequest(
-                    Name: body.Name,
-                    SourceType: "upload",
-                    SourceUrl: null,
-                    Branch: null,
-                    SourceRoot: null,
-                    Files: collected), ct);
-
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
-            {
-                return BadRequest("ingest.duplicate_name", ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest("ingest.invalid_request", ex.Message);
-            }
+            var runId = runs.StartIngest(new IngestPipeline.IngestRequest(
+                Name: body.Name,
+                SourceType: "upload",
+                SourceUrl: null,
+                Branch: null,
+                SourceRoot: null,
+                Files: collected), actor.Persona, actor.DisplayName);
+            return await AwaitIngestRunAsync(runs, runId, r => Results.Ok(IngestBody((IngestPipeline.IngestResult)r)), ct);
         })
         .WithName("ingestText");
 
@@ -268,7 +273,7 @@ public static class IngestEndpoints
         // ────────────────────────────────────────────────────────────────
         var reingest = app.MapGroup("/api/v1/corpora/{corpusId:guid}/reingest");
 
-        reingest.MapPost("upload", async (Guid corpusId, HttpRequest request, IngestPipeline pipeline, CancellationToken ct) =>
+        reingest.MapPost("upload", async (Guid corpusId, HttpRequest request, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
                 return BadRequest("ingest.invalid_form", "Expected multipart/form-data.");
@@ -282,7 +287,7 @@ public static class IngestEndpoints
                 return BadRequest("ingest.no_supported_files",
                     $"Upload contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
 
-            return await RunReingest(pipeline, new IngestPipeline.ReingestRequest(
+            return await RunReingest(runs, actor, new IngestPipeline.ReingestRequest(
                 CorpusId: corpusId,
                 SourceUrl: null, Branch: null, SourceRoot: null, GitCommitHash: null,
                 Files: collected.Files), ct);
@@ -290,7 +295,7 @@ public static class IngestEndpoints
         .DisableAntiforgery()
         .WithName("reingestUpload");
 
-        reingest.MapPost("git", async (Guid corpusId, IngestEndpoints.IngestGitRequest body, IngestPipeline pipeline, ILoggerFactory lf, CancellationToken ct) =>
+        reingest.MapPost("git", async (Guid corpusId, IngestEndpoints.IngestGitRequest body, IngestRunService runs, DevPersonaContext actor, ILoggerFactory lf, CancellationToken ct) =>
         {
             var log = lf.CreateLogger("ingest.git.reingest");
             if (string.IsNullOrWhiteSpace(body.Url))
@@ -321,7 +326,7 @@ public static class IngestEndpoints
                 }
                 catch (Exception ex) { log.LogWarning(ex, "Could not read HEAD sha"); }
 
-                return await RunReingest(pipeline, new IngestPipeline.ReingestRequest(
+                return await RunReingest(runs, actor, new IngestPipeline.ReingestRequest(
                     CorpusId: corpusId,
                     SourceUrl: body.Url,
                     Branch: body.Branch,
@@ -351,7 +356,7 @@ public static class IngestEndpoints
         })
         .WithName("reingestGit");
 
-        reingest.MapPost("text", async (Guid corpusId, IngestEndpoints.IngestTextRequest body, IngestPipeline pipeline, CancellationToken ct) =>
+        reingest.MapPost("text", async (Guid corpusId, IngestEndpoints.IngestTextRequest body, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
         {
             if (body.Files is null || body.Files.Count == 0)
                 return BadRequest("ingest.no_files", "At least one file is required.");
@@ -362,7 +367,7 @@ public static class IngestEndpoints
                 RelativePath: f.Path,
                 Content: f.Content ?? "")).ToList();
 
-            return await RunReingest(pipeline, new IngestPipeline.ReingestRequest(
+            return await RunReingest(runs, actor, new IngestPipeline.ReingestRequest(
                 CorpusId: corpusId,
                 SourceUrl: null, Branch: null, SourceRoot: null, GitCommitHash: null,
                 Files: collected), ct);
@@ -372,33 +377,62 @@ public static class IngestEndpoints
         return app;
     }
 
-    private static async Task<IResult> RunReingest(IngestPipeline pipeline, IngestPipeline.ReingestRequest req, CancellationToken ct)
+    private static async Task<IResult> RunReingest(IngestRunService runs, DevPersonaContext actor, IngestPipeline.ReingestRequest req, CancellationToken ct)
     {
+        Guid runId;
         try
         {
-            var r = await pipeline.ReingestAsync(req, ct);
-            return Results.Ok(new
-            {
-                corpusId = r.CorpusId,
-                state = r.State,
-                fileCount = r.FileCount,
-                totalLoc = r.TotalLoc,
-                subroutineCount = r.SubroutineCount,
-                carriedForwardCount = r.CarriedForwardCount,
-                supersededCount = r.SupersededCount,
-                warnings = r.Warnings,
-                errorMessage = r.ErrorMessage,
-            });
+            runId = await runs.StartReingestAsync(req, actor.Persona, actor.DisplayName, ct);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
         {
             return Results.NotFound(new { error = new { code = "corpus.not_found", message = ex.Message } });
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest("ingest.invalid_request", ex.Message);
-        }
+        return await AwaitIngestRunAsync(runs, runId, r => Results.Ok(ReingestBody((IngestPipeline.ReingestResult)r)), ct);
     }
+
+    /// <summary>
+    /// The finished result when the run ends inside <see cref="SyncDeadline"/>
+    /// (the answer every caller always got), a mapped error when it failed
+    /// before producing one, or 202 with the run id to poll when the work
+    /// outlives the deadline. The run itself carries on either way.
+    /// </summary>
+    private static async Task<IResult> AwaitIngestRunAsync(
+        IngestRunService runs, Guid runId, Func<object, IResult> ok, CancellationToken ct)
+    {
+        var status = await runs.WaitAsync(runId, SyncDeadline, ct);
+        if (status.State == "RUNNING")
+        {
+            return Results.Accepted($"/api/v1/ingest/runs/{runId}", new
+            {
+                runId,
+                corpusId = status.CorpusId,
+                state = "INGESTING",
+                statusUrl = $"/api/v1/ingest/runs/{runId}",
+                eventsUrl = $"/api/v1/runs/{runId}/events",
+            });
+        }
+        if (status.Result is { } result) return ok(result);
+        return status.ErrorCode switch
+        {
+            "corpus.not_found" => Results.NotFound(new { error = new { code = "corpus.not_found", message = status.Error } }),
+            { } code => BadRequest(code, status.Error ?? "Ingest failed."),
+            _ => Results.Json(new { error = new { code = "ingest.failed", message = status.Error ?? "Ingest failed." } }, statusCode: 500),
+        };
+    }
+
+    private static object ReingestBody(IngestPipeline.ReingestResult r) => new
+    {
+        corpusId = r.CorpusId,
+        state = r.State,
+        fileCount = r.FileCount,
+        totalLoc = r.TotalLoc,
+        subroutineCount = r.SubroutineCount,
+        carriedForwardCount = r.CarriedForwardCount,
+        supersededCount = r.SupersededCount,
+        warnings = r.Warnings,
+        errorMessage = r.ErrorMessage,
+    };
 
     private sealed record FormFiles(
         List<IngestPipeline.IncomingFile> Files,
@@ -519,17 +553,16 @@ public static class IngestEndpoints
         return result;
     }
 
-    private static IResult Ok(IngestPipeline.IngestResult r) =>
-        Results.Ok(new
-        {
-            corpusId = r.CorpusId,
-            state = r.State,
-            fileCount = r.FileCount,
-            totalLoc = r.TotalLoc,
-            subroutineCount = r.SubroutineCount,
-            warnings = r.Warnings,
-            errorMessage = r.ErrorMessage,
-        });
+    private static object IngestBody(IngestPipeline.IngestResult r) => new
+    {
+        corpusId = r.CorpusId,
+        state = r.State,
+        fileCount = r.FileCount,
+        totalLoc = r.TotalLoc,
+        subroutineCount = r.SubroutineCount,
+        warnings = r.Warnings,
+        errorMessage = r.ErrorMessage,
+    };
 
     private static IResult BadRequest(string code, string message) =>
         Results.BadRequest(new { error = new { code, message } });

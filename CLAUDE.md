@@ -32,6 +32,12 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   `LlmCall` row priced by `ModelPricing.Estimate`, cache the system block, and use forced tool-use for
   structured output. Sonnet for anything signable and for the orchestrator; Haiku for survey digests and
   narration-scale calls.
+- **Ingest is a narrated background run** (`Ingest/IngestRunService`): every ingest/re-sync route hands the
+  files to the run service, which runs `IngestPipeline` detached on the app-lifetime token and publishes
+  stages/progress on the `RunEventBus` for the Discovery agent to narrate. The route answers with the finished
+  result when the run ends within 60 s (the shape every caller always got) and with `202 {runId, corpusId,
+  statusUrl}` otherwise; `GET /api/v1/ingest/runs/{runId}` carries the same result once done and the frontend's
+  `awaitIngestRun` polls it. Never make a route wait on a long pipeline: App Service cuts requests at 230 s.
 - **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
   writer) — that is how the UI loop is verified locally and in e2e.
 - **Build/verify**: no local .NET 8 — Docker `mcr.microsoft.com/dotnet/sdk:8.0` for `dotnet build` / `dotnet test`

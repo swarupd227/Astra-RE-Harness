@@ -1301,11 +1301,15 @@ export const api = {
     ),
 
   // ─── Phase C.1: ingest ────────────────────────────────────────────
+  // Every ingest route answers with the finished result when the run ends
+  // inside the server's deadline, and with 202 + a run id otherwise (the
+  // platform cuts long requests; the work carries on server-side and the
+  // Discovery agent narrates it). `awaitIngestRun` hides the difference.
   ingestText: (body: { name: string; files: { path: string; content: string }[] }) =>
-    apiFetch<IngestResult>('/api/v1/ingest/text', {
+    apiFetch<IngestResult | IngestAccepted>('/api/v1/ingest/text', {
       method: 'POST',
       body: JSON.stringify(body),
-    }),
+    }).then((r) => awaitIngestRun<IngestResult>(r)),
   ingestUpload: async (name: string, files: File[]): Promise<IngestResult> => {
     const fd = new FormData();
     fd.append('name', name);
@@ -1329,13 +1333,13 @@ export const api = {
         err?.details,
       );
     }
-    return body as IngestResult;
+    return awaitIngestRun<IngestResult>(body as IngestResult | IngestAccepted);
   },
   ingestGit: (body: { name: string; url: string; branch?: string; sourceRoot?: string }) =>
-    apiFetch<IngestGitResult>('/api/v1/ingest/git', {
+    apiFetch<IngestGitResult | IngestAccepted>('/api/v1/ingest/git', {
       method: 'POST',
       body: JSON.stringify(body),
-    }),
+    }).then((r) => awaitIngestRun<IngestGitResult>(r)),
 
   // ─── Phase C.3: re-sync ───────────────────────────────────────────
   reingestUpload: async (corpusId: string, files: File[]): Promise<ReingestResult> => {
@@ -1360,10 +1364,10 @@ export const api = {
         err?.details,
       );
     }
-    return body as ReingestResult;
+    return awaitIngestRun<ReingestResult>(body as ReingestResult | IngestAccepted);
   },
   reingestGit: (corpusId: string, body: { url: string; branch?: string; sourceRoot?: string }) =>
-    apiFetch<ReingestResult & { gitCommitHash: string | null }>(
+    apiFetch<(ReingestResult & { gitCommitHash: string | null }) | IngestAccepted>(
       `/api/v1/corpora/${corpusId}/reingest/git`,
       {
         method: 'POST',
@@ -1372,7 +1376,7 @@ export const api = {
         // us if any (the URL itself is what matters server-side).
         body: JSON.stringify({ name: '', ...body }),
       },
-    ),
+    ).then((r) => awaitIngestRun<ReingestResult & { gitCommitHash: string | null }>(r)),
 
   // ─── Phase #2a/2b/2c: post-migration validation ────────────────────
   listValidationRuns: (scaffoldId: string) =>
@@ -1703,6 +1707,57 @@ export type IngestResult = {
   warnings: string[];
   errorMessage: string | null;
 };
+
+/** 202 body: the run outlived the server's synchronous deadline. */
+export type IngestAccepted = {
+  runId: string;
+  corpusId: string | null;
+  state: 'INGESTING';
+  statusUrl: string;
+  eventsUrl: string;
+};
+
+export type IngestRunStatus<T> = {
+  runId: string;
+  corpusId: string | null;
+  kind: 'ingest' | 'reingest';
+  state: 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  result: T | null;
+  errorCode: string | null;
+  error: string | null;
+};
+
+function isIngestAccepted(body: unknown): body is IngestAccepted {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'runId' in body &&
+    (body as { state?: string }).state === 'INGESTING'
+  );
+}
+
+/**
+ * Turn an ingest response into the finished result: pass a finished body
+ * straight through, poll the run for a 202 until it ends. Polls every 3 s
+ * for up to an hour; a failed run surfaces as the same ApiError a
+ * synchronous failure would have raised.
+ */
+export async function awaitIngestRun<T>(body: T | IngestAccepted): Promise<T> {
+  if (!isIngestAccepted(body)) return body as T;
+  const deadline = Date.now() + 60 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const status = await apiFetch<IngestRunStatus<T>>(`/api/v1/ingest/runs/${body.runId}`);
+    if (status.state === 'RUNNING') continue;
+    if (status.result) return status.result;
+    throw new ApiError(
+      status.errorCode === 'corpus.not_found' ? 404 : 400,
+      status.errorCode ?? 'ingest.failed',
+      status.error ?? 'Ingest failed.',
+    );
+  }
+  throw new ApiError(504, 'ingest.timeout', 'The ingest is still running; check the project list in a while.');
+}
 
 export type IngestGitResult = IngestResult & {
   gitCommitHash: string | null;

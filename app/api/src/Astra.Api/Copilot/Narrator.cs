@@ -54,6 +54,7 @@ public sealed class Narrator
         var ct = _lifetime.ApplicationStopping;
         string? lastStage = null;
         var progressMilestone = 0;
+        var started = DateTimeOffset.UtcNow;
         try
         {
             await foreach (var evt in _bus.SubscribeAsync(t.RunId, 0, ct))
@@ -62,6 +63,36 @@ public sealed class Narrator
                 {
                     switch (evt.Type)
                     {
+                        // An ingest narrates its stages only once it has been
+                        // going a while: a three-file corpus is done in two
+                        // seconds and nobody wants three posts about it.
+                        case "stage" when t.Kind == "ingest":
+                            if (evt.Stage is { Length: > 0 } && evt.Stage != lastStage)
+                            {
+                                lastStage = evt.Stage;
+                                var sdata = ToElement(evt.Data);
+                                var big = sdata.TryGetProperty("total", out var stotal) && stotal.ValueKind == JsonValueKind.Number && stotal.GetInt32() >= 50;
+                                if (evt.Message is { Length: > 0 } && (big || DateTimeOffset.UtcNow - started > TimeSpan.FromSeconds(8)))
+                                    await PostAsync(t, evt.Message.TrimEnd('.') + ".", null, null, ct);
+                            }
+                            break;
+                        case "progress" when t.Kind == "ingest":
+                        {
+                            var pdata = ToElement(evt.Data);
+                            if (evt.Stage == "parsing" && progressMilestone < 1
+                                && pdata.TryGetProperty("total", out var ptotal) && pdata.TryGetProperty("done", out var pdone)
+                                && ptotal.ValueKind == JsonValueKind.Number && pdone.ValueKind == JsonValueKind.Number)
+                            {
+                                var total = ptotal.GetInt32();
+                                var done = pdone.GetInt32();
+                                if (total >= 50 && done * 2 >= total)
+                                {
+                                    progressMilestone = 1;
+                                    await PostAsync(t, $"Halfway: {done:N0} / {total:N0} files parsed.", null, null, ct);
+                                }
+                            }
+                            break;
+                        }
                         case "stage" when t.Kind == "pattern-analysis":
                             if (evt.Stage is { Length: > 0 } && evt.Stage != lastStage)
                             {
@@ -132,9 +163,48 @@ public sealed class Narrator
         var artifacts = new List<ArtifactDto>();
         var suggestions = new List<SuggestionDto>();
         string markdown;
+        // An ingest of a brand-new corpus is followed in the global thread
+        // (its programme thread does not exist while it runs); the summary
+        // goes to the programme thread as well once the corpus is there.
+        Guid? alsoTo = null;
 
         switch (t.Kind)
         {
+            case "ingest":
+            {
+                var item = await LatestItemAsync(t.RunId, "ingest", ct);
+                Guid? corpusId = item.TryGetProperty("corpusId", out var cidEl) && Guid.TryParse(cidEl.GetString(), out var cg) ? cg : t.CorpusId;
+                var reingest = item.TryGetProperty("reingest", out var re) && re.ValueKind == JsonValueKind.True;
+                var verb = reingest ? "Re-sync" : "Ingest";
+                var corpus = corpusId is { } cid
+                    ? await db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cid, ct)
+                    : null;
+                if (state == "SUCCEEDED" && corpus is not null)
+                {
+                    int N(string name) => item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+                    var (_, _, language) = await conversations.ProgrammeStatsAsync(corpus, ct);
+                    var bits = new List<string> { $"{N("fileCount"):N0} files", $"{N("totalLoc"):N0} lines", $"{N("subroutineCount"):N0} routines" };
+                    if (N("carriedForwardCount") > 0) bits.Add($"{N("carriedForwardCount"):N0} specs carried forward");
+                    if (N("supersededCount") > 0) bits.Add($"{N("supersededCount"):N0} superseded");
+                    markdown = $"{verb} done for **{corpus.Name}**" + (string.IsNullOrWhiteSpace(language) ? "" : $" ({ConversationService.LanguageLabel(language)})") +
+                               $": {string.Join(", ", bits)}." +
+                               (N("warningCount") > 0 ? $" {N("warningCount"):N0} parse warning(s) are recorded on the corpus." : "") +
+                               " Next: survey it to find the shared patterns.";
+                    var (funnel, _) = await ArtifactBuilders.FunnelAsync(db, conversations, corpus, ct);
+                    artifacts.Add(funnel);
+                    suggestions.Add(new("Survey the programme", $"Survey the {corpus.Name} programme"));
+                    suggestions.Add(new("Riskiest routines", $"Show me the riskiest routines in {corpus.Name}"));
+                    suggestions.Add(new("Run an assessment", $"Run an assessment for {corpus.Name}"));
+                    var programme = await conversations.EnsureProgrammeAsync(corpus.Id, ct);
+                    if (programme.Id != t.ConversationId) alsoTo = programme.Id;
+                }
+                else
+                {
+                    markdown = $"{verb} of **{t.Label}** {StateWord(state)}: {summary}";
+                    suggestions.Add(new("Try again", reingest ? $"Re-sync the {t.Label} programme" : $"Ingest {t.Label} again"));
+                }
+                break;
+            }
             case "pattern-analysis":
             {
                 var run = await db.PatternAnalysisRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == t.RunId, ct);
@@ -273,6 +343,8 @@ public sealed class Narrator
         }
 
         await PostAsync(t, markdown, artifacts, suggestions, ct, conversations);
+        if (alsoTo is { } other)
+            await PostAsync(t with { ConversationId = other }, markdown, artifacts, suggestions, ct, conversations);
     }
 
     private static string StageLabel(string stage) => stage switch

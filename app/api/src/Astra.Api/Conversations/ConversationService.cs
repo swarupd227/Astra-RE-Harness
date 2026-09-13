@@ -49,30 +49,59 @@ public sealed class ConversationService
     /// get a thread without a migration.</summary>
     public async Task<Conversation> EnsureProgrammeAsync(Guid corpusId, CancellationToken ct)
     {
-        var existing = await _db.Conversations
-            .FirstOrDefaultAsync(c => c.CorpusId == corpusId && c.Kind == "programme", ct);
-        if (existing is not null)
+        // The moment an ingest ends, the Narrator's summary, the UI's thread
+        // list and the copilot overview all touch this thread at once. Two
+        // concurrent first touches used to create two programme threads and
+        // two welcome posts. One gate per corpus in this process, plus the
+        // partial unique index on (corpus_id) WHERE kind = 'programme' as
+        // the backstop across processes.
+        var gate = ProgrammeGates.GetOrAdd(corpusId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
         {
-            // A thread created while ingest was still running has no welcome
-            // yet (see below) — backfill it the first time routines exist.
-            if (existing.MessageCount == 0) await TrySeedWelcomeAsync(existing, ct);
-            return existing;
+            var existing = await _db.Conversations
+                .FirstOrDefaultAsync(c => c.CorpusId == corpusId && c.Kind == "programme", ct);
+            if (existing is not null)
+            {
+                // A thread created while ingest was still running has no welcome
+                // yet (see below) — backfill it the first time routines exist.
+                if (existing.MessageCount == 0) await TrySeedWelcomeAsync(existing, ct);
+                return existing;
+            }
+
+            var corpus = await _db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == corpusId, ct)
+                ?? throw new InvalidOperationException($"Corpus {corpusId} not found.");
+
+            var now = DateTimeOffset.UtcNow;
+            var conv = new Conversation
+            {
+                Id = Guid.NewGuid(), CorpusId = corpusId, Kind = "programme", Title = corpus.Name,
+                CreatedAt = now, UpdatedAt = now,
+            };
+            _db.Conversations.Add(conv);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Another process won the race: use its thread.
+                _db.Entry(conv).State = EntityState.Detached;
+                var theirs = await _db.Conversations
+                    .FirstOrDefaultAsync(c => c.CorpusId == corpusId && c.Kind == "programme", ct);
+                if (theirs is not null) return theirs;
+                throw;
+            }
+            await TrySeedWelcomeAsync(conv, ct);
+            return conv;
         }
-
-        var corpus = await _db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == corpusId, ct)
-            ?? throw new InvalidOperationException($"Corpus {corpusId} not found.");
-
-        var now = DateTimeOffset.UtcNow;
-        var conv = new Conversation
+        finally
         {
-            Id = Guid.NewGuid(), CorpusId = corpusId, Kind = "programme", Title = corpus.Name,
-            CreatedAt = now, UpdatedAt = now,
-        };
-        _db.Conversations.Add(conv);
-        await _db.SaveChangesAsync(ct);
-        await TrySeedWelcomeAsync(conv, ct);
-        return conv;
+            gate.Release();
+        }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> ProgrammeGates = new();
 
     /// <summary>Post the Discovery agent's welcome once the corpus actually
     /// has routines — a thread touched mid-ingest would otherwise open with
