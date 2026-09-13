@@ -78,7 +78,7 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
         Astra.Api.Parser.Grpc.ParseCorpusReply reply;
         try
         {
-            reply = await _client.ParseCorpusAsync(req, cancellationToken: ct);
+            reply = await ParseCorpusStreamingAsync(req, ct);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
         {
@@ -108,6 +108,45 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
                 : Degraded(files[i].Filename, files[i].Content, "parser_rpc_failed: sidecar returned fewer results than files"));
         }
         return new CorpusParseOutcome(results, reply.Warnings.ToArray(), CrossFileResolved: true);
+    }
+
+    /// <summary>
+    /// The streaming corpus parse: progress events keep the stream busy (a
+    /// proxy in front of the sidecar drops one idle for 240 s) and are
+    /// logged at every tenth of the way; the single `done` event carries
+    /// the reply. A sidecar without the streaming RPC gets the unary call.
+    /// </summary>
+    private async Task<Astra.Api.Parser.Grpc.ParseCorpusReply> ParseCorpusStreamingAsync(
+        Astra.Api.Parser.Grpc.ParseCorpusRequest req, CancellationToken ct)
+    {
+        try
+        {
+            using var call = _client.ParseCorpusStream(req, cancellationToken: ct);
+            Astra.Api.Parser.Grpc.ParseCorpusReply? done = null;
+            var nextLogAt = 0;
+            await foreach (var evt in call.ResponseStream.ReadAllAsync(ct))
+            {
+                if (evt.Done is { } reply)
+                {
+                    done = reply;
+                    continue;
+                }
+                var p = evt.Progress;
+                if (p is null || p.TotalFiles == 0) continue;
+                var pct = p.ParsedFiles * 100 / p.TotalFiles;
+                if (pct >= nextLogAt)
+                {
+                    _logger.LogInformation("Parser sidecar corpus parse: {Parsed}/{Total} files ({Pct}%)", p.ParsedFiles, p.TotalFiles, pct);
+                    nextLogAt = (pct / 10 + 1) * 10;
+                }
+            }
+            return done ?? throw new RpcException(new Status(StatusCode.Internal, "ParseCorpusStream ended without a done event"));
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+        {
+            _logger.LogInformation("Parser sidecar has no ParseCorpusStream RPC; using the unary ParseCorpus");
+            return await _client.ParseCorpusAsync(req, cancellationToken: ct);
+        }
     }
 
     private static ParseOutcome ToOutcome(Astra.Api.Parser.Grpc.ParseResult resp)

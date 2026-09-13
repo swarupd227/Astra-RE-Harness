@@ -9,6 +9,8 @@ Serves on PARSER_GRPC_PORT (default 50051). Exposes:
   - ParseCorpus(...) -> ParseCorpusReply  whole corpus at once; C++ files are
                                           parsed on disk so cross-file
                                           references resolve
+  - ParseCorpusStream(...) -> stream      the same, with progress events so a
+                                          proxy's idle timeout never cuts it
 
 The proto/parser.proto file is the contract. Generated Python stubs
 (parser_pb2.py, parser_pb2_grpc.py) are produced at container build time.
@@ -125,7 +127,7 @@ def _cpp_parse(filename: str, content: str):
     return _cpp_parse_v0(filename=filename, content=content)
 
 
-def _cpp_parse_corpus(files):
+def _cpp_parse_corpus(files, on_progress=None):
     """Corpus-mode C++ parse: libclang with every file on disk so includes
     resolve. Falls back to the per-file dispatcher — and says so in the
     corpus warnings — when libclang is unavailable or the corpus parse
@@ -137,11 +139,17 @@ def _cpp_parse_corpus(files):
         return [_cpp_parse(filename=f, content=c) for f, c in files], [
             f"libclang unavailable ({e}); C++ files parsed in isolation"]
     try:
-        return _pc(files), []
+        return _pc(files, on_progress=on_progress), []
     except Exception as e:  # noqa: BLE001 — never lose the whole corpus
         log.warning("libclang corpus parse failed (%s); parsing file by file", e)
         return [_cpp_parse(filename=f, content=c) for f, c in files], [
             f"libclang corpus parse failed ({e}); C++ files parsed in isolation"]
+
+
+# Keep-alive cadence for ParseCorpusStream: a progress event goes out at
+# least this often even while one huge translation unit is still parsing.
+# Azure Container Apps' ingress closes a stream idle for 240 s.
+_STREAM_HEARTBEAT_SECONDS = 20.0
 
 
 def _to_result(filename: str, line_count: int, subroutines, warnings) -> "parser_pb2.ParseResult":
@@ -320,6 +328,54 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         """One call, every file. C++ files (same routing precedence as
         Parse) go through the on-disk corpus parse together; every other
         file is parsed exactly as Parse would. Results keep request order."""
+        return self._parse_corpus_reply(request, on_progress=None)
+
+    def ParseCorpusStream(self, request, context):
+        """ParseCorpus, streamed: progress events as files complete and at
+        least every _STREAM_HEARTBEAT_SECONDS, then one `done`. The parse
+        runs on a worker thread; this generator only relays events, so a
+        single huge translation unit cannot silence the stream."""
+        import queue
+
+        events: "queue.Queue[object]" = queue.Queue()
+        total = len(request.files)
+        last = [0, total]
+
+        def on_progress(parsed: int, total_files: int, current: str) -> None:
+            last[0], last[1] = parsed, total_files
+            events.put(parser_pb2.ParseCorpusEvent(
+                progress=parser_pb2.ParseProgress(parsed_files=parsed, total_files=total_files, current=current)))
+
+        outcome: dict = {}
+
+        def work() -> None:
+            try:
+                outcome["reply"] = self._parse_corpus_reply(request, on_progress=on_progress)
+            except Exception as e:  # noqa: BLE001 — surfaced to the caller as the stream's error
+                outcome["error"] = e
+            finally:
+                events.put(None)
+
+        worker = threading.Thread(target=work, name="parse-corpus-stream", daemon=True)
+        worker.start()
+        yield parser_pb2.ParseCorpusEvent(
+            progress=parser_pb2.ParseProgress(parsed_files=0, total_files=total, current=""))
+        while True:
+            try:
+                item = events.get(timeout=_STREAM_HEARTBEAT_SECONDS)
+            except queue.Empty:
+                yield parser_pb2.ParseCorpusEvent(
+                    progress=parser_pb2.ParseProgress(parsed_files=last[0], total_files=last[1], current=""))
+                continue
+            if item is None:
+                break
+            yield item
+        worker.join()
+        if "error" in outcome:
+            context.abort(grpc.StatusCode.INTERNAL, f"corpus parse failed: {outcome['error']}")
+        yield parser_pb2.ParseCorpusEvent(done=outcome["reply"])
+
+    def _parse_corpus_reply(self, request, on_progress):
         started = time.time()
         files = [(f.filename or f"<inline-{i}>", f.content or "") for i, f in enumerate(request.files)]
         form = request.form or ""
@@ -330,7 +386,7 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         ]
         reply = parser_pb2.ParseCorpusReply()
         if cpp_items:
-            outcomes, corpus_warnings = _cpp_parse_corpus([(fn, c) for _, fn, c in cpp_items])
+            outcomes, corpus_warnings = _cpp_parse_corpus([(fn, c) for _, fn, c in cpp_items], on_progress=on_progress)
             reply.warnings.extend(corpus_warnings)
             for (i, fn, _), outcome in zip(cpp_items, outcomes):
                 results[i] = _to_result(fn, outcome.line_count, outcome.subroutines, outcome.warnings)

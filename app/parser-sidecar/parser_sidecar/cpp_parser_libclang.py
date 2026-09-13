@@ -79,7 +79,7 @@ import tempfile
 import threading
 from concurrent import futures
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from clang import cindex
 
@@ -290,10 +290,14 @@ class _TuResult:
     covered: List[str]
 
 
+ProgressCallback = Callable[[int, int, str], None]
+
+
 def parse_corpus(
     files: Sequence[Tuple[str, str]],
     compile_args: Optional[Sequence[str]] = None,
     max_workers: Optional[int] = None,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> List[ParseOutcome]:
     """Parse every (relative path, content) pair as one corpus.
 
@@ -319,6 +323,11 @@ def parse_corpus(
 
     Outcomes come back in input order. Paths that try to escape the root
     are parsed in memory instead, as `parse_source` would.
+
+    `on_progress(parsed_files, total_files, display)` is called from the
+    calling thread after every translation unit, with the number of files
+    whose routines are known so far (a header harvested from a unit counts
+    as soon as that unit is done).
     """
     outcomes: List[Optional[ParseOutcome]] = [None] * len(files)
     on_disk: Dict[str, Tuple[int, str, int]] = {}  # normalised path -> (index, display, line count)
@@ -346,12 +355,18 @@ def parse_corpus(
         harvested: Dict[str, List[SubroutineSummary]] = {}
         file_warnings: Dict[str, List[str]] = {}
         covered: set = set()
+        total_files = len(on_disk) + sum(1 for o in outcomes if o is not None)
+        known = sum(1 for o in outcomes if o is not None)
 
         def absorb(result: _TuResult) -> None:
+            nonlocal known
             covered.update(result.covered)
             file_warnings[result.display] = result.warnings
             for display, routines in result.routines.items():
                 harvested.setdefault(display, routines)
+            known = len(covered | set(harvested)) + sum(1 for o in outcomes if o is not None)
+            if on_progress is not None:
+                on_progress(min(known, total_files), total_files, result.display)
 
         units = [p for p in on_disk if not p.lower().endswith(_HEADER_SUFFIXES)]
         for result in _run_units(units, args, wanted, max_workers):
@@ -386,7 +401,10 @@ def _run_units(
 ):
     """Parse the given translation units, in a spawn-based process pool when
     there is enough work to share. Spawn, not fork: the caller is a gRPC
-    server whose C core does not survive being forked mid-flight."""
+    server whose C core does not survive being forked mid-flight. Work is
+    handed out in small batches and yielded as each batch completes, so a
+    caller reporting progress hears from us every few seconds rather than
+    once per worker."""
     if not paths:
         return
     workers = max_workers or int(os.environ.get("ASTRA_CORPUS_WORKERS", "0") or 0) or max(1, min(4, os.cpu_count() or 1))
@@ -396,11 +414,19 @@ def _run_units(
         return
     import multiprocessing
 
-    chunks = [paths[k::workers] for k in range(workers)]
+    batch = _UNIT_BATCH
+    batches = [paths[k:k + batch] for k in range(0, len(paths), batch)]
     ctx = multiprocessing.get_context("spawn")
     with futures.ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
-        for results in pool.map(_parse_units_list, chunks, [args] * workers, [wanted] * workers):
-            yield from results
+        pending = [pool.submit(_parse_units_list, b, args, wanted) for b in batches]
+        for done in futures.as_completed(pending):
+            yield from done.result()
+
+
+# Translation units per pool task: small enough that progress ticks every
+# few seconds on a real corpus, large enough that pickling `wanted` per
+# task (one entry per corpus file) stays negligible.
+_UNIT_BATCH = 4
 
 
 def _parse_units_list(paths: List[str], args: List[str], wanted: Dict[str, str]) -> List[_TuResult]:

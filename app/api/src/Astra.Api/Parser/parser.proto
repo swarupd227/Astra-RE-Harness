@@ -18,6 +18,9 @@ service Parser {
   // Whole-corpus parse so cross-file references resolve (C++ definitions
   // whose class lives in a sibling header). Results in request order.
   rpc ParseCorpus(ParseCorpusRequest) returns (ParseCorpusReply);
+  // ParseCorpus with progress events so a proxy's idle timeout never cuts
+  // a long parse; ends with exactly one `done`.
+  rpc ParseCorpusStream(ParseCorpusRequest) returns (stream ParseCorpusEvent);
 }
 
 message PingRequest {}
@@ -72,4 +75,17 @@ message ParseCorpusRequest {
 message ParseCorpusReply {
   repeated ParseResult results = 1;
   repeated string warnings = 2;
+}
+
+message ParseProgress {
+  int32 parsed_files = 1;
+  int32 total_files = 2;
+  string current = 3;
+}
+
+message ParseCorpusEvent {
+  oneof event {
+    ParseProgress progress = 1;
+    ParseCorpusReply done = 2;
+  }
 }

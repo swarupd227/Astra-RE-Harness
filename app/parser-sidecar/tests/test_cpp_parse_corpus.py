@@ -150,6 +150,17 @@ def test_process_pool_and_inline_paths_agree():
         [(o.filename, [s.name for s in o.subroutines]) for o in inline]
 
 
+def test_progress_is_reported_per_unit_and_reaches_the_total():
+    ticks = []
+    outs = parse_corpus(FILES, max_workers=2, on_progress=lambda done, total, cur: ticks.append((done, total, cur)))
+    assert len(outs) == 3
+    assert ticks, "no progress at all"
+    assert all(t[1] == 3 for t in ticks)
+    assert [t[0] for t in ticks] == sorted(t[0] for t in ticks)
+    assert ticks[-1][0] == 3
+    assert {t[2] for t in ticks} <= {"src/Store.cpp", "src/main.cpp", "include/app/Store.hpp"}
+
+
 def test_empty_file_keeps_its_slot():
     outs = parse_corpus([("empty.cpp", ""), ("a.cpp", "int a() { return 0; }\n")])
     assert outs[0].subroutines == [] and outs[0].line_count == 0 and outs[0].filename == "empty.cpp"

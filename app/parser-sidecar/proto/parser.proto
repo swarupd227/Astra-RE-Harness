@@ -27,6 +27,14 @@ service Parser {
   // Results come back in request order, one ParseResult per file.
   // Non-C++ files are parsed exactly as Parse would.
   rpc ParseCorpus(ParseCorpusRequest) returns (ParseCorpusReply);
+
+  // ParseCorpus with progress. A proxy in front of the sidecar drops a
+  // stream that stays idle (Azure Container Apps ingress: 240 s) and a
+  // whole-corpus parse can run longer than that, so this variant sends a
+  // progress event as files complete (and at least every 20 s), then
+  // exactly one `done` carrying the same reply ParseCorpus would return.
+  // Prefer it; fall back to ParseCorpus against an older sidecar.
+  rpc ParseCorpusStream(ParseCorpusRequest) returns (stream ParseCorpusEvent);
 }
 
 message PingRequest {}
@@ -109,4 +117,20 @@ message ParseCorpusReply {
   repeated ParseResult results = 1;
   // Corpus-level diagnostics (include roots used, fallbacks taken).
   repeated string warnings = 2;
+}
+
+message ParseProgress {
+  // Files whose routines are known so far (a header harvested from a
+  // translation unit counts as soon as that unit is done).
+  int32 parsed_files = 1;
+  int32 total_files = 2;
+  // The file that just completed; empty on a keep-alive tick.
+  string current = 3;
+}
+
+message ParseCorpusEvent {
+  oneof event {
+    ParseProgress progress = 1;
+    ParseCorpusReply done = 2;
+  }
 }
