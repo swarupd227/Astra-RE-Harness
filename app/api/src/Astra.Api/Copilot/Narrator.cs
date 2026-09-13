@@ -81,8 +81,11 @@ public sealed class Narrator
                                 {
                                     progressMilestone = 1;
                                     var propagated = data.TryGetProperty("propagated", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0;
-                                    var pct = propagated > 0 ? $" — {propagated * 100 / Math.Max(1, done)}% were structural duplicates, so I only read the exemplars" : "";
-                                    await PostAsync(t, $"Halfway: {done:N0} / {total:N0} routines surveyed{pct}.", null, null, ct);
+                                    // `propagated` is the run-wide count of structural
+                                    // duplicates decided up front, not a share of `done`
+                                    // — dividing the two printed "137%" on oatpp.
+                                    var dup = propagated > 0 ? $" — {propagated:N0} more are structural duplicates I won't need to read" : "";
+                                    await PostAsync(t, $"Halfway: {done:N0} / {total:N0} routines surveyed{dup}.", null, null, ct);
                                 }
                             }
                             break;
