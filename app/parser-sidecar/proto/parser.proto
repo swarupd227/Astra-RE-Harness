@@ -18,6 +18,15 @@ service Parser {
   // subroutine inventory + lightweight cross-references (COMMON blocks,
   // called subroutines) so the API can persist real corpora.
   rpc Parse(ParseRequest) returns (ParseResult);
+
+  // Parse a whole corpus in one call. The sidecar materialises the files
+  // on disk so cross-file references resolve: a C++ `.cpp` whose class is
+  // declared in a sibling header yields its definitions, qualified call
+  // targets and shared-state refs, none of which a per-file Parse can
+  // see (libclang drops a member definition whose class it never saw).
+  // Results come back in request order, one ParseResult per file.
+  // Non-C++ files are parsed exactly as Parse would.
+  rpc ParseCorpus(ParseCorpusRequest) returns (ParseCorpusReply);
 }
 
 message PingRequest {}
@@ -76,4 +85,28 @@ message ParseResult {
   // Non-fatal diagnostics — parse fell back to a recovery path, unknown
   // construct skipped, etc. Surfaced verbatim in the API audit row.
   repeated string warnings = 4;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Corpus parse contract (additive; Parse stays as it is)
+// ────────────────────────────────────────────────────────────────────
+
+message SourceFile {
+  // Path relative to the corpus root, forward slashes. It is recreated
+  // verbatim under a temporary root so `#include "a/b.hpp"` resolves.
+  string filename = 1;
+  string content = 2;
+}
+
+message ParseCorpusRequest {
+  repeated SourceFile files = 1;
+  // Optional Fortran form override, as on ParseRequest.
+  string form = 2;
+}
+
+message ParseCorpusReply {
+  // Same order as the request's files.
+  repeated ParseResult results = 1;
+  // Corpus-level diagnostics (include roots used, fallbacks taken).
+  repeated string warnings = 2;
 }

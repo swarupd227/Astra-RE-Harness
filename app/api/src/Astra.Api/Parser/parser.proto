@@ -15,6 +15,9 @@ service Parser {
   rpc Ping(PingRequest) returns (PingReply);
   rpc EchoSource(EchoSourceRequest) returns (EchoSourceReply);
   rpc Parse(ParseRequest) returns (ParseResult);
+  // Whole-corpus parse so cross-file references resolve (C++ definitions
+  // whose class lives in a sibling header). Results in request order.
+  rpc ParseCorpus(ParseCorpusRequest) returns (ParseCorpusReply);
 }
 
 message PingRequest {}
@@ -54,4 +57,19 @@ message ParseResult {
   int32 line_count = 2;
   repeated Subroutine subroutines = 3;
   repeated string warnings = 4;
+}
+
+message SourceFile {
+  string filename = 1;
+  string content = 2;
+}
+
+message ParseCorpusRequest {
+  repeated SourceFile files = 1;
+  string form = 2;
+}
+
+message ParseCorpusReply {
+  repeated ParseResult results = 1;
+  repeated string warnings = 2;
 }

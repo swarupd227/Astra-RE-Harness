@@ -62,15 +62,24 @@ What this parser does NOT handle
 - Heavy template metaprogramming with `consteval` recursion — libclang
   parses it but the cursor walk surfaces only the primary template;
   per-instantiation analysis is out of scope (per ADR-026).
-- Cross-translation-unit symbol resolution. A `CALL_EXPR` to a routine
-  defined in a different `.cpp` file is recorded by name; the Migration
-  Planner does the cross-TU join later.
+- Per-file parsing of a `.cpp` whose class lives in a header it cannot
+  see. clang drops `void Store::save(int)` entirely when `Store` was never
+  declared, so a per-file parse of a real corpus yields almost nothing
+  from its `.cpp` files. `parse_corpus` fixes that: the whole corpus is
+  written to a temporary root, every directory holding a header becomes
+  an include path, and each file is parsed on disk so definitions,
+  qualified call targets and shared-state refs resolve across files.
 """
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+import tempfile
+import threading
+from concurrent import futures
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from clang import cindex
 
@@ -104,19 +113,27 @@ class ParseOutcome:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Lazy Index singleton — creating a clang Index allocates an LLVM
-# context, so reuse across calls. Indexes are NOT thread-safe; the
-# parser-sidecar serialises Parse RPCs at the server layer.
+# One lazily created Index per thread — creating a clang Index allocates
+# an LLVM context, so reuse it, but an Index is NOT thread-safe and
+# `parse_corpus` parses files on a small thread pool.
 # ──────────────────────────────────────────────────────────────────────
 
-_INDEX: Optional[cindex.Index] = None
+_INDEX_LOCAL = threading.local()
 
 
 def _get_index() -> cindex.Index:
-    global _INDEX
-    if _INDEX is None:
-        _INDEX = cindex.Index.create()
-    return _INDEX
+    index = getattr(_INDEX_LOCAL, "index", None)
+    if index is None:
+        index = cindex.Index.create()
+        _INDEX_LOCAL.index = index
+    return index
+
+
+# CXTranslationUnit_KeepGoing: do not stop at a fatal diagnostic. Without
+# it a single missing `#include` ends the parse at that line and every
+# routine below it vanishes. Not exposed as a constant by the Python
+# bindings, so spelled as the C API value.
+_PARSE_KEEP_GOING = 0x200
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -153,8 +170,9 @@ _NAMESPACE_CURSOR_KINDS = frozenset({
 _DEFAULT_CXX_FLAGS: Tuple[str, ...] = (
     "-std=c++20",
     "-x", "c++",
-    "-fno-exceptions",
-    "-fno-rtti",
+    # Exceptions and RTTI stay ON: with them off clang rejects every
+    # `throw` / `try` / `typeid` / `dynamic_cast` and drops the enclosing
+    # statement, and the calls inside it, from the AST.
     "-Wno-everything",
     "-Wno-deprecated",
     # Phase 9.4.b: when no compile_commands.json is available, point
@@ -195,38 +213,258 @@ def parse_source(
     parses. Caller raises on `cindex.LibclangError` so the dispatcher
     in `server.py` can fall through to the v0 tokenizer.
     """
-    warnings: List[str] = []
-    raw = content.replace("\r\n", "\n").replace("\r", "\n")
+    raw = _normalise(content)
     if not raw:
         return ParseOutcome(line_count=0, subroutines=[], warnings=[], filename=filename)
-    line_count = raw.count("\n") + (0 if raw.endswith("\n") else 1)
-
-    index = _get_index()
     args = list(compile_args) if compile_args else list(_DEFAULT_CXX_FLAGS)
-    tu = index.parse(
-        filename,
+    return _parse_tu(
+        path=filename,
+        display_name=filename,
         args=args,
-        unsaved_files=[(filename, raw)],
-        options=(
-            cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
-            | cindex.TranslationUnit.PARSE_INCOMPLETE
-        ),
+        unsaved=[(filename, raw)],
+        line_count=_line_count(raw),
     )
 
-    # Collect fatal-or-error diagnostics as warnings on the outcome.
-    # Non-fatal warnings from the compile aren't surfaced (too noisy on
-    # cross-TU symbol failures); the production parser is best-effort.
-    for diag in tu.diagnostics:
-        if diag.severity >= cindex.Diagnostic.Error:
-            warnings.append(f"libclang: {diag.spelling}")
 
-    routines = _collect_routines(tu.cursor, filename)
+def _normalise(content: str) -> str:
+    return content.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _line_count(raw: str) -> int:
+    return raw.count("\n") + (0 if raw.endswith("\n") else 1)
+
+
+def _parse_tu(
+    path: str,
+    display_name: str,
+    args: List[str],
+    unsaved: Optional[List[Tuple[str, str]]],
+    line_count: int,
+) -> ParseOutcome:
+    """Parse one translation unit — from memory (`unsaved`) or from disk —
+    and collect the routines that live in `path` itself."""
+    index = _get_index()
+    tu = index.parse(path, args=args, unsaved_files=unsaved, options=_PARSE_OPTIONS)
+    routines = _collect_routines(tu.cursor, path)
     return ParseOutcome(
         line_count=line_count,
         subroutines=routines,
-        warnings=warnings,
-        filename=filename,
+        warnings=_error_diagnostics(tu),
+        filename=display_name,
     )
+
+
+# No PARSE_DETAILED_PROCESSING_RECORD: it records every macro expansion
+# and instantiation, which on template-heavy code costs more than the
+# parse itself, and nothing here reads preprocessor cursors any more.
+_PARSE_OPTIONS = cindex.TranslationUnit.PARSE_INCOMPLETE | _PARSE_KEEP_GOING
+
+
+def _error_diagnostics(tu) -> List[str]:
+    """Error-or-worse diagnostics as outcome warnings. Compile warnings
+    are not surfaced (too noisy on cross-TU symbol failures); the
+    production parser is best-effort."""
+    out: List[str] = []
+    for diag in tu.diagnostics:
+        if diag.severity >= cindex.Diagnostic.Error:
+            out.append(f"libclang: {diag.spelling}")
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Corpus mode — the files on disk, so includes resolve
+# ──────────────────────────────────────────────────────────────────────
+
+_HEADER_SUFFIXES = (".h", ".hpp", ".hxx", ".h++", ".ipp", ".inl", ".tcc", ".inc")
+_MAX_INCLUDE_DIRS = 500
+
+
+@dataclass
+class _TuResult:
+    """What one translation unit yielded: routines for every corpus file
+    it pulled in (keyed by display name), the main file's diagnostics, and
+    the display names of every corpus file it covered."""
+    display: str
+    routines: Dict[str, List[SubroutineSummary]]
+    warnings: List[str]
+    covered: List[str]
+
+
+def parse_corpus(
+    files: Sequence[Tuple[str, str]],
+    compile_args: Optional[Sequence[str]] = None,
+    max_workers: Optional[int] = None,
+) -> List[ParseOutcome]:
+    """Parse every (relative path, content) pair as one corpus.
+
+    The files are written under a temporary root exactly as named and
+    every directory that holds a header (and each of its ancestors)
+    becomes an `-I` path, so `#include "a/b.hpp"` resolves, the class
+    behind `void Store::save(int)` is known, and the definition, its
+    qualified callees and its shared-state refs all survive. A missing
+    third-party header is still reported but no longer ends the parse.
+
+    Each translation unit (every non-header file) is parsed once, and the
+    routines of every corpus header it pulls in are harvested from that
+    same parse — the headers are already in the AST, so parsing them
+    again on their own would only repeat the work. Headers no unit reaches
+    (header-only corpora, orphans) are parsed standalone afterwards. Units
+    run in a process pool: the cursor walk is Python and holds the GIL,
+    so threads alone gain little.
+
+    A declaration is dropped when some other file in the corpus holds the
+    definition of the same qualified name: one routine, one row, the one
+    with the body. Declarations nothing defines (pure virtuals, symbols
+    from libraries outside the corpus) stay, exactly as in per-file mode.
+
+    Outcomes come back in input order. Paths that try to escape the root
+    are parsed in memory instead, as `parse_source` would.
+    """
+    outcomes: List[Optional[ParseOutcome]] = [None] * len(files)
+    on_disk: Dict[str, Tuple[int, str, int]] = {}  # normalised path -> (index, display, line count)
+    root = tempfile.mkdtemp(prefix="astra-corpus-")
+    try:
+        for i, (display, content) in enumerate(files):
+            raw = _normalise(content or "")
+            if not raw:
+                outcomes[i] = ParseOutcome(line_count=0, subroutines=[], warnings=[], filename=display)
+                continue
+            rel = _safe_relative(display)
+            if rel is None:
+                outcomes[i] = parse_source(display, raw, compile_args)
+                continue
+            abs_path = os.path.join(root, rel)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(raw)
+            on_disk[os.path.normpath(abs_path)] = (i, display, _line_count(raw))
+
+        args = list(compile_args) if compile_args else list(_DEFAULT_CXX_FLAGS)
+        args += [f"-I{d}" for d in _include_dirs(root, list(on_disk))]
+        wanted = {path: meta[1] for path, meta in on_disk.items()}
+
+        harvested: Dict[str, List[SubroutineSummary]] = {}
+        file_warnings: Dict[str, List[str]] = {}
+        covered: set = set()
+
+        def absorb(result: _TuResult) -> None:
+            covered.update(result.covered)
+            file_warnings[result.display] = result.warnings
+            for display, routines in result.routines.items():
+                harvested.setdefault(display, routines)
+
+        units = [p for p in on_disk if not p.lower().endswith(_HEADER_SUFFIXES)]
+        for result in _run_units(units, args, wanted, max_workers):
+            absorb(result)
+        orphans = [
+            p for p in on_disk
+            if p.lower().endswith(_HEADER_SUFFIXES) and wanted[p] not in covered
+        ]
+        for result in _run_units(orphans, args, wanted, max_workers):
+            absorb(result)
+
+        for path, (i, display, line_count) in on_disk.items():
+            outcomes[i] = ParseOutcome(
+                line_count=line_count,
+                subroutines=harvested.get(display, []),
+                warnings=file_warnings.get(display, []),
+                filename=display,
+            )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+    filled = [o for o in outcomes if o is not None]
+    _drop_declarations_defined_elsewhere(filled)
+    return filled
+
+
+def _run_units(
+    paths: List[str],
+    args: List[str],
+    wanted: Dict[str, str],
+    max_workers: Optional[int],
+):
+    """Parse the given translation units, in a spawn-based process pool when
+    there is enough work to share. Spawn, not fork: the caller is a gRPC
+    server whose C core does not survive being forked mid-flight."""
+    if not paths:
+        return
+    workers = max_workers or int(os.environ.get("ASTRA_CORPUS_WORKERS", "0") or 0) or max(1, min(4, os.cpu_count() or 1))
+    workers = max(1, min(workers, len(paths)))
+    if workers == 1:
+        yield from _parse_units(paths, args, wanted)
+        return
+    import multiprocessing
+
+    chunks = [paths[k::workers] for k in range(workers)]
+    ctx = multiprocessing.get_context("spawn")
+    with futures.ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
+        for results in pool.map(_parse_units_list, chunks, [args] * workers, [wanted] * workers):
+            yield from results
+
+
+def _parse_units_list(paths: List[str], args: List[str], wanted: Dict[str, str]) -> List[_TuResult]:
+    return list(_parse_units(paths, args, wanted))
+
+
+def _parse_units(paths: List[str], args: List[str], wanted: Dict[str, str]):
+    index = _get_index()
+    for path in paths:
+        display = wanted[path]
+        try:
+            tu = index.parse(path, args=args, options=_PARSE_OPTIONS)
+            routines = _collect_routines_multi(tu.cursor, wanted)
+            covered = [display]
+            try:
+                for inc in tu.get_includes():
+                    hit = wanted.get(os.path.normpath(inc.include.name))
+                    if hit is not None:
+                        covered.append(hit)
+            except Exception:  # noqa: BLE001 — inclusion listing is best-effort
+                pass
+            yield _TuResult(display=display, routines=routines, warnings=_error_diagnostics(tu), covered=covered)
+            del tu
+        except Exception as e:  # noqa: BLE001 — one file must not sink the corpus
+            log.info("libclang failed on %s in corpus mode (%s)", display, e)
+            yield _TuResult(display=display, routines={}, warnings=[f"libclang: {e}"], covered=[display])
+
+
+def _safe_relative(display: str) -> Optional[str]:
+    """Turn a corpus-relative path into a path safe to create under the
+    temporary root, or None when it cannot be trusted."""
+    p = (display or "").replace("\\", "/").strip()
+    while p.startswith("./"):
+        p = p[2:]
+    p = p.lstrip("/")
+    if not p or ":" in p.split("/")[0]:
+        return None
+    parts = [seg for seg in p.split("/") if seg != ""]
+    if not parts or any(seg in (".", "..") for seg in parts):
+        return None
+    return os.path.join(*parts)
+
+
+def _include_dirs(root: str, paths: Sequence[str]) -> List[str]:
+    """Root plus every directory holding a header and each ancestor up to
+    the root, shallowest first — so `#include "oatpp/core/Types.hpp"`
+    resolves from `-I<root>/src` and `#include "Types.hpp"` from the
+    header's own directory."""
+    dirs = {root}
+    for p in paths:
+        if not p.lower().endswith(_HEADER_SUFFIXES):
+            continue
+        d = os.path.dirname(p)
+        while d.startswith(root) and d != root:
+            dirs.add(d)
+            d = os.path.dirname(d)
+    ordered = sorted(dirs, key=lambda d: (d.count(os.sep), d))
+    return ordered[:_MAX_INCLUDE_DIRS]
+
+
+def _drop_declarations_defined_elsewhere(outcomes: List[ParseOutcome]) -> None:
+    defined = {s.name for o in outcomes for s in o.subroutines if s.is_definition}
+    for o in outcomes:
+        o.subroutines = [s for s in o.subroutines if s.is_definition or s.name not in defined]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -247,42 +485,53 @@ def _collect_routines(
     Class declarations are walked too; nested class methods surface
     with the same qualified-name handling.
     """
-    raw_entries: List[SubroutineSummary] = []
+    wanted = {filename: filename, os.path.normpath(filename): filename}
+    return _collect_routines_multi(root_cursor, wanted).get(filename, [])
+
+
+def _collect_routines_multi(
+    root_cursor,
+    wanted: Dict[str, str],
+) -> Dict[str, List[SubroutineSummary]]:
+    """Walk the cursor tree once and bucket routine summaries by the
+    corpus file they live in. `wanted` maps a normalised on-disk path (or
+    the exact spelling libclang was given) to the file's display name;
+    cursors from any other file — system headers, third-party code — are
+    skipped without descending, which is also what keeps the walk cheap.
+    Each bucket is deduplicated by qualified name (definition first)."""
+    buckets: Dict[str, List[SubroutineSummary]] = {}
+    memo: Dict[str, Optional[str]] = {}
+
+    def display_for(name: str) -> Optional[str]:
+        hit = memo.get(name, memo)
+        if hit is memo:
+            hit = wanted.get(name)
+            if hit is None:
+                hit = wanted.get(os.path.normpath(name))
+            memo[name] = hit
+        return hit
 
     def visit(cursor):
-        # Skip cursors that live in files other than the one we're
-        # parsing — `#include`d headers parade through here otherwise.
         loc = cursor.location.file
-        if loc is not None and loc.name != filename:
-            return
+        display: Optional[str] = None
+        if loc is not None:
+            display = display_for(loc.name)
+            if display is None:
+                return
         if cursor.kind in _ROUTINE_CURSOR_KINDS:
-            summary = _build_summary(cursor)
-            if summary is not None:
-                raw_entries.append(summary)
-            # Recurse into the routine to pick up nested routines and
-            # call-expressions used by _collect_calls (already counted
-            # within _build_summary).
+            if display is not None:
+                summary = _build_summary(cursor)
+                if summary is not None:
+                    buckets.setdefault(display, []).append(summary)
+            # Calls and shared-state refs were collected inside
+            # _build_summary; nothing below a routine is a routine we want.
             return
-        if cursor.kind in _NAMESPACE_CURSOR_KINDS or cursor.kind == cindex.CursorKind.TRANSLATION_UNIT:
-            for child in cursor.get_children():
-                visit(child)
-            return
-        # Class / struct declarations: walk children to surface methods.
-        if cursor.kind in (
-            cindex.CursorKind.CLASS_DECL,
-            cindex.CursorKind.STRUCT_DECL,
-            cindex.CursorKind.CLASS_TEMPLATE,
-            cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
-        ):
-            for child in cursor.get_children():
-                visit(child)
-            return
-        # Other cursor kinds we don't care about for routine extraction.
+        # Namespaces, classes, the TU root and anything else: descend.
         for child in cursor.get_children():
             visit(child)
 
     visit(root_cursor)
-    return _dedup_by_name(raw_entries)
+    return {display: _dedup_by_name(entries) for display, entries in buckets.items()}
 
 
 def _build_summary(cursor) -> Optional[SubroutineSummary]:

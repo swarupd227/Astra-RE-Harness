@@ -95,6 +95,48 @@ public sealed class IngestPipeline
         IReadOnlyList<string> Warnings,
         string? ErrorMessage);
 
+    /// <summary>
+    /// Parse every file of a version, in input order. A C++ corpus goes to
+    /// the sidecar in one call so it can put the files on disk and resolve
+    /// definitions, qualified callees and shared state across headers;
+    /// everything else — and a C++ corpus too large for one message — is
+    /// parsed file by file as before. Corpus-level warnings land in
+    /// <paramref name="warnings"/> un-prefixed.
+    /// </summary>
+    private async Task<IReadOnlyList<ParseOutcome>> ParseFilesAsync(
+        IReadOnlyList<IncomingFile> files,
+        List<string> warnings,
+        CancellationToken ct)
+    {
+        var totalBytes = files.Sum(f => (long)Encoding.UTF8.GetByteCount(f.Content));
+        if (IngestParseRouting.UseCorpusMode(files.Select(f => f.RelativePath), totalBytes))
+        {
+            var corpus = await _parser.ParseCorpusAsync(
+                files.Select(f => new CorpusFile(f.RelativePath, NormaliseNewlines(f.Content))).ToList(), ct);
+            warnings.AddRange(corpus.Warnings);
+            _logger.LogInformation(
+                "Ingest: corpus parse of {Files} files ({Bytes} bytes), cross-file resolved={Resolved}",
+                files.Count, totalBytes, corpus.CrossFileResolved);
+            return corpus.Results;
+        }
+
+        if (files.Any(f => SourceLanguageDetector.FromFilename(f.RelativePath) == SourceLanguageDetector.Cpp))
+        {
+            warnings.Add(
+                $"corpus is {totalBytes / (1024 * 1024)} MiB, above the " +
+                $"{IngestParseRouting.CorpusParseMaxBytes / (1024 * 1024)} MiB whole-corpus parse limit — " +
+                "C++ files parsed in isolation, cross-file calls unresolved");
+        }
+
+        var results = new List<ParseOutcome>(files.Count);
+        foreach (var f in files)
+        {
+            ct.ThrowIfCancellationRequested();
+            results.Add(await _parser.ParseAsync(f.RelativePath, NormaliseNewlines(f.Content), form: null, ct: ct));
+        }
+        return results;
+    }
+
     public async Task<IngestResult> IngestAsync(IngestRequest req, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(req.Name))
@@ -190,14 +232,12 @@ public sealed class IngestPipeline
             corpus.TotalLoc = totalLoc;
             await _db.SaveChangesAsync(ct);
 
-            foreach (var (incoming, fileRow) in req.Files.Zip(fileEntities))
+            var outcomes = await ParseFilesAsync(req.Files, warnings, ct);
+            for (var i = 0; i < fileEntities.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                var outcome = await _parser.ParseAsync(
-                    fileRow.RelativePath,
-                    NormaliseNewlines(incoming.Content),
-                    form: null,
-                    ct: ct);
+                var fileRow = fileEntities[i];
+                var outcome = outcomes[i];
 
                 foreach (var w in outcome.Warnings)
                     warnings.Add($"{fileRow.RelativePath}: {w}");
@@ -430,14 +470,12 @@ public sealed class IngestPipeline
 
             // Parse + reconcile each new subroutine.
             var seenPriorKeys = new HashSet<(string, string)>();
-            foreach (var (incoming, fileRow) in newFileRows)
+            var outcomes = await ParseFilesAsync(newFileRows.Select(r => r.Incoming).ToList(), warnings, ct);
+            for (var i = 0; i < newFileRows.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                var outcome = await _parser.ParseAsync(
-                    fileRow.RelativePath,
-                    NormaliseNewlines(incoming.Content),
-                    form: null,
-                    ct: ct);
+                var (incoming, fileRow) = newFileRows[i];
+                var outcome = outcomes[i];
 
                 foreach (var w in outcome.Warnings)
                     warnings.Add($"{fileRow.RelativePath}: {w}");

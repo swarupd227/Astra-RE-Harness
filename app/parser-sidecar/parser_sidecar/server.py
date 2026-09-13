@@ -6,6 +6,9 @@ Serves on PARSER_GRPC_PORT (default 50051). Exposes:
   - Ping(empty) -> PingReply              liveness for the API /health/ready check
   - EchoSource(...) -> EchoSourceReply    round-trip test
   - Parse(...) -> ParseResult             Phase C: real fparser2-backed parse
+  - ParseCorpus(...) -> ParseCorpusReply  whole corpus at once; C++ files are
+                                          parsed on disk so cross-file
+                                          references resolve
 
 The proto/parser.proto file is the contract. Generated Python stubs
 (parser_pb2.py, parser_pb2_grpc.py) are produced at container build time.
@@ -120,6 +123,39 @@ def _cpp_parse(filename: str, content: str):
             outcome.warnings.append(f"libclang panic: {e}; v0 fallback")
             return outcome
     return _cpp_parse_v0(filename=filename, content=content)
+
+
+def _cpp_parse_corpus(files):
+    """Corpus-mode C++ parse: libclang with every file on disk so includes
+    resolve. Falls back to the per-file dispatcher — and says so in the
+    corpus warnings — when libclang is unavailable or the corpus parse
+    itself fails. Returns (outcomes in input order, corpus warnings)."""
+    try:
+        from parser_sidecar.cpp_parser_libclang import parse_corpus as _pc
+    except Exception as e:  # noqa: BLE001 — libclang import surface is broad
+        log.warning("libclang unavailable (%s); corpus parsed file by file", e)
+        return [_cpp_parse(filename=f, content=c) for f, c in files], [
+            f"libclang unavailable ({e}); C++ files parsed in isolation"]
+    try:
+        return _pc(files), []
+    except Exception as e:  # noqa: BLE001 — never lose the whole corpus
+        log.warning("libclang corpus parse failed (%s); parsing file by file", e)
+        return [_cpp_parse(filename=f, content=c) for f, c in files], [
+            f"libclang corpus parse failed ({e}); C++ files parsed in isolation"]
+
+
+def _to_result(filename: str, line_count: int, subroutines, warnings) -> "parser_pb2.ParseResult":
+    result = parser_pb2.ParseResult(filename=filename, line_count=line_count, warnings=list(warnings))
+    for s in subroutines:
+        result.subroutines.add(
+            name=s.name,
+            signature=s.signature,
+            line_start=s.line_start,
+            line_end=s.line_end,
+            common_block_refs=list(s.common_block_refs),
+            called_subroutines=list(s.called_subroutines),
+        )
+    return result
 
 
 def _csharp_parse(filename: str, content: str):
@@ -274,7 +310,42 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         )
 
     def Parse(self, request, context):
-        filename = request.filename or "<inline>.f90"
+        return self._parse_one(
+            filename=request.filename or "<inline>.f90",
+            content=request.content or "",
+            form=request.form or "",
+        )
+
+    def ParseCorpus(self, request, context):
+        """One call, every file. C++ files (same routing precedence as
+        Parse) go through the on-disk corpus parse together; every other
+        file is parsed exactly as Parse would. Results keep request order."""
+        started = time.time()
+        files = [(f.filename or f"<inline-{i}>", f.content or "") for i, f in enumerate(request.files)]
+        form = request.form or ""
+        results = [None] * len(files)
+        cpp_items = [
+            (i, fn, c) for i, (fn, c) in enumerate(files)
+            if not _looks_like_cobol(fn) and not _looks_like_delphi(fn) and _looks_like_cpp(fn)
+        ]
+        reply = parser_pb2.ParseCorpusReply()
+        if cpp_items:
+            outcomes, corpus_warnings = _cpp_parse_corpus([(fn, c) for _, fn, c in cpp_items])
+            reply.warnings.extend(corpus_warnings)
+            for (i, fn, _), outcome in zip(cpp_items, outcomes):
+                results[i] = _to_result(fn, outcome.line_count, outcome.subroutines, outcome.warnings)
+        for i, (fn, c) in enumerate(files):
+            if results[i] is None:
+                results[i] = self._parse_one(filename=fn, content=c, form=form)
+        reply.results.extend(results)
+        log.info(
+            "parsed corpus files=%d cpp=%d subroutines=%d warnings=%d in %.1fs",
+            len(files), len(cpp_items), sum(len(r.subroutines) for r in results),
+            sum(len(r.warnings) for r in results) + len(reply.warnings), time.time() - started,
+        )
+        return reply
+
+    def _parse_one(self, filename: str, content: str, form: str):
         # Phase 5.1 + 9.0.a: route by extension. COBOL, Delphi, and
         # Fortran each have their own parser; the contract is identical
         # so the API sees one unified `ParseResult` shape regardless of
@@ -293,70 +364,70 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         # (global SymbolTable singleton); the COBOL / Delphi / C++ / VB6 paths
         # are purely local. We acquire the lock only for the Fortran path.
         if is_cobol:
-            cobol_outcome = _cobol_parse(filename=filename, content=request.content or "")
+            cobol_outcome = _cobol_parse(filename=filename, content=content)
             outcome_line_count = cobol_outcome.line_count
             outcome_subroutines = cobol_outcome.subroutines
             outcome_warnings = cobol_outcome.warnings
             outcome_filename = filename
             language = "cobol"
         elif is_delphi:
-            delphi_outcome = _delphi_parse(filename=filename, content=request.content or "")
+            delphi_outcome = _delphi_parse(filename=filename, content=content)
             outcome_line_count = delphi_outcome.line_count
             outcome_subroutines = delphi_outcome.subroutines
             outcome_warnings = delphi_outcome.warnings
             outcome_filename = delphi_outcome.filename
             language = "delphi"
         elif is_cpp:
-            cpp_outcome = _cpp_parse(filename=filename, content=request.content or "")
+            cpp_outcome = _cpp_parse(filename=filename, content=content)
             outcome_line_count = cpp_outcome.line_count
             outcome_subroutines = cpp_outcome.subroutines
             outcome_warnings = cpp_outcome.warnings
             outcome_filename = cpp_outcome.filename
             language = "cpp"
         elif is_vb6:
-            vb6_outcome = _vb6_parse(filename=filename, content=request.content or "")
+            vb6_outcome = _vb6_parse(filename=filename, content=content)
             outcome_line_count = vb6_outcome.line_count
             outcome_subroutines = vb6_outcome.subroutines
             outcome_warnings = vb6_outcome.warnings
             outcome_filename = vb6_outcome.filename
             language = "vb6"
         elif is_csharp:
-            cs_outcome = _csharp_parse(filename=filename, content=request.content or "")
+            cs_outcome = _csharp_parse(filename=filename, content=content)
             outcome_line_count = cs_outcome.line_count
             outcome_subroutines = cs_outcome.subroutines
             outcome_warnings = cs_outcome.warnings
             outcome_filename = cs_outcome.filename
             language = "csharp"
         elif is_vbnet:
-            vbnet_outcome = _vbnet_parse(filename=filename, content=request.content or "")
+            vbnet_outcome = _vbnet_parse(filename=filename, content=content)
             outcome_line_count = vbnet_outcome.line_count
             outcome_subroutines = vbnet_outcome.subroutines
             outcome_warnings = vbnet_outcome.warnings
             outcome_filename = vbnet_outcome.filename
             language = "vbnet"
         elif is_abl:
-            abl_outcome = _abl_parse(filename=filename, content=request.content or "")
+            abl_outcome = _abl_parse(filename=filename, content=content)
             outcome_line_count = abl_outcome.line_count
             outcome_subroutines = abl_outcome.subroutines
             outcome_warnings = abl_outcome.warnings
             outcome_filename = abl_outcome.filename
             language = "openedge"
         elif is_java:
-            java_outcome = _java_parse(filename=filename, content=request.content or "")
+            java_outcome = _java_parse(filename=filename, content=content)
             outcome_line_count = java_outcome.line_count
             outcome_subroutines = java_outcome.subroutines
             outcome_warnings = java_outcome.warnings
             outcome_filename = java_outcome.filename
             language = "java"
         elif is_php:
-            php_outcome = _php_parse(filename=filename, content=request.content or "")
+            php_outcome = _php_parse(filename=filename, content=content)
             outcome_line_count = php_outcome.line_count
             outcome_subroutines = php_outcome.subroutines
             outcome_warnings = php_outcome.warnings
             outcome_filename = php_outcome.filename
             language = "php"
         elif is_unibasic:
-            unibasic_outcome = _unibasic_parse(filename=filename, content=request.content or "")
+            unibasic_outcome = _unibasic_parse(filename=filename, content=content)
             outcome_line_count = unibasic_outcome.line_count
             outcome_subroutines = unibasic_outcome.subroutines
             outcome_warnings = unibasic_outcome.warnings
@@ -365,9 +436,9 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         else:
             with _PARSE_LOCK:
                 fortran_outcome = _fortran_parse(
-                    content=request.content or "",
+                    content=content,
                     filename=filename,
-                    form=request.form or "",
+                    form=form,
                 )
             outcome_line_count = fortran_outcome.line_count
             outcome_subroutines = fortran_outcome.subroutines

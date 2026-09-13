@@ -22,9 +22,25 @@ public interface IFortranParserClient
     /// stale container from a fresh one.
     /// </summary>
     Task<ParserPing> PingAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Parse a whole source version in one call. The sidecar puts the files
+    /// on disk so cross-file references resolve — a C++ routine defined in
+    /// a .cpp whose class lives in a header is invisible to a per-file
+    /// parse. Results keep the input order. Against a sidecar that predates
+    /// the RPC the client parses file by file and says so in the warnings.
+    /// </summary>
+    Task<CorpusParseOutcome> ParseCorpusAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default);
 }
 
 public sealed record ParserPing(string Service, string Version);
+
+public sealed record CorpusFile(string Filename, string Content);
+
+public sealed record CorpusParseOutcome(
+    IReadOnlyList<ParseOutcome> Results,
+    IReadOnlyList<string> Warnings,
+    bool CrossFileResolved);
 
 public sealed record ParseOutcome(
     string Filename,
