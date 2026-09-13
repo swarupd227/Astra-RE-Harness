@@ -48,6 +48,14 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   `git checkout <branch>`, then `az acr build … --target runtime ./api` / `./frontend` (with
   `--build-arg VITE_API_BASE_URL="https://astra-api.azurewebsites.net"`) and `az webapp restart` for each app
   that changed. State the origin tip in the same message.
+  **The parser sidecar the API uses is an Azure Container App** (`Parser__GrpcEndpoint` points at
+  `parser-sidecar.<env>.centralus.azurecontainerapps.io`), not the App Service `astra-parser-sidecar`, which
+  cannot pass App Service's warm-up probe on a gRPC-only port and serves nothing. Deploy it with
+  `az acr build --registry astraharnessacr --image parser-sidecar:<sha> ./parser-sidecar` then
+  `az containerapp update -g <rg> -n parser-sidecar --image astraharnessacr.azurecr.io/parser-sidecar:<sha>
+  --revision-suffix v<sha>` (find rg/name with `az containerapp list`). Bump `parser_sidecar/__init__.py`
+  `__version__` with every sidecar change; `GET /health/ready` on the API reports `astra-parser <version>` and is
+  the only external proof the deploy landed (direct gRPC to the sidecar from outside times out).
 - **Production caution**: Compile / Test-pack validation runs execute in-process on the live API container;
   weigh before triggering them for testing. Never perform permanent deletions.
 - **Persona model**: Engineer extracts/routes/generates/runs gates; SME reviews and signs; Admin surveys,
