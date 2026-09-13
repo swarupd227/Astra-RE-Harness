@@ -1,0 +1,54 @@
+# Astra RE Harness — working rules for Claude sessions
+
+Astra is Artizent's agentic legacy-modernization platform: React + Vite + Tailwind frontend (`app/frontend`),
+.NET 8 minimal API (`app/api`), Postgres, Anthropic Claude, language parser sidecars (`app/parser-sidecar` and
+per-language validation sidecars), deployed to Azure App Service. Branch of record: `phase-8.0.e-strategy-plugins`.
+
+## The product model (read before touching any UI or agent code)
+
+**You talk to a team of agents, and they talk back.** The conversation is the primary surface; pages are
+artifact views the agents open. Full philosophy, agents, surfaces, card registry and extension recipe:
+**`docs/02_UX/agentic-ux-philosophy.md`** — read it before UI work. The non-negotiables:
+
+1. Natural language is the primary way to do anything; buttons inside artifact views are the *same* actions.
+2. Every fact the orchestrator states comes from a tool call in the same turn; tool calls stay on the message
+   as Sources, tool cards become artifacts. Failures are reported with the provider's reason, never hidden.
+3. State-changing tools pause on a Confirm / Not now card; persona rules are enforced server-side.
+4. Long runs narrate themselves into the thread (stage, halfway figure, final summary + suggestion chips).
+5. Results are explained in one or two plain sentences, then shown as a card.
+6. Dark-first Artizent tokens only (`src/theme/palette.json`); `#FFDD00` volt is the single accent and means
+   *agent working / primary action / focus*. No `bg-white`, `slate-*`, hex literals in components.
+7. Routes, `data-testid`s and demo-spec button labels are stable. New surfaces add ids; they never rename.
+
+New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating, describe, payload, artifact)
+→ maybe a card in `src/workspace/artifacts/` → maybe a page. New long run → publish on `RunEventBus` and
+`Narrator.Track` it. Anything new must be demonstrable as a sentence typed into a thread.
+
+## Engineering conventions
+
+- **Schema**: no EF migrations. Startup applies additive raw SQL (`CREATE/ALTER … IF NOT EXISTS`) in
+  `Program.cs`; a fresh database builds its schema from the model. Mirror every new column in `AppDbContext`.
+- **Anthropic calls** go through `Llm/AnthropicHttp.SendWithRetryAsync` + `AnthropicRateLimiter`, record an
+  `LlmCall` row priced by `ModelPricing.Estimate`, cache the system block, and use forced tool-use for
+  structured output. Sonnet for anything signable and for the orchestrator; Haiku for survey digests and
+  narration-scale calls.
+- **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
+  writer) — that is how the UI loop is verified locally and in e2e.
+- **Build/verify**: no local .NET 8 — Docker `mcr.microsoft.com/dotnet/sdk:8.0` for `dotnet build` / `dotnet test`
+  (`app/api/tests/Astra.Api.Tests`); frontend `npx tsc -b && npx vite build`. Parser sidecar tests run inside
+  its image (`astra-re-harness-parser-sidecar`, pytest). Local stack: see `.claude/launch.json`
+  (`frontend-localapi`) and the compose file; run only `postgres minio minio-bootstrap parser-sidecar` via
+  compose and the API from the `runtime` image (the compose `api` dev target does not boot on a Windows bind
+  mount). MinIO images live on `quay.io/minio/…`.
+- **Commits**: only verified work (build + tests + local run), one increment per commit with a message that
+  says what changed and why. Push right after committing on this branch — the user deploys from GitHub the
+  moment a commit is reported. Never push or deploy something half-verified.
+- **Deploy** (user runs it in Azure Cloud Shell): every block must start with
+  `az account set --subscription "Microsoft Azure Sponsorship"`, then `cd ~`, `rm -rf ~/astra`, a fresh clone,
+  `git checkout <branch>`, then `az acr build … --target runtime ./api` / `./frontend` (with
+  `--build-arg VITE_API_BASE_URL="https://astra-api.azurewebsites.net"`) and `az webapp restart` for each app
+  that changed. State the origin tip in the same message.
+- **Production caution**: Compile / Test-pack validation runs execute in-process on the live API container;
+  weigh before triggering them for testing. Never perform permanent deletions.
+- **Persona model**: Engineer extracts/routes/generates/runs gates; SME reviews and signs; Admin surveys,
+  generates docs and plans, runs assessments, manages the LLM key (Platform → LLM); Observer reads.
