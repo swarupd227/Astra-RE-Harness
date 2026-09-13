@@ -186,8 +186,10 @@ public sealed class CopilotOrchestrator
                 catch (AnthropicRequestException ex)
                 {
                     _logger.LogWarning(ex, "Copilot model call failed");
+                    var detail = ExtractApiError(ex.Message);
                     await FinishAsync(conv, actor, state, emit, ct,
-                        fallback: $"The model call failed ({ex.StatusCode}). Please try again in a moment.");
+                        fallback: $"The model call failed ({ex.StatusCode}{(detail is null ? "" : $": {detail}")}). " +
+                                  (ex.StatusCode is 429 or >= 500 ? "Please try again in a moment." : "This needs a code or configuration fix — the message above is the provider's own reason."));
                     return;
                 }
                 await RecordLlmCallAsync(resp, ct);
@@ -201,7 +203,10 @@ public sealed class CopilotOrchestrator
                     break;
                 }
 
-                var assistantTurn = new Dictionary<string, object?> { ["role"] = "assistant", ["content"] = resp.RawAssistantContent };
+                // Rebuild the assistant turn from the parsed blocks rather than
+                // echoing the raw response array: response-only fields and
+                // whitespace-only text blocks are both rejected on input.
+                var assistantTurn = new Dictionary<string, object?> { ["role"] = "assistant", ["content"] = AssistantContent(resp.Blocks) };
                 history.Add(assistantTurn);
                 state.Turns.Add(assistantTurn);
 
@@ -536,13 +541,61 @@ public sealed class CopilotOrchestrator
         Ct = ct,
     };
 
-    private static object ToolResultBlock(string toolUseId, ToolResult result) => new Dictionary<string, object?>
+    private static List<object> AssistantContent(IReadOnlyList<BrainBlock> blocks)
     {
-        ["type"] = "tool_result",
-        ["tool_use_id"] = toolUseId,
-        ["content"] = JsonSerializer.Serialize(result.ModelPayload, ConversationJson.Web),
-        ["is_error"] = result.Ok ? null : true,
-    };
+        var content = new List<object>();
+        foreach (var b in blocks)
+        {
+            if (b.Type == "text" && !string.IsNullOrWhiteSpace(b.Text))
+                content.Add(new Dictionary<string, object?> { ["type"] = "text", ["text"] = b.Text });
+            else if (b.Type == "tool_use" && b.ToolUseId is not null && b.ToolName is not null)
+                content.Add(new Dictionary<string, object?>
+                {
+                    ["type"] = "tool_use",
+                    ["id"] = b.ToolUseId,
+                    ["name"] = b.ToolName,
+                    ["input"] = b.Input ?? JsonDocument.Parse("{}").RootElement,
+                });
+        }
+        return content;
+    }
+
+    // `is_error` is only ever sent as `true`: a null dictionary value is NOT
+    // dropped by WhenWritingNull (that applies to properties), and Anthropic
+    // rejects `"is_error": null` with a 400 — which silently broke every
+    // second model round in production while the mock brain never noticed.
+    private static object ToolResultBlock(string toolUseId, ToolResult result)
+    {
+        var block = new Dictionary<string, object?>
+        {
+            ["type"] = "tool_result",
+            ["tool_use_id"] = toolUseId,
+            ["content"] = JsonSerializer.Serialize(result.ModelPayload, ConversationJson.Web),
+        };
+        if (!result.Ok) block["is_error"] = true;
+        return block;
+    }
+
+    /// <summary>The provider's own `error.message` out of an
+    /// <see cref="AnthropicRequestException"/> text, when it carried a JSON body.</summary>
+    private static string? ExtractApiError(string exceptionMessage)
+    {
+        var start = exceptionMessage.IndexOf('{');
+        if (start < 0) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(exceptionMessage[start..].TrimEnd('…'));
+            if (doc.RootElement.TryGetProperty("error", out var err) && err.TryGetProperty("message", out var msg))
+                return msg.GetString();
+        }
+        catch (JsonException)
+        {
+            // Truncated body — fall back to a regex over the raw text.
+            var m = System.Text.RegularExpressions.Regex.Match(exceptionMessage, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            if (m.Success) return m.Groups[1].Value.Replace("\\\"", "\"");
+        }
+        return null;
+    }
 
     private static List<ArtifactDto> DedupeArtifacts(IEnumerable<ArtifactDto> artifacts)
     {
