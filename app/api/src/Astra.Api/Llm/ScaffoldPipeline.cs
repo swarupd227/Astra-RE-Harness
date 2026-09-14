@@ -55,7 +55,8 @@ public sealed class ScaffoldPipeline
     public async IAsyncEnumerable<ExtractionEvent> RunAsync(
         Guid specId,
         string targetStack,
-        [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct,
+        string? repairHint = null)
     {
         // Phase #4 / value-add #3 — engineer-chosen target stack.
         // The pipeline currently delegates to a single scaffold provider, but
@@ -121,7 +122,8 @@ public sealed class ScaffoldPipeline
             DefaultPromptTemplateId,
             DefaultPromptTemplateVersion,
             spec.Subroutine?.SourceLanguage ?? "",
-            originalSourceText);
+            originalSourceText,
+            repairHint);
 
         object? finalPayload = null;
         await foreach (var evt in _provider.GenerateAsync(req, ct))

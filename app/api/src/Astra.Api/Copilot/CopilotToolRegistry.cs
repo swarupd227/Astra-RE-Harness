@@ -266,16 +266,18 @@ public sealed class CopilotToolRegistry
             Agent = "migration",
             Mutating = true,
             AllowedPersonas = new[] { Persona.Engineer },
-            Description = "Generate target code for a SIGNED spec on a target stack (e.g. dotnet8, java-spring, angular-java, dotnet10-blazor). Omit targetStack for the default. Runs in the background. Engineer only.",
+            Description = "Generate target code for a SIGNED spec on a target stack (e.g. dotnet10, java-spring, angular-java, dotnet10-blazor). Omit targetStack for the default. Set repairFromLatestFailure when the user wants the code regenerated with the last failed gate's errors fixed. Runs in the background. Engineer only.",
             InputSchema = Obj(
                 ("specId", Str("Spec id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative).")),
-                ("targetStack", Str("Target stack id. Optional."))),
+                ("targetStack", Str("Target stack id. Optional.")),
+                ("repairFromLatestFailure", Bool("True to feed the routine's latest FAILED gate log (errors, failing tests) into the regeneration so they get fixed."))),
             Describe = async (input, ctx) =>
             {
                 var spec = await ResolveSpecAsync(input, ctx);
                 var target = Read(input, "targetStack");
-                return $"generate {(string.IsNullOrWhiteSpace(target) ? "the default target's" : target)} code for `{spec?.Subroutine?.Name ?? "the routine"}`";
+                var repair = ReadBool(input, "repairFromLatestFailure") ? " with the last gate's errors fixed" : "";
+                return $"{(repair.Length > 0 ? "regenerate" : "generate")} {(string.IsNullOrWhiteSpace(target) ? "the default target's" : target)} code for `{spec?.Subroutine?.Name ?? "the routine"}`{repair}";
             },
             Execute = GenerateScaffoldAsync,
         });
@@ -1014,7 +1016,31 @@ public sealed class CopilotToolRegistry
         var runs = ctx.Services.GetRequiredService<BackgroundRunService>();
         var narrator = ctx.Services.GetRequiredService<Narrator>();
         var name = spec.Subroutine?.Name ?? spec.Id.ToString();
-        var runId = runs.StartScaffold(spec.Id, name, chosen, ctx.Actor.Persona, ctx.Actor.DisplayName);
+
+        // "Regenerate with the fix": the routine's latest failed gate becomes
+        // a repair hint — file, line, code, message — appended to the prompt.
+        string? repairHint = null;
+        if (ReadBool(input, "repairFromLatestFailure"))
+        {
+            var lastFailed = await ctx.Db.ValidationRuns.AsNoTracking()
+                .Where(r => r.SpecId == spec.Id && r.Status == "FAILED")
+                .OrderByDescending(r => r.StartedAt)
+                .FirstOrDefaultAsync(ctx.Ct);
+            if (lastFailed is not null)
+            {
+                string? log = null;
+                if (lastFailed.LogBlobUri is { Length: > 0 } uri)
+                {
+                    try { log = await ctx.Services.GetRequiredService<Astra.Api.Storage.IBlobClient>().GetTextAsync(uri, ctx.Ct); }
+                    catch (Exception) { /* the summary still describes the failure */ }
+                }
+                repairHint = Astra.Api.Validation.GateFailureDigest.Parse(lastFailed.Stage, log).ToRepairHint();
+                if (string.IsNullOrWhiteSpace(repairHint))
+                    repairHint = $"The previous attempt failed the {lastFailed.Stage} gate: {lastFailed.Summary}";
+            }
+        }
+
+        var runId = runs.StartScaffold(spec.Id, name, chosen, ctx.Actor.Persona, ctx.Actor.DisplayName, repairHint);
         narrator.Track(runId, ctx.ConversationId, "migration", "scaffold", name, ctx.CorpusId,
             ctx.Actor.Persona.ToString().ToLowerInvariant(), ctx.Actor.DisplayName);
 
@@ -1022,7 +1048,7 @@ public sealed class CopilotToolRegistry
         {
             kind = "scaffold",
             corpusId = ctx.CorpusId,
-            label = $"Generating {chosen} · {name}",
+            label = repairHint is null ? $"Generating {chosen} · {name}" : $"Regenerating {chosen} with the fix · {name}",
             agent = "migration",
             state = "RUNNING",
             startedAt = DateTimeOffset.UtcNow,

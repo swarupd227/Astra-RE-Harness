@@ -134,12 +134,19 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             ["signedSpecJson"] = request.SignedSpecJson,
         });
 
+        // A regeneration after a failed gate carries the gate's findings; the
+        // system block (and its cache) stay exactly as they are.
+        var userPrompt = string.IsNullOrWhiteSpace(request.RepairHint)
+            ? rendered.User
+            : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
+              "\n\nReturn the complete corrected package in the same JSON shape; every file, not only the changed ones.";
+
         string? rawJson = null;
         int inputTokens = 0, outputTokens = 0;
         string? transportError = null;
         try
         {
-            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(rendered.System, rendered.User, ct);
+            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(rendered.System, userPrompt, ct);
         }
         catch (Exception ex)
         {

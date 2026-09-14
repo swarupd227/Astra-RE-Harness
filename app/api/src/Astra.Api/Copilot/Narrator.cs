@@ -301,8 +301,26 @@ public sealed class Narrator
                 }
                 else
                 {
-                    suggestions.Add(new("Explain the failure", $"Explain why the gate failed for {t.Label} and what would fix it"));
-                    suggestions.Add(new("Regenerate and retry", $"Generate the code for {t.Label} again and re-run the compile gate"));
+                    // A failed gate is explained from its own log — file, line,
+                    // code, message, what that usually means — and offered a
+                    // regeneration that carries those errors into the prompt.
+                    Guid? validationRunId = item.TryGetProperty("validationRunId", out var vr) && Guid.TryParse(vr.GetString(), out var vg) ? vg : null;
+                    var run = validationRunId is { } rid
+                        ? await db.ValidationRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == rid, ct)
+                        : null;
+                    string? log = null;
+                    if (run?.LogBlobUri is { Length: > 0 } uri)
+                    {
+                        try { log = await blob.GetTextAsync(uri, ct); }
+                        catch (Exception ex) { _logger.LogWarning(ex, "Gate log unavailable for run {Run}", run.Id); }
+                    }
+                    var stage = run?.Stage ?? (item.TryGetProperty("stage", out var stEl) ? stEl.GetString() ?? "COMPILE" : "COMPILE");
+                    var gateWord = stage.Replace('_', '-').ToLowerInvariant();
+                    var digest = Astra.Api.Validation.GateFailureDigest.Parse(stage, log);
+                    markdown = digest.ToMarkdown(t.Label, run?.Summary ?? summary);
+                    suggestions.Add(new("Regenerate with the fix", $"Regenerate the code for {t.Label} with the {gateWord} errors fixed, then re-run the {gateWord} gate"));
+                    suggestions.Add(new("Show the log", $"Show me the {gateWord} log for {t.Label}"));
+                    suggestions.Add(new("Explain the failure", $"Explain why the {gateWord} gate failed for {t.Label} and what would fix it"));
                 }
                 break;
             }

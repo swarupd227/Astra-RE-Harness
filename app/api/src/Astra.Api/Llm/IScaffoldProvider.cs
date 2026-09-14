@@ -26,7 +26,11 @@ public sealed record ScaffoldRequest(
     string PromptTemplateId,
     string PromptTemplateVersion,
     string SourceSchema = "",
-    string OriginalSourceText = "");
+    string OriginalSourceText = "",
+    // What the previous attempt's gate said (GateFailureDigest.ToRepairHint):
+    // appended to the prompt so the regeneration fixes those errors instead
+    // of repeating them. Null for a first attempt.
+    string? RepairHint = null);
 
 public sealed record ScaffoldFile(
     string Path,

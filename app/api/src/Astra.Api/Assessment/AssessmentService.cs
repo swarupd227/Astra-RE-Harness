@@ -159,16 +159,29 @@ public sealed class AssessmentService
                 UiFlagged: flagCounts.Keys.Any(k => k.Contains("ui", StringComparison.OrdinalIgnoreCase)),
                 DataFlagged: flagCounts.Keys.Any(k => k.Contains("data", StringComparison.OrdinalIgnoreCase)) || tables.Count > 0));
 
-            var candidateTargets = archetypes.All()
+            // Ordered the way the platform itself would choose (.NET 10 first,
+            // then a dotnet10-* variant, then dotnet8, then the rest): the
+            // narrative is told that the first candidate is the default, so
+            // alphabetical order no longer nudges it towards dotnet8.
+            var unordered = archetypes.All()
                 .Where(a => language is null || a.Manifest.CompatibleSchemas.Count == 0
                             || a.Manifest.CompatibleSchemas.Any(s => string.Equals(s, language, StringComparison.OrdinalIgnoreCase)))
                 .Select(a => a.Manifest.TargetStack).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
+            var candidateTargets = new List<string>();
+            var remaining = new List<string>(unordered);
+            while (remaining.Count > 0)
+            {
+                var pick = Endpoints.ScaffoldEndpoints.PreferredStack(remaining);
+                candidateTargets.Add(pick);
+                remaining.Remove(pick);
+            }
 
             var facts = new
             {
                 programme = corpus.Name,
                 sourceLanguage = language,
                 languageLabel = ConversationService.LanguageLabel(language),
+                defaultTarget = candidateTargets.FirstOrDefault(),
                 inventory = new
                 {
                     routines,

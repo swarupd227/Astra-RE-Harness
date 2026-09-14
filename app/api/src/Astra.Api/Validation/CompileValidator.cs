@@ -26,6 +26,26 @@ public sealed class CompileValidator
 {
     private static readonly Regex ErrorLine = new(@"\berror\s+[A-Z]+\d+:", RegexOptions.Compiled);
     private static readonly Regex WarningLine = new(@"\bwarning\s+[A-Z]+\d+:", RegexOptions.Compiled);
+    private static readonly Regex NodePrefix = new(@"^\s*(\d+>)?\s*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Distinct diagnostics in a build log. MSBuild prints every error and
+    /// warning twice — once inline, prefixed with the project number, and
+    /// once in the summary block — so a raw line count reported "10 errors"
+    /// for five. Lines are compared without the prefix and indentation.
+    /// </summary>
+    public static (int Errors, int Warnings) CountDiagnostics(string log)
+    {
+        var errors = new HashSet<string>(StringComparer.Ordinal);
+        var warnings = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var raw in log.Split('\n'))
+        {
+            var line = NodePrefix.Replace(raw.TrimEnd('\r'), "");
+            if (ErrorLine.IsMatch(line)) errors.Add(line);
+            else if (WarningLine.IsMatch(line)) warnings.Add(line);
+        }
+        return (errors.Count, warnings.Count);
+    }
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(5);
     // npm install can legitimately take longer than a dotnet build on a
     // cold cache — this is only exercised by angular-dotnet8.
@@ -162,12 +182,7 @@ public sealed class CompileValidator
             var (exitCode, log) = await RunDotnetBuildAsync(tempDir, ct);
 
             // 3. Parse warnings + errors out of the build log.
-            int errorCount = 0, warningCount = 0;
-            foreach (var line in log.Split('\n'))
-            {
-                if (ErrorLine.IsMatch(line)) errorCount++;
-                else if (WarningLine.IsMatch(line)) warningCount++;
-            }
+            var (errorCount, warningCount) = CountDiagnostics(log);
 
             // 4. Upload the build log to MinIO for posterity.
             var logKey = $"validation/{run.Id:N}/compile.log";
@@ -293,12 +308,7 @@ public sealed class CompileValidator
             //    the dotnet8-only path does. ng build's error format doesn't
             //    match those regexes and isn't worth a second parser for a
             //    count that's redundant with the exit code either way.
-            int errorCount = 0, warningCount = 0;
-            foreach (var line in dotnetLog.Split('\n'))
-            {
-                if (ErrorLine.IsMatch(line)) errorCount++;
-                else if (WarningLine.IsMatch(line)) warningCount++;
-            }
+            var (errorCount, warningCount) = CountDiagnostics(dotnetLog);
 
             var combinedLog = new StringBuilder();
             combinedLog.AppendLine("=== backend (dotnet build) ===");

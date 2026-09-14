@@ -42,11 +42,13 @@ public sealed class BackgroundRunService
         return runId;
     }
 
-    public Guid StartScaffold(Guid specId, string routineName, string targetStack, Persona persona, string displayName)
+    public Guid StartScaffold(Guid specId, string routineName, string targetStack, Persona persona, string displayName, string? repairHint = null)
     {
         var runId = Guid.NewGuid();
-        _bus.State(runId, "migration", "RUNNING", $"Generating {targetStack} code for `{routineName}`…");
-        _ = Task.Run(() => RunScaffoldAsync(runId, specId, routineName, targetStack, persona, displayName));
+        _bus.State(runId, "migration", "RUNNING", repairHint is null
+            ? $"Generating {targetStack} code for `{routineName}`…"
+            : $"Regenerating {targetStack} code for `{routineName}` with the last gate's errors in hand…");
+        _ = Task.Run(() => RunScaffoldAsync(runId, specId, routineName, targetStack, persona, displayName, repairHint));
         return runId;
     }
 
@@ -151,7 +153,7 @@ public sealed class BackgroundRunService
 
     // ── Scaffold ─────────────────────────────────────────────────────────
 
-    private async Task RunScaffoldAsync(Guid runId, Guid specId, string routineName, string targetStack, Persona persona, string displayName)
+    private async Task RunScaffoldAsync(Guid runId, Guid specId, string routineName, string targetStack, Persona persona, string displayName, string? repairHint = null)
     {
         var ct = _lifetime.ApplicationStopping;
         try
@@ -163,7 +165,7 @@ public sealed class BackgroundRunService
             int files = 0, lines = 0, todos = 0;
             var tokens = 0;
 
-            await foreach (var evt in pipeline.RunAsync(specId, targetStack, ct))
+            await foreach (var evt in pipeline.RunAsync(specId, targetStack, ct, repairHint))
             {
                 switch (evt.Type)
                 {
