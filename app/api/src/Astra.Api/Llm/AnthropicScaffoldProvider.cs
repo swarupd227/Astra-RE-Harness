@@ -566,33 +566,111 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
               "\n\nReturn the complete corrected package through the tool; every file, not only the changed ones.";
 
-        string? toolJson = null;
-        string? stopReason = null;
-        int inputTokens = 0, outputTokens = 0;
+        // The whole unit comes back in one answer, so the call streams: the
+        // run narrates progress while the model writes, nothing waits on a
+        // single response, and the output budget is raised above the
+        // routine-scale default because a unit is many routines.
+        var maxOutput = Math.Max(_opts.MaxOutputTokens, FaithfulConversion.MaxOutputTokens);
+        var body = JsonSerializer.Serialize(BuildToolRequest(rendered.System, userPrompt, FaithfulConversion.EmitPackageTool(), maxOutput));
+        var cacheKey = $"scaffold:faithful:{request.SourceSchema}:{loaded.Version}";
+
+        HttpResponseMessage? resp = null;
         string? failure = null;
+        using var lease = await _limiter.AcquireAsync(cacheKey, ct);
         try
         {
-            (toolJson, inputTokens, outputTokens, stopReason) = await CallAnthropicToolAsync(
-                rendered.System, userPrompt, FaithfulConversion.EmitPackageTool(),
-                $"scaffold:faithful:{request.SourceSchema}:{loaded.Version}", ct);
+            resp = await _http.SendAsync(AnthropicHttp.BuildMessagesRequest(_opts, body), HttpCompletionOption.ResponseHeadersRead, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Faithful conversion failed for spec {Spec} ({Unit})", request.SpecId, unit.UnitPath);
+            _logger.LogError(ex, "Faithful conversion transport failure for spec {Spec} ({Unit})", request.SpecId, unit.UnitPath);
             failure = ex.Message;
         }
-
-        if (failure is not null)
+        if (failure is not null || resp is null)
         {
-            yield return new("error", new { code = "provider.scaffold_generation_failed", message = failure, retryable = true });
+            yield return new("error", new { code = "provider.transport", message = $"Could not reach Anthropic: {failure ?? "no response"}", retryable = true });
             yield break;
         }
+        _limiter.Observe(resp);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var upstream = await resp.Content.ReadAsStringAsync(ct);
+            var status = (int)resp.StatusCode;
+            resp.Dispose();
+            yield return new("error", new
+            {
+                code = status == 429 ? "provider.rate_limited" : status >= 500 ? "provider.unavailable" : "provider.rejected",
+                message = $"Anthropic returned {status}: {Truncate(upstream, 400)}",
+                retryable = status == 429 || status >= 500,
+            });
+            yield break;
+        }
+
+        var buffer = new StringBuilder(64 * 1024);
+        int inputTokens = 0, outputTokens = 0;
+        string? stopReason = null;
+        string? streamError = null;
+        await using (var stream = await resp.Content.ReadAsStreamAsync(ct))
+        using (var reader = new StreamReader(stream, Encoding.UTF8))
+        {
+            string? eventType = null;
+            while (!reader.EndOfStream)
+            {
+                ct.ThrowIfCancellationRequested();
+                var line = await reader.ReadLineAsync(ct);
+                if (line is null) break;
+                if (line.Length == 0) { eventType = null; continue; }
+                if (line.StartsWith("event:", StringComparison.Ordinal)) { eventType = line[6..].Trim(); continue; }
+                if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
+                var json = line[5..].Trim();
+                if (json.Length == 0) continue;
+                JsonElement ev;
+                try { using var doc = JsonDocument.Parse(json); ev = doc.RootElement.Clone(); }
+                catch (JsonException) { continue; }
+                var type = ev.TryGetProperty("type", out var tEl) ? tEl.GetString() : eventType;
+                switch (type)
+                {
+                    case "message_start":
+                        if (ev.TryGetProperty("message", out var msg) && msg.TryGetProperty("usage", out var u0)
+                            && u0.TryGetProperty("input_tokens", out var inT))
+                            inputTokens = inT.GetInt32();
+                        break;
+                    case "content_block_delta":
+                        if (ev.TryGetProperty("delta", out var delta) && AnthropicLlmProvider.DeltaText(delta) is { Length: > 0 } chunk)
+                        {
+                            buffer.Append(chunk);
+                            yield return new("token", new { path = $"src/{unit.ClassName}.cs", text = chunk });
+                        }
+                        break;
+                    case "message_delta":
+                        if (ev.TryGetProperty("delta", out var md) && md.TryGetProperty("stop_reason", out var sr) && sr.ValueKind == JsonValueKind.String)
+                            stopReason = sr.GetString();
+                        if (ev.TryGetProperty("usage", out var u1) && u1.TryGetProperty("output_tokens", out var outT))
+                            outputTokens = outT.GetInt32();
+                        break;
+                    case "error":
+                        streamError = ev.TryGetProperty("error", out var e) && e.TryGetProperty("message", out var em)
+                            ? em.GetString() ?? "Anthropic emitted an error event."
+                            : "Anthropic emitted an error event.";
+                        break;
+                }
+                if (streamError is not null) break;
+            }
+        }
+        resp.Dispose();
+
+        if (streamError is not null)
+        {
+            yield return new("error", new { code = "provider.stream_error", message = streamError, retryable = true });
+            yield break;
+        }
+        var toolJson = buffer.Length > 0 ? buffer.ToString() : null;
         if (string.Equals(stopReason, "max_tokens", StringComparison.OrdinalIgnoreCase))
         {
             yield return new("error", new
             {
                 code = "provider.output_truncated",
-                message = $"The model ran out of output ({_opts.MaxOutputTokens:N0} tokens) before finishing {unit.UnitName} " +
+                message = $"The model ran out of output ({maxOutput:N0} tokens, {outputTokens:N0} written) before finishing {unit.UnitName} " +
                           $"({unit.Routines.Count} routines, {unitLines:N0} lines). Convert a smaller unit, or raise Llm:Anthropic:MaxOutputTokens.",
                 retryable = false,
             });
@@ -661,45 +739,31 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             request.SpecId, unit.UnitPath, unit.Routines.Count, package.Count, inputTokens, outputTokens);
     }
 
-    /// <summary>
-    /// One non-streaming Messages call with a forced tool, through the
-    /// shared retrying sender and the process-wide rate limiter. Returns
-    /// the tool input (null when the model produced none) and the stop
-    /// reason so a truncated answer is reported rather than parsed.
-    /// </summary>
-    private async Task<(string? ToolJson, int InputTokens, int OutputTokens, string? StopReason)> CallAnthropicToolAsync(
-        string systemPrompt, string userPrompt, Dictionary<string, object?> tool, string cacheKey, CancellationToken ct)
+    /// <summary>A streamed Messages request with one forced tool and a
+    /// cached system block; the caller reads the SSE and assembles the
+    /// tool input from the <c>input_json_delta</c> chunks.</summary>
+    private Dictionary<string, object?> BuildToolRequest(
+        string systemPrompt, string userPrompt, Dictionary<string, object?> tool, int maxTokens) => new()
     {
-        var body = JsonSerializer.Serialize(new Dictionary<string, object?>
+        ["model"] = _opts.Model,
+        ["max_tokens"] = maxTokens,
+        ["stream"] = true,
+        ["tools"] = new[] { tool },
+        ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = tool["name"] },
+        ["system"] = new[]
         {
-            ["model"] = _opts.Model,
-            ["max_tokens"] = _opts.MaxOutputTokens,
-            ["tools"] = new[] { tool },
-            ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = tool["name"] },
-            ["system"] = new[]
+            new Dictionary<string, object?>
             {
-                new Dictionary<string, object?>
-                {
-                    ["type"] = "text",
-                    ["text"] = systemPrompt,
-                    ["cache_control"] = new { type = "ephemeral" },
-                },
+                ["type"] = "text",
+                ["text"] = systemPrompt,
+                ["cache_control"] = new { type = "ephemeral" },
             },
-            ["messages"] = new[]
-            {
-                new Dictionary<string, object?> { ["role"] = "user", ["content"] = userPrompt },
-            },
-        });
-
-        var resp = await AnthropicHttp.SendWithRetryAsync(
-            _http, () => AnthropicHttp.BuildMessagesRequest(_opts, body), _limiter, cacheKey, _logger, ct);
-
-        using var doc = JsonDocument.Parse(resp.Body);
-        var root = doc.RootElement;
-        var usage = AnthropicHttp.ReadUsage(root);
-        var stop = root.TryGetProperty("stop_reason", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
-        return (AnthropicHttp.ReadToolInput(root), usage.InputTokens, usage.OutputTokens, stop);
-    }
+        },
+        ["messages"] = new[]
+        {
+            new Dictionary<string, object?> { ["role"] = "user", ["content"] = userPrompt },
+        },
+    };
 
     private sealed record GeneratedFile(string Path, string Language, string Content, string[] DerivedFromClaimIds)
     {

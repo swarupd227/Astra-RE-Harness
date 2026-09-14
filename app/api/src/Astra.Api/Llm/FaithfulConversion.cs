@@ -32,10 +32,15 @@ public static class FaithfulConversion
     /// shape; it is never carried into a generated package.</summary>
     public const string ExemplarPath = "src/Unit.cs";
 
-    /// <summary>One non-streaming call has to return the whole unit; past
-    /// this many source lines the output cap is hit and the package would be
+    /// <summary>One call has to return the whole unit; past this many source
+    /// lines even the raised output budget is hit and the package would be
     /// cut off mid-file, so the provider refuses up front with a reason.</summary>
     public const int MaxUnitLines = 1200;
+
+    /// <summary>Output budget for a unit (the routine-scale default is 16k):
+    /// a 600-line unit with stubs is 15-20k tokens of C#, so the answer is
+    /// streamed and allowed 32k unless the configured cap is higher.</summary>
+    public const int MaxOutputTokens = 32768;
 
     /// <summary>Every placeholder the faithful prompt may use — the test
     /// suite checks the prompt on disk against this list so a typo can never

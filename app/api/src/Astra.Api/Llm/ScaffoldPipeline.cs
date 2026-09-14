@@ -146,22 +146,30 @@ public sealed class ScaffoldPipeline
             unit);
 
         object? finalPayload = null;
+        var providerReportedError = false;
         await foreach (var evt in _provider.GenerateAsync(req, ct))
         {
             ct.ThrowIfCancellationRequested();
             if (evt.Type == "__final__") { finalPayload = evt.Data; continue; }
+            if (evt.Type == "error") providerReportedError = true;
             yield return evt;
         }
 
         if (finalPayload is null)
         {
-            yield return new("error", new
+            // The provider's own error already said why; a second, generic
+            // error would only replace it in the run's summary.
+            if (!providerReportedError)
             {
-                code = "provider.no_final_payload",
-                message = "Provider stream ended without producing a scaffold package.",
-                retryable = true,
-            });
-            if (spec.Subroutine is not null) spec.Subroutine.State = "SIGNED";
+                yield return new("error", new
+                {
+                    code = "provider.no_final_payload",
+                    message = "Provider stream ended without producing a scaffold package.",
+                    retryable = true,
+                });
+            }
+            if (spec.Subroutine is not null)
+                spec.Subroutine.State = await _db.Scaffolds.AnyAsync(s => s.SpecId == specId, ct) ? "SCAFFOLDED" : "SIGNED";
             await _db.SaveChangesAsync(ct);
             yield break;
         }

@@ -224,7 +224,9 @@ public sealed class BackgroundRunService
                         break;
                     case "error":
                         var e = Read(evt.Data);
-                        error = e.TryGetProperty("message", out var m) ? m.GetString() : "scaffold failed";
+                        var reason = e.TryGetProperty("message", out var m) ? m.GetString() : "scaffold failed";
+                        _bus.Log(runId, "migration", "", $"Error: {reason}");
+                        error ??= reason;
                         break;
                     case "done":
                         var d = Read(evt.Data);
