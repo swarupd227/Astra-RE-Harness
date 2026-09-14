@@ -78,8 +78,9 @@ export function buildStackOptions(
 
 /**
  * The stack the platform would choose on its own for this source language.
- * Mirrors the server's default in ScaffoldEndpoints.cs: prefer dotnet8 when
- * it is viable, else the first viable stack alphabetically.
+ * Mirrors the server's default in ScaffoldEndpoints.cs: .NET 10 first (the
+ * plain `dotnet10` stack, then a `dotnet10-*` variant), then dotnet8 for
+ * estates standardised on the older LTS, else the first viable stack.
  */
 export function recommendedStack(
   archetypes: ArchetypeManifest[],
@@ -87,7 +88,12 @@ export function recommendedStack(
 ): string | null {
   const viable = buildStackOptions(archetypes, schema).filter((o) => o.selectable);
   if (viable.length === 0) return null;
-  return viable.find((o) => o.stack === 'dotnet8')?.stack ?? viable[0].stack;
+  return (
+    viable.find((o) => o.stack === 'dotnet10')?.stack ??
+    viable.find((o) => o.stack.startsWith('dotnet10-'))?.stack ??
+    viable.find((o) => o.stack === 'dotnet8')?.stack ??
+    viable[0].stack
+  );
 }
 
 export function prettyStack(s: string): string {

@@ -115,10 +115,10 @@ public sealed class ExtractionPipeline
 
         // 2. Provider context (visible to the user).
         // Phase 5.2 — pick the prompt by the subroutine's parsed language.
-        // Target stack stays "dotnet8" for now; Phase 5.4 introduces the
-        // engineer-chosen target-stack override on the scaffold path.
+        // The extract prompt is picked for the default .NET target (.NET 10);
+        // the engineer-chosen target stack applies on the scaffold path.
         var sourceLanguage = string.IsNullOrEmpty(sub.SourceLanguage) ? "fortran-f77" : sub.SourceLanguage;
-        const string defaultTargetStack = "dotnet8";
+        const string defaultTargetStack = "dotnet10";
         var (promptId, promptVersion) = ResolvePromptMeta(sourceLanguage, defaultTargetStack);
         yield return new("provider_info", new
         {

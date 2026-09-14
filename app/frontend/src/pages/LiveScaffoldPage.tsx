@@ -41,8 +41,8 @@ export function LiveScaffoldPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // The Spec-review surface forwards the chosen target stack here. Default
-  // to dotnet8 so deep links still work.
-  const targetStack = searchParams.get('target') ?? 'dotnet8';
+  // to the platform default (.NET 10) so deep links still work.
+  const targetStack = searchParams.get('target') ?? 'dotnet10';
   const subroutineId = useResolveSubroutineId(id);
 
   const [status, setStatus] = useState<Status>('idle');

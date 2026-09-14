@@ -36,7 +36,7 @@ public static class ProviderEndpoints
             // Fortran → .NET 8 path. When per-project pinning lands this
             // becomes per-project.
             const string schemaId = "fortran-f77";
-            const string targetStack = "dotnet8";
+            const string targetStack = "dotnet10";
             const string kind = "extract";
             var extractPrompt = prompts.GetLatest(schemaId, targetStack, kind);
 

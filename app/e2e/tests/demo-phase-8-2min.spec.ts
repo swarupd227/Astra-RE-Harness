@@ -433,7 +433,7 @@ test.describe('Demo · final 2-minute end-to-end', () => {
       });
       await page.getByRole('button', { name: /Open scaffold/ }).click();
       await expect(
-        page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet8/ }),
+        page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet10/ }),
       ).toBeVisible({ timeout: 30_000 });
 
       // Click the actual business-logic file in the tree.

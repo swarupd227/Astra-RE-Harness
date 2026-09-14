@@ -11,6 +11,20 @@ namespace Astra.Api.Endpoints;
 
 public static class ScaffoldEndpoints
 {
+    /// <summary>The platform's own choice among the stacks that have an
+    /// archetype for a source language: .NET 10 first (the plain stack, then
+    /// a <c>dotnet10-*</c> variant), .NET 8 for estates standardised on the
+    /// older LTS, else the first candidate. Empty input → the default.</summary>
+    public static string PreferredStack(IEnumerable<string> candidates)
+    {
+        var list = candidates.ToList();
+        return list.FirstOrDefault(s => string.Equals(s, "dotnet10", StringComparison.OrdinalIgnoreCase))
+            ?? list.FirstOrDefault(s => s.StartsWith("dotnet10-", StringComparison.OrdinalIgnoreCase))
+            ?? list.FirstOrDefault(s => string.Equals(s, "dotnet8", StringComparison.OrdinalIgnoreCase))
+            ?? list.FirstOrDefault()
+            ?? Astra.Api.Llm.ScaffoldPipeline.TargetPlatform;
+    }
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -68,12 +82,10 @@ public static class ScaffoldEndpoints
             //   - explicit ?targetStack=X wins, no matter what
             //   - else: stacks whose archetypes list `compatibleSchemas`
             //     including this spec's schemaId become the candidate set
-            //   - prefer "dotnet8" if it's in the set (keeps Fortran /
-            //     COBOL / Delphi / C++ on the well-trodden path)
-            //   - otherwise pick the first stack alphabetically — VB6 has
-            //     only "dotnet10" archetypes so this routes correctly
-            //   - fallback to "dotnet8" if no archetype is compatible at
-            //     all (preserves legacy behaviour)
+            //   - prefer .NET 10 (plain "dotnet10", then a "dotnet10-*"
+            //     variant), then "dotnet8" for estates on the older LTS,
+            //     otherwise the first stack alphabetically — see
+            //     PreferredStack, which the copilot tool shares
             string chosenTarget;
             if (!string.IsNullOrWhiteSpace(targetStack))
             {
@@ -89,9 +101,7 @@ public static class ScaffoldEndpoints
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                chosenTarget = compatibleStacks.Contains("dotnet8", StringComparer.OrdinalIgnoreCase)
-                    ? "dotnet8"
-                    : (compatibleStacks.FirstOrDefault() ?? "dotnet8");
+                chosenTarget = PreferredStack(compatibleStacks);
                 log.LogInformation(
                     "Scaffold default targetStack for spec {SpecId} (schema={Schema}): {Stack} (from candidates {Candidates})",
                     id, sourceLanguage, chosenTarget, string.Join(",", compatibleStacks));

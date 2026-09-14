@@ -176,7 +176,7 @@ test.describe('Appendix A · 4-minute demo path', () => {
         await openExisting.click();
       }
       // Scaffold artifact view — file tree + Monaco + traceability.
-      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet8/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet10/ })).toBeVisible();
       if (beat) await page.waitForTimeout(beat);  // see file tree + traceability
     });
 

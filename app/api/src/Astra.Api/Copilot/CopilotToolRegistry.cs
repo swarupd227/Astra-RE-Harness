@@ -991,7 +991,7 @@ public sealed class CopilotToolRegistry
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            chosen = compatible.Contains("dotnet8", StringComparer.OrdinalIgnoreCase) ? "dotnet8" : compatible.FirstOrDefault() ?? "dotnet8";
+            chosen = Endpoints.ScaffoldEndpoints.PreferredStack(compatible);
         }
 
         var forTarget = archetypes.All()

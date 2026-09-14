@@ -54,7 +54,7 @@ export const ASSESSMENT_FIXTURE: Artifact = {
     },
     recommendation: {
       mode: 'strangler',
-      targetStack: 'dotnet8',
+      targetStack: 'dotnet10',
       summary:
         'Wrap the formatting core behind a façade and migrate the leaf routines first; the FMTSUB cycle is the last thing to move. Equivalence-test every wave against the golden dataset.',
     },

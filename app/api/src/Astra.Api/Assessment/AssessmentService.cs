@@ -494,9 +494,13 @@ public static class EffortRiskModel
 
     private static readonly Dictionary<string, string> DefaultTarget = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["fortran-f77"] = "dotnet8", ["cpp"] = "dotnet8", ["delphi"] = "dotnet8", ["cobol"] = "java-spring",
-        ["vb6"] = "dotnet10-blazor", ["vbnet"] = "dotnet8", ["unibasic"] = "java-spring", ["abl"] = "java-spring",
-        ["java"] = "java-spring", ["csharp"] = "dotnet8",
+        // .NET 10 is the default .NET target everywhere; dotnet8 stays
+        // selectable for clients standardised on the older LTS. C# and
+        // VB.NET only ever had dotnet10 prompts — "dotnet8" here pointed
+        // them at a stack with nothing behind it.
+        ["fortran-f77"] = "dotnet10", ["cpp"] = "dotnet10", ["delphi"] = "dotnet10", ["cobol"] = "java-spring",
+        ["vb6"] = "dotnet10-blazor", ["vbnet"] = "dotnet10-csharp", ["unibasic"] = "java-spring", ["abl"] = "java-spring",
+        ["java"] = "java-spring", ["csharp"] = "dotnet10-webapi",
     };
 
     public static Result Compute(Inputs i)

@@ -118,6 +118,15 @@
     <Content Include="Llm/Archetypes/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- `dotnet publish` (the runtime image) drops *.razor Content even though
+       `dotnet build` copies it: the Razor SDK treats every .razor as a
+       component input, not a shippable file, and strips it from the publish
+       list after any target here has run. The Blazor archetypes then failed
+       to load in production with "declared file … .razor missing on disk".
+       The Dockerfile's runtime stage therefore copies Llm/Archetypes from
+       the source tree over the published output. -->
+
+
   <ItemGroup>
     <!-- Phase 6.0 — Golden dataset entries.
          Per-schema directories of JSON manifests under

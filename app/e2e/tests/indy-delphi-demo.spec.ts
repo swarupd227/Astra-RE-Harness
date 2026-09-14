@@ -227,7 +227,7 @@ test.describe('Indy · Delphi demo · TIdSMTP.Connect end-to-end', () => {
       } else {
         await openExisting.click();
       }
-      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet8/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet10/ })).toBeVisible();
       if (beat) await page.waitForTimeout(beat);
     });
 

@@ -57,7 +57,10 @@ export async function streamScaffold(
     onEvent = maybeOnEvent!;
   }
 
-  const qs = targetStack && targetStack !== 'dotnet8'
+  // Always name the stack when the caller chose one; the server's own
+  // default is a moving target (.NET 10 today) and an explicit choice
+  // must never be confused with it.
+  const qs = targetStack
     ? `?targetStack=${encodeURIComponent(targetStack)}`
     : '';
   const res = await fetch(`${API_BASE}/api/v1/specs/${specId}/scaffold${qs}`, {

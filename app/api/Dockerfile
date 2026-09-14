@@ -10,7 +10,7 @@ WORKDIR /src
 # triggered by /scaffolds/{id}/validate/compile use net10.0.
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 10.0 --quality preview --install-dir /usr/share/dotnet \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
     && rm /tmp/dotnet-install.sh \
     && dotnet --list-sdks
 
@@ -61,7 +61,7 @@ WORKDIR /app
 # for them runs against THIS image, not the build-time sdk stage.
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 10.0 --quality preview --install-dir /usr/share/dotnet \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
     && rm /tmp/dotnet-install.sh \
     && dotnet --list-sdks
 
@@ -97,6 +97,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app .
+# The archetype templates come straight from the source tree: `dotnet publish`
+# strips *.razor files (the Razor SDK treats them as component inputs, not
+# shippable content), which left the Blazor archetypes unloadable in
+# production ("declared file … .razor missing on disk"). bin/ and obj/
+# under the templates are kept out by .dockerignore.
+COPY src/Astra.Api/Llm/Archetypes/ ./Llm/Archetypes/
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 ENTRYPOINT ["dotnet", "Astra.Api.dll"]

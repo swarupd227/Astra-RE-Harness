@@ -32,7 +32,7 @@ public sealed record ExtractionRequest(
     // inside the provider. Default values keep pre-5.2 call sites
     // compiling without explicit migration.
     string SourceLanguage = "fortran-f77",
-    string TargetStack = "dotnet8",
+    string TargetStack = "dotnet10",
     // Phase 7.0 — structured cross-routine context. Null when the
     // caller hasn't built one (legacy per-routine extraction); a
     // populated value enables the "## Neighbourhood" block in the

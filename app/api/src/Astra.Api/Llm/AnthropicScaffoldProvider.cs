@@ -56,6 +56,16 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         _logger = logger;
     }
 
+    /// <summary>The prompt folder a target stack shares with its siblings:
+    /// every <c>dotnet10-*</c> variant reads <c>common/dotnet10</c>; other
+    /// stacks are their own family.</summary>
+    public static string ScaffoldPromptFamily(string targetStack)
+    {
+        if (targetStack.StartsWith("dotnet10", StringComparison.OrdinalIgnoreCase)) return "dotnet10";
+        if (targetStack.StartsWith("dotnet8", StringComparison.OrdinalIgnoreCase)) return "dotnet8";
+        return targetStack;
+    }
+
     public ProviderInfo Info => new(
         Name: "anthropic",
         Model: _opts.Model,
@@ -98,9 +108,17 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         yield return Stage("streaming", 2,
             $"Customizing {request.TargetPlatform} package from {archetype.Manifest.Id} for {request.SubroutineName}");
 
+        // The scaffold prompt is per target FAMILY: every dotnet10-* variant
+        // (webapi, minimalapi, blazor, winforms…) shares common/dotnet10, and
+        // dotnet8 remains the fallback for a family without its own prompt.
+        // Before this, any dotnet10 target threw here and VB6/C# code could
+        // never be generated with the real provider.
+        var family = ScaffoldPromptFamily(request.TargetPlatform);
         var loaded = _prompts.GetLatest("common", request.TargetPlatform, "scaffold-generate")
+            ?? _prompts.GetLatest("common", family, "scaffold-generate")
+            ?? (family.StartsWith("dotnet", StringComparison.OrdinalIgnoreCase) ? _prompts.GetLatest("common", "dotnet8", "scaffold-generate") : null)
             ?? throw new InvalidOperationException(
-                $"No scaffold-generate prompt registered (common/{request.TargetPlatform}/scaffold-generate).");
+                $"No scaffold-generate prompt registered (common/{request.TargetPlatform}/scaffold-generate, nor common/{family}).");
 
         var referenceFilesJson = JsonSerializer.Serialize(
             archetype.Files.Select(f => new { path = f.Path, language = f.Language, content = f.Content }),
@@ -249,6 +267,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             $"Modernizing {request.SourcePath} in place for {request.SubroutineName}");
 
         var loaded = _prompts.GetLatest(request.SourceSchema, request.TargetPlatform, "inplace-transform")
+            ?? _prompts.GetLatest(request.SourceSchema, ScaffoldPromptFamily(request.TargetPlatform), "inplace-transform")
             ?? throw new InvalidOperationException(
                 $"No inplace-transform prompt registered ({request.SourceSchema}/{request.TargetPlatform}/inplace-transform).");
 

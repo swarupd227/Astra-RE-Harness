@@ -38,6 +38,15 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   result when the run ends within 60 s (the shape every caller always got) and with `202 {runId, corpusId,
   statusUrl}` otherwise; `GET /api/v1/ingest/runs/{runId}` carries the same result once done and the frontend's
   `awaitIngestRun` polls it. Never make a route wait on a long pipeline: App Service cuts requests at 230 s.
+- **Target stacks**: `.NET 10` (`dotnet10`, and the `dotnet10-*` variants for C#/VB6/VB.NET) is the default
+  target for every .NET-bound source language; `dotnet8` stays selectable for estates on the older LTS,
+  `java-spring` is the default for COBOL/UniBasic/ABL/Java. Prompts live under
+  `Llm/Prompts/<source>/<target>/`, scaffold prompts under `Llm/Prompts/common/<family>/` (every `dotnet10-*`
+  variant shares `common/dotnet10`; see `AnthropicScaffoldProvider.ScaffoldPromptFamily`), archetypes under
+  `Llm/Archetypes/<target>/<id>/` with `net10.0` csproj files. Adding a target = prompt + archetype + entry in
+  `ScaffoldEndpoints.PreferredStack` / `AssessmentService.DefaultTarget` / frontend `targetStacks.ts`. The API
+  image carries the .NET 8 and .NET 10 SDKs so the compile gate can build either. The API itself still runs on
+  .NET 8 (`DOTNET_VERSION` in `app/api/Dockerfile`); moving the runtime is a separate increment.
 - **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
   writer) — that is how the UI loop is verified locally and in e2e.
 - **Build/verify**: no local .NET 8 — Docker `mcr.microsoft.com/dotnet/sdk:8.0` for `dotnet build` / `dotnet test`

@@ -20,7 +20,7 @@ public sealed class ScaffoldPipeline
     // persisted to the LlmCall row below, not these constants.
     public const string DefaultPromptTemplateId = "dotnet-scaffold";
     public const string DefaultPromptTemplateVersion = "v2.0";
-    public const string TargetPlatform = "dotnet8";
+    public const string TargetPlatform = "dotnet10";
 
     private readonly IScaffoldProvider _provider;
     private readonly AppDbContext _db;

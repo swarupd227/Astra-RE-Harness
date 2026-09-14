@@ -1,0 +1,8 @@
+# Build outputs never belong in the image context: the SDK stage restores
+# and builds from source, and the archetype templates are copied verbatim
+# (their local bin/ and obj/ from ad-hoc test builds would otherwise ride
+# along).
+**/bin/
+**/obj/
+**/.vs/
+**/TestResults/

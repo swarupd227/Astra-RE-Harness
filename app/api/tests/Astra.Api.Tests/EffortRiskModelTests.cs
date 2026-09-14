@@ -17,7 +17,7 @@ public class EffortRiskModelTests
         Assert.InRange(r.Effort.PersonWeeks.Low, baseWeeks * 0.8 - 0.01, baseWeeks * 0.8 + 0.01);
         Assert.InRange(r.Effort.PersonWeeks.High, baseWeeks * 1.4 - 0.01, baseWeeks * 1.4 + 0.01);
         Assert.Equal("faithful-1to1", r.Recommendation.Mode);
-        Assert.Equal("dotnet8", r.Recommendation.TargetStack);
+        Assert.Equal("dotnet10", r.Recommendation.TargetStack);
         Assert.Equal(1, r.Risk.Score);
     }
 

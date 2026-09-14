@@ -83,7 +83,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         // continues to reach fortran-f77/<target>/extract. Defaults on
         // the record keep pre-5.2 callers safe.
         var schemaId = string.IsNullOrEmpty(request.SourceLanguage) ? "fortran-f77" : request.SourceLanguage;
-        var targetStack = string.IsNullOrEmpty(request.TargetStack) ? "dotnet8" : request.TargetStack;
+        var targetStack = string.IsNullOrEmpty(request.TargetStack) ? "dotnet10" : request.TargetStack;
         const string kind = "extract";
         // Phase 10.1.c — fall back to the first registered target stack for
         // this (schema, kind) when the exact tuple is missing. VB6 (and any

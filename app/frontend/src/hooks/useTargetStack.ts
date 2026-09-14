@@ -58,7 +58,7 @@ export function useTargetStack(sourceLanguage: string | null | undefined): Targe
   );
 
   const savedIsUsable = options.some((o) => o.stack === savedStack && o.selectable);
-  const targetStack = savedIsUsable ? savedStack! : (recommended ?? savedStack ?? 'dotnet8');
+  const targetStack = savedIsUsable ? savedStack! : (recommended ?? savedStack ?? 'dotnet10');
 
   // `recommended` is null until the archetype query resolves, so neither
   // notice can fire on a loading frame.

@@ -10,8 +10,8 @@ public sealed class Scaffold
 
     public Guid? LlmCallId { get; set; }
 
-    /// <summary>Target platform identifier — e.g. "dotnet8".</summary>
-    public string TargetPlatform { get; set; } = "dotnet8";
+    /// <summary>Target platform identifier — e.g. "dotnet10", "java-spring".</summary>
+    public string TargetPlatform { get; set; } = "dotnet10";
 
     /// <summary>
     /// MinIO blob URI of the manifest JSON that lists every generated file
