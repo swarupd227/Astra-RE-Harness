@@ -1,0 +1,21 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "faithful-delphi-unit",
+  "targetStack": "dotnet10-faithful",
+  "displayName": "Faithful 1:1 unit conversion (Delphi → .NET 10)",
+  "description": "Mode A of the conversion story: the routine's whole Delphi unit becomes ONE C# file with the same types, the same routine names in the same order, and the same call graph — only syntax and casing become idiomatic. Free routines live on a static class named after the unit; every method carries a [SourceRoutine] attribute citing the unit, routine and line range it came from, and [SpecClaim] citations where a signed spec covers it. Types the unit takes from other units are stubbed under src/Stubs/ with a TODO until those units are converted. This archetype is the build shell (project files, provenance attributes, a test anchor) plus a shape exemplar (src/Unit.cs) the model imitates; the exemplar itself is never shipped in a generated package.",
+  "compatibleSchemas": ["delphi"],
+  "matches": {
+    "anyOf": [],
+    "fallback": "Every Delphi routine: the unit that contains it is converted as a whole, with the routine's signed spec (and the unit's other signed specs) as guardrails."
+  },
+  "owner": "Artizent · Delphi migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Faithful.Unit.csproj",             "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Faithful.Unit.Tests.csproj", "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/Provenance.cs",                "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Unit.cs",                      "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "tests/UnitTests.cs",               "language": "csharp", "derivedFromClaimIds": [] }
+  ]
+}

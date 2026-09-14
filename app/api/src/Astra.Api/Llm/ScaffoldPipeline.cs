@@ -113,6 +113,25 @@ public sealed class ScaffoldPipeline
             ? await _blob.GetTextAsync(sourceBlobUri, ct)
             : "";
 
+        // WS3 Mode A — a faithful 1:1 conversion works on the whole unit the
+        // routine lives in: every sibling routine in line order, and the
+        // signed specs among them as guardrails. The anchor spec is signed
+        // (checked above); siblings without a signed spec are converted from
+        // source and marked so in the output.
+        FaithfulConversion.UnitContext? unit = null;
+        if (FaithfulConversion.IsFaithful(targetStack) && spec.Subroutine is not null)
+        {
+            var fileId = spec.Subroutine.SourceFileId;
+            var siblings = await _db.Subroutines.AsNoTracking()
+                .Where(s => s.SourceFileId == fileId)
+                .ToListAsync(ct);
+            var siblingIds = siblings.Select(s => s.Id).ToList();
+            var siblingSpecs = await _db.Specs.AsNoTracking()
+                .Where(sp => siblingIds.Contains(sp.SubroutineId))
+                .ToListAsync(ct);
+            unit = FaithfulConversion.Build(spec.Subroutine.SourceFile?.RelativePath ?? "", siblings, siblingSpecs);
+        }
+
         var req = new ScaffoldRequest(
             spec.Id,
             spec.Subroutine?.Name ?? "",
@@ -123,7 +142,8 @@ public sealed class ScaffoldPipeline
             DefaultPromptTemplateVersion,
             spec.Subroutine?.SourceLanguage ?? "",
             originalSourceText,
-            repairHint);
+            repairHint,
+            unit);
 
         object? finalPayload = null;
         await foreach (var evt in _provider.GenerateAsync(req, ct))
@@ -184,6 +204,14 @@ public sealed class ScaffoldPipeline
             specId = spec.Id,
             subroutineId = spec.SubroutineId,
             targetPlatform = targetStack,
+            mode = unit is null ? "archetype" : FaithfulConversion.Mode,
+            unit = unit is null ? null : new
+            {
+                name = unit.UnitName,
+                path = unit.UnitPath,
+                routineCount = unit.Routines.Count,
+                signedSpecCount = unit.SignedCount,
+            },
             generatedAt = DateTimeOffset.UtcNow,
             generatedBy = _persona.DisplayName,
             files = JsonDocument.Parse(filesJson).RootElement,
@@ -244,6 +272,8 @@ public sealed class ScaffoldPipeline
                 provider = _provider.Info.Name,
                 model = _provider.Info.Model,
                 targetPlatform = targetStack,
+                mode = unit is null ? "archetype" : FaithfulConversion.Mode,
+                unit = unit?.UnitPath,
                 fileCount, totalLines, todoCount,
                 inputTokens, outputTokens, latencyMs,
                 blobUri,
@@ -254,6 +284,9 @@ public sealed class ScaffoldPipeline
         {
             scaffoldId = scaffold.Id,
             specId = spec.Id,
+            mode = unit is null ? "archetype" : FaithfulConversion.Mode,
+            unitPath = unit?.UnitPath,
+            unitRoutineCount = unit?.Routines.Count,
             fileCount, totalLines, todoCount,
             inputTokens, outputTokens, latencyMs,
             costUsd = llmCall.CostUsd,

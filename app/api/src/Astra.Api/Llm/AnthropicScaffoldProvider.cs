@@ -37,6 +37,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     private readonly SpecSchemaProvider _schemas;
     private readonly AnthropicOptions _opts;
     private readonly HttpClient _http;
+    private readonly AnthropicRateLimiter _limiter;
     private readonly ILogger<AnthropicScaffoldProvider> _logger;
 
     public AnthropicScaffoldProvider(
@@ -45,6 +46,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         SpecSchemaProvider schemas,
         IOptions<AnthropicOptions> opts,
         IHttpClientFactory httpFactory,
+        AnthropicRateLimiter limiter,
         ILogger<AnthropicScaffoldProvider> logger)
     {
         _archetypes = archetypes;
@@ -53,6 +55,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         _opts = opts.Value;
         _http = httpFactory.CreateClient("anthropic-scaffold-generate");
         _http.Timeout = TimeSpan.FromMinutes(10);
+        _limiter = limiter;
         _logger = logger;
     }
 
@@ -82,6 +85,15 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         if (_schemas.GetById(request.SourceSchema)?.InPlaceModernization == true)
         {
             await foreach (var evt in GenerateInPlaceAsync(request, ct))
+                yield return evt;
+            yield break;
+        }
+
+        // WS3 Mode A — faithful 1:1: the whole unit becomes one file; the
+        // archetype is only the build shell and the shape exemplar.
+        if (FaithfulConversion.IsFaithful(request.TargetPlatform))
+        {
+            await foreach (var evt in GenerateFaithfulAsync(request, ct))
                 yield return evt;
             yield break;
         }
@@ -475,6 +487,218 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             }
         }
         return (sb.ToString(), inT, outT);
+    }
+
+    /// <summary>
+    /// WS3 Mode A — faithful 1:1 conversion of the routine's whole unit.
+    /// The prompt gets the unit source, the routine inventory, the signed
+    /// specs, the RTL table and the shape exemplar; the model answers
+    /// through the forced <c>emit_package</c> tool with the unit file and
+    /// any stubs, and the archetype's build shell is merged in so the
+    /// compile and test-pack gates run exactly as for any other package.
+    /// </summary>
+    private async IAsyncEnumerable<ExtractionEvent> GenerateFaithfulAsync(
+        ScaffoldRequest request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var unit = request.Unit;
+
+        yield return Stage("priming", 1, unit is null
+            ? "Reading the unit"
+            : $"Reading unit {unit.UnitName}: {unit.Routines.Count} routines, {unit.SignedCount} with a signed spec");
+
+        if (unit is null || string.IsNullOrWhiteSpace(request.OriginalSourceText))
+        {
+            yield return new("error", new
+            {
+                code = "provider.no_source_text",
+                message = $"A faithful conversion needs the unit's source text, but none was available for '{request.SourcePath}'.",
+                retryable = false,
+            });
+            yield break;
+        }
+
+        var unitLines = request.OriginalSourceText.Count(c => c == '\n') + 1;
+        if (unitLines > FaithfulConversion.MaxUnitLines)
+        {
+            yield return new("error", new
+            {
+                code = "provider.unit_too_large",
+                message = $"{unit.UnitName} has {unitLines:N0} lines; a faithful conversion is capped at " +
+                          $"{FaithfulConversion.MaxUnitLines:N0} lines per unit because the whole file must come back in one answer. " +
+                          "Pick a routine in a smaller unit, or split the unit first.",
+                retryable = false,
+            });
+            yield break;
+        }
+
+        var archetype = _archetypes.PickForSubroutine(request.TargetPlatform, request.SubroutineName, request.SourceSchema)
+            ?? throw new InvalidOperationException(
+                $"No archetype compatible with source schema '{request.SourceSchema}' is registered for target stack '{request.TargetPlatform}'. " +
+                $"Check Llm/Archetypes/{request.TargetPlatform}/.");
+
+        yield return new("provider_info", new
+        {
+            name = Info.Name,
+            model = Info.Model,
+            configVersion = Info.ConfigVersion,
+            promptTemplateId = FaithfulConversion.PromptKind,
+            targetPlatform = request.TargetPlatform,
+            archetypeId = archetype.Manifest.Id,
+            mode = FaithfulConversion.Mode,
+        });
+
+        yield return Stage("streaming", 2,
+            $"Converting {unit.UnitName} 1:1 to C# ({unit.Routines.Count} routines, {unitLines:N0} lines)");
+
+        var loaded = _prompts.GetLatest(request.SourceSchema, request.TargetPlatform, FaithfulConversion.PromptKind)
+            ?? _prompts.GetLatest("common", request.TargetPlatform, FaithfulConversion.PromptKind)
+            ?? throw new InvalidOperationException(
+                $"No {FaithfulConversion.PromptKind} prompt registered ({request.SourceSchema}/{request.TargetPlatform}/{FaithfulConversion.PromptKind}).");
+
+        var exemplar = archetype.Files.FirstOrDefault(f => FaithfulConversion.IsExemplar(f.Path))?.Content ?? "";
+        var provenance = archetype.Files.FirstOrDefault(f => f.Path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase))?.Content ?? "";
+        var rendered = _prompts.Render(loaded, FaithfulConversion.PromptVariablesFor(
+            request, unit, exemplar, provenance, _prompts.TryReadAsset(request.SourceSchema, "rtl-mapping.json")));
+
+        var userPrompt = string.IsNullOrWhiteSpace(request.RepairHint)
+            ? rendered.User
+            : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
+              "\n\nReturn the complete corrected package through the tool; every file, not only the changed ones.";
+
+        string? toolJson = null;
+        string? stopReason = null;
+        int inputTokens = 0, outputTokens = 0;
+        string? failure = null;
+        try
+        {
+            (toolJson, inputTokens, outputTokens, stopReason) = await CallAnthropicToolAsync(
+                rendered.System, userPrompt, FaithfulConversion.EmitPackageTool(),
+                $"scaffold:faithful:{request.SourceSchema}:{loaded.Version}", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Faithful conversion failed for spec {Spec} ({Unit})", request.SpecId, unit.UnitPath);
+            failure = ex.Message;
+        }
+
+        if (failure is not null)
+        {
+            yield return new("error", new { code = "provider.scaffold_generation_failed", message = failure, retryable = true });
+            yield break;
+        }
+        if (string.Equals(stopReason, "max_tokens", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new("error", new
+            {
+                code = "provider.output_truncated",
+                message = $"The model ran out of output ({_opts.MaxOutputTokens:N0} tokens) before finishing {unit.UnitName} " +
+                          $"({unit.Routines.Count} routines, {unitLines:N0} lines). Convert a smaller unit, or raise Llm:Anthropic:MaxOutputTokens.",
+                retryable = false,
+            });
+            yield break;
+        }
+
+        yield return Stage("validating", 3, "Parsing the converted unit");
+
+        var files = FaithfulConversion.ParseToolFiles(toolJson, unit.ClaimIds());
+        if (files.Count == 0)
+        {
+            yield return new("error", new
+            {
+                code = "provider.no_files_generated",
+                message = "The model's answer did not contain a files array.",
+                retryable = true,
+            });
+            yield break;
+        }
+        var package = FaithfulConversion.MergeWithArchetype(files, archetype)
+            .Select(f => new GeneratedFile(f.Path, f.Language, f.Content, f.DerivedFromClaimIds))
+            .ToList();
+
+        yield return Stage("committing", 4, "Persisting package + commit metadata");
+
+        foreach (var file in package)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return new("file_started", new { path = file.Path, language = file.Language, derivedFrom = file.DerivedFromClaimIds });
+            await foreach (var chunk in StreamFileChunks(file.Content, ct))
+                yield return new("file_chunk", new { path = file.Path, content = chunk });
+            yield return new("file_done", new
+            {
+                path = file.Path,
+                lineCount = file.LineCount,
+                todoCount = file.TodoCount,
+                derivedFrom = file.DerivedFromClaimIds,
+            });
+        }
+
+        var fileObjects = package.Select(f => (object?)new Dictionary<string, object?>
+        {
+            ["path"] = f.Path,
+            ["language"] = f.Language,
+            ["content"] = f.Content,
+            ["lineCount"] = f.LineCount,
+            ["todoCount"] = f.TodoCount,
+            ["derivedFromClaimIds"] = f.DerivedFromClaimIds,
+        }).ToList();
+
+        sw.Stop();
+        yield return new("__final__", new Dictionary<string, object?>
+        {
+            ["files"] = fileObjects,
+            ["inputTokens"] = inputTokens,
+            ["outputTokens"] = outputTokens,
+            ["latencyMs"] = sw.ElapsedMilliseconds,
+            ["archetypeId"] = archetype.Manifest.Id,
+            ["promptTemplateId"] = loaded.PromptId,
+            ["promptTemplateVersion"] = loaded.Version,
+            ["mode"] = FaithfulConversion.Mode,
+        });
+
+        _logger.LogInformation(
+            "Faithful conversion for spec {Spec}: unit {Unit} ({Routines} routines) → {Files} files, {In}/{Out} tokens",
+            request.SpecId, unit.UnitPath, unit.Routines.Count, package.Count, inputTokens, outputTokens);
+    }
+
+    /// <summary>
+    /// One non-streaming Messages call with a forced tool, through the
+    /// shared retrying sender and the process-wide rate limiter. Returns
+    /// the tool input (null when the model produced none) and the stop
+    /// reason so a truncated answer is reported rather than parsed.
+    /// </summary>
+    private async Task<(string? ToolJson, int InputTokens, int OutputTokens, string? StopReason)> CallAnthropicToolAsync(
+        string systemPrompt, string userPrompt, Dictionary<string, object?> tool, string cacheKey, CancellationToken ct)
+    {
+        var body = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["model"] = _opts.Model,
+            ["max_tokens"] = _opts.MaxOutputTokens,
+            ["tools"] = new[] { tool },
+            ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = tool["name"] },
+            ["system"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "text",
+                    ["text"] = systemPrompt,
+                    ["cache_control"] = new { type = "ephemeral" },
+                },
+            },
+            ["messages"] = new[]
+            {
+                new Dictionary<string, object?> { ["role"] = "user", ["content"] = userPrompt },
+            },
+        });
+
+        var resp = await AnthropicHttp.SendWithRetryAsync(
+            _http, () => AnthropicHttp.BuildMessagesRequest(_opts, body), _limiter, cacheKey, _logger, ct);
+
+        using var doc = JsonDocument.Parse(resp.Body);
+        var root = doc.RootElement;
+        var usage = AnthropicHttp.ReadUsage(root);
+        var stop = root.TryGetProperty("stop_reason", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
+        return (AnthropicHttp.ReadToolInput(root), usage.InputTokens, usage.OutputTokens, stop);
     }
 
     private sealed record GeneratedFile(string Path, string Language, string Content, string[] DerivedFromClaimIds)

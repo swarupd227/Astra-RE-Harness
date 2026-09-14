@@ -30,7 +30,11 @@ public sealed record ScaffoldRequest(
     // What the previous attempt's gate said (GateFailureDigest.ToRepairHint):
     // appended to the prompt so the regeneration fixes those errors instead
     // of repeating them. Null for a first attempt.
-    string? RepairHint = null);
+    string? RepairHint = null,
+    // WS3 Mode A — set only for a faithful 1:1 conversion: the whole unit
+    // around the routine (every sibling routine, the signed specs among
+    // them) that the provider converts as one file. See FaithfulConversion.
+    FaithfulConversion.UnitContext? Unit = null);
 
 public sealed record ScaffoldFile(
     string Path,

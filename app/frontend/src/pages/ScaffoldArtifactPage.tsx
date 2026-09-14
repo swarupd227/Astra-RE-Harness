@@ -121,8 +121,13 @@ export function ScaffoldArtifactPage() {
                 Scaffolded package
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
-                {sc.fileCount} files · {sc.todoCount} TODOs · {sc.targetPlatform}
+                {sc.fileCount} files · {sc.todoCount} TODOs · {prettyStack(sc.targetPlatform)}
               </h1>
+              {sc.unit && (
+                <p className="text-caption text-ink-secondary" data-testid="scaffold-unit">
+                  Faithful 1:1 conversion of <span className="font-mono">{sc.unit.path}</span> · {sc.unit.routineCount} routines, {sc.unit.signedSpecCount} with a signed spec
+                </p>
+              )}
             </div>
             <Badge tone={isCommitted ? 'signed' : 'scaffolded'}>{sc.state}</Badge>
           </div>

@@ -223,7 +223,14 @@ public sealed class MockCopilotBrain : ICopilotBrain
         if (Regex.IsMatch(t, @"\bsign\b")) return ("sign_spec", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\broute\b")) return ("route_for_review", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\bextract\b|\bdraft (a|the) spec\b|\bspecify\b")) return ("extract_spec", new { subroutineId = name ?? "" });
-        if (Regex.IsMatch(t, @"\b(re)?generate\b|\bscaffold\b|\bbuild\b")) return ("generate_scaffold", new { subroutineId = name ?? "", repairFromLatestFailure = Regex.IsMatch(t, @"\bfix") });
+        if (Regex.IsMatch(t, @"\b(re)?generate\b|\bscaffold\b|\bbuild\b|\bconvert\b|\bport\b"))
+        {
+            var fix = Regex.IsMatch(t, @"\bfix");
+            // "Convert `X` 1:1 to .NET 10" — the faithful mode is a target stack.
+            return Regex.IsMatch(t, @"\b1:1\b|\bone[- ]to[- ]one\b|\bfaithful\b|\blike[- ]for[- ]like\b|\bas[- ]is\b")
+                ? ("generate_scaffold", new { subroutineId = name ?? "", repairFromLatestFailure = fix, targetStack = FaithfulConversion.Stack })
+                : ("generate_scaffold", new { subroutineId = name ?? "", repairFromLatestFailure = fix });
+        }
         if (Regex.IsMatch(t, @"\bcompile\b|\bgate\b|\btest[- ]pack\b")) return ("run_gate", new { subroutineId = name ?? "", gate = t.Contains("test") ? "test-pack" : "compile" });
         if (Regex.IsMatch(t, @"\bexplain\b|\bclaims\b|\bspec for\b|\bthe spec\b")) return ("get_spec", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\bsource\b|\bread\b|\bshow me\b") && name is not null) return ("read_routine", new { subroutineId = name });

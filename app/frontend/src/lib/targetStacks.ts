@@ -100,6 +100,7 @@ export function prettyStack(s: string): string {
   switch (s) {
     case 'dotnet8':         return '.NET 8';
     case 'dotnet10':        return '.NET 10';
+    case 'dotnet10-faithful': return '.NET 10 · Faithful 1:1';
     case 'java-spring':     return 'Java Spring';
     case 'angular-dotnet8': return 'Angular + .NET 8';
     case 'angular-java':    return 'Angular + Java';

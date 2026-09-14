@@ -266,7 +266,7 @@ public sealed class CopilotToolRegistry
             Agent = "migration",
             Mutating = true,
             AllowedPersonas = new[] { Persona.Engineer },
-            Description = "Generate target code for a SIGNED spec on a target stack (e.g. dotnet10, java-spring, angular-java, dotnet10-blazor). Omit targetStack for the default. Set repairFromLatestFailure when the user wants the code regenerated with the last failed gate's errors fixed. Runs in the background. Engineer only.",
+            Description = "Generate target code for a SIGNED spec on a target stack (e.g. dotnet10, java-spring, angular-java, dotnet10-blazor). Omit targetStack for the default. Use targetStack 'dotnet10-faithful' when the user asks for a 1:1, faithful, like-for-like or as-is conversion: it converts the routine's whole Delphi unit into one C# file with the same names and call graph instead of the canonical archetype. Set repairFromLatestFailure when the user wants the code regenerated with the last failed gate's errors fixed. Runs in the background. Engineer only.",
             InputSchema = Obj(
                 ("specId", Str("Spec id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative).")),
@@ -1052,7 +1052,7 @@ public sealed class CopilotToolRegistry
             agent = "migration",
             state = "RUNNING",
             startedAt = DateTimeOffset.UtcNow,
-            links = new[] { new { label = "Watch live", href = $"/specs/{spec.Id}/scaffold" } },
+            links = new[] { new { label = "Watch live", href = $"/specs/{spec.Id}/scaffold?target={Uri.EscapeDataString(chosen)}" } },
         };
         return new ToolResult(true,
             new { runId, specId = spec.Id, name, targetStack = chosen, archetype = match.Manifest.Id, status = "started" },

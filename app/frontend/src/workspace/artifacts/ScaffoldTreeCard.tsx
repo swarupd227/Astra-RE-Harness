@@ -1,5 +1,6 @@
 import { FileCode2 } from 'lucide-react';
 import { arr, formatInt, num, obj, str } from '../format';
+import { prettyStack } from '@/lib/targetStacks';
 import type { ArtifactRenderProps } from './registry';
 
 type FileRow = { path: string; language: string; lines: number };
@@ -23,7 +24,7 @@ export function ScaffoldTreeCard({ artifact, size }: ArtifactRenderProps) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-caption">
         <span className="font-mono text-body text-ink-primary">{str(p.routineName, 'Routine')}</span>
-        {str(p.targetPlatform) && <span className="text-ink-tertiary">→ {str(p.targetPlatform)}</span>}
+        {str(p.targetPlatform) && <span className="text-ink-tertiary">→ {prettyStack(str(p.targetPlatform))}</span>}
       </div>
 
       <div className="grid grid-cols-3 gap-2">

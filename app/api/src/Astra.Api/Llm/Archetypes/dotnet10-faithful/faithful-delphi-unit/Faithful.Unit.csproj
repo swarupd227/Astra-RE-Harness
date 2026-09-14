@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Faithful</RootNamespace>
+    <AssemblyName>Faithful.Unit</AssemblyName>
+    <Description>
+      Faithful 1:1 conversion of one Delphi unit to .NET 10. One C# file per unit,
+      same names and call graph as the source; provenance attributes in
+      src/Provenance.cs tie every method back to the Delphi routine and line range
+      it was converted from.
+    </Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- tests/ has its own project — keep its sources out of this one. -->
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+</Project>

@@ -47,6 +47,16 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   `ScaffoldEndpoints.PreferredStack` / `AssessmentService.DefaultTarget` / frontend `targetStacks.ts`. The API
   image carries the .NET 8 and .NET 10 SDKs so the compile gate can build either. The API itself still runs on
   .NET 8 (`DOTNET_VERSION` in `app/api/Dockerfile`); moving the runtime is a separate increment.
+- **Two conversion modes** (WS3). The canonical path substitutes one routine into an archetype package. The
+  **faithful 1:1 mode** is the target stack `dotnet10-faithful` (`Llm/FaithfulConversion.cs`): the routine's
+  whole source unit becomes one C# file with the same types, names, order and call graph; the unit's signed
+  specs are guardrails and are cited with `[SpecClaim]`, every member cites its source lines with
+  `[SourceRoutine]`, foreign types are stubbed under `src/Stubs/` with a TODO. The archetype
+  (`Archetypes/dotnet10-faithful/faithful-delphi-unit`) is only the build shell plus a shape exemplar
+  (`src/Unit.cs`, never shipped); the prompt is `Prompts/delphi/dotnet10-faithful/faithful-transform.v1.md`,
+  answered through a forced tool call. Adding a source language to the mode = a prompt under
+  `Prompts/<source>/dotnet10-faithful/` + `compatibleSchemas` on an archetype under `dotnet10-faithful/`.
+  Typed as "Convert `X` 1:1 to .NET 10"; the mock brain routes 1:1 / faithful / like-for-like to it.
 - **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
   writer) — that is how the UI loop is verified locally and in e2e.
 - **Build/verify**: no local .NET 8 — Docker `mcr.microsoft.com/dotnet/sdk:8.0` for `dotnet build` / `dotnet test`

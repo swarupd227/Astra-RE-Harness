@@ -1812,6 +1812,10 @@ export type ScaffoldResponse = {
   specId: string;
   state: string;
   targetPlatform: string;
+  /** 'archetype' for a canonical package; 'faithful-1to1' when a whole unit was converted. */
+  mode?: string;
+  /** The converted unit, for faithful packages only. */
+  unit?: { name: string; path: string; routineCount: number; signedSpecCount: number } | null;
   fileCount: number;
   totalLines: number;
   todoCount: number;

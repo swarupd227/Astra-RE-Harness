@@ -413,12 +413,18 @@ public static class ScaffoldEndpoints
         var manifestText = await blob.GetTextAsync(scaffold.PackageBlobUri, ct);
         using var manifest = JsonDocument.Parse(manifestText);
         var files = manifest.RootElement.GetProperty("files").Clone();
+        // WS3 — a faithful 1:1 package records which unit it converted; older
+        // manifests carry neither field and read as archetype packages.
+        var mode = manifest.RootElement.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : "archetype";
+        var unit = manifest.RootElement.TryGetProperty("unit", out var u) && u.ValueKind == JsonValueKind.Object ? u.Clone() : (JsonElement?)null;
         return new
         {
             id = scaffold.Id,
             specId = scaffold.SpecId,
             state = scaffold.State,
             targetPlatform = scaffold.TargetPlatform,
+            mode,
+            unit,
             fileCount = scaffold.FileCount,
             totalLines = scaffold.TotalLines,
             todoCount = scaffold.TodoCount,

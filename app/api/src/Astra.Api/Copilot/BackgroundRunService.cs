@@ -162,7 +162,8 @@ public sealed class BackgroundRunService
             var pipeline = scope.ServiceProvider.GetRequiredService<ScaffoldPipeline>();
             Guid? scaffoldId = null;
             string? error = null;
-            int files = 0, lines = 0, todos = 0;
+            int files = 0, lines = 0, todos = 0, unitRoutines = 0;
+            string? unitPath = null;
             var tokens = 0;
 
             await foreach (var evt in pipeline.RunAsync(specId, targetStack, ct, repairHint))
@@ -174,6 +175,7 @@ public sealed class BackgroundRunService
                         _bus.Publish(runId, "migration", stage.TryGetProperty("stage", out var st) ? st.GetString() ?? "" : "", "stage", evt.Data,
                             stage.TryGetProperty("label", out var l) ? l.GetString() : null);
                         break;
+                    case "file_started":
                     case "file_start":
                     case "file":
                         var f = Read(evt.Data);
@@ -192,14 +194,21 @@ public sealed class BackgroundRunService
                         files = d.TryGetProperty("fileCount", out var fc) ? fc.GetInt32() : 0;
                         lines = d.TryGetProperty("totalLines", out var tl) ? tl.GetInt32() : 0;
                         todos = d.TryGetProperty("todoCount", out var tc) ? tc.GetInt32() : 0;
+                        unitPath = d.TryGetProperty("unitPath", out var up) && up.ValueKind == JsonValueKind.String ? up.GetString() : null;
+                        unitRoutines = d.TryGetProperty("unitRoutineCount", out var ur) && ur.ValueKind == JsonValueKind.Number ? ur.GetInt32() : 0;
                         break;
                 }
             }
 
             if (scaffoldId is { } id)
             {
-                _bus.Publish(runId, "migration", "", "item", new { kind = "scaffold", scaffoldId = id, specId, routineName, targetStack, files, lines, todos });
-                _bus.State(runId, "migration", "SUCCEEDED", $"Generated {files} files ({lines:N0} lines, {todos} TODOs) for `{routineName}` on {targetStack}.");
+                _bus.Publish(runId, "migration", "", "item", new { kind = "scaffold", scaffoldId = id, specId, routineName, targetStack, files, lines, todos, unitPath });
+                // A faithful 1:1 run converted the whole unit, so the sentence
+                // names the unit; the routine only anchored it.
+                var summary = unitPath is { Length: > 0 }
+                    ? $"Converted `{unitPath}` 1:1 to .NET 10 ({unitRoutines} routines, {files} files, {lines:N0} lines, {todos} TODOs), anchored on `{routineName}`."
+                    : $"Generated {files} files ({lines:N0} lines, {todos} TODOs) for `{routineName}` on {targetStack}.";
+                _bus.State(runId, "migration", "SUCCEEDED", summary);
             }
             else
             {
