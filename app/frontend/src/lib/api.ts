@@ -1936,12 +1936,32 @@ export type DocSectionSummaryItem = {
   updatedAt: string;
 };
 
+/** WS6 — the critic pass's verdict on a section: a score out of 100 against a
+ *  threshold, deterministic checks (citations resolve, no filler…), and the
+ *  critique's per-axis scores and fixes when a model reviewed it. */
+export type DocQuality = {
+  score: number | null;
+  threshold: number;
+  provider?: string;
+  criticModel?: string | null;
+  checks: { name: string; passed: boolean; problems: string[] }[];
+  critique?: {
+    scores: { accuracy: number; completeness: number; clarity: number; structure: number };
+    total: number;
+    fixes: string[];
+    summary: string;
+  } | null;
+  revised?: boolean;
+  note?: string | null;
+};
+
 export type DocSectionDetail = DocSectionSummaryItem & {
   corpusId: string;
   sourceVersionId: string;
   renderedMarkdown?: string;
   payload: Record<string, unknown>;
   llmCallId?: string;
+  quality?: DocQuality | null;
 };
 
 export type DocSectionListResult = {

@@ -5,14 +5,15 @@ import {
   ArrowLeft, ChevronDown, ChevronRight, Download, FileText,
   Loader2, Play, ShieldCheck, XCircle, CheckCircle2,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { api, getPersona, API_BASE } from '@/lib/api';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { MermaidBlock } from '@/components/MermaidBlock';
+import { DocToc } from '@/components/DocToc';
+import { DocQualityChip } from '@/components/DocQualityChip';
+import { Markdown } from '@/workspace/Markdown';
 
 const KIND_ORDER = [
   'overview', 'module', 'routine-summary',
@@ -834,11 +835,33 @@ export function DocsPage() {
               {/* Sticky action bar */}
               <div className="sticky top-0 z-10 border-b border-line-subtle bg-raised px-6 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge tone={stateTone(detail.state)}>{stateLabel(detail.state)}</Badge>
                     <span className="truncate font-mono text-sm text-ink-secondary">
                       {sectionLabel(detail)}
                     </span>
+                    {detail.quality && <DocQualityChip quality={detail.quality} />}
+                    {/* Cross-links: the routine and spec this section documents, or
+                        the module's routines — the doc is a view over them. */}
+                    {detail.subroutineId && (
+                      <span className="flex items-center gap-2 text-xs">
+                        <Link to={`/subroutines/${detail.subroutineId}`} className="text-ink-link underline-offset-2 hover:underline" data-testid="doc-link-routine">
+                          Open routine
+                        </Link>
+                        <Link to={`/subroutines/${detail.subroutineId}/spec`} className="text-ink-link underline-offset-2 hover:underline" data-testid="doc-link-spec">
+                          Spec
+                        </Link>
+                      </span>
+                    )}
+                    {!detail.subroutineId && detail.moduleName && (
+                      <Link
+                        to={`/subroutines?corpus=${detail.corpusId}&q=${encodeURIComponent(detail.moduleName)}`}
+                        className="text-xs text-ink-link underline-offset-2 hover:underline"
+                        data-testid="doc-link-module"
+                      >
+                        Routines in this module
+                      </Link>
+                    )}
                   </div>
 
                   {persona === 'admin' && (
@@ -888,11 +911,7 @@ export function DocsPage() {
                       </h2>
                     )}
                     {payload?.narrative && (
-                      <div className="prose prose-sm mb-4 max-w-none text-ink-primary">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {payload.narrative}
-                        </ReactMarkdown>
-                      </div>
+                      <Markdown className="mb-4">{payload.narrative}</Markdown>
                     )}
                     {payload?.mermaidSource ? (
                       <MermaidBlock source={payload.mermaidSource} />
@@ -903,15 +922,13 @@ export function DocsPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="prose prose-sm max-w-none text-ink-primary
-                    prose-headings:font-mono prose-headings:text-ink-primary
-                    prose-code:rounded prose-code:bg-sunken prose-code:px-1 prose-code:font-mono
-                    prose-pre:rounded prose-pre:bg-sunken prose-pre:p-4
-                    prose-table:border-collapse prose-th:border prose-th:border-line-subtle prose-th:px-3 prose-th:py-1
-                    prose-td:border prose-td:border-line-subtle prose-td:px-3 prose-td:py-1">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {detail.renderedMarkdown ?? '*(no content)*'}
-                    </ReactMarkdown>
+                  // The same renderer the agents' messages use: design-system
+                  // typography, highlighted code, heading ids for the contents.
+                  <div className="flex gap-8">
+                    <div className="min-w-0 flex-1 max-w-[76ch]" data-testid="doc-body">
+                      <Markdown>{detail.renderedMarkdown ?? '*(no content)*'}</Markdown>
+                    </div>
+                    <DocToc markdown={detail.renderedMarkdown ?? ''} className="sticky top-4 hidden w-56 shrink-0 self-start xl:block" />
                   </div>
                 )}
               </div>

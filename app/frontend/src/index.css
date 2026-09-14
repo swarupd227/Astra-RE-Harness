@@ -45,6 +45,22 @@
     }
   }
 
+  /* Code highlighting — highlight.js token classes on palette tokens. Volt
+     stays out of code: identifiers read in teal, keywords in violet,
+     strings in emerald, numbers in amber, comments recede. */
+  .hljs { color: rgb(var(--sand-100)); background: transparent; }
+  .hljs-comment, .hljs-quote { color: rgb(var(--ink-tertiary)); font-style: italic; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-doctag, .hljs-template-tag { color: rgb(var(--violet)); }
+  .hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-variable { color: rgb(var(--emerald)); }
+  .hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: rgb(var(--amber)); }
+  .hljs-title, .hljs-title.function_, .hljs-section, .hljs-name { color: rgb(var(--teal)); }
+  .hljs-type, .hljs-built_in, .hljs-class, .hljs-title.class_ { color: rgb(var(--indigo)); }
+  .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-property, .hljs-params { color: rgb(var(--sand-300)); }
+  .hljs-meta, .hljs-meta .hljs-keyword, .hljs-preprocessor { color: rgb(var(--ink-secondary)); }
+  .hljs-deletion { color: rgb(var(--rose)); }
+  .hljs-emphasis { font-style: italic; }
+  .hljs-strong { font-weight: 600; }
+
   /* Focus ring — visible, never removed. Volt is the one accent, and focus
      is one of the three things it is reserved for. */
   :focus-visible {

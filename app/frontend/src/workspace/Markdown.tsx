@@ -1,8 +1,16 @@
 import { memo, type ComponentProps } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeSlug from 'rehype-slug';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
+
+// Fenced code gets highlight.js token classes (styled with palette tokens in
+// index.css, never a stock theme) and every heading gets a stable id so a
+// table of contents and cross-links can point at it. Unknown languages are
+// left as plain text; nothing is auto-detected.
+const rehypePlugins = [rehypeSlug, [rehypeHighlight, { detect: false }]] as const;
 
 /** Drop react-markdown's `node` prop before spreading onto a DOM element. */
 function clean<T extends { node?: unknown }>(p: T): Omit<T, 'node'> {
@@ -98,7 +106,11 @@ export const Markdown = memo(function Markdown({
 }) {
   return (
     <div className={clsx('text-body text-ink-primary/90 [overflow-wrap:anywhere]', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehypePlugins as unknown as ComponentProps<typeof ReactMarkdown>['rehypePlugins']}
+        components={components}
+      >
         {children ?? ''}
       </ReactMarkdown>
     </div>
