@@ -125,7 +125,7 @@ public sealed class BackgroundRunService
         {
             _logger.LogError(ex, "Background extraction failed for {Sub}", subroutineId);
             await RevertExtractingAsync(subroutineId);
-            _bus.State(runId, "spec", "FAILED", ex.Message);
+            _bus.State(runId, "spec", "FAILED", Reason(ex));
         }
         finally
         {
@@ -149,6 +149,44 @@ public sealed class BackgroundRunService
         {
             _logger.LogWarning(ex, "Could not revert EXTRACTING for {Sub}", subroutineId);
         }
+    }
+
+    /// <summary>
+    /// A run that died after flipping the routine to SCAFFOLDING leaves it
+    /// there forever otherwise (seen on Azure: a failed save left
+    /// TBlogApplication.ArticleView stuck). Put it back to what the spec's
+    /// packages say: SCAFFOLDED when an earlier package exists, else SIGNED.
+    /// </summary>
+    internal static async Task RevertScaffoldingAsync(IServiceScopeFactory scopes, Guid specId, ILogger logger)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var spec = await db.Specs.Include(s => s.Subroutine).FirstOrDefaultAsync(s => s.Id == specId);
+            if (spec?.Subroutine is null || spec.Subroutine.State != "SCAFFOLDING") return;
+            var hasPackage = await db.Scaffolds.AnyAsync(s => s.SpecId == specId);
+            spec.Subroutine.State = hasPackage ? "SCAFFOLDED" : "SIGNED";
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not revert SCAFFOLDING for spec {Spec}", specId);
+        }
+    }
+
+    /// <summary>
+    /// The message a person can act on: the exception's own text plus the
+    /// root cause when one is wrapped inside it. EF's "An error occurred
+    /// while saving the entity changes" hides the Postgres error that
+    /// actually explains the failure.
+    /// </summary>
+    internal static string Reason(Exception ex)
+    {
+        var root = ex.GetBaseException();
+        return ReferenceEquals(root, ex) || string.IsNullOrWhiteSpace(root.Message) || ex.Message.Contains(root.Message, StringComparison.Ordinal)
+            ? ex.Message
+            : $"{ex.Message} — {root.Message}";
     }
 
     // ── Scaffold ─────────────────────────────────────────────────────────
@@ -222,7 +260,8 @@ public sealed class BackgroundRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Background scaffold failed for spec {Spec}", specId);
-            _bus.State(runId, "migration", "FAILED", ex.Message);
+            await RevertScaffoldingAsync(_scopeFactory, specId, _logger);
+            _bus.State(runId, "migration", "FAILED", Reason(ex));
         }
         finally
         {
@@ -260,7 +299,7 @@ public sealed class BackgroundRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Background gate {Gate} failed for scaffold {Scaffold}", gate, scaffoldId);
-            _bus.State(runId, "validation", "FAILED", ex.Message);
+            _bus.State(runId, "validation", "FAILED", Reason(ex));
         }
         finally
         {

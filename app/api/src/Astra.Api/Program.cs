@@ -862,26 +862,35 @@ using (var scope = app.Services.CreateScope())
         // (spec) to (spec, target_platform): find whatever unique index
         // currently covers spec_id alone (its EF-generated name isn't
         // guaranteed) and replace it, rather than guessing the name.
+        // Every single-column unique index on spec_id goes, whether it is a
+        // plain index or backs a UNIQUE constraint (a constraint-backed index
+        // cannot be dropped with DROP INDEX, which is how the old rule could
+        // survive a boot and reject every second package for a spec).
         await db.Database.ExecuteSqlRawAsync("""
             DO $$
             DECLARE
-                old_index_name text;
+                r record;
             BEGIN
-                SELECT ix.relname INTO old_index_name
-                FROM pg_index i
-                JOIN pg_class ix ON ix.oid = i.indexrelid
-                JOIN pg_class t ON t.oid = i.indrelid
-                WHERE t.relname = 'scaffolds'
-                  AND i.indisunique
-                  -- indkey is an int2vector; it only compares to int2[] after a cast.
-                  AND i.indkey::int2[] = (SELECT array_agg(attnum ORDER BY attnum)
-                                           FROM pg_attribute
-                                           WHERE attrelid = t.oid AND attname = 'spec_id')::int2[]
-                LIMIT 1;
-
-                IF old_index_name IS NOT NULL THEN
-                    EXECUTE format('DROP INDEX IF EXISTS %I', old_index_name);
-                END IF;
+                FOR r IN
+                    SELECT ix.relname AS index_name, con.conname AS constraint_name
+                    FROM pg_index i
+                    JOIN pg_class ix ON ix.oid = i.indexrelid
+                    JOIN pg_class t ON t.oid = i.indrelid
+                    JOIN pg_namespace n ON n.oid = t.relnamespace
+                    LEFT JOIN pg_constraint con ON con.conindid = i.indexrelid
+                    WHERE t.relname = 'scaffolds'
+                      AND n.nspname = current_schema()
+                      AND i.indisunique
+                      AND i.indnatts = 1
+                      AND i.indkey[0] = (SELECT attnum FROM pg_attribute
+                                         WHERE attrelid = t.oid AND attname = 'spec_id')
+                LOOP
+                    IF r.constraint_name IS NOT NULL THEN
+                        EXECUTE format('ALTER TABLE scaffolds DROP CONSTRAINT IF EXISTS %I', r.constraint_name);
+                    ELSE
+                        EXECUTE format('DROP INDEX IF EXISTS %I', r.index_name);
+                    END IF;
+                END LOOP;
             END $$;
 
             CREATE UNIQUE INDEX IF NOT EXISTS ix_scaffolds_spec_id_target_platform

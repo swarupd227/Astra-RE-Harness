@@ -194,10 +194,12 @@ public static class ScaffoldEndpoints
             catch (Exception ex)
             {
                 log.LogError(ex, "Scaffold pipeline failed for spec {Id}", id);
+                await Copilot.BackgroundRunService.RevertScaffoldingAsync(
+                    ctx.RequestServices.GetRequiredService<IServiceScopeFactory>(), id, log);
                 await WriteEventAsync(ctx, new ExtractionEvent("error", new
                 {
                     code = "scaffold.unhandled_exception",
-                    message = ex.Message,
+                    message = Copilot.BackgroundRunService.Reason(ex),
                     retryable = true,
                 }), ct);
             }
