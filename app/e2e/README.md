@@ -2,6 +2,27 @@
 
 Playwright walk-through of the full demo flow against the running Docker stack.
 
+## Golden demo (typed, not clicked)
+
+The golden demo is a conversation: every beat is a sentence typed into the
+programme's thread, and every answer is an agent message with a card.
+Slow or paid work is pre-baked so the recording has no visible waits.
+
+```bash
+cd app/e2e
+API_BASE=http://127.0.0.1:38080 node scripts/prebake-golden.mjs --corpus oatpp   # idempotent
+BASE_URL=http://127.0.0.1:35173 API_BASE=http://127.0.0.1:38080 npx playwright test demo-golden
+RECORD_DEMO=1 BASE_URL=… API_BASE=… npx playwright test demo-golden               # with captions + video
+```
+
+`prebake-golden.mjs` makes sure the programme has a thread, a SUCCEEDED
+pattern analysis, one "hero" routine with a SIGNED spec, generated code
+with a PASSED compile gate, a migration plan and an assessment, then writes
+`generated/golden.json` (corpus, thread, hero) for the recorder. Pass
+`--hero <name|id>` to choose the routine. Against the mock brain the whole
+run takes about a minute; against a real key the survey and the
+assessment are the long parts.
+
 ## Run
 
 ```bash

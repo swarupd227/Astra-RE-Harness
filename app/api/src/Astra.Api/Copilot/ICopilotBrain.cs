@@ -203,6 +203,11 @@ public sealed class MockCopilotBrain : ICopilotBrain
 
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
         if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
+        if (Regex.IsMatch(t, @"\bmigration plan\b|\bwaves?\b"))
+            return Regex.IsMatch(t, @"\b(plan the|draft|generate|create|make)\b")
+                ? ("generate_migration_plan", new { })
+                : ("get_migration_plan", new { });
+        if (Regex.IsMatch(t, @"\baccept\b")) return ("review_all_claims", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\b(riskiest|most (called|depended)|biggest|largest|hotspots?)\b"))
             return ("rank_routines", new { by = t.Contains("called") || t.Contains("depended") ? "fan_in" : t.Contains("biggest") || t.Contains("largest") ? "size" : "risk", limit = 10 });
         if (Regex.IsMatch(t, @"\bexplain (claim )?([A-Z]{1,3}-\d+)\b|\bwhy\b.*\b([A-Z]{1,3}-\d+)\b", RegexOptions.IgnoreCase))
