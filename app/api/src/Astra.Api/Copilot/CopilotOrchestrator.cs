@@ -54,6 +54,7 @@ public sealed class CopilotOrchestrator
         public string? FinalMarkdown { get; set; }
         public Guid? RunId { get; set; }
         public int Rounds { get; set; }
+        public bool Nudged { get; set; }
     }
 
     private sealed record StoredTurns(List<JsonElement> Turns, string? PendingToolUseId);
@@ -196,6 +197,18 @@ public sealed class CopilotOrchestrator
 
                 var texts = resp.Blocks.Where(b => b.Type == "text" && !string.IsNullOrWhiteSpace(b.Text)).Select(b => b.Text!).ToList();
                 var toolUses = resp.Blocks.Where(b => b.Type == "tool_use").ToList();
+
+                if (toolUses.Count == 0 && !state.Nudged && LooksLikeUncalledAction(texts))
+                {
+                    // The model announced an action ("I'll regenerate… Confirm and
+                    // I'll go ahead.") without calling any tool, so nothing would
+                    // happen while the thread reads as if it had. One more round
+                    // with the fact spelled out; the second time, the text stands.
+                    state.Nudged = true;
+                    history.Add(new Dictionary<string, object?> { ["role"] = "assistant", ["content"] = AssistantContent(resp.Blocks) });
+                    history.Add(UserText("[system] No tool was called, so nothing happened. If you meant to act, call the tool now — it pauses for the user's confirmation by itself. If you did not, answer without announcing an action."));
+                    continue;
+                }
 
                 if (toolUses.Count == 0)
                 {
@@ -462,40 +475,111 @@ public sealed class CopilotOrchestrator
         "Use tools for every fact; never assert status you didn't read. State-changing tools pause for user confirmation automatically. " +
         "Answer briefly in markdown and end by calling finish_turn with 2–4 suggestions.\n\n" + v["programmeContext"];
 
-    private List<object> BuildHistory(IEnumerable<ConversationMessage> rows)
+    /// <summary>
+    /// The thread as the model must see it: its own earlier actions as the
+    /// tool calls they were, each followed by its result — never as prose.
+    /// The old text-only rendering ("I'll regenerate… Confirm and I'll go
+    /// ahead. [proposed action …: confirmed]") taught the model that saying
+    /// those words is how an action happens; three times on Azure it then
+    /// narrated a retry and called nothing.
+    /// </summary>
+    public static List<object> BuildHistory(IEnumerable<ConversationMessage> rows)
     {
-        var history = new List<Dictionary<string, object?>>();
+        var history = new List<(string Role, List<object> Content)>();
+        void Add(string role, List<object> blocks)
+        {
+            if (blocks.Count == 0) return;
+            if (history.Count > 0 && history[^1].Role == role) history[^1].Content.AddRange(blocks);
+            else history.Add((role, blocks));
+        }
+        static object Text(string t) => new Dictionary<string, object?> { ["type"] = "text", ["text"] = t };
+
         foreach (var m in rows)
         {
-            string role;
-            string text;
             if (m.Role == "user")
             {
-                role = "user";
-                text = m.Markdown;
+                var t = ArtifactBuilders.Truncate(m.Markdown, 2500);
+                if (!string.IsNullOrWhiteSpace(t)) Add("user", new List<object> { Text(t) });
+                continue;
             }
-            else if (m.Role == "agent" && m.Agent == "orchestrator")
+            if (m.Role != "agent" || m.Agent != "orchestrator")
             {
-                role = "assistant";
-                text = m.Markdown;
-                var action = ConversationJson.Parse<PendingActionDto>(m.PendingActionJson);
-                if (action is not null) text += $"\n\n[proposed action {action.ToolName}: {action.State}]";
+                var t = ArtifactBuilders.Truncate($"[{Narrator.AgentName(m.Agent ?? "system")} agent posted to the thread]\n{m.Markdown}", 2500);
+                if (!string.IsNullOrWhiteSpace(t)) Add("user", new List<object> { Text(t) });
+                continue;
             }
-            else
-            {
-                role = "user";
-                text = $"[{Narrator.AgentName(m.Agent ?? "system")} agent posted to the thread]\n{m.Markdown}";
-            }
-            text = ArtifactBuilders.Truncate(text, 2500);
-            if (string.IsNullOrWhiteSpace(text)) continue;
 
-            if (history.Count > 0 && (string)history[^1]["role"]! == role)
-                history[^1]["content"] = history[^1]["content"] + "\n\n" + text;
-            else
-                history.Add(new Dictionary<string, object?> { ["role"] = role, ["content"] = text });
+            var assistant = new List<object>();
+            var results = new List<object>();
+            var own = ArtifactBuilders.Truncate(HistoryText(m.Markdown), 2500);
+            if (!string.IsNullOrWhiteSpace(own)) assistant.Add(Text(own));
+
+            var key = m.Id.ToString("N")[..12];
+            var calls = ConversationJson.Parse<List<ToolCallDto>>(m.ToolCallsJson) ?? new();
+            for (var i = 0; i < calls.Count; i++)
+            {
+                var id = $"hist_{key}_{i}";
+                assistant.Add(ToolUse(id, calls[i].Name, calls[i].Input));
+                results.Add(HistoryResult(id, calls[i].Ok, new { ok = calls[i].Ok, summary = calls[i].Summary }));
+            }
+            var action = ConversationJson.Parse<PendingActionDto>(m.PendingActionJson);
+            if (action is not null)
+            {
+                var id = $"hist_{key}_p";
+                assistant.Add(ToolUse(id, action.ToolName, action.Input));
+                var (ok, outcome) = action.State switch
+                {
+                    "confirmed" => (true, "The user confirmed; the action ran, and the agent posted its outcome to the thread afterwards."),
+                    "declined" => (false, "The user declined; nothing ran."),
+                    _ => (false, "Still waiting for the user's confirmation; nothing has run."),
+                };
+                results.Add(HistoryResult(id, ok, new { ok, summary = action.Summary, outcome }));
+            }
+            Add("assistant", assistant);
+            Add("user", results);
         }
-        while (history.Count > 0 && (string)history[0]["role"]! != "user") history.RemoveAt(0);
-        return history.Cast<object>().ToList();
+
+        while (history.Count > 0 && history[0].Role != "user") history.RemoveAt(0);
+        return history.Select(h => (object)new Dictionary<string, object?> { ["role"] = h.Role, ["content"] = h.Content }).ToList();
+    }
+
+    /// <summary>What the model itself wrote: the phrase the code appends
+    /// under a pending action and any transcript note are not its words.</summary>
+    public static string HistoryText(string markdown)
+    {
+        const string appended = "Confirm and I'll go ahead.";
+        var t = StripTranscriptNotes(markdown);
+        if (t.EndsWith(appended, StringComparison.OrdinalIgnoreCase)) t = t[..^appended.Length].TrimEnd();
+        return t;
+    }
+
+    /// <summary>A text-only answer that talks like the confirmation card or
+    /// like a transcript note: the model meant to act and did not.</summary>
+    public static bool LooksLikeUncalledAction(IEnumerable<string> texts)
+    {
+        var t = string.Join("\n", texts);
+        return t.Contains("Confirm and I'll go ahead", StringComparison.OrdinalIgnoreCase)
+            || t.Contains("[proposed action", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static object ToolUse(string id, string name, JsonElement input) => new Dictionary<string, object?>
+    {
+        ["type"] = "tool_use",
+        ["id"] = id,
+        ["name"] = name,
+        ["input"] = input.ValueKind == JsonValueKind.Object ? input : JsonDocument.Parse("{}").RootElement,
+    };
+
+    private static object HistoryResult(string id, bool ok, object payload)
+    {
+        var block = new Dictionary<string, object?>
+        {
+            ["type"] = "tool_result",
+            ["tool_use_id"] = id,
+            ["content"] = JsonSerializer.Serialize(payload, ConversationJson.Web),
+        };
+        if (!ok) block["is_error"] = true;
+        return block;
     }
 
     private static Dictionary<string, object?> UserText(string text) => new() { ["role"] = "user", ["content"] = text };
