@@ -34,7 +34,11 @@ public sealed record ScaffoldRequest(
     // WS3 Mode A — set only for a faithful 1:1 conversion: the whole unit
     // around the routine (every sibling routine, the signed specs among
     // them) that the provider converts as one file. See FaithfulConversion.
-    FaithfulConversion.UnitContext? Unit = null);
+    FaithfulConversion.UnitContext? Unit = null,
+    // The failed package's `files` array (manifest JSON) when this is a
+    // repair: the model edits it instead of rewriting the unit from scratch,
+    // which is what made repair rounds oscillate instead of converge.
+    string? PreviousPackageFilesJson = null);
 
 public sealed record ScaffoldFile(
     string Path,

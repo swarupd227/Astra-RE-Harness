@@ -294,6 +294,37 @@ public static class FaithfulConversion
         },
     };
 
+    /// <summary>
+    /// The failed package's source files, rendered under the repair hint so
+    /// the model fixes what exists instead of rewriting the unit and making
+    /// fresh mistakes. Only the model's own files (src/, not the shell).
+    /// </summary>
+    public static string PreviousPackageSection(string? filesJson)
+    {
+        if (string.IsNullOrWhiteSpace(filesJson)) return "";
+        var sb = new StringBuilder();
+        try
+        {
+            using var doc = JsonDocument.Parse(filesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return "";
+            foreach (var f in doc.RootElement.EnumerateArray())
+            {
+                var path = f.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()!.Replace('\\', '/') : "";
+                var content = f.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
+                if (!path.StartsWith("src/", StringComparison.OrdinalIgnoreCase)) continue;
+                if (path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase) || content.Length == 0) continue;
+                sb.Append("\n\n### ").Append(path).Append("\n```csharp\n").Append(content.TrimEnd()).Append("\n```");
+            }
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+        if (sb.Length == 0) return "";
+        return "\n\n## The package that failed — edit it\n\nThese are the files the gate compiled. Fix the errors above in place and " +
+               "return every file again, changing nothing else: same paths, same members, same order." + sb;
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Package assembly
     // ────────────────────────────────────────────────────────────────────

@@ -132,6 +132,28 @@ public sealed class ScaffoldPipeline
             unit = FaithfulConversion.Build(spec.Subroutine.SourceFile?.RelativePath ?? "", siblings, siblingSpecs);
         }
 
+        // A repair of a faithful package edits the previous one: hand the
+        // provider the files the failed gate saw.
+        string? previousFiles = null;
+        if (unit is not null && !string.IsNullOrWhiteSpace(repairHint))
+        {
+            var previous = await _db.Scaffolds.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SpecId == specId && s.TargetPlatform == targetStack, ct);
+            if (previous?.PackageBlobUri is { Length: > 0 } previousUri)
+            {
+                try
+                {
+                    using var previousManifest = JsonDocument.Parse(await _blob.GetTextAsync(previousUri, ct));
+                    if (previousManifest.RootElement.TryGetProperty("files", out var previousArray) && previousArray.ValueKind == JsonValueKind.Array)
+                        previousFiles = previousArray.GetRawText();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Previous package for spec {Spec} could not be read; repairing without it", specId);
+                }
+            }
+        }
+
         var req = new ScaffoldRequest(
             spec.Id,
             spec.Subroutine?.Name ?? "",
@@ -143,7 +165,8 @@ public sealed class ScaffoldPipeline
             spec.Subroutine?.SourceLanguage ?? "",
             originalSourceText,
             repairHint,
-            unit);
+            unit,
+            previousFiles);
 
         object? finalPayload = null;
         var providerReportedError = false;

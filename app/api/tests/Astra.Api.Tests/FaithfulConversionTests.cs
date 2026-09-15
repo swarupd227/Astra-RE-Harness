@@ -116,6 +116,30 @@ public class FaithfulConversionTests
     }
 
     [Fact]
+    public void A_repair_shows_the_failed_package_source_but_not_the_shell()
+    {
+        var files = """
+        [
+          {"path":"Faithful.Unit.csproj","content":"<Project/>"},
+          {"path":"src/Provenance.cs","content":"// attrs"},
+          {"path":"src/MVCViewModel.cs","content":"namespace Faithful.MVCViewModel;\npublic class TBlogApplication {}"},
+          {"path":"src\\Stubs\\MormotRestCore.cs","content":"namespace Faithful.MormotRestCore;"},
+          {"path":"tests/UnitTests.cs","content":"// anchor"}
+        ]
+        """;
+        var section = FaithfulConversion.PreviousPackageSection(files);
+        Assert.Contains("## The package that failed", section);
+        Assert.Contains("### src/MVCViewModel.cs", section);
+        Assert.Contains("### src/Stubs/MormotRestCore.cs", section);
+        Assert.DoesNotContain("Faithful.Unit.csproj", section);
+        Assert.DoesNotContain("Provenance", section);
+        Assert.DoesNotContain("tests/UnitTests.cs", section);
+        Assert.Equal("", FaithfulConversion.PreviousPackageSection(null));
+        Assert.Equal("", FaithfulConversion.PreviousPackageSection("not json"));
+        Assert.Equal("", FaithfulConversion.PreviousPackageSection("[]"));
+    }
+
+    [Fact]
     public void The_faithful_prompt_on_disk_uses_only_variables_the_provider_supplies()
     {
         var prompt = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Prompts", "delphi", "dotnet10-faithful", "faithful-transform.v1.md"));

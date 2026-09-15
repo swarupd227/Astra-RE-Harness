@@ -564,6 +564,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         var userPrompt = string.IsNullOrWhiteSpace(request.RepairHint)
             ? rendered.User
             : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
+              FaithfulConversion.PreviousPackageSection(request.PreviousPackageFilesJson) +
               "\n\nReturn the complete corrected package through the tool; every file, not only the changed ones.";
 
         // The whole unit comes back in one answer, so the call streams: the

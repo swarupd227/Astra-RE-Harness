@@ -1,6 +1,6 @@
 ---
 id: delphi-faithful-transform
-version: v1.1
+version: v1.2
 schemaId: delphi
 targetStack: dotnet10-faithful
 kind: faithful-transform
@@ -106,14 +106,29 @@ Rules:
    type. A unit in the `uses` clause that this unit never actually
    references gets no stub file and no `using` — list the referenced
    members first, then write only those stubs.
-   Stubs must compile: a Delphi alias of a sealed .NET type
-   (`TFileName = type string`, `TID = type Int64`) or a dynamic array
-   (`TIDDynArray = array of TID`) is never a subclass — emit a file-level
-   `global using TFileName = string;` / `global using TIDDynArray = long[];`
-   (or a `readonly record struct` wrapper when the alias carries members);
-   never derive from `string`, `Array`, or another sealed type; optional
-   parameters go last in every stub signature (drop the defaults if the
-   Delphi order puts an optional one first).
+   Stubs must compile, so every stub file has exactly this skeleton, in
+   this order:
+   ```csharp
+   // TODO(faithful): stub for <OtherUnit> — replace when <OtherUnit>.pas is converted.
+   global using TFileName = string;          // aliases FIRST, before the namespace
+   global using TIDDynArray = long[];
+   namespace Faithful.<OtherUnit>;
+   using Faithful.Provenance;
+   [SourceUnit("<best-known path>")]
+   public class TSomeType { ... }
+   ```
+   A Delphi alias of a sealed .NET type (`TFileName = type string`,
+   `TID = type Int64`) or a dynamic array (`TIDDynArray = array of TID`)
+   is never a subclass: it is a `global using` alias at the top of the
+   file (or a `readonly record struct` wrapper when the alias carries
+   members). A `using` that appears after a type declaration does not
+   compile. Never derive from `string`, `Array`, or another sealed type.
+   Optional parameters go last in every stub signature (drop the defaults
+   if the Delphi order puts an optional one first). When the unit
+   overrides a base member (`override`), declare that member in the stub
+   base class as `public virtual` with the same visibility the override
+   uses, so the override's access modifier matches. Stub every foreign
+   type the unit references — a missing one is a compile error too.
 9. **It must compile.** `<Nullable>enable</Nullable>` and
    `<ImplicitUsings>enable</ImplicitUsings>` are on; add `using` lines for
    anything else. No `async`, no dependency injection, no logging, no
