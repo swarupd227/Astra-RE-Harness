@@ -539,9 +539,40 @@ public sealed class CopilotOrchestrator
             Add("user", results);
         }
 
-        while (history.Count > 0 && history[0].Role != "user") history.RemoveAt(0);
+        // The window may open on an orchestrator turn: dropping it orphans the
+        // tool_result blocks that answered it in the next user turn, and the
+        // API rejects a result whose tool_use is not in the message just
+        // before it (seen live: 400 "unexpected tool_use_id … hist_…_p").
+        // Trim until the transcript is consistent from its first user turn.
+        for (var pass = 0; pass < 4; pass++)
+        {
+            while (history.Count > 0 && history[0].Role != "user") history.RemoveAt(0);
+            for (var i = 0; i < history.Count; i++)
+            {
+                if (history[i].Role != "user") continue;
+                var answered = i > 0 && history[i - 1].Role == "assistant" ? ToolUseIds(history[i - 1].Content) : new HashSet<string>();
+                history[i].Content.RemoveAll(b => ToolResultId(b) is { } id && !answered.Contains(id));
+            }
+            var before = history.Count;
+            history.RemoveAll(h => h.Content.Count == 0);
+            if (history.Count == before && (history.Count == 0 || history[0].Role == "user")) break;
+        }
         return history.Select(h => (object)new Dictionary<string, object?> { ["role"] = h.Role, ["content"] = h.Content }).ToList();
     }
+
+    private static HashSet<string> ToolUseIds(IEnumerable<object> blocks)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var b in blocks)
+            if (b is Dictionary<string, object?> d && d.TryGetValue("type", out var t) && t as string == "tool_use"
+                && d.TryGetValue("id", out var id) && id is string s)
+                ids.Add(s);
+        return ids;
+    }
+
+    private static string? ToolResultId(object block) =>
+        block is Dictionary<string, object?> d && d.TryGetValue("type", out var t) && t as string == "tool_result"
+        && d.TryGetValue("tool_use_id", out var id) && id is string s ? s : null;
 
     /// <summary>What the model itself wrote: the phrase the code appends
     /// under a pending action and any transcript note are not its words.</summary>

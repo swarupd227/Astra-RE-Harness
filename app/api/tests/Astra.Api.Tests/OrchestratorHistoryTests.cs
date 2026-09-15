@@ -79,6 +79,30 @@ public class OrchestratorHistoryTests
         Assert.Contains("declined", result.GetProperty("content").GetString());
     }
 
+    [Fact]
+    public void A_window_that_opens_on_an_orchestrator_turn_leaves_no_orphaned_result()
+    {
+        // Exactly the shape that returned 400 on Azure: the history window began
+        // with the pause message of an earlier confirmed action.
+        var rows = new[]
+        {
+            Msg("agent", "orchestrator", "I'll regenerate it.",
+                pending: """{"toolName":"generate_scaffold","input":{"subroutineId":"X"},"summary":"regenerate X","requiredPersona":"engineer","state":"confirmed"}""",
+                minute: 0),
+            Msg("agent", "orchestrator", "Regenerating now.", minute: 1),
+            Msg("agent", "migration", "Converted `X.pas` 1:1 to .NET 10.", minute: 2),
+            Msg("user", null, "Run the compile gate", minute: 3),
+        };
+
+        var history = CopilotOrchestrator.BuildHistory(rows).Select(Ser).ToList();
+
+        Assert.Equal("user", history[0].GetProperty("role").GetString());
+        var first = history[0].GetProperty("content").EnumerateArray().ToList();
+        Assert.DoesNotContain(first, b => b.GetProperty("type").GetString() == "tool_result");
+        Assert.Contains("[Migration agent posted to the thread]", first[0].GetProperty("text").GetString());
+        Assert.Equal("Run the compile gate", first[1].GetProperty("text").GetString());
+    }
+
     [Theory]
     [InlineData("I'll regenerate the conversion now. Confirm and I'll go ahead.", true)]
     [InlineData("Retrying. [proposed action run_gate: confirmed]", true)]
