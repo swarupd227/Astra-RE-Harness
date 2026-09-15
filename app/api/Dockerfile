@@ -105,4 +105,9 @@ COPY --from=build /app .
 COPY src/Astra.Api/Llm/Archetypes/ ./Llm/Archetypes/
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
+# The commit this image was built from: pass --build-arg BUILD_SHA=$(git
+# rev-parse --short HEAD) at build time; /health and /health/ready report it
+# as `build`, which is the one external proof a deploy landed.
+ARG BUILD_SHA=dev
+ENV ASTRA_BUILD_SHA=${BUILD_SHA}
 ENTRYPOINT ["dotnet", "Astra.Api.dll"]

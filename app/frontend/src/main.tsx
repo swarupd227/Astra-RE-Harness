@@ -21,6 +21,9 @@ const queryClient = new QueryClient({
   },
 });
 
+// Which commit this bundle is: stamped at image build time, "dev" locally.
+document.documentElement.dataset.build = import.meta.env.VITE_BUILD_SHA || 'dev';
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     {/* Honest motion: every framer-motion animation follows the OS

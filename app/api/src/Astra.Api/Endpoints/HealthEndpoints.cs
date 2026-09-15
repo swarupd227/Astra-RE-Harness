@@ -11,10 +11,15 @@ namespace Astra.Api.Endpoints;
 
 public static class HealthEndpoints
 {
+    /// <summary>The commit the running image was built from (ASTRA_BUILD_SHA,
+    /// stamped by the Dockerfile's BUILD_SHA arg); "dev" outside an image.</summary>
+    public static readonly string Build =
+        Environment.GetEnvironmentVariable("ASTRA_BUILD_SHA") is { Length: > 0 } sha ? sha : "dev";
+
     public static IEndpointRouteBuilder MapHealthEndpoints(this IEndpointRouteBuilder app)
     {
         // Liveness: process is up. No I/O.
-        app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "astra-api" }))
+        app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "astra-api", build = Build }))
             .WithName("health")
             .ExcludeFromDescription();
 
@@ -61,6 +66,7 @@ public static class HealthEndpoints
             {
                 status = allOk ? "ready" : "degraded",
                 service = "astra-api",
+                build = Build,
                 dependencies = checks
             };
             return allOk ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);

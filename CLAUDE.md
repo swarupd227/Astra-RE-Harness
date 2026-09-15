@@ -72,7 +72,10 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   `az account set --subscription "Microsoft Azure Sponsorship"`, then `cd ~`, `rm -rf ~/astra`, a fresh clone,
   `git checkout <branch>`, then `az acr build … --target runtime ./api` / `./frontend` (with
   `--build-arg VITE_API_BASE_URL="https://astra-api.azurewebsites.net"`) and `az webapp restart` for each app
-  that changed. State the origin tip in the same message.
+  that changed. State the origin tip in the same message. **Every build passes
+  `--build-arg BUILD_SHA=$(git rev-parse --short HEAD)`**: the API reports it as `build` on `/health` and
+  `/health/ready`, the frontend stamps it on `<html data-build>` (and the bundle contains the literal sha), so
+  "is commit X deployed?" is answered by one GET, never by guessing from behaviour.
   **The parser sidecar the API uses is an Azure Container App** (`Parser__GrpcEndpoint` points at
   `parser-sidecar.<env>.centralus.azurecontainerapps.io`), not the App Service `astra-parser-sidecar`, which
   cannot pass App Service's warm-up probe on a gRPC-only port and serves nothing. Deploy it with

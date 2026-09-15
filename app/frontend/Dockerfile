@@ -20,6 +20,11 @@ FROM node:${NODE_VERSION}-alpine AS build
 WORKDIR /app
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# The commit this bundle was built from (--build-arg BUILD_SHA=$(git rev-parse
+# --short HEAD)); main.tsx stamps it on <html data-build> so a deploy can be
+# checked from the served page.
+ARG BUILD_SHA=dev
+ENV VITE_BUILD_SHA=$BUILD_SHA
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
