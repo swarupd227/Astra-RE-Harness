@@ -1,6 +1,6 @@
 ---
 id: delphi-faithful-transform
-version: v1.0
+version: v1.1
 schemaId: delphi
 targetStack: dotnet10-faithful
 kind: faithful-transform
@@ -103,7 +103,17 @@ Rules:
    `// TODO(faithful): stub for <OtherUnit> — replace when <OtherUnit>.pas is converted.`
    Add `using Faithful.<OtherUnit>;` to the unit file. RTL and VCL types
    that the RTL MAPPING TABLE maps to .NET are NOT stubbed — use the .NET
-   type. Do not stub anything the unit does not reference.
+   type. A unit in the `uses` clause that this unit never actually
+   references gets no stub file and no `using` — list the referenced
+   members first, then write only those stubs.
+   Stubs must compile: a Delphi alias of a sealed .NET type
+   (`TFileName = type string`, `TID = type Int64`) or a dynamic array
+   (`TIDDynArray = array of TID`) is never a subclass — emit a file-level
+   `global using TFileName = string;` / `global using TIDDynArray = long[];`
+   (or a `readonly record struct` wrapper when the alias carries members);
+   never derive from `string`, `Array`, or another sealed type; optional
+   parameters go last in every stub signature (drop the defaults if the
+   Delphi order puts an optional one first).
 9. **It must compile.** `<Nullable>enable</Nullable>` and
    `<ImplicitUsings>enable</ImplicitUsings>` are on; add `using` lines for
    anything else. No `async`, no dependency injection, no logging, no

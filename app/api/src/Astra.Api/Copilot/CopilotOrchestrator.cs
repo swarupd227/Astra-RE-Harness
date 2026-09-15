@@ -199,7 +199,7 @@ public sealed class CopilotOrchestrator
 
                 if (toolUses.Count == 0)
                 {
-                    state.FinalMarkdown = string.Join("\n\n", texts);
+                    state.FinalMarkdown = StripTranscriptNotes(string.Join("\n\n", texts));
                     break;
                 }
 
@@ -219,7 +219,7 @@ public sealed class CopilotOrchestrator
 
                     if (name == FinishTool)
                     {
-                        state.FinalMarkdown = CopilotToolRegistry.Read(input, "markdown") ?? string.Join("\n\n", texts);
+                        state.FinalMarkdown = StripTranscriptNotes(CopilotToolRegistry.Read(input, "markdown") ?? string.Join("\n\n", texts));
                         state.Suggestions.Clear();
                         if (input.TryGetProperty("suggestions", out var sugg) && sugg.ValueKind == JsonValueKind.Array)
                             foreach (var s in sugg.EnumerateArray())
@@ -445,6 +445,17 @@ public sealed class CopilotOrchestrator
         }
         return string.Join("\n", lines);
     }
+
+    /// <summary>
+    /// History shows an earlier assistant turn's confirmed action as a
+    /// bracketed note (see BuildHistory). Seen live: the model copied the
+    /// note into its own answer — "[proposed action generate_scaffold:
+    /// confirmed] Retrying…" — without calling the tool, so nothing ran
+    /// while the thread read as if it had. The prompt now forbids it; this
+    /// keeps a stray one out of what the user sees.
+    /// </summary>
+    public static string StripTranscriptNotes(string markdown) =>
+        System.Text.RegularExpressions.Regex.Replace(markdown, @"\s*\[proposed action [^\]]*\]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
 
     private static string FallbackSystem(Dictionary<string, string?> v) =>
         $"You are Astra, the orchestrator of a legacy-modernization programme at Artizent. Acting persona: {v["persona"]}.\n" +
