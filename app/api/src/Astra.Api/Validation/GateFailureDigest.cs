@@ -138,13 +138,25 @@ public sealed record GateFailureDigest(
 
     /// <summary>The same facts, phrased for the model that regenerates the
     /// code: what failed, where, and what to change.</summary>
-    public string ToRepairHint()
+    /// <summary>
+    /// The hint a regeneration gets. A regeneration starts from scratch and
+    /// never sees its previous output, so an error is only actionable when
+    /// the offending line travels with it: <paramref name="readFile"/> (the
+    /// previous package's files by path) lets each error quote its line —
+    /// without it the same signature was rewritten three times on Azure.
+    /// </summary>
+    public string ToRepairHint(Func<string, string?>? readFile = null)
     {
         var sb = new StringBuilder();
         if (Errors.Count > 0)
         {
             sb.AppendLine($"The previous attempt failed the {Stage} gate with {Errors.Count} compiler error(s). Fix every one of them; keep the file layout and the tests unchanged unless an error is in a test.");
-            foreach (var e in Errors.Take(20)) sb.AppendLine($"- {Where(e)} {e.Code}: {e.Message}");
+            foreach (var e in Errors.Take(20))
+            {
+                sb.AppendLine($"- {Where(e)} {e.Code}: {e.Message}");
+                var line = OffendingLine(e, readFile);
+                if (line is not null) sb.AppendLine($"  the line was: `{line}`");
+            }
         }
         if (FailedTests.Count > 0)
         {
@@ -155,6 +167,18 @@ public sealed record GateFailureDigest(
     }
 
     private static string Relative(string file) => TempRoot.Replace(file, "").Replace('\\', '/');
+
+    private static string? OffendingLine(CompileError e, Func<string, string?>? readFile)
+    {
+        if (readFile is null || e.File is null || e.Line is not { } n || n < 1) return null;
+        var content = readFile(e.File) ?? readFile(e.File.Replace('\\', '/'));
+        if (content is null) return null;
+        var lines = content.Split('\n');
+        if (n > lines.Length) return null;
+        var text = lines[n - 1].Trim();
+        if (text.Length == 0) return null;
+        return text.Length <= 240 ? text : text[..240] + "…";
+    }
 
     private static void Add(List<CompileError> list, HashSet<string> seen, CompileError e)
     {

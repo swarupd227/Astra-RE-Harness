@@ -1029,12 +1029,30 @@ public sealed class CopilotToolRegistry
             if (lastFailed is not null)
             {
                 string? log = null;
+                var blobs = ctx.Services.GetRequiredService<Astra.Api.Storage.IBlobClient>();
                 if (lastFailed.LogBlobUri is { Length: > 0 } uri)
                 {
-                    try { log = await ctx.Services.GetRequiredService<Astra.Api.Storage.IBlobClient>().GetTextAsync(uri, ctx.Ct); }
+                    try { log = await blobs.GetTextAsync(uri, ctx.Ct); }
                     catch (Exception) { /* the summary still describes the failure */ }
                 }
-                repairHint = Astra.Api.Validation.GateFailureDigest.Parse(lastFailed.Stage, log).ToRepairHint();
+                // The failed package's files, so every error can quote its line.
+                var previousFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    var failedScaffold = await ctx.Db.Scaffolds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == lastFailed.ScaffoldId, ctx.Ct);
+                    if (failedScaffold?.PackageBlobUri is { Length: > 0 } packageUri)
+                    {
+                        using var manifest = JsonDocument.Parse(await blobs.GetTextAsync(packageUri, ctx.Ct));
+                        if (manifest.RootElement.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+                            foreach (var f in files.EnumerateArray())
+                                if (f.TryGetProperty("path", out var fp) && fp.ValueKind == JsonValueKind.String
+                                    && f.TryGetProperty("content", out var fc) && fc.ValueKind == JsonValueKind.String)
+                                    previousFiles[fp.GetString()!.Replace('\\', '/')] = fc.GetString()!;
+                    }
+                }
+                catch (Exception) { /* the hint still lists the errors */ }
+                repairHint = Astra.Api.Validation.GateFailureDigest.Parse(lastFailed.Stage, log)
+                    .ToRepairHint(path => previousFiles.TryGetValue(path.Replace('\\', '/'), out var c) ? c : null);
                 if (string.IsNullOrWhiteSpace(repairHint))
                     repairHint = $"The previous attempt failed the {lastFailed.Stage} gate: {lastFailed.Summary}";
             }
