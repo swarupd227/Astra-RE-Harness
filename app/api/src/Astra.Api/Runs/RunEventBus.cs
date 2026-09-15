@@ -124,7 +124,16 @@ public sealed class RunEventBus : IDisposable
     public async IAsyncEnumerable<RunEvent> SubscribeAsync(
         Guid runId, long afterSeq, [EnumeratorCancellation] CancellationToken ct)
     {
+        // Subscribing before the first publish is allowed (a card can attach
+        // in the same tick the run starts), so an unknown run gets a stream —
+        // but only a short grace to say something. A run the bus never saw
+        // (evicted after completion, or from before a restart) stays silent
+        // and the subscription ends; before this it stayed open forever, every
+        // finished run card in a thread did exactly that, and a few dozen of
+        // them used up the browser's connections to the API so the composer's
+        // own request never got through (seen in the golden demo).
         RunStream stream;
+        var fresh = false;
         lock (_lock)
         {
             if (!_runs.TryGetValue(runId, out stream!))
@@ -132,6 +141,7 @@ public sealed class RunEventBus : IDisposable
                 EvictIfOverCapacityLocked();
                 stream = new RunStream();
                 _runs[runId] = stream;
+                fresh = true;
             }
         }
 
@@ -154,6 +164,17 @@ public sealed class RunEventBus : IDisposable
 
         try
         {
+            if (fresh)
+            {
+                bool spoke;
+                using (var grace = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    grace.CancelAfter(UnknownRunGrace);
+                    try { spoke = await channel.Reader.WaitToReadAsync(grace.Token); }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { spoke = false; }
+                }
+                if (!spoke) yield break;
+            }
             await foreach (var evt in channel.Reader.ReadAllAsync(ct))
                 yield return evt;
         }
@@ -162,6 +183,10 @@ public sealed class RunEventBus : IDisposable
             lock (stream.Lock) stream.Subscribers.Remove(channel);
         }
     }
+
+    /// <summary>How long a subscription to a run the bus has never seen waits
+    /// for its first event before ending.</summary>
+    public static readonly TimeSpan UnknownRunGrace = TimeSpan.FromSeconds(5);
 
     /// <summary>Message-only view for legacy string-log consumers.</summary>
     public async IAsyncEnumerable<string> SubscribeMessagesAsync(

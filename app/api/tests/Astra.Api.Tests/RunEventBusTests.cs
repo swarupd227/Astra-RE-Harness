@@ -63,4 +63,17 @@ public class RunEventBusTests
         await foreach (var e in bus.SubscribeAsync(runId, afterSeq, ct)) list.Add(e);
         return list;
     }
+
+    [Fact]
+    public async Task Subscribing_to_a_run_the_bus_never_saw_ends_after_the_grace()
+    {
+        using var bus = new RunEventBus();
+        var events = new List<RunEvent>();
+        using var cts = new CancellationTokenSource(RunEventBus.UnknownRunGrace + TimeSpan.FromSeconds(10));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await foreach (var e in bus.SubscribeAsync(Guid.NewGuid(), 0, cts.Token)) events.Add(e);
+        Assert.Empty(events);
+        Assert.False(cts.IsCancellationRequested, "the stream must end by itself, not by timeout");
+        Assert.True(sw.Elapsed < RunEventBus.UnknownRunGrace + TimeSpan.FromSeconds(5), $"ended after {sw.Elapsed}");
+    }
 }

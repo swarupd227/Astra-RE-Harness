@@ -1,16 +1,15 @@
-ARG DOTNET_VERSION=8.0
+ARG DOTNET_VERSION=10.0
 
 # ─── Base build/runtime stages ────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS sdk
 WORKDIR /src
 
-# Phase 10.0 — install .NET 10 SDK alongside .NET 8 so the validation
-# compile gate can build VB6 scaffolds (which target net10.0 per ADR-035).
-# The Astra.Api project itself stays on net8.0; only the in-tmp builds
-# triggered by /scaffolds/{id}/validate/compile use net10.0.
+# The API runs on .NET 10 (the base image). The .NET 8 SDK is installed
+# alongside so the validation compile gate can still build packages that
+# target net8.0 (the dotnet8 archetypes, angular-dotnet8's backend half).
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet \
     && rm /tmp/dotnet-install.sh \
     && dotnet --list-sdks
 
@@ -56,12 +55,12 @@ RUN dotnet publish -c Release -o /app /p:UseAppHost=false
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS runtime
 WORKDIR /app
 
-# .NET 10 SDK — mirrors the install in the sdk/dev stage above. Needed
-# here too: VB6 scaffolds target net10.0 (ADR-035), and compile validation
-# for them runs against THIS image, not the build-time sdk stage.
+# .NET 8 SDK — mirrors the install in the sdk/dev stage above. Needed
+# here too: compile validation runs against THIS image, and dotnet8
+# packages need the 8.0 SDK next to the 10.0 one the base image carries.
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet \
     && rm /tmp/dotnet-install.sh \
     && dotnet --list-sdks
 

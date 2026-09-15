@@ -1,7 +1,7 @@
 # Astra RE Harness — working rules for Claude sessions
 
 Astra is Artizent's agentic legacy-modernization platform: React + Vite + Tailwind frontend (`app/frontend`),
-.NET 8 minimal API (`app/api`), Postgres, Anthropic Claude, language parser sidecars (`app/parser-sidecar` and
+.NET 10 minimal API (`app/api`), Postgres, Anthropic Claude, language parser sidecars (`app/parser-sidecar` and
 per-language validation sidecars), deployed to Azure App Service. Branch of record: `phase-8.0.e-strategy-plugins`.
 
 ## The product model (read before touching any UI or agent code)
@@ -45,8 +45,9 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   variant shares `common/dotnet10`; see `AnthropicScaffoldProvider.ScaffoldPromptFamily`), archetypes under
   `Llm/Archetypes/<target>/<id>/` with `net10.0` csproj files. Adding a target = prompt + archetype + entry in
   `ScaffoldEndpoints.PreferredStack` / `AssessmentService.DefaultTarget` / frontend `targetStacks.ts`. The API
-  image carries the .NET 8 and .NET 10 SDKs so the compile gate can build either. The API itself still runs on
-  .NET 8 (`DOTNET_VERSION` in `app/api/Dockerfile`); moving the runtime is a separate increment.
+  image carries the .NET 10 and .NET 8 SDKs so the compile gate can build either. The API itself runs on
+  .NET 10 (`DOTNET_VERSION` in `app/api/Dockerfile`, EF Core 10, Npgsql 10); the worker (`app/worker`) is still
+  on .NET 8 and moves separately.
 - **Two conversion modes** (WS3). The canonical path substitutes one routine into an archetype package. The
   **faithful 1:1 mode** is the target stack `dotnet10-faithful` (`Llm/FaithfulConversion.cs`): the routine's
   whole source unit becomes one C# file with the same types, names, order and call graph; the unit's signed
@@ -59,7 +60,7 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   Typed as "Convert `X` 1:1 to .NET 10"; the mock brain routes 1:1 / faithful / like-for-like to it.
 - **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
   writer) — that is how the UI loop is verified locally and in e2e.
-- **Build/verify**: no local .NET 8 — Docker `mcr.microsoft.com/dotnet/sdk:8.0` for `dotnet build` / `dotnet test`
+- **Build/verify**: no local .NET SDK — Docker `mcr.microsoft.com/dotnet/sdk:10.0` for `dotnet build` / `dotnet test`
   (`app/api/tests/Astra.Api.Tests`); frontend `npx tsc -b && npx vite build`. Parser sidecar tests run inside
   its image (`astra-re-harness-parser-sidecar`, pytest). Local stack: see `.claude/launch.json`
   (`frontend-localapi`) and the compose file; run only `postgres minio minio-bootstrap parser-sidecar` via

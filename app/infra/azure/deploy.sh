@@ -217,7 +217,7 @@ cat <<EOF
   mc version enable astra-minio/signed-specs
 EOF
 
-# ─── 10. API (.NET 8) ───────────────────────────────────────────────
+# ─── 10. API (.NET 10) ───────────────────────────────────────────────
 az acr build --registry "$ACR_NAME" --image "api:latest" --target runtime "./api"
 deploy_container_app "api" "${ACR_LOGIN_SERVER}/api:latest" 8080
 az webapp config appsettings set \

@@ -65,7 +65,12 @@ export function RunProgressCard({ artifact, size, onIntent }: ArtifactRenderProp
   }, [runId, p.state, p.done, p.total, p.stage, p.summary]);
 
   useEffect(() => {
-    if (!runId || isTerminalRunState(str(p.state))) return;
+    // A card from an old turn still says RUNNING in its props; the API keeps a
+    // finished run's events for 30 minutes, so a card older than an hour has
+    // nothing to hear and only costs one of the browser's connections.
+    const startedAt = Date.parse(str(p.startedAt));
+    const stale = Number.isFinite(startedAt) && Date.now() - startedAt > 60 * 60_000;
+    if (!runId || isTerminalRunState(str(p.state)) || stale) return;
     const close = openRunStream(
       runId,
       0,
