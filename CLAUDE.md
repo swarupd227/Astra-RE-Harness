@@ -52,11 +52,18 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   **faithful 1:1 mode** is the target stack `dotnet10-faithful` (`Llm/FaithfulConversion.cs`): the routine's
   whole source unit becomes one C# file with the same types, names, order and call graph; the unit's signed
   specs are guardrails and are cited with `[SpecClaim]`, every member cites its source lines with
-  `[SourceRoutine]`, foreign types are stubbed under `src/Stubs/` with a TODO. The archetype
-  (`Archetypes/dotnet10-faithful/faithful-delphi-unit`) is only the build shell plus a shape exemplar
-  (`src/Unit.cs`, never shipped); the prompt is `Prompts/delphi/dotnet10-faithful/faithful-transform.v1.md`,
-  answered through a forced tool call. Adding a source language to the mode = a prompt under
-  `Prompts/<source>/dotnet10-faithful/` + `compatibleSchemas` on an archetype under `dotnet10-faithful/`.
+  `[SourceRoutine]`, foreign types are stubbed under `src/Stubs/` with a TODO. The single archetype
+  (`Archetypes/dotnet10-faithful/faithful-delphi-unit`) is language-neutral — only the build shell plus a
+  C#-shape exemplar (`src/Unit.cs`, never shipped) — and lists every source language in
+  `compatibleSchemas`; what actually differs per language is the prompt, one file per source at
+  `Prompts/<source>/dotnet10-faithful/faithful-transform.v1.md`, answered through a forced tool call.
+  Covered so far: delphi, cpp, fortran-f77 (each verified locally end to end — signed spec → faithful
+  package → COMPILE + TEST_PACK gates green — and delphi additionally on Azure with the real provider through
+  several regenerate-with-fix rounds). Adding a language = write its prompt (mapping-table asset via
+  `FaithfulConversion.MappingAssetFileName`, or none — see the fortran/php case) + add it to the archetype's
+  `compatibleSchemas` + a case in `FaithfulConversionTests`; no other plumbing changes. Not yet done: php,
+  vb6, vbnet, csharp, cobol (cobol/unibasic/openedge/java default to java-spring, not .NET, so "faithful to
+  .NET 10" does not apply to them without first deciding a Java-target faithful mode — out of scope so far).
   Typed as "Convert `X` 1:1 to .NET 10"; the mock brain routes 1:1 / faithful / like-for-like to it.
 - **Mock providers must keep working** (`Llm:Provider=mock`, mock survey, mock copilot brain, mock doc
   writer) — that is how the UI loop is verified locally and in e2e.

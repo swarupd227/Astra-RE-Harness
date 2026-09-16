@@ -558,8 +558,10 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
 
         var exemplar = archetype.Files.FirstOrDefault(f => FaithfulConversion.IsExemplar(f.Path))?.Content ?? "";
         var provenance = archetype.Files.FirstOrDefault(f => f.Path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase))?.Content ?? "";
+        var mappingAsset = FaithfulConversion.MappingAssetFileName(request.SourceSchema);
+        var mappingTable = mappingAsset is null ? null : _prompts.TryReadAsset(request.SourceSchema, mappingAsset);
         var rendered = _prompts.Render(loaded, FaithfulConversion.PromptVariablesFor(
-            request, unit, exemplar, provenance, _prompts.TryReadAsset(request.SourceSchema, "rtl-mapping.json")));
+            request, unit, exemplar, provenance, mappingTable));
 
         var userPrompt = string.IsNullOrWhiteSpace(request.RepairHint)
             ? rendered.User

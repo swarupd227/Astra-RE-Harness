@@ -1,6 +1,6 @@
 ---
 id: delphi-faithful-transform
-version: v1.2
+version: v1.3
 schemaId: delphi
 targetStack: dotnet10-faithful
 kind: faithful-transform
@@ -161,10 +161,10 @@ Target file: src/{{className}}.cs · namespace {{namespace}}
 {{unitSpecsJson}}
 ```
 
-## RTL mapping table (authoritative Delphi RTL → .NET mappings)
+## Mapping table (authoritative Delphi RTL → .NET mappings)
 
 ```json
-{{rtlMappingTable}}
+{{mappingTable}}
 ```
 
 ## Provenance attributes already in the package (use as declared)

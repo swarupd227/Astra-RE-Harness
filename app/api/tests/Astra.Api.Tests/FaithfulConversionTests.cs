@@ -139,10 +139,13 @@ public class FaithfulConversionTests
         Assert.Equal("", FaithfulConversion.PreviousPackageSection("[]"));
     }
 
-    [Fact]
-    public void The_faithful_prompt_on_disk_uses_only_variables_the_provider_supplies()
+    [Theory]
+    [InlineData("delphi")]
+    [InlineData("cpp")]
+    [InlineData("fortran-f77")]
+    public void The_faithful_prompt_on_disk_uses_only_variables_the_provider_supplies(string sourceSchema)
     {
-        var prompt = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Prompts", "delphi", "dotnet10-faithful", "faithful-transform.v1.md"));
+        var prompt = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Prompts", sourceSchema, "dotnet10-faithful", "faithful-transform.v1.md"));
         var text = File.ReadAllText(prompt);
         var used = Regex.Matches(text, @"\{\{(\w+)\}\}").Select(m => m.Groups[1].Value).Distinct().OrderBy(x => x).ToArray();
 
@@ -151,8 +154,38 @@ public class FaithfulConversionTests
         Assert.True(unknown.Length == 0, $"placeholders with no value: {string.Join(", ", unknown)}");
         Assert.Contains("unitSourceText", used);
         Assert.Contains("unitSpecsJson", used);
-        Assert.Contains("rtlMappingTable", used);
+        Assert.Contains("mappingTable", used);
         Assert.Contains($"`{FaithfulConversion.ToolName}`", text);
+    }
+
+    [Theory]
+    [InlineData("delphi", "rtl-mapping.json")]
+    [InlineData("cpp", "stl-mapping.json")]
+    [InlineData("vb6", "com-progid-registry.json")]
+    [InlineData("fortran-f77", null)]
+    [InlineData("php", null)]
+    public void MappingAssetFileName_matches_each_languages_own_curated_asset(string sourceSchema, string? expected) =>
+        Assert.Equal(expected, FaithfulConversion.MappingAssetFileName(sourceSchema));
+
+    [Fact]
+    public void The_faithful_archetype_lists_every_language_with_a_faithful_prompt()
+    {
+        var archetypeDir = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Archetypes", "dotnet10-faithful", "faithful-delphi-unit"));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(archetypeDir, "archetype.json")));
+        var compatible = manifest.RootElement.GetProperty("compatibleSchemas").EnumerateArray().Select(e => e.GetString()).ToHashSet();
+
+        // archetypeDir = .../Llm/Archetypes/dotnet10-faithful/faithful-delphi-unit — three levels up is .../Llm.
+        var llmRoot = archetypeDir;
+        for (var i = 0; i < 3; i++) llmRoot = Directory.GetParent(llmRoot)!.FullName;
+        var promptsDir = Path.Combine(llmRoot, "Prompts");
+        var languagesWithFaithfulPrompt = Directory.EnumerateDirectories(promptsDir)
+            .Select(Path.GetFileName)
+            .Where(schema => File.Exists(Path.Combine(promptsDir, schema!, "dotnet10-faithful", "faithful-transform.v1.md")))
+            .ToArray();
+
+        Assert.NotEmpty(languagesWithFaithfulPrompt);
+        foreach (var schema in languagesWithFaithfulPrompt)
+            Assert.Contains(schema, compatible);
     }
 
     [Fact]

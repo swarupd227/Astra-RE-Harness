@@ -49,7 +49,7 @@ public static class FaithfulConversion
     {
         "unitName", "unitPath", "className", "namespace", "anchorRoutine",
         "routineCount", "signedCount", "unitRoutinesJson", "unitSpecsJson",
-        "unitSourceText", "rtlMappingTable", "exemplarSource", "provenanceSource",
+        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource",
     };
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -237,8 +237,20 @@ public static class FaithfulConversion
     // Prompt + tool
     // ────────────────────────────────────────────────────────────────────
 
+    /// <summary>The curated type/idiom mapping table each source language
+    /// ships next to its prompt directories — the same asset its own extract
+    /// prompt already cites, so the faithful path is consistent with it.
+    /// Fortran and PHP have no curated table today; the prompt says so.</summary>
+    public static string? MappingAssetFileName(string sourceSchema) => sourceSchema.ToLowerInvariant() switch
+    {
+        "delphi" => "rtl-mapping.json",
+        "cpp" => "stl-mapping.json",
+        "vb6" => "com-progid-registry.json",
+        _ => null,
+    };
+
     public static Dictionary<string, string?> PromptVariablesFor(
-        ScaffoldRequest request, UnitContext unit, string exemplarSource, string provenanceSource, string? rtlMappingTable) =>
+        ScaffoldRequest request, UnitContext unit, string exemplarSource, string provenanceSource, string? mappingTable) =>
         new()
         {
             ["unitName"] = unit.UnitName,
@@ -251,7 +263,7 @@ public static class FaithfulConversion
             ["unitRoutinesJson"] = unit.RoutinesJson(),
             ["unitSpecsJson"] = unit.SpecsJson(),
             ["unitSourceText"] = request.OriginalSourceText,
-            ["rtlMappingTable"] = rtlMappingTable ?? "(no curated RTL mapping table is registered for this source language)",
+            ["mappingTable"] = mappingTable ?? "(no curated mapping table is registered for this source language — map types and idioms using standard knowledge of the language and cite an open question for anything ambiguous)",
             ["exemplarSource"] = exemplarSource,
             ["provenanceSource"] = provenanceSource,
         };
