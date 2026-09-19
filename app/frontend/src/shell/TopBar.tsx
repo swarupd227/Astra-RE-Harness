@@ -11,6 +11,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { getRouteMeta } from '@/shell/routeMeta';
 import { api } from '@/lib/api';
 import { useTheme } from '@/theme/ThemeProvider';
+import { AgentDockToggle } from '@/agentdock/AgentDock';
 
 const iconButton =
   'flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-raised hover:text-ink-primary';
@@ -112,6 +113,7 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
             </Tooltip>
           )}
           {import.meta.env.DEV && <Badge tone="neutral" className="hidden font-mono md:inline-flex">DEV</Badge>}
+          <AgentDockToggle className={iconButton} />
           <Tooltip content="Keyboard shortcuts (?)">
             <button type="button" onClick={onOpenHelp} className={iconButton} aria-label="Open keyboard help">
               <CircleHelp className="h-4 w-4" aria-hidden="true" />

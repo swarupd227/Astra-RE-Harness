@@ -5,6 +5,7 @@ import { LeftNav } from '@/shell/LeftNav';
 import { MobileNav } from '@/shell/MobileNav';
 import { WorkspacePage } from '@/workspace/WorkspacePage';
 import { CommandPalette } from '@/copilot/CommandPalette';
+import { AgentDock } from '@/agentdock/AgentDock';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CorporaPage } from '@/pages/CorporaPage';
@@ -159,6 +160,7 @@ export function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
+        <AgentDock />
       </div>
       <KeyboardOverlay open={helpOpen} onClose={closeHelp} />
       <CommandPalette />

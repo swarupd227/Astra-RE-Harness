@@ -36,6 +36,7 @@ export function ThreadPanel({
   actions,
   className,
   testid = 'thread-panel',
+  pinStarters = false,
 }: {
   /** Undefined while the host is still resolving which thread to open. */
   conversationId: string | undefined;
@@ -55,6 +56,8 @@ export function ThreadPanel({
   actions?: Omit<ThreadActions, 'sendIntent'>;
   className?: string;
   testid?: string;
+  /** Keep the starters above the composer once the thread has history (a long shared thread never shows its empty state). */
+  pinStarters?: boolean;
 }) {
   const conv = useConversation(conversationId);
   const messages = conv.messages;
@@ -143,6 +146,16 @@ export function ThreadPanel({
               />
             }
           />
+        )}
+        {pinStarters && messages.length > 0 && (
+          <div className="shrink-0 overflow-x-auto border-t border-line-subtle px-3 py-2" data-testid="pinned-starters">
+            <SuggestionChips
+              suggestions={starters}
+              onPick={onStarter}
+              disabled={conv.streaming || !ready}
+              className="w-max flex-nowrap"
+            />
+          </div>
         )}
         <Composer
           compact

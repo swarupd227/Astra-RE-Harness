@@ -72,7 +72,10 @@ sign-off** and **Cutover sign-off**. Agents never cross a gate on their own.
   card the last message opened. **Mission Control** is the global thread's first screen (cross-programme
   funnel, per-programme rows, telemetry).
 - **Artifact views** = the pages, restyled to the tokens and reached from cards. A page may embed a thread
-  (`ThreadPanel`) — Spec review does — but it never replaces the conversation.
+  (`ThreadPanel`) — Spec review does — but it never replaces the conversation. Every other artifact view gets
+  the **agent dock** (`src/agentdock/`): a top-bar toggle that opens that page's agent beside it, in the
+  programme's own thread (the same one the Workspace shows, so history and confirm steps carry over). Wide
+  screens dock it (choice remembered); narrow screens overlay it (starts closed, Esc closes).
 - **⌘K** is natural language first: type anything → routed to Astra in the current context; programmes,
   navigation and theme are the fallbacks.
 
@@ -102,5 +105,7 @@ Mermaid and Monaco take their colours from `themeHex()` / `chartTheme()` and fol
   id, `Narrator.Track(...)` it with the agent that owns it, and add its terminal summary + chips to
   `Narrator.OnTerminalAsync`.
 - **New page → an artifact view.** Tokens only, compact header, a thread panel if the page is a place where
-  decisions are made, stable test ids, "Open full view" from its card.
+  decisions are made, stable test ids, "Open full view" from its card. A page that shows programme data gets
+  its agent for free by adding one row to `DOCK_META` in `src/agentdock/dockMeta.ts` (route pattern, agent,
+  starters as intents); a page that embeds its own thread is left out of the table.
 - **Golden demo is typed, not clicked.** Anything added should be demonstrable as a sentence in a thread.
