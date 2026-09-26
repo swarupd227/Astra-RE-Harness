@@ -592,6 +592,43 @@ export type MigrationPlanDetail = {
   waves: MigrationPlanWave[];
 };
 
+// ─── Routine flow board (WS2) ─────────────────────────────────────────
+export type FlowBoardColumnKey =
+  | 'parsed'
+  | 'extracting'
+  | 'draft'
+  | 'in_review'
+  | 'signed'
+  | 'built'
+  | 'verified'
+  | 'committed';
+
+export type FlowBoardRoutine = {
+  id: string;
+  name: string;
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  /** Only set once a scaffold exists — "SCAFFOLDED" | "COMMITTED" | "FAILED". */
+  scaffoldState: string | null;
+};
+
+export type FlowBoardColumn = {
+  key: FlowBoardColumnKey;
+  label: string;
+  total: number;
+  routines: FlowBoardRoutine[];
+  /** true when `total` exceeds `routines.length` — the column was capped. */
+  hasMore: boolean;
+};
+
+export type FlowBoard = {
+  corpusId: string;
+  corpusName: string;
+  totalRoutines: number;
+  columns: FlowBoardColumn[];
+};
+
 // ─── Harmonisation (Phase 7.1: cross-routine consistency check) ──────
 export type HarmonisationRunSummary = {
   id: string;
@@ -1145,6 +1182,8 @@ export const api = {
       `/api/v1/migration-plans/${encodeURIComponent(planId)}/archive`,
       { method: 'POST' },
     ),
+  getFlowBoard: (corpusId: string) =>
+    apiFetch<FlowBoard>(`/api/v1/corpora/${encodeURIComponent(corpusId)}/flow-board`),
   getCurrentMigrationPlan: (corpusId: string) =>
     apiFetch<MigrationPlanDetail>(
       `/api/v1/corpora/${encodeURIComponent(corpusId)}/migration-plan`,

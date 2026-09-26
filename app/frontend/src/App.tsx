@@ -6,6 +6,7 @@ import { MobileNav } from '@/shell/MobileNav';
 import { WorkspacePage } from '@/workspace/WorkspacePage';
 import { CommandPalette } from '@/copilot/CommandPalette';
 import { AgentDock } from '@/agentdock/AgentDock';
+import { RoutineFlowBoard } from '@/board/RoutineFlowBoard';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CorporaPage } from '@/pages/CorporaPage';
@@ -127,6 +128,7 @@ export function App() {
             <Route path="/corpora/:id" element={<CorpusDetailPage />} />
             <Route path="/corpora/:id/dependency-graph" element={<DependencyGraphPage />} />
             <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
+            <Route path="/corpora/:id/board" element={<RoutineFlowBoard />} />
             <Route path="/corpora/:id/docs" element={<DocsPage />} />
             <Route path="/projects/:id/docs" element={<DocsPage />} />
             <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />

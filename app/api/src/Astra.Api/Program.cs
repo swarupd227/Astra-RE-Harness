@@ -1198,6 +1198,7 @@ app.MapGoldenDatasetEndpoints();
 app.MapHarmonisationEndpoints();
 app.MapDependencyEndpoints();
 app.MapMigrationPlanEndpoints();
+app.MapFlowBoardEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();

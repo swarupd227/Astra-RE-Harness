@@ -47,6 +47,11 @@ export const DOCK_META: DockMeta[] = [
     s('Which routines are still unsigned?'),
     s('Show me the riskiest routines'),
   ]),
+  ...corpusPage('/board', 'programme', 'Programme', 'the flow board', [
+    s("What's stuck, and where?"),
+    s('Which routines failed a gate?'),
+    s('Sign every routine still in review'),
+  ]),
   ...corpusPage('/migration-plan', 'planning', 'Planning', 'the migration plan', [
     s('Explain the migration plan wave by wave'),
     s('What should we migrate first, and why?'),
