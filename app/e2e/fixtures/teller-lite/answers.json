@@ -1,0 +1,151 @@
+{
+  "_comment": "Ground truth for the synthetic Teller Lite dataset. Companion to BIBLE.md. Synthetic data only.",
+  "app": {
+    "name": "Teller Lite",
+    "association": "Blue Ridge Farm Credit (synthetic)",
+    "tier": 1,
+    "knowledgeHolder": "Dale Henry (synthetic)",
+    "interviewer": "Morgan Lee (synthetic)",
+    "wave": { "name": "Wave 1", "endDate": "2027-03-31" },
+    "banner": "Synthetic data for demonstration"
+  },
+  "inventory": {
+    "tables": ["TLR_BRANCH", "TLR_TELLER", "TLR_DRAWER", "TLR_LIMIT", "TLR_TXN", "TLR_STAGE", "TLR_POSTED", "TLR_RECON", "TLR_VAULT_FILE", "TLR_DRAWER_CLOSE", "TLR_OFAC_LOG", "TLR_AUDIT", "TLR_JOB_LOG", "TLR_CONFIG"],
+    "procedures": ["usp_OpenDrawer", "usp_CloseDrawer", "usp_PostStage", "usp_PurgeStage", "usp_ReconcileDrawers", "usp_LogOfac", "usp_RebuildDrawerTotals", "usp_GetTellerLimits", "usp_ArchiveAudit"],
+    "views": ["vw_DrawerLimits", "vw_DailyPosted"],
+    "screens": ["Payment", "CashAdvance", "DrawerOpenClose", "ReceiptReprint"],
+    "services": ["TellerPostingService", "DrawerService", "LoanLookupClient", "OfacScreeningClient"],
+    "uniqueKeys": [{ "table": "TLR_STAGE", "name": "UQ_TLR_STAGE_TXN_REF", "columns": ["TXN_REF"] }]
+  },
+  "jobs": [
+    { "name": "TLR_EOD", "type": "jobplan", "schedule": "Mon-Fri 20:30", "host": "UC4AGENT-TLR01", "tasks": ["TLR_EOD_LOCK", "TLR_EOD_COUNT", "TLR_EOD_POST", "TLR_DW_EXTRACT", "TLR_EOD_REPORT"], "restartPoint": { "taskIndex": 3, "job": "TLR_EOD_POST" }, "file": "batch/uc4/TLR_EOD.xml" },
+    { "name": "TLR_EOD_LOCK", "type": "job", "taskIndex": 1, "predecessors": [], "command": "usp_CloseDrawer @Mode='EOD_LOCK'", "reRunnable": false },
+    { "name": "TLR_EOD_COUNT", "type": "job", "taskIndex": 2, "predecessors": ["TLR_EOD_LOCK"], "command": "usp_ReconcileDrawers @Mode='CONTROL_TOTALS'", "reRunnable": false, "note": "re-running double-counts control totals" },
+    { "name": "TLR_EOD_POST", "type": "job", "taskIndex": 3, "predecessors": ["TLR_EOD_COUNT"], "command": "usp_PostStage", "restartPoint": true, "approxMinutes": 25 },
+    { "name": "TLR_DW_EXTRACT", "type": "job", "taskIndex": 4, "predecessors": ["TLR_EOD_POST"], "command": "bcp queryout \\\\dw-stage\\teller\\", "foundOnlyIn": ["job"] },
+    { "name": "TLR_EOD_REPORT", "type": "job", "taskIndex": 5, "predecessors": ["TLR_EOD_POST"], "command": "powershell D:\\Scripts\\EodReport.ps1" },
+    { "name": "TLR_AM_RECON", "type": "job", "schedule": "daily 06:15", "predecessors": ["file-event:D:\\Import\\CashVault\\cashvault_current.csv"], "command": "dtexec /F D:\\SSIS\\DrawerRecon.dtsx", "runsPackage": "batch/ssis/DrawerRecon.dtsx" }
+  ],
+  "expectedJobCount": 6,
+  "interfaces": [
+    { "id": "loan-lookup", "name": "Loan lookup", "protocol": "REST", "direction": "outbound", "frequency": "per payment", "party": "LoanServ (synthetic)", "foundIn": ["code", "config", "document"] },
+    { "id": "gl-posting", "name": "GL posting", "protocol": "MQ", "direction": "outbound", "frequency": "per transaction", "party": "General Ledger team", "foundIn": ["code", "config"] },
+    { "id": "ofac-screening", "name": "OFAC screening", "protocol": "REST", "direction": "outbound", "frequency": "per payment or advance", "party": "Compliance IT", "foundIn": ["code", "config"], "urlOnlyIn": "config" },
+    { "id": "cash-vault-file", "name": "Cash vault file", "protocol": "file", "direction": "inbound", "frequency": "daily 05:30", "party": "VaultTrack (synthetic)", "foundIn": ["etl", "config", "job"] },
+    { "id": "drawer-limits", "name": "Drawer limits", "protocol": "SQL", "direction": "outbound", "frequency": "on demand", "party": "Branch Ops app", "foundIn": ["sql", "code"] },
+    { "id": "teller-identity", "name": "Teller identity", "protocol": "AD group", "direction": "inbound", "frequency": "per sign-in", "party": "Identity team", "foundIn": ["config", "code"] },
+    { "id": "receipt-printer", "name": "Receipt printer service", "protocol": "REST", "direction": "outbound", "frequency": "per receipt", "party": "branch hardware service", "foundIn": ["code", "config"], "urlOnlyIn": "config" },
+    { "id": "dw-extract", "name": "Data-warehouse extract", "protocol": "SQL", "direction": "outbound", "frequency": "nightly", "party": "enterprise data warehouse", "foundIn": ["job"], "foundOnlyIn": ["job"] }
+  ],
+  "expectedInterfaceCount": 8,
+  "minimumInterfacesFound": 7,
+  "knownErrors": [
+    { "id": "KE-01", "title": "TLR_EOD_POST fails with SQL error 2627", "errorCode": "2627", "job": "TLR_EOD_POST", "tables": ["TLR_STAGE"], "tickets": 9, "ticketExamples": ["INC-T-0412"], "causeIn": ["sql", "ticket"], "fixIn": ["transcript@00:14:32"], "fixDocumented": true },
+    { "id": "KE-02", "title": "Drawer will not close; variance flagged at $0.00", "tickets": 4, "causeIn": ["code"], "fixIn": ["transcript@00:19:05", "ticket"], "fixDocumented": true, "manualWorkaround": true },
+    { "id": "KE-03", "title": "Payment posts twice after a timeout", "tickets": 4, "ticketExamples": ["INC-T-0377"], "causeIn": ["code"], "fixIn": [], "fixDocumented": false, "expectOpenQuestion": "Q1" },
+    { "id": "KE-04", "title": "Morning reconciliation is empty", "job": "TLR_AM_RECON", "tickets": 4, "causeIn": ["config", "etl"], "fixIn": ["transcript@00:22:40"], "fixDocumented": true },
+    { "id": "KE-05", "title": "OFAC check times out and blocks the teller", "tickets": 3, "ticketExamples": ["INC-T-0455"], "causeIn": ["code"], "fixIn": ["document", "ticket"], "fixDocumented": true, "note": "the document's advice is outdated (see C-02)" }
+  ],
+  "expectedKnownErrorCount": 5,
+  "minimumKnownErrorsFound": 4,
+  "conflicts": [
+    { "id": "C-01", "required": true, "claim": { "kind": "transcript", "locator": "t=00:11:20", "text": "the EOD chain restarts from the top" }, "against": { "kind": "job", "locator": "batch/uc4/TLR_EOD.xml#/JOBP/Tasks/Task[3]", "fact": "restart point is task 3 (TLR_EOD_POST)" } },
+    { "id": "C-02", "required": false, "claim": { "kind": "document", "locator": "h=Known issues", "text": "raise Ofac:TimeoutSeconds to fix OFAC timeouts" }, "against": { "kind": "code", "locator": "src/services/OfacScreeningClient.cs", "fact": "timeout is hard-coded to 5 seconds and ignores the config key" } }
+  ],
+  "openQuestions": [
+    { "id": "Q1", "topic": "confirming whether the loan system applied a timed-out payment before reversing", "relatesTo": "KE-03" },
+    { "id": "Q2", "topic": "who approves deleting a staged duplicate in PROD", "relatesTo": "KE-01" },
+    { "id": "Q3", "topic": "after-hours escalation for OFAC outages", "relatesTo": "KE-05" },
+    { "id": "Q4", "topic": "owner of the consumers of vw_DrawerLimits and change notification", "relatesTo": "drawer-limits" },
+    { "id": "Q5", "topic": "consumer and deadline of the nightly warehouse extract", "relatesTo": "dw-extract" },
+    { "id": "Q6", "topic": "ownership of the tlr.gl exchange and credential rotation", "relatesTo": "gl-posting" }
+  ],
+  "tickets": {
+    "total": 140, "routine": 84, "incidents": 56,
+    "routineBreakdown": { "password reset": 30, "printer swap": 24, "access request": 20, "peripheral": 10 },
+    "clusters": { "KE-01": 9, "KE-02": 4, "KE-03": 4, "KE-04": 4, "KE-05": 3 },
+    "noiseIncidents": 32, "noiseCategoriesMin": 16, "noiseMaxPerCategory": 2,
+    "p1p2": [{ "number": "INC-T-0377", "priority": "P1", "cluster": "KE-03" }, { "number": "INC-T-0412", "priority": "P2", "cluster": "KE-01" }, { "number": "INC-T-0455", "priority": "P2", "cluster": "KE-05" }],
+    "window": { "from": "2025-10-01", "to": "2026-09-30" },
+    "columns": ["number", "opened_at", "priority", "state", "short_description", "description", "assignment_group", "cmdb_ci", "close_notes", "resolved_by"]
+  },
+  "transcript": {
+    "file": "kt/session1.vtt", "durationSeconds": 1800, "approxWords": 4500,
+    "speakers": ["Dale Henry (synthetic)", "Morgan Lee (synthetic)"],
+    "plantedAt": { "C-01": "00:11:20", "KE-01": "00:14:32", "KE-02": "00:19:05", "KE-04": "00:22:40" },
+    "timestampsDerivedFromAudio": true,
+    "contacts": ["LoanServ Support Desk 555-0101", "VaultTrack Support 555-0102", "BRFC Service Desk 555-0100", "Sam Okafor (synthetic), DBA on-call"]
+  },
+  "wowMoment": {
+    "runbookStep": "If TLR_EOD_POST fails with error 2627, clear the duplicate in staging and rerun from step 3",
+    "mustCite": [
+      { "kind": "transcript", "locatorStartsWith": "t=00:14:32" },
+      { "kind": "ticket", "locator": "row:INC-T-0412" },
+      { "kind": "sql", "mustContain": "UQ_TLR_STAGE_TXN_REF" }
+    ]
+  },
+  "scoring": {
+    "weights": { "overview": 10, "context-diagram": 10, "interface-map": 15, "batch-sheets": 15, "runbook": 20, "known-errors": 15, "environments-access-contacts": 10, "open-questions": 5 },
+    "slots": {
+      "overview": ["overview:purpose", "overview:users", "overview:business-process", "overview:tier", "overview:owners"],
+      "context-diagram": ["context:diagram"],
+      "interface-map": ["entity:interface:loan-lookup", "entity:interface:gl-posting", "entity:interface:ofac-screening", "entity:interface:cash-vault-file", "entity:interface:drawer-limits", "entity:interface:teller-identity", "entity:interface:receipt-printer", "entity:interface:dw-extract"],
+      "batch-sheets": ["entity:job:TLR_EOD_LOCK", "entity:job:TLR_EOD_COUNT", "entity:job:TLR_EOD_POST", "entity:job:TLR_DW_EXTRACT", "entity:job:TLR_EOD_REPORT", "entity:job:TLR_AM_RECON"],
+      "runbook": ["runbook:start-of-day", "runbook:end-of-day", "runbook:failure-handling", "runbook:restart", "runbook:escalation"],
+      "known-errors": ["entity:error:KE-01", "entity:error:KE-02", "entity:error:KE-03", "entity:error:KE-04", "entity:error:KE-05"],
+      "environments-access-contacts": ["env:environments", "env:access-groups", "env:contacts"],
+      "open-questions": ["openq:closed"]
+    },
+    "creditRules": { "approvedAllSupported": 1.0, "approvedWithUnverified": 0.5, "draftOrRejected": 0.0 },
+    "slotCredit": "maximum over approved versions",
+    "legacyApproved": [
+      { "slot": "overview:purpose", "source": "docs/TellerOpsNotes2019.docx#h=Overview" },
+      { "slot": "overview:users", "source": "docs/TellerOpsNotes2019.docx#h=Users" },
+      { "slot": "entity:interface:loan-lookup", "source": "docs/TellerOpsNotes2019.docx#h=Interfaces" },
+      { "slot": "entity:job:TLR_EOD_LOCK", "source": "docs/TellerOpsNotes2019.docx#h=Batch" },
+      { "slot": "entity:job:TLR_AM_RECON", "source": "docs/TellerOpsNotes2019.docx#h=Batch" },
+      { "slot": "runbook:start-of-day", "source": "docs/TellerOpsNotes2019.docx#h=Daily operations" },
+      { "slot": "env:environments", "source": "docs/TellerOpsNotes2019.docx#h=Environments" }
+    ],
+    "expectedBeforePercent": 18.2,
+    "expectedAfterRangePercent": [70, 80],
+    "afterWorkedExample": {
+      "totalPercent": 76.5,
+      "slotCredits": {
+        "overview:purpose": 1.0, "overview:users": 1.0, "overview:business-process": 1.0, "overview:tier": 1.0, "overview:owners": 0.5,
+        "context:diagram": 1.0,
+        "entity:interface:loan-lookup": 1.0, "entity:interface:gl-posting": 1.0, "entity:interface:ofac-screening": 1.0, "entity:interface:cash-vault-file": 1.0, "entity:interface:drawer-limits": 1.0, "entity:interface:teller-identity": 1.0, "entity:interface:receipt-printer": 1.0, "entity:interface:dw-extract": 0.5,
+        "entity:job:TLR_EOD_LOCK": 1.0, "entity:job:TLR_EOD_COUNT": 1.0, "entity:job:TLR_EOD_POST": 0.5, "entity:job:TLR_DW_EXTRACT": 1.0, "entity:job:TLR_EOD_REPORT": 1.0, "entity:job:TLR_AM_RECON": 1.0,
+        "runbook:start-of-day": 1.0, "runbook:end-of-day": 1.0, "runbook:failure-handling": 0.5, "runbook:restart": 1.0, "runbook:escalation": 0.0,
+        "entity:error:KE-01": 1.0, "entity:error:KE-02": 0.5, "entity:error:KE-03": 0.0, "entity:error:KE-04": 0.5, "entity:error:KE-05": 1.0,
+        "env:environments": 1.0, "env:access-groups": 1.0, "env:contacts": 0.0,
+        "openq:closed": 0.0
+      }
+    }
+  },
+  "placeholderApps": [
+    { "name": "Loan Docs Lite", "tier": 2, "scorePercent": 45, "knowledgeHolder": "Priya Nair (synthetic)", "precomputed": true },
+    { "name": "Statement Batch Lite", "tier": 2, "scorePercent": 62, "knowledgeHolder": "Marcus Webb (synthetic)", "precomputed": true },
+    { "name": "Member Portal Lite", "tier": 3, "scorePercent": 30, "knowledgeHolder": "Elena Ruiz (synthetic)", "precomputed": true }
+  ],
+  "dependency": {
+    "bands": { "highAbove": 60, "mediumFrom": 30 },
+    "targets": { "day90": 50, "day180": 25, "day365": 10 },
+    "tierWeights": { "1": 3, "2": 2, "3": 1 },
+    "portfolioBeforePercent": 62.7,
+    "portfolioAfterPercent": 40.8,
+    "assumption": "placeholder tiers are assumed; the spec takes tiers from a workbook not available here"
+  },
+  "acceptance": {
+    "runUnderSeconds": 240, "citedClaimsPercent": 100, "citationsResolvePercent": 100,
+    "jobsFound": "6/6", "interfacesFoundAtLeast": 7, "knownErrorsFoundAtLeast": 4, "requiredConflictsFlagged": 1,
+    "plantedItemFoundInAtLeastRunsOf5": 4
+  },
+  "syntheticScan": {
+    "bannerText": "Synthetic data for demonstration",
+    "allowedEmailDomains": ["brfc.example"],
+    "phonePattern": "555-01\\d\\d",
+    "accountRefPattern": "ACCT-\\d{6}",
+    "denylist": ["AgFirst", "AgriBank", "Farm Credit Services of America", "CoBank", "ServiceNow Inc", "Automic Software GmbH"]
+  }
+}
