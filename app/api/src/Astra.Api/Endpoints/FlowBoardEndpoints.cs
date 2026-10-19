@@ -4,9 +4,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Endpoints;
 
-public sealed record FlowBoardRoutine(Guid Id, string Name, string FilePath, int LineStart, int LineEnd, string? ScaffoldState);
+/// <param name="Gates">
+/// Latest result of each of the four validation gates for this routine's
+/// scaffold (PASSED / FAILED / ERRORED / RUNNING, or NOT_RUN when the gate
+/// has never run). Null when the routine has no scaffold yet.
+/// </param>
+public sealed record FlowBoardRoutine(
+    Guid Id, string Name, string FilePath, int LineStart, int LineEnd, string? ScaffoldState,
+    IReadOnlyDictionary<string, string>? Gates = null);
 
-public sealed record FlowBoardColumn(string Key, string Label, int Total, IReadOnlyList<FlowBoardRoutine> Routines, bool HasMore);
+/// <param name="GateTally">
+/// For stages whose routines have scaffolds (built / verified / committed):
+/// per gate, how many of ALL the stage's routines — not just the returned
+/// ones — sit at each result. Null for earlier stages.
+/// </param>
+public sealed record FlowBoardColumn(
+    string Key, string Label, int Total, IReadOnlyList<FlowBoardRoutine> Routines, bool HasMore,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>>? GateTally = null);
 
 public sealed record FlowBoardResult(Guid CorpusId, string CorpusName, int TotalRoutines, IReadOnlyList<FlowBoardColumn> Columns);
 
@@ -110,6 +124,7 @@ public static class FlowBoardEndpoints
 
         var buckets = ColumnKeys.ToDictionary(k => k, _ => new List<FlowBoardRoutine>());
         var counts = ColumnKeys.ToDictionary(k => k, _ => 0);
+        var tallies = new Dictionary<string, Dictionary<string, Dictionary<string, int>>>();
 
         foreach (var x in subs)
         {
@@ -118,15 +133,49 @@ public static class FlowBoardEndpoints
             var statusByStage = scaffold is null ? null : latestStatusByScaffold.GetValueOrDefault(scaffold.Id);
             var column = ClassifyColumn(x.State, spec?.State, scaffold?.State, statusByStage);
             counts[column]++;
+
+            var gates = scaffold is null ? null : GateMap(statusByStage);
+            if (gates is not null)
+            {
+                if (!tallies.TryGetValue(column, out var byStage)) tallies[column] = byStage = new();
+                Tally(byStage, gates);
+            }
+
             var list = buckets[column];
             if (list.Count < perColumnCap)
-                list.Add(new FlowBoardRoutine(x.Id, x.Name, x.FilePath, x.LineStart, x.LineEnd, scaffold?.State));
+                list.Add(new FlowBoardRoutine(x.Id, x.Name, x.FilePath, x.LineStart, x.LineEnd, scaffold?.State, gates));
         }
 
         var columns = ColumnKeys
-            .Select(k => new FlowBoardColumn(k, Label(k), counts[k], buckets[k], counts[k] > buckets[k].Count))
+            .Select(k => new FlowBoardColumn(
+                k, Label(k), counts[k], buckets[k], counts[k] > buckets[k].Count,
+                tallies.TryGetValue(k, out var t)
+                    ? t.ToDictionary(e => e.Key, e => (IReadOnlyDictionary<string, int>)e.Value)
+                    : null))
             .ToList();
         return new FlowBoardResult(corpusId, corpus.Name, subs.Count, columns);
+    }
+
+    public const string NotRun = "NOT_RUN";
+
+    /// <summary>
+    /// All four gates in order, each with its latest result — or NOT_RUN when
+    /// it never ran, so "hasn't run" is stated by the data, not inferred by a
+    /// reader (or a model) from a missing key.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> GateMap(IReadOnlyDictionary<string, string>? statusByStage) =>
+        GateStages.ToDictionary(
+            g => g,
+            g => statusByStage is not null && statusByStage.TryGetValue(g, out var s) ? s : NotRun);
+
+    /// <summary>Adds one routine's gate results to a stage's running per-gate counts.</summary>
+    public static void Tally(Dictionary<string, Dictionary<string, int>> byStage, IReadOnlyDictionary<string, string> gates)
+    {
+        foreach (var (stage, status) in gates)
+        {
+            if (!byStage.TryGetValue(stage, out var counts)) byStage[stage] = counts = new();
+            counts[status] = counts.GetValueOrDefault(status) + 1;
+        }
     }
 
     public static string Label(string key) => key switch

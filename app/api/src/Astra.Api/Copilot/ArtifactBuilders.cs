@@ -536,7 +536,11 @@ public static class ArtifactBuilders
                 stage = c.Key,
                 label = c.Label,
                 count = c.Total,
-                examples = c.Routines.Take(FlowBoardExamplesForModel).Select(r => r.Name),
+                // gates is set only once a routine has generated code; gateTally
+                // counts every routine in the stage, examples are just a sample.
+                examples = c.Routines.Take(FlowBoardExamplesForModel)
+                    .Select(r => r.Gates is null ? (object)new { routine = r.Name } : new { routine = r.Name, gates = r.Gates }),
+                gateTally = c.GateTally,
             }),
         };
         return (ToolResult.Artifact("flowBoard", board.CorpusId.ToString(), props), payload);

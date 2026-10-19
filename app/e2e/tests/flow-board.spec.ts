@@ -47,6 +47,32 @@ test.describe('Flow board · API', () => {
     }
   });
 
+  test('stages with generated code report every gate for every routine, and each gate tally adds up', async ({ page }) => {
+    const id = await minpackId(page);
+    const body = await page.request.get(`${API_BASE}/api/v1/corpora/${id}/flow-board`).then((r) => r.json());
+    const GATES = ['COMPILE', 'TEST_PACK', 'EQUIVALENCE', 'FALSIFYING'];
+    const RESULTS = ['PASSED', 'FAILED', 'ERRORED', 'RUNNING', 'NOT_RUN'];
+
+    for (const col of body.columns) {
+      const withCode = ['built', 'verified', 'committed'].includes(col.key);
+      if (!withCode) {
+        expect(col.gateTally ?? null).toBeNull();
+        for (const r of col.routines) expect(r.gates ?? null).toBeNull();
+        continue;
+      }
+      for (const r of col.routines) {
+        expect(Object.keys(r.gates)).toEqual(GATES);
+        for (const g of GATES) expect(RESULTS).toContain(r.gates[g]);
+      }
+      if (col.total === 0) continue;
+      // Every gate's results account for every routine in the stage, not just the sample.
+      for (const g of GATES) {
+        const sum = Object.values(col.gateTally[g] as Record<string, number>).reduce((n, v) => n + v, 0);
+        expect(sum).toBe(col.total);
+      }
+    }
+  });
+
   test('unknown corpus 404s', async ({ page }) => {
     const res = await page.request.get(`${API_BASE}/api/v1/corpora/00000000-0000-0000-0000-000000000000/flow-board`);
     expect(res.status()).toBe(404);

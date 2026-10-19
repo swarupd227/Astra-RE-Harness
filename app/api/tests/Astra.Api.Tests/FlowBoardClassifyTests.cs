@@ -88,6 +88,74 @@ public class FlowBoardClassifyTests
     }
 
     [Fact]
+    public void GateMap_lists_all_four_gates_in_order_and_says_NOT_RUN_for_gates_that_never_ran()
+    {
+        var map = FlowBoardEndpoints.GateMap(Gates(("COMPILE", "PASSED"), ("TEST_PACK", "PASSED")));
+        Assert.Equal(new[] { "COMPILE", "TEST_PACK", "EQUIVALENCE", "FALSIFYING" }, map.Keys);
+        Assert.Equal("PASSED", map["COMPILE"]);
+        Assert.Equal("PASSED", map["TEST_PACK"]);
+        Assert.Equal("NOT_RUN", map["EQUIVALENCE"]);
+        Assert.Equal("NOT_RUN", map["FALSIFYING"]);
+    }
+
+    [Fact]
+    public void GateMap_with_no_runs_at_all_is_all_NOT_RUN() =>
+        Assert.All(FlowBoardEndpoints.GateMap(null).Values, v => Assert.Equal("NOT_RUN", v));
+
+    [Fact]
+    public void Tally_counts_every_routine_per_gate_per_result()
+    {
+        var byStage = new Dictionary<string, Dictionary<string, int>>();
+        FlowBoardEndpoints.Tally(byStage, FlowBoardEndpoints.GateMap(Gates(("COMPILE", "PASSED"), ("TEST_PACK", "PASSED"))));
+        FlowBoardEndpoints.Tally(byStage, FlowBoardEndpoints.GateMap(Gates(("COMPILE", "PASSED"), ("TEST_PACK", "FAILED"))));
+        FlowBoardEndpoints.Tally(byStage, FlowBoardEndpoints.GateMap(Gates(("COMPILE", "FAILED"))));
+
+        Assert.Equal(2, byStage["COMPILE"]["PASSED"]);
+        Assert.Equal(1, byStage["COMPILE"]["FAILED"]);
+        Assert.Equal(1, byStage["TEST_PACK"]["PASSED"]);
+        Assert.Equal(1, byStage["TEST_PACK"]["FAILED"]);
+        Assert.Equal(1, byStage["TEST_PACK"]["NOT_RUN"]);
+        Assert.Equal(3, byStage["EQUIVALENCE"]["NOT_RUN"]);
+        // Every gate's results account for every routine tallied.
+        Assert.All(byStage.Values, counts => Assert.Equal(3, counts.Values.Sum()));
+    }
+
+    [Fact]
+    public void Model_payload_states_gate_results_for_built_routines_and_the_stage_tally()
+    {
+        var gates = FlowBoardEndpoints.GateMap(Gates(("COMPILE", "PASSED"), ("TEST_PACK", "PASSED")));
+        var built = new FlowBoardRoutine(Guid.NewGuid(), "takeAction", "src/a.cpp", 1, 2, "SCAFFOLDED", gates);
+        var parsed = new FlowBoardRoutine(Guid.NewGuid(), "Foo", "src/b.cpp", 1, 2, null);
+        var tally = new Dictionary<string, IReadOnlyDictionary<string, int>>
+        {
+            ["COMPILE"] = new Dictionary<string, int> { ["PASSED"] = 1 },
+            ["TEST_PACK"] = new Dictionary<string, int> { ["PASSED"] = 1 },
+            ["EQUIVALENCE"] = new Dictionary<string, int> { ["NOT_RUN"] = 1 },
+            ["FALSIFYING"] = new Dictionary<string, int> { ["NOT_RUN"] = 1 },
+        };
+        var columns = FlowBoardEndpoints.ColumnKeys.Select(k => k switch
+        {
+            "built" => new FlowBoardColumn(k, "Built", 1, new[] { built }, false, tally),
+            "parsed" => new FlowBoardColumn(k, "Parsed", 1, new[] { parsed }, false),
+            _ => new FlowBoardColumn(k, FlowBoardEndpoints.Label(k), 0, Array.Empty<FlowBoardRoutine>(), false),
+        }).ToList();
+
+        var (_, payload) = ArtifactBuilders.FlowBoard(new FlowBoardResult(Guid.NewGuid(), "oatpp", 2, columns));
+        var model = System.Text.Json.JsonSerializer.SerializeToElement(payload);
+        var stages = model.GetProperty("stages").EnumerateArray().ToDictionary(s => s.GetProperty("stage").GetString()!);
+
+        var ex = stages["built"].GetProperty("examples")[0];
+        Assert.Equal("takeAction", ex.GetProperty("routine").GetString());
+        Assert.Equal("PASSED", ex.GetProperty("gates").GetProperty("TEST_PACK").GetString());
+        Assert.Equal("NOT_RUN", ex.GetProperty("gates").GetProperty("EQUIVALENCE").GetString());
+        Assert.Equal(1, stages["built"].GetProperty("gateTally").GetProperty("COMPILE").GetProperty("PASSED").GetInt32());
+
+        // Routines without code have no gates to report, and a stage without code has no tally.
+        Assert.False(stages["parsed"].GetProperty("examples")[0].TryGetProperty("gates", out _));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, stages["parsed"].GetProperty("gateTally").ValueKind);
+    }
+
+    [Fact]
     public void Card_props_and_model_payload_carry_the_same_counts_and_the_model_sees_few_names()
     {
         var routines = Enumerable.Range(1, 12)

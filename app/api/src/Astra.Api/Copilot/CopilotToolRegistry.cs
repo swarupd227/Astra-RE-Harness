@@ -162,7 +162,7 @@ public sealed class CopilotToolRegistry
         {
             Name = "get_flow_board",
             Agent = "programme",
-            Description = "Where every routine in the programme sits in the pipeline right now: a count per stage plus example routines. Use for 'what's stuck / where are we / how far along / what's built but not verified / show me the board' questions. Stages in order: parsed (no spec yet), extracting (spec being drafted), draft (spec drafted, not yet reviewed), in_review (with an SME), signed (spec signed, no code yet), built (code generated, but not all four validation gates have passed), verified (all four gates passed), committed (code is in git).",
+            Description = "Where every routine in the programme sits in the pipeline right now: a count per stage plus example routines. Use for 'what's stuck / where are we / how far along / what's built but not verified / show me the board' questions. Stages in order: parsed (no spec yet), extracting (spec being drafted), draft (spec drafted, not yet reviewed), in_review (with an SME), signed (spec signed, no code yet), built (code generated, but not all four validation gates have passed), verified (all four gates passed), committed (code is in git). For stages that have generated code (built, verified, committed) it also returns each example routine's latest result for every gate (COMPILE, TEST_PACK, EQUIVALENCE, FALSIFYING: PASSED, FAILED, ERRORED, RUNNING or NOT_RUN) and, per gate, a tally across ALL routines in the stage — use these to say which gates have and haven't passed; never infer a gate result.",
             InputSchema = Obj(("corpusId", Str("Programme id or name. Optional in a programme thread."))),
             Execute = GetFlowBoardAsync,
         });
