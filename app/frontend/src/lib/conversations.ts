@@ -58,6 +58,7 @@ export type ArtifactKind =
   | 'text'
   | 'assessment'
   | 'planWaves'
+  | 'flowBoard'
   | 'docSection';
 
 export type Artifact = {

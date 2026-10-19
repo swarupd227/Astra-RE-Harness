@@ -102,6 +102,33 @@ test.describe('Flow board · UI', () => {
     await expect(page.getByTestId('subroutines-search')).toBeVisible();
   });
 
+  // Needs the mock copilot brain (local stack): it routes this phrase to
+  // get_flow_board deterministically. A real model may answer from another
+  // tool, so this is not run against a deployed environment.
+  test('asking "what\'s stuck" in the dock answers with a flowBoard card that matches the API', async ({ page }) => {
+    const id = await minpackId(page);
+    const api = await page.request.get(`${API_BASE}/api/v1/corpora/${id}/flow-board`).then((r) => r.json());
+
+    await page.addInitScript(() => window.localStorage.setItem('astra.agentDock', 'open'));
+    await page.goto(`/corpora/${id}/board`);
+    const dock = page.getByTestId('agent-dock');
+    await expect(dock).toBeVisible();
+
+    await dock.locator('[data-testid="suggestion-chip"][data-intent="What\'s stuck, and where?"]').click();
+
+    const card = dock.getByTestId('flow-board-card').last();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    const stages = card.getByTestId('flow-board-stage');
+    await expect(stages).toHaveCount(8);
+
+    // The card and the page read the same builder, so every stage count agrees.
+    for (const col of api.columns) {
+      await expect(card.locator(`[data-stage="${col.key}"]`)).toHaveAttribute('data-count', String(col.total));
+    }
+    // Card size shows counts only; the routines appear once it is expanded.
+    await expect(card.getByRole('link')).toHaveCount(0);
+  });
+
   test('the project page links to the board', async ({ page }) => {
     const id = await minpackId(page);
     await page.goto(`/corpora/${id}`);

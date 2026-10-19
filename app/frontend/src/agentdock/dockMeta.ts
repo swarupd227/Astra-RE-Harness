@@ -49,7 +49,7 @@ export const DOCK_META: DockMeta[] = [
   ]),
   ...corpusPage('/board', 'programme', 'Programme', 'the flow board', [
     s("What's stuck, and where?"),
-    s('Which routines failed a gate?'),
+    s("What's built but not verified yet?"),
     s('Sign every routine still in review'),
   ]),
   ...corpusPage('/migration-plan', 'planning', 'Planning', 'the migration plan', [

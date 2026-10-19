@@ -12,23 +12,14 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import {
-  CheckCircle2,
-  ChevronRight,
-  Cog,
-  Eye,
-  FileCode,
-  GitCommit,
-  Loader2,
-  PenLine,
-  ShieldCheck,
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, type FlowBoardColumn, type FlowBoardColumnKey, type FlowBoardRoutine } from '@/lib/api';
 import { PageHero } from '@/components/PageHero';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
+import { columnStyle } from './columns';
 
 // The raw Subroutine.State value a "view the rest" link should filter by —
 // as fine-grained as the routines list endpoint goes. Built/verified/
@@ -43,20 +34,6 @@ const STATE_FILTER: Record<FlowBoardColumnKey, string> = {
   built: 'SCAFFOLDED',
   verified: 'SCAFFOLDED',
   committed: 'SCAFFOLDED',
-};
-
-const COLUMN_STYLE: Record<
-  FlowBoardColumnKey,
-  { icon: typeof FileCode; text: string; border: string; spin?: boolean }
-> = {
-  parsed: { icon: FileCode, text: 'text-ink-tertiary', border: 'border-line' },
-  extracting: { icon: Loader2, text: 'text-volt', border: 'border-volt/40', spin: true },
-  draft: { icon: PenLine, text: 'text-status-warn', border: 'border-status-warn/40' },
-  in_review: { icon: Eye, text: 'text-status-ok', border: 'border-status-ok/40' },
-  signed: { icon: ShieldCheck, text: 'text-status-info', border: 'border-status-info/40' },
-  built: { icon: Cog, text: 'text-status-warn', border: 'border-status-warn/40' },
-  verified: { icon: CheckCircle2, text: 'text-status-ok', border: 'border-status-ok/40' },
-  committed: { icon: GitCommit, text: 'text-status-ok', border: 'border-status-ok/40' },
 };
 
 export function RoutineFlowBoard() {
@@ -104,14 +81,14 @@ export function RoutineFlowBoard() {
 }
 
 function BoardColumn({ corpusId, column }: { corpusId: string; column: FlowBoardColumn }) {
-  const style = COLUMN_STYLE[column.key];
+  const style = columnStyle(column.key);
   const Icon = style.icon;
   const reduced = useReducedMotion();
 
   return (
     <div className="flex min-h-0 flex-col rounded-lg border border-line-subtle bg-raised" data-testid={`flow-column-${column.key}`}>
       <div className={clsx('flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-2.5', style.border)}>
-        <Icon className={clsx('h-4 w-4 shrink-0', style.text, style.spin && 'animate-spin')} aria-hidden="true" />
+        <Icon className={clsx('h-4 w-4 shrink-0', style.text, style.spin && column.total > 0 && 'animate-spin')} aria-hidden="true" />
         <h2 className="min-w-0 flex-1 truncate text-caption font-semibold text-ink-primary">{column.label}</h2>
         <Badge tone="neutral">{column.total.toLocaleString()}</Badge>
       </div>

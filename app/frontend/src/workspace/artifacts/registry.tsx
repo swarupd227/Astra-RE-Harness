@@ -13,6 +13,7 @@ import { ScaffoldTreeCard } from './ScaffoldTreeCard';
 import { TextCard } from './TextCard';
 import { AssessmentCard } from './AssessmentCard';
 import { PlanWavesCard } from './PlanWavesCard';
+import { FlowBoardCard } from './FlowBoardCard';
 import { DocSectionCard } from './DocSectionCard';
 
 export type ArtifactSize = 'card' | 'pane';
@@ -64,6 +65,8 @@ export function renderArtifact(artifact: Artifact, opts: RenderOptions): ReactNo
       return <AssessmentCard artifact={a} size={size} onIntent={onIntent} />;
     case 'planWaves':
       return <PlanWavesCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'flowBoard':
+      return <FlowBoardCard artifact={a} size={size} onIntent={onIntent} />;
     case 'docSection':
       return <DocSectionCard artifact={a} size={size} onIntent={onIntent} />;
     default: {

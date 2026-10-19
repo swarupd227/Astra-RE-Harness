@@ -174,6 +174,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
     private static string Verb(string tool) => tool switch
     {
         "get_programme_status" => "checking the programme status",
+        "get_flow_board" => "reading the flow board",
         "search_routines" => "searching the routines",
         "survey_corpus" => "starting the pattern survey",
         "get_pattern_clusters" => "loading the pattern clusters",
@@ -207,6 +208,8 @@ public sealed class MockCopilotBrain : ICopilotBrain
             return Regex.IsMatch(t, @"\b(plan the|draft|generate|create|make)\b")
                 ? ("generate_migration_plan", new { })
                 : ("get_migration_plan", new { });
+        if (Regex.IsMatch(t, @"\bflow board\b|\bthe board\b|\bpipeline\b|\bstuck\b|\bwhere are we\b|\bhow far along\b|\bnot (yet )?verified\b"))
+            return ("get_flow_board", new { });
         if (Regex.IsMatch(t, @"\baccept\b")) return ("review_all_claims", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\b(riskiest|most (called|depended)|biggest|largest|hotspots?)\b"))
             return ("rank_routines", new { by = t.Contains("called") || t.Contains("depended") ? "fan_in" : t.Contains("biggest") || t.Contains("largest") ? "size" : "risk", limit = 10 });

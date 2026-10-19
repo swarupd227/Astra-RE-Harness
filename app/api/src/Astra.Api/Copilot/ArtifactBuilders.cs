@@ -499,6 +499,49 @@ public static class ArtifactBuilders
         return (ToolResult.Artifact("planWaves", plan.Id.ToString(), props), payload);
     }
 
+    // ── flowBoard ────────────────────────────────────────────────────────
+
+    /// <summary>Routines per stage the card carries; it only shows them once expanded to pane size.</summary>
+    public const int FlowBoardCardCap = 12;
+    private const int FlowBoardExamplesForModel = 5;
+
+    /// <summary>
+    /// The page's own read model (<see cref="FlowBoardEndpoints.BuildAsync"/>)
+    /// as a card and as the compact facts the model reasons from — counts
+    /// per stage plus a few example names, never the whole board.
+    /// </summary>
+    public static (ArtifactDto Artifact, object Payload) FlowBoard(FlowBoardResult board)
+    {
+        var props = new
+        {
+            corpusId = board.CorpusId,
+            corpusName = board.CorpusName,
+            totalRoutines = board.TotalRoutines,
+            columns = board.Columns.Select(c => new
+            {
+                key = c.Key,
+                label = c.Label,
+                total = c.Total,
+                hasMore = c.HasMore,
+                routines = c.Routines.Select(r => new { id = r.Id, name = r.Name, filePath = r.FilePath, lineStart = r.LineStart }),
+            }),
+        };
+        var payload = new
+        {
+            corpusId = board.CorpusId,
+            programme = board.CorpusName,
+            totalRoutines = board.TotalRoutines,
+            stages = board.Columns.Select(c => new
+            {
+                stage = c.Key,
+                label = c.Label,
+                count = c.Total,
+                examples = c.Routines.Take(FlowBoardExamplesForModel).Select(r => r.Name),
+            }),
+        };
+        return (ToolResult.Artifact("flowBoard", board.CorpusId.ToString(), props), payload);
+    }
+
     public const int DocMarkdownCap = 8_000;
 
     public static ArtifactDto DocSection(DocSection section, string title, string href)

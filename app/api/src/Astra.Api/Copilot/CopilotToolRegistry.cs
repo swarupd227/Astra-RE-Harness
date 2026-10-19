@@ -160,6 +160,14 @@ public sealed class CopilotToolRegistry
         });
         _tools.Add(new CopilotTool
         {
+            Name = "get_flow_board",
+            Agent = "programme",
+            Description = "Where every routine in the programme sits in the pipeline right now: a count per stage plus example routines. Use for 'what's stuck / where are we / how far along / what's built but not verified / show me the board' questions. Stages in order: parsed (no spec yet), extracting (spec being drafted), draft (spec drafted, not yet reviewed), in_review (with an SME), signed (spec signed, no code yet), built (code generated, but not all four validation gates have passed), verified (all four gates passed), committed (code is in git).",
+            InputSchema = Obj(("corpusId", Str("Programme id or name. Optional in a programme thread."))),
+            Execute = GetFlowBoardAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
             Name = "get_validation_results",
             Agent = "validation",
             Description = "Latest result of each validation gate (COMPILE, TEST_PACK, EQUIVALENCE, FALSIFYING) for a routine's generated code.",
@@ -515,6 +523,16 @@ public sealed class CopilotToolRegistry
             return ToolResult.Failure("plan.none", $"No migration plan exists for {corpus.Name} — offer to draft one (generate_migration_plan).");
         var (artifact, payload) = await ArtifactBuilders.PlanWavesAsync(ctx.Db, plan, ctx.Ct);
         return ToolResult.Success(payload, $"plan: {plan.TotalWaves} waves ({plan.Status})", artifact);
+    }
+
+    private static async Task<ToolResult> GetFlowBoardAsync(JsonElement input, ToolContext ctx)
+    {
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        var board = await FlowBoardEndpoints.BuildAsync(ctx.Db, corpus.Id, ArtifactBuilders.FlowBoardCardCap, ctx.Ct);
+        if (board is null) return NoCorpus(input);
+        var (artifact, payload) = ArtifactBuilders.FlowBoard(board);
+        return ToolResult.Success(payload, $"flow board: {board.TotalRoutines} routines", artifact);
     }
 
     // ═══ NL querying (Increment 2) ═══════════════════════════════════════

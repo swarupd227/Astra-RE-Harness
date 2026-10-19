@@ -12,6 +12,7 @@ import {
   FileText,
   FolderTree,
   Gauge,
+  Kanban,
   LayoutGrid,
   ListTree,
   ShieldCheck,
@@ -36,6 +37,7 @@ const KINDS: Record<string, KindMeta> = {
   text: { label: 'Note', icon: FileText },
   assessment: { label: 'Assessment', icon: ClipboardList },
   planWaves: { label: 'Migration plan', icon: Waves },
+  flowBoard: { label: 'Flow board', icon: Kanban },
   docSection: { label: 'Documentation', icon: BookOpen },
 };
 
@@ -77,6 +79,8 @@ export function artifactTitle(artifact: Artifact): string {
       return str(p.corpusName) ? `Assessment · ${str(p.corpusName)}` : 'Assessment';
     case 'planWaves':
       return str(p.strategyName) ? `Migration plan · ${str(p.strategyName)}` : 'Migration plan';
+    case 'flowBoard':
+      return str(p.corpusName) ? `Flow board · ${str(p.corpusName)}` : 'Flow board';
     case 'docSection':
       return str(p.title, 'Documentation');
     default:
@@ -121,6 +125,10 @@ export function artifactLink(artifact: Artifact): { label: string; href: string 
     case 'planWaves': {
       const corpusId = str(p.corpusId);
       return corpusId ? { label: 'Open migration plan', href: `/corpora/${corpusId}/migration-plan` } : null;
+    }
+    case 'flowBoard': {
+      const corpusId = str(p.corpusId) || (ref ?? '');
+      return corpusId ? { label: 'Open flow board', href: `/corpora/${corpusId}/board` } : null;
     }
     case 'docSection': {
       const href = str(p.href) || (str(p.corpusId) ? `/projects/${str(p.corpusId)}/docs` : '');

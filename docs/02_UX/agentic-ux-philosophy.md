@@ -82,7 +82,7 @@ sign-off** and **Cutover sign-off**. Agents never cross a gate on their own.
 ## The card registry (`src/workspace/artifacts/`)
 
 `funnel · runProgress · routineList · clusterGrid · specSummary · programmeList · routine · gateResults ·
-scaffoldTree · planWaves · assessment · docSection · text`. A card renders from `{kind, refId, props}` in the
+scaffoldTree · planWaves · flowBoard · assessment · docSection · text`. A card renders from `{kind, refId, props}` in the
 message's `artifacts`; the same component powers the card size, the pane size, and (where one exists) the
 page. Props contracts live in `ArtifactBuilders.cs`; the frontend must be defensive (`props.items ?? []`).
 

@@ -741,6 +741,7 @@ public sealed class CopilotOrchestrator
         "get_run_status" => "Checking the run",
         "query_graph" => "Walking the dependency graph",
         "get_migration_plan" => "Loading the migration plan",
+        "get_flow_board" => "Reading the flow board",
         "get_validation_results" => "Loading the gate results",
         "survey_corpus" => "Starting the pattern survey",
         "extract_spec" => "Starting the spec draft",

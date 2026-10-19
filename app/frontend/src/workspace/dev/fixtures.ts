@@ -83,6 +83,29 @@ export const PLAN_WAVES_FIXTURE: Artifact = {
   },
 };
 
+const FLOW_ROUTINES = (names: string[]) =>
+  names.map((name, i) => ({ id: `99999999-9999-4999-8999-${String(i).padStart(12, '0')}`, name, filePath: 'src/fmt.f', lineStart: 10 + i * 12 }));
+
+export const FLOW_BOARD_FIXTURE: Artifact = {
+  kind: 'flowBoard',
+  refId: CORPUS_ID,
+  props: {
+    corpusId: CORPUS_ID,
+    corpusName: 'fmt (Fortran demo)',
+    totalRoutines: 142,
+    columns: [
+      { key: 'parsed', label: 'Parsed', total: 60, hasMore: true, routines: FLOW_ROUTINES(['ERRHND', 'PRSLIN', 'RDREC', 'LCKREC']) },
+      { key: 'extracting', label: 'Extracting', total: 2, hasMore: false, routines: FLOW_ROUTINES(['FMTSUB', 'WRTREC']) },
+      { key: 'draft', label: 'Draft', total: 38, hasMore: true, routines: FLOW_ROUTINES(['TRIMSP', 'PADLFT', 'PADRGT']) },
+      { key: 'in_review', label: 'In review', total: 5, hasMore: false, routines: FLOW_ROUTINES(['CNVNUM', 'CNVDAT']) },
+      { key: 'signed', label: 'Signed', total: 4, hasMore: false, routines: FLOW_ROUTINES(['SPLTLN']) },
+      { key: 'built', label: 'Built', total: 22, hasMore: true, routines: FLOW_ROUTINES(['NXTTOK', 'SKPBLK']) },
+      { key: 'verified', label: 'Verified', total: 9, hasMore: false, routines: FLOW_ROUTINES(['CHKSUM']) },
+      { key: 'committed', label: 'Committed', total: 2, hasMore: false, routines: FLOW_ROUTINES(['CPYSTR', 'LENSTR']) },
+    ],
+  },
+};
+
 export const DOC_SECTION_FIXTURE: Artifact = {
   kind: 'docSection',
   refId: '66666666-6666-4666-8666-666666666666',
@@ -162,6 +185,7 @@ export const SPEC_SUMMARY_FIXTURE: Artifact = {
 export const ALL_FIXTURES: Artifact[] = [
   ASSESSMENT_FIXTURE,
   PLAN_WAVES_FIXTURE,
+  FLOW_BOARD_FIXTURE,
   DOC_SECTION_FIXTURE,
   RUN_RESUMABLE_FIXTURE,
   SPEC_SUMMARY_FIXTURE,
