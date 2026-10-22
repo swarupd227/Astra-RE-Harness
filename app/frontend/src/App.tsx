@@ -7,6 +7,8 @@ import { WorkspacePage } from '@/workspace/WorkspacePage';
 import { CommandPalette } from '@/copilot/CommandPalette';
 import { AgentDock } from '@/agentdock/AgentDock';
 import { RoutineFlowBoard } from '@/board/RoutineFlowBoard';
+import { ProjectBanner } from '@/components/ProjectBanner';
+import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CorporaPage } from '@/pages/CorporaPage';
@@ -107,6 +109,7 @@ export function App() {
       </a>
       <TopBar onOpenHelp={openHelp} onOpenNav={openMobileNav} />
       <MobileNav open={mobileNavOpen} onClose={closeMobileNav} />
+      <ProjectBanner />
       <div className="flex min-h-0 flex-1">
         <LeftNav />
         {/* <main> is the scroll container: the Workspace fills it (h-full);
@@ -129,6 +132,7 @@ export function App() {
             <Route path="/corpora/:id/dependency-graph" element={<DependencyGraphPage />} />
             <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
             <Route path="/corpora/:id/board" element={<RoutineFlowBoard />} />
+            <Route path="/corpora/:id/settings" element={<ProjectSettingsPage />} />
             <Route path="/corpora/:id/docs" element={<DocsPage />} />
             <Route path="/projects/:id/docs" element={<DocsPage />} />
             <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />

@@ -532,6 +532,18 @@ using (var scope = app.Services.CreateScope())
               ON subroutines (source_language);
             """);
 
+        // WS7 K1a — per-project settings and a per-file artefact kind. Both
+        // settings_json and meta_json are nullable (null = defaults) because a
+        // jsonb literal default would need braces, which ExecuteSqlRawAsync
+        // reads as parameter placeholders (see the note above).
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE corpora ADD COLUMN IF NOT EXISTS settings_json jsonb NULL;
+            ALTER TABLE source_files ADD COLUMN IF NOT EXISTS kind varchar(32) NOT NULL DEFAULT 'code';
+            ALTER TABLE source_files ADD COLUMN IF NOT EXISTS content_type varchar(128) NULL;
+            ALTER TABLE source_files ADD COLUMN IF NOT EXISTS size_bytes bigint NULL;
+            ALTER TABLE source_files ADD COLUMN IF NOT EXISTS meta_json jsonb NULL;
+            """);
+
         // Phase 6.0 — Golden dataset tables. Additive create-if-not-exists
         // so existing dev databases pick them up without a full recreate.
         await db.Database.ExecuteSqlRawAsync("""
@@ -1199,6 +1211,8 @@ app.MapHarmonisationEndpoints();
 app.MapDependencyEndpoints();
 app.MapMigrationPlanEndpoints();
 app.MapFlowBoardEndpoints();
+app.MapArtefactEndpoints();
+app.MapProjectSettingsEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();
 app.MapProviderEndpoints();

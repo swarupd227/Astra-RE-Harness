@@ -814,6 +814,43 @@ export type CorpusListItem = {
   sourceLanguage: string | null;
   updatedAt: string;
 };
+// ─── Artefact kinds + project settings (WS7) ─────────────────────────
+export type ArtefactKindInfo = {
+  id: string;
+  label: string;
+  description: string;
+  extensions: string[];
+  /** structured = parser-derived facts; narrative = what people said or wrote. */
+  trustTier: 'structured' | 'narrative';
+  maxBytes: number;
+  text: boolean;
+  /** Core kinds (source code) are always on. */
+  core: boolean;
+};
+
+export type ProjectSettings = {
+  /** Optional kinds switched on for this project; source code is always on and not listed. */
+  artefactKinds: string[];
+  pack: string | null;
+  banner: string | null;
+  metadata: {
+    tier: number | null;
+    knowledgeHolder: string | null;
+    wave: { name: string | null; endDate: string | null } | null;
+  };
+  expectedCounts: Record<string, number>;
+  demo: boolean;
+};
+
+export const EMPTY_PROJECT_SETTINGS: ProjectSettings = {
+  artefactKinds: [],
+  pack: null,
+  banner: null,
+  metadata: { tier: null, knowledgeHolder: null, wave: null },
+  expectedCounts: {},
+  demo: false,
+};
+
 export type CorpusDetail = {
   id: string;
   name: string;
@@ -823,12 +860,15 @@ export type CorpusDetail = {
   totalLoc: number;
   createdAt: string;
   updatedAt: string;
+  settings?: ProjectSettings;
   latestVersion: {
     id: string;
     ingestedAt: string;
     files: {
       id: string;
       relativePath: string;
+      /** Artefact kind id; "code" for source files. */
+      kind?: string;
       lineCount: number;
       fileHash: string;
       subroutines: {
@@ -1273,6 +1313,14 @@ export const api = {
 
   listCorpora: () => apiFetch<{ data: CorpusListItem[] }>('/api/v1/corpora'),
   getCorpus: (id: string) => apiFetch<CorpusDetail>(`/api/v1/corpora/${id}`),
+  listArtefactKinds: () => apiFetch<{ data: ArtefactKindInfo[] }>('/api/v1/artefact-kinds'),
+  getCorpusSettings: (id: string) =>
+    apiFetch<ProjectSettings>(`/api/v1/corpora/${encodeURIComponent(id)}/settings`),
+  putCorpusSettings: (id: string, settings: ProjectSettings) =>
+    apiFetch<ProjectSettings>(`/api/v1/corpora/${encodeURIComponent(id)}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
   getSubroutine: (id: string) => apiFetch<SubroutineDetail>(`/api/v1/subroutines/${id}`),
   getSubroutineSource: (id: string) => apiFetch<SubroutineSource>(`/api/v1/subroutines/${id}/source`),
 

@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, FileCode, GitBranch, Loader2, Upload, X } from 'lucide-react';
-import { ApiError, api, type IngestResult, type SpecSchemaSummary } from '@/lib/api';
+import { ApiError, api, EMPTY_PROJECT_SETTINGS, type IngestResult, type SpecSchemaSummary } from '@/lib/api';
+import { ArtefactKindPicker } from '@/components/ArtefactKindPicker';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -62,15 +63,30 @@ export function NewCorpusPage() {
     return Array.from(all);
   }, [selectedSchema, schemas]);
 
+  // WS7 — optional artefact kinds beyond source code. Recorded as project
+  // settings once the project exists; the files themselves are added from the
+  // project page.
+  const [artefactKinds, setArtefactKinds] = useState<string[]>([]);
+
   const ingest = useMutation<IngestResult, ApiError>({
     mutationFn: async () => {
-      if (mode === 'upload') return api.ingestUpload(name, files);
-      return api.ingestGit({
-        name,
-        url: gitUrl,
-        branch: branch.trim() || undefined,
-        sourceRoot: sourceRoot.trim() || undefined,
-      });
+      const result =
+        mode === 'upload'
+          ? await api.ingestUpload(name, files)
+          : await api.ingestGit({
+              name,
+              url: gitUrl,
+              branch: branch.trim() || undefined,
+              sourceRoot: sourceRoot.trim() || undefined,
+            });
+      if (artefactKinds.length > 0 && result.corpusId && result.state === 'PARSED') {
+        try {
+          await api.putCorpusSettings(result.corpusId, { ...EMPTY_PROJECT_SETTINGS, artefactKinds });
+        } catch {
+          // The project exists and is usable; the kinds can be set again on the settings page.
+        }
+      }
+      return result;
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['corpora'] });
@@ -326,6 +342,24 @@ export function NewCorpusPage() {
               </div>
             </>
           )}
+
+          <div role="group" aria-labelledby="artefact-kinds-label">
+            <p id="artefact-kinds-label" className="text-body font-medium text-ink-primary">
+              Additional artefacts (optional)
+            </p>
+            <p className="mt-0.5 text-caption text-ink-tertiary">
+              Besides source code, this project can also take these kinds of evidence. You add the
+              files on the project page after it is created, and can change this later in the
+              project settings.
+            </p>
+            <div className="mt-2">
+              <ArtefactKindPicker
+                value={artefactKinds}
+                onChange={setArtefactKinds}
+                disabled={ingest.isPending || ingest.isSuccess}
+              />
+            </div>
+          </div>
 
           <div className="flex items-center justify-end gap-3">
             <Button

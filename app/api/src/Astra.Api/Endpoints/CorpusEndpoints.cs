@@ -1,3 +1,4 @@
+using Astra.Api.Artefacts;
 using Astra.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -118,6 +119,7 @@ public static class CorpusEndpoints
                 totalLoc = corpus.TotalLoc,
                 createdAt = corpus.CreatedAt,
                 updatedAt = corpus.UpdatedAt,
+                settings = ProjectSettings.Parse(corpus.SettingsJson),
                 latestVersion = latest is null ? null : new
                 {
                     id = latest.Id,
@@ -126,6 +128,7 @@ public static class CorpusEndpoints
                     {
                         id = f.Id,
                         relativePath = f.RelativePath,
+                        kind = f.Kind,
                         lineCount = f.LineCount,
                         fileHash = f.FileHash,
                         subroutines = f.Subroutines.OrderBy(s => s.LineStart).Select(s => new

@@ -13,6 +13,14 @@ public sealed class Corpus
     public int TotalLoc { get; set; }
     public Guid? OwnerId { get; set; }
     public Guid? LatestVersionId { get; set; }
+
+    /// <summary>
+    /// Per-project settings (see <c>Artefacts/ProjectSettings.cs</c>): which optional
+    /// artefact kinds the project takes, display banner, programme metadata. Null means
+    /// "all defaults" — rows that predate the column.
+    /// </summary>
+    public string? SettingsJson { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

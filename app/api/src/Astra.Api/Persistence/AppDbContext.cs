@@ -82,6 +82,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.TotalLoc).HasColumnName("total_loc");
             b.Property(x => x.OwnerId).HasColumnName("owner_id");
             b.Property(x => x.LatestVersionId).HasColumnName("latest_version_id");
+            b.Property(x => x.SettingsJson).HasColumnName("settings_json").HasColumnType("jsonb");
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             b.HasIndex(x => x.Name).IsUnique();
@@ -112,6 +113,10 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.FileHash).HasColumnName("file_hash").HasMaxLength(80).IsRequired();
             b.Property(x => x.LineCount).HasColumnName("line_count");
             b.Property(x => x.BlobUri).HasColumnName("blob_uri").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired().HasDefaultValue("code");
+            b.Property(x => x.ContentType).HasColumnName("content_type").HasMaxLength(128);
+            b.Property(x => x.SizeBytes).HasColumnName("size_bytes");
+            b.Property(x => x.MetaJson).HasColumnName("meta_json").HasColumnType("jsonb");
             b.HasOne(x => x.SourceVersion).WithMany(v => v.Files)
              .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.SourceVersionId, x.RelativePath }).IsUnique();

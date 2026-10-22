@@ -9,6 +9,14 @@ public sealed class SourceFile
     public int LineCount { get; set; }
     public string BlobUri { get; set; } = "";
 
+    /// <summary>Artefact kind id (see <c>Artefacts/ArtefactKinds.cs</c>); "code" for source files.</summary>
+    public string Kind { get; set; } = "code";
+    public string? ContentType { get; set; }
+    public long? SizeBytes { get; set; }
+
+    /// <summary>Kind-specific metadata, e.g. <c>{"attachesTo":"kt/session1.vtt"}</c> for audio.</summary>
+    public string? MetaJson { get; set; }
+
     public SourceVersion? SourceVersion { get; set; }
     public List<Subroutine> Subroutines { get; set; } = new();
 }

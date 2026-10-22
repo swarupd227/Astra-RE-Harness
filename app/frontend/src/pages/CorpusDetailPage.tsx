@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Download, FileCode, Folder, GitBranch, GitMerge, Kanban, Layers, RefreshCw } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Download, FileCode, Folder, GitBranch, GitMerge, Kanban, Layers, RefreshCw, Settings } from 'lucide-react';
 import { api, getPersona } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
@@ -110,6 +110,10 @@ export function CorpusDetailPage() {
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Re-sync
+          </Button>
+          <Button variant="secondary" onClick={() => navigate(`/corpora/${id}/settings`)} data-testid="open-project-settings">
+            <Settings className="h-4 w-4" aria-hidden="true" />
+            Settings
           </Button>
           {persona === 'admin' && (
             <div className="relative">
