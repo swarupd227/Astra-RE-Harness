@@ -141,6 +141,22 @@ public sealed class MockCopilotBrain : ICopilotBrain
                 .Where(b => b.TryGetProperty("type", out var t) && t.GetString() == "tool_result")
                 .Select(b => b.TryGetProperty("content", out var cc) ? cc.ValueKind == JsonValueKind.String ? cc.GetString() ?? "" : cc.GetRawText() : "")
                 .ToList();
+
+            // The orchestrator held back a tool-less answer (grounding check). Behave like
+            // a model: if a tool would answer the question, call it; else send the same reply.
+            if (results.Any(x => x.Contains("grounding.no_tool")))
+            {
+                var original = LastUserText(request.Messages);
+                if (RouteOrNull(original) is { } routed)
+                {
+                    var retry = new List<BrainBlock>
+                    {
+                        new("tool_use", null, "toolu_mock_grounded", routed.Tool, JsonSerializer.SerializeToElement(routed.Input)),
+                    };
+                    return Task.FromResult(new BrainResponse(retry, "tool_use", Raw(retry), null, Model, 0));
+                }
+                return Task.FromResult(NoToolFinish(NoToolReply(original) ?? "OK."));
+            }
             var failed = results.Any(x => x.Contains("\"error\""));
             var text = failed
                 ? "That didn't go through — the details are in the source chip below. Tell me how you'd like to proceed."
@@ -162,6 +178,9 @@ public sealed class MockCopilotBrain : ICopilotBrain
         }
 
         var userText = lastContent.ValueKind == JsonValueKind.String ? lastContent.GetString() ?? "" : lastContent.GetRawText();
+        // Scripted tool-less answers: "from memory" reproduces the real failure (a status
+        // answered from the thread); thanks/ok are turns that genuinely need no tool.
+        if (NoToolReply(userText) is { } noTool) return Task.FromResult(NoToolFinish(noTool));
         var (tool, input) = Route(userText);
         var call = new List<BrainBlock>
         {
@@ -169,6 +188,43 @@ public sealed class MockCopilotBrain : ICopilotBrain
             new("tool_use", null, "toolu_mock_1", tool, JsonSerializer.SerializeToElement(input)),
         };
         return Task.FromResult(new BrainResponse(call, "tool_use", Raw(call), null, Model, 0));
+    }
+
+    private static string? NoToolReply(string userText)
+    {
+        if (userText.Contains("from memory", StringComparison.OrdinalIgnoreCase))
+            return "From what I remember, nothing has moved since last time.";
+        if (Regex.IsMatch(userText.Trim(), @"^(thanks|thank you|ok|okay)[.! ]*$", RegexOptions.IgnoreCase))
+            return "You're welcome.";
+        return null;
+    }
+
+    private static BrainResponse NoToolFinish(string text)
+    {
+        var blocks = new List<BrainBlock>
+        {
+            new("tool_use", null, "toolu_mock_finish_notool", "finish_turn", JsonSerializer.SerializeToElement(new
+            {
+                markdown = text,
+                suggestions = new object[] { new { label = "What's the status?", intent = "What's the status of this programme?" } },
+            })),
+        };
+        return new BrainResponse(blocks, "tool_use", Raw(blocks), null, "mock-router", 0);
+    }
+
+    private static string LastUserText(IEnumerable<object> messages)
+    {
+        foreach (var m in messages.Reverse())
+        {
+            var j = JsonSerializer.SerializeToElement(m, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (j.TryGetProperty("role", out var r) && r.GetString() == "user"
+                && j.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+            {
+                var text = c.GetString() ?? "";
+                if (!text.StartsWith("[system]", StringComparison.Ordinal)) return text;
+            }
+        }
+        return "";
     }
 
     private static string Verb(string tool) => tool switch
@@ -194,7 +250,11 @@ public sealed class MockCopilotBrain : ICopilotBrain
         _ => "working on it",
     };
 
-    private static (string Tool, object Input) Route(string text)
+    private static (string Tool, object Input) Route(string text) =>
+        RouteOrNull(text) ?? ("get_programme_status", new { });
+
+    /// <summary>The keyword rule that matches, or null when only the default would apply.</summary>
+    private static (string Tool, object Input)? RouteOrNull(string text)
     {
         var t = text.ToLowerInvariant();
         var quotedMatch = Regex.Match(text, "[`\"']([^`\"']+)[`\"']").Groups[1].Value;
@@ -242,7 +302,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
             var query = quoted ?? Regex.Match(text, @"(?:named|called|for|matching)\s+([A-Za-z0-9_.]+)").Groups[1].Value;
             return ("search_routines", new { query = string.IsNullOrWhiteSpace(query) ? "" : query, limit = 20 });
         }
-        return ("get_programme_status", new { });
+        return null;
     }
 
     private static JsonElement Raw(IEnumerable<BrainBlock> blocks)

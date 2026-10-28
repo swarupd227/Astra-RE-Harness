@@ -55,7 +55,34 @@ public sealed class CopilotOrchestrator
         public Guid? RunId { get; set; }
         public int Rounds { get; set; }
         public bool Nudged { get; set; }
+        /// <summary>The one grounding check this turn has already been spent.</summary>
+        public bool GroundingChecked { get; set; }
     }
+
+    /// <summary>
+    /// What the model is told when it tries to end a turn without having
+    /// called any tool. It arrives as the result of its own finish_turn call,
+    /// so the conversation stays valid and the model sees it as a reply, not
+    /// as the user speaking.
+    /// </summary>
+    public const string GroundingCheckMessage =
+        "Not sent yet: you called no tool this turn. If your answer states any routine status, count, claim, " +
+        "gate or run result, or where something came from, call the relevant read tool now (get_flow_board for " +
+        "pipeline state and gate results) and write the answer from its result — not from the thread above. " +
+        "If it states none of those, or only repeats the programme context, call finish_turn again with the same " +
+        "answer. This check happens once per turn.";
+
+    /// <summary>
+    /// True when the model is about to end a turn having called no tool at
+    /// all, and this turn has not been checked yet. The prompt asks the model
+    /// to ground every fact in a tool called this turn; on a long thread it
+    /// answered from earlier turns instead (correctly once, falsely before),
+    /// so this makes the ask a server-side step rather than only a
+    /// request. Turns that legitimately need no tool ("thanks", explaining an
+    /// approach) pay one extra round and finish unchanged.
+    /// </summary>
+    public static bool NeedsGroundingCheck(bool alreadyChecked, int toolCallsThisTurn, IEnumerable<string?> toolNamesThisRound) =>
+        !alreadyChecked && toolCallsThisTurn == 0 && toolNamesThisRound.All(n => n == FinishTool);
 
     private sealed record StoredTurns(List<JsonElement> Turns, string? PendingToolUseId);
 
@@ -210,6 +237,16 @@ public sealed class CopilotOrchestrator
                     continue;
                 }
 
+                if (toolUses.Count == 0 && NeedsGroundingCheck(state.GroundingChecked, state.ToolCalls.Count, Array.Empty<string?>()))
+                {
+                    // A plain-text answer with no tool called: same check as a bare finish_turn.
+                    state.GroundingChecked = true;
+                    _logger.LogInformation("Grounding check issued (text answer, no tool) for conversation {Conv}", conv.Id);
+                    history.Add(new Dictionary<string, object?> { ["role"] = "assistant", ["content"] = AssistantContent(resp.Blocks) });
+                    history.Add(UserText("[system] " + GroundingCheckMessage));
+                    continue;
+                }
+
                 if (toolUses.Count == 0)
                 {
                     state.FinalMarkdown = StripTranscriptNotes(string.Join("\n\n", texts));
@@ -232,6 +269,16 @@ public sealed class CopilotOrchestrator
 
                     if (name == FinishTool)
                     {
+                        if (NeedsGroundingCheck(state.GroundingChecked, state.ToolCalls.Count, toolUses.Select(t => t.ToolName)))
+                        {
+                            // Hold this answer back once; the model's next move is either a
+                            // tool call or the same finish_turn, which is then accepted.
+                            state.GroundingChecked = true;
+                            _logger.LogInformation("Grounding check issued (finish_turn, no tool) for conversation {Conv}", conv.Id);
+                            results.Add(ToolResultBlock(tu.ToolUseId!, ToolResult.Failure("grounding.no_tool", GroundingCheckMessage)));
+                            continue;
+                        }
+
                         state.FinalMarkdown = StripTranscriptNotes(CopilotToolRegistry.Read(input, "markdown") ?? string.Join("\n\n", texts));
                         state.Suggestions.Clear();
                         if (input.TryGetProperty("suggestions", out var sugg) && sugg.ValueKind == JsonValueKind.Array)

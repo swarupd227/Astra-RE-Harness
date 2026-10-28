@@ -79,6 +79,44 @@ test.describe('Flow board · API', () => {
   });
 });
 
+// The server-side grounding check: a turn that ends without any tool call is
+// held back once. Needs the mock copilot brain (it scripts the failure mode),
+// so it only runs on the local stack.
+test.describe('Grounding check · copilot turn', () => {
+  async function ask(page: Page, text: string) {
+    const id = await minpackId(page);
+    const thread = (await page.request.get(`${API_BASE}/api/v1/conversations?corpusId=${id}`).then((r) => r.json())).data[0].id;
+    const res = await page.request.post(`${API_BASE}/api/v1/conversations/${thread}/messages`, {
+      headers: { 'Content-Type': 'application/json', 'X-Dev-Persona': 'engineer' },
+      data: { text },
+      timeout: 60_000,
+    });
+    expect(res.status()).toBe(200);
+    await res.text(); // the SSE body ends when the turn does
+    const convo = await page.request.get(`${API_BASE}/api/v1/conversations/${thread}`).then((r) => r.json());
+    const mine = convo.messages.filter((m: { role: string; markdown: string }) => m.role === 'user' && m.markdown === text);
+    const replies = convo.messages.filter((m: { role: string; createdAt: string }) => m.role === 'agent' && m.createdAt > mine[mine.length - 1].createdAt);
+    return { replies };
+  }
+
+  test('a status answered "from memory" is held back and redone from the tool', async ({ page }) => {
+    const { replies } = await ask(page, 'From memory, where are we?');
+    expect(replies).toHaveLength(1);
+    const r = replies[0];
+    expect(r.toolCalls.map((t: { name: string }) => t.name)).toEqual(['get_flow_board']);
+    expect(r.artifacts.map((a: { kind: string }) => a.kind)).toContain('flowBoard');
+    // The ungrounded draft was never sent.
+    expect(r.markdown).not.toContain('From what I remember');
+  });
+
+  test('a turn that needs no tool pays one extra round and still finishes unchanged, exactly once', async ({ page }) => {
+    const { replies } = await ask(page, 'thanks');
+    expect(replies).toHaveLength(1);
+    expect(replies[0].toolCalls).toHaveLength(0);
+    expect(replies[0].markdown).toContain("You're welcome.");
+  });
+});
+
 test.describe('Flow board · UI', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
