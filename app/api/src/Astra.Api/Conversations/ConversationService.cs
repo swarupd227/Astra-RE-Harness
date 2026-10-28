@@ -323,7 +323,7 @@ public sealed class ConversationService
     public async Task<(int Routines, int Files, string? Language)> ProgrammeStatsAsync(Corpus corpus, CancellationToken ct)
     {
         if (corpus.LatestVersionId is not { } vid) return (0, corpus.FileCount, null);
-        var files = await _db.SourceFiles.AsNoTracking().CountAsync(f => f.SourceVersionId == vid, ct);
+        var files = await _db.SourceFiles.AsNoTracking().CountAsync(f => f.SourceVersionId == vid && f.Kind == "code", ct);
         var byLanguage = await (
             from s in _db.Subroutines.AsNoTracking()
             join f in _db.SourceFiles.AsNoTracking() on s.SourceFileId equals f.Id

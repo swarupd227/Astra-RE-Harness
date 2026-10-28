@@ -409,6 +409,7 @@ builder.Services.AddSingleton<IFortranParserClient, FortranParserClient>();
 
 // ─── Ingest pipeline (Phase C.1) ──────────────────────────────────────
 builder.Services.AddScoped<IngestPipeline>();
+builder.Services.AddScoped<Astra.Api.Artefacts.ArtefactAttachService>();
 
 // ─── Docs drift detection (Phase 11.0.f) ─────────────────────────────
 builder.Services.AddScoped<DriftDetectionService>();

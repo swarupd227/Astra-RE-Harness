@@ -392,10 +392,15 @@ function Outcome({ result }: { result: ReingestResult }) {
         <Stat label="Carried fwd" value={result.carriedForwardCount.toString()} tone={result.carriedForwardCount > 0 ? 'signed' : 'neutral'} />
         <Stat label="Superseded" value={result.supersededCount.toString()} tone={result.supersededCount > 0 ? 'failed' : 'neutral'} />
       </dl>
+      {(result.carriedArtefacts ?? 0) > 0 && (
+        <p className="mt-3 text-body text-ink-secondary" data-testid="reingest-carried-artefacts">
+          Kept {result.carriedArtefacts} attached artefact{result.carriedArtefacts === 1 ? '' : 's'} from the previous version.
+        </p>
+      )}
       {result.warnings.length > 0 && (
         <details className="mt-3 rounded-md bg-sunken p-2">
           <summary className="cursor-pointer text-body font-medium text-ink-primary">
-            {result.warnings.length} parse warning{result.warnings.length === 1 ? '' : 's'}
+            {result.warnings.length} note{result.warnings.length === 1 ? '' : 's'} on this re-sync
           </summary>
           <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-caption text-ink-secondary">
             {result.warnings.map((w, i) => (<li key={i}>{w}</li>))}

@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { ReingestModal } from '@/components/ReingestModal';
+import { ArtefactSources } from '@/components/ArtefactSources';
 import { PageHero } from '@/components/PageHero';
 import { formatState } from '@/lib/labels';
 
@@ -67,7 +68,8 @@ export function CorpusDetailPage() {
     );
   }
   const c = corpus.data;
-  const files = c.latestVersion?.files ?? [];
+  // Attached evidence (tickets, transcripts, …) is listed in Sources; this list is routines.
+  const files = (c.latestVersion?.files ?? []).filter((f) => (f.kind ?? 'code') === 'code');
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
@@ -168,6 +170,8 @@ export function CorpusDetailPage() {
         defaultBranch={null}
         defaultSourceRoot={null}
       />
+
+      <ArtefactSources corpusId={c.id} canWrite={persona !== 'observer'} />
 
       <Card>
         <CardHeader

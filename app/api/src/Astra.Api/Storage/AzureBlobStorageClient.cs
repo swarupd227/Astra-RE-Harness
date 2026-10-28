@@ -82,6 +82,34 @@ public sealed class AzureBlobStorageClient : IBlobClient
         return response.Value.Content.ToString();
     }
 
+    public async Task<string> PutBytesAsync(
+        string bucket,
+        string objectName,
+        byte[] content,
+        string contentType = "application/octet-stream",
+        CancellationToken ct = default)
+    {
+        var container = _client.GetBlobContainerClient(bucket);
+        await container.CreateIfNotExistsAsync(cancellationToken: ct);
+
+        var blob = container.GetBlobClient(objectName);
+        using var stream = new MemoryStream(content, writable: false);
+        await blob.UploadAsync(
+            stream,
+            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = contentType } },
+            ct);
+
+        return $"minio://{bucket}/{objectName}";
+    }
+
+    public async Task<byte[]> GetBytesAsync(string blobUri, CancellationToken ct = default)
+    {
+        var (bucket, name) = ParseUri(blobUri);
+        var blob = _client.GetBlobContainerClient(bucket).GetBlobClient(name);
+        var response = await blob.DownloadContentAsync(ct);
+        return response.Value.Content.ToArray();
+    }
+
     public async Task<bool> ExistsAsync(string bucket, string objectName, CancellationToken ct = default)
     {
         var blob = _client.GetBlobContainerClient(bucket).GetBlobClient(objectName);

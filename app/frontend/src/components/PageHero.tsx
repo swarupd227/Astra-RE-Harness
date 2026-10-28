@@ -39,7 +39,8 @@ export function PageHero({
           <h1 className="text-h-lg font-semibold tracking-tight text-ink-primary">{title}</h1>
           {lead && <p className="max-w-3xl text-body text-ink-secondary">{lead}</p>}
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        {/* max-w-full lets the buttons wrap onto a second row when they outgrow the page; shrink-0 alone never wrapped. */}
+        {actions && <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children && <div className="mt-3">{children}</div>}
     </header>

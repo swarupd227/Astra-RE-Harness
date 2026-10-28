@@ -29,7 +29,10 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set('X-Dev-Persona', getPersona());
-  if (init?.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // A FormData body must keep the browser's multipart boundary, so it never gets the JSON type.
+  if (init?.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   const text = await res.text();
@@ -842,6 +845,63 @@ export type ProjectSettings = {
   demo: boolean;
 };
 
+/** What happened to one file in an attach: added | replaced | unchanged | rejected. */
+export type ArtefactFileStatus = 'added' | 'replaced' | 'unchanged' | 'rejected';
+
+export type AttachFileResult = {
+  path: string;
+  kind: string | null;
+  status: ArtefactFileStatus;
+  /** Stable code for a rejection (e.g. kind_not_enabled); null otherwise. */
+  code: string | null;
+  /** Plain-language reason for a rejection; null otherwise. */
+  message: string | null;
+  sizeBytes: number;
+  lineCount: number;
+  /** More than one enabled kind takes this extension; the first was chosen. */
+  ambiguous: boolean;
+};
+
+export type AttachResponse = {
+  corpusId: string;
+  versionId: string;
+  counts: { added: number; replaced: number; unchanged: number; rejected: number };
+  files: AttachFileResult[];
+};
+
+export type ArtefactSummaryFile = {
+  id: string;
+  path: string;
+  sizeBytes: number | null;
+  lineCount: number;
+  hash: string;
+};
+
+export type ArtefactSummaryKind = {
+  id: string;
+  label: string;
+  core: boolean;
+  /** Source code is always on; the others follow the project's settings. */
+  enabled: boolean;
+  trustTier: 'structured' | 'narrative';
+  extensions: string[];
+  fileCount: number;
+  totalBytes: number;
+  /** False when some files predate size tracking, so totalBytes undercounts. */
+  sizeKnown: boolean;
+  /** Empty for source code, which is listed elsewhere. */
+  files: ArtefactSummaryFile[];
+};
+
+export type ArtefactSummary = {
+  corpusId: string;
+  versionId: string | null;
+  kinds: ArtefactSummaryKind[];
+};
+
+/** A file picked or dropped, with the path it should keep inside the project. */
+export type ArtefactUpload = { file: File; path: string };
+
 export const EMPTY_PROJECT_SETTINGS: ProjectSettings = {
   artefactKinds: [],
   pack: null,
@@ -1321,6 +1381,27 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
+  getArtefacts: (id: string) =>
+    apiFetch<ArtefactSummary>(`/api/v1/corpora/${encodeURIComponent(id)}/artefacts`),
+  // Adds or replaces artefacts on the project's current version. A refused file comes back
+  // in the result (status "rejected" with a reason); only a whole-request fault throws.
+  attachArtefacts: (id: string, uploads: ArtefactUpload[], kind?: string) => {
+    const fd = new FormData();
+    for (const u of uploads) {
+      fd.append('files', u.file, u.file.name);
+      fd.append('path', u.path); // aligned with the files above, in the same order
+    }
+    if (kind) fd.append('kind', kind);
+    return apiFetch<AttachResponse>(`/api/v1/corpora/${encodeURIComponent(id)}/artefacts`, {
+      method: 'POST',
+      body: fd,
+    });
+  },
+  removeArtefact: (id: string, path: string) =>
+    apiFetch<{ removed: boolean; path: string }>(
+      `/api/v1/corpora/${encodeURIComponent(id)}/artefacts?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' },
+    ),
   getSubroutine: (id: string) => apiFetch<SubroutineDetail>(`/api/v1/subroutines/${id}`),
   getSubroutineSource: (id: string) => apiFetch<SubroutineSource>(`/api/v1/subroutines/${id}/source`),
 
@@ -1880,6 +1961,9 @@ export type ReingestResult = {
   subroutineCount: number;
   carriedForwardCount: number;
   supersededCount: number;
+  /** Attached evidence (tickets, transcripts, …) kept from the previous version. */
+  carriedArtefacts?: number;
+  /** Parse warnings and notes on what intake left out (e.g. files that are not source code). */
   warnings: string[];
   errorMessage: string | null;
 };

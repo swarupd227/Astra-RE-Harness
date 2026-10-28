@@ -494,7 +494,7 @@ function ResultCard({ result, onOpen }: { result: IngestResult; onOpen: () => vo
         {result.warnings.length > 0 && (
           <details className="mt-4 rounded-md border border-line-subtle bg-sunken p-3">
             <summary className="cursor-pointer text-body font-medium text-ink-primary">
-              {result.warnings.length} parse warning{result.warnings.length === 1 ? '' : 's'}
+              {result.warnings.length} note{result.warnings.length === 1 ? '' : 's'} on this ingest
             </summary>
             <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-caption text-ink-secondary">
               {result.warnings.map((w, i) => (

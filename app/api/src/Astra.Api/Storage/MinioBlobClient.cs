@@ -71,6 +71,36 @@ public sealed class MinioBlobClient : IBlobClient
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
+    public async Task<string> PutBytesAsync(
+        string bucket,
+        string objectName,
+        byte[] content,
+        string contentType = "application/octet-stream",
+        CancellationToken ct = default)
+    {
+        await using var stream = new MemoryStream(content, writable: false);
+        var args = new PutObjectArgs()
+            .WithBucket(bucket)
+            .WithObject(objectName)
+            .WithStreamData(stream)
+            .WithObjectSize(content.LongLength)
+            .WithContentType(contentType);
+        await _client.PutObjectAsync(args, ct);
+        return $"minio://{bucket}/{objectName}";
+    }
+
+    public async Task<byte[]> GetBytesAsync(string blobUri, CancellationToken ct = default)
+    {
+        var (bucket, name) = ParseUri(blobUri);
+        using var ms = new MemoryStream();
+        var args = new GetObjectArgs()
+            .WithBucket(bucket)
+            .WithObject(name)
+            .WithCallbackStream(stream => stream.CopyTo(ms));
+        await _client.GetObjectAsync(args, ct);
+        return ms.ToArray();
+    }
+
     public async Task<bool> ExistsAsync(string bucket, string objectName, CancellationToken ct = default)
     {
         try

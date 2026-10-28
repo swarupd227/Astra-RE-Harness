@@ -82,7 +82,10 @@ public sealed class IngestPipeline
         IReadOnlyList<IncomingFile> Files,
         // Lets a caller that runs the ingest in the background hand the
         // corpus id to its client before the row exists.
-        Guid? CorpusId = null);
+        Guid? CorpusId = null,
+        // What the intake left out (unsupported or oversize files in an archive or
+        // repository), reported first among the result's warnings.
+        IReadOnlyList<string>? IntakeNotes = null);
 
     /// <summary>One progress tick: a stage name, a human line, and done/total
     /// where the stage counts something (files uploaded, files parsed).</summary>
@@ -114,7 +117,8 @@ public sealed class IngestPipeline
         string? Branch,
         string? SourceRoot,
         string? GitCommitHash,
-        IReadOnlyList<IncomingFile> Files);
+        IReadOnlyList<IncomingFile> Files,
+        IReadOnlyList<string>? IntakeNotes = null);
 
     public sealed record ReingestResult(
         Guid CorpusId,
@@ -125,7 +129,9 @@ public sealed class IngestPipeline
         int CarriedForwardCount,
         int SupersededCount,
         IReadOnlyList<string> Warnings,
-        string? ErrorMessage);
+        string? ErrorMessage,
+        // Non-code artefacts (transcripts, tickets…) carried into the new version.
+        int CarriedArtefacts = 0);
 
     /// <summary>
     /// Parse every file of a version, in input order. A C++ corpus goes to
@@ -226,7 +232,7 @@ public sealed class IngestPipeline
 
         // 2) Upload each file and parse. Collected warnings surface to UI;
         //    a single parse failure does NOT abort the whole corpus.
-        var warnings = new List<string>();
+        var warnings = new List<string>(req.IntakeNotes ?? Array.Empty<string>());
         var totalLoc = 0;
         var totalSubs = 0;
         var fileEntities = new List<SourceFile>();
@@ -258,6 +264,7 @@ public sealed class IngestPipeline
                     FileHash = sha,
                     LineCount = lineCount,
                     BlobUri = blobUri,
+                    SizeBytes = Encoding.UTF8.GetByteCount(content),
                 };
                 _db.SourceFiles.Add(fileRow);
                 fileEntities.Add(fileRow);
@@ -489,11 +496,12 @@ public sealed class IngestPipeline
         corpus.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
 
-        var warnings = new List<string>();
+        var warnings = new List<string>(req.IntakeNotes ?? Array.Empty<string>());
         var totalLoc = 0;
         var totalSubs = 0;
         var carriedForward = 0;
         var superseded = 0;
+        var carriedArtefacts = 0;
         var newFileRows = new List<(IncomingFile Incoming, SourceFile File)>();
 
         try
@@ -517,12 +525,19 @@ public sealed class IngestPipeline
                     FileHash = sha,
                     LineCount = lineCount,
                     BlobUri = blobUri,
+                    SizeBytes = Encoding.UTF8.GetByteCount(content),
                 };
                 _db.SourceFiles.Add(fileRow);
                 newFileRows.Add((f, fileRow));
                 if (newFileRows.Count % 50 == 0 || newFileRows.Count == req.Files.Count)
                     Report("uploading", $"Stored {newFileRows.Count:N0} / {req.Files.Count:N0} files", newFileRows.Count, req.Files.Count);
             }
+
+            // Artefacts (transcripts, tickets, scripts…) are not part of a code re-sync, which
+            // builds the new version only from the files sent. Carry them over from the version
+            // the corpus points at — a path sent again wins — or the next re-sync would drop them.
+            carriedArtefacts = await CarryArtefactsForwardAsync(
+                (pointed ?? priorVersion)?.Id, newVersionId, req.Files.Select(f => f.RelativePath).ToHashSet(StringComparer.Ordinal), ct);
 
             corpus.State = "PARSING";
             corpus.UpdatedAt = DateTimeOffset.UtcNow;
@@ -710,6 +725,7 @@ public sealed class IngestPipeline
                     subroutineCount = totalSubs,
                     carriedForward,
                     superseded,
+                    carriedArtefacts,
                     warnings = warnings.Count,
                 },
                 ct: ct);
@@ -729,7 +745,8 @@ public sealed class IngestPipeline
                 CarriedForwardCount: carriedForward,
                 SupersededCount: superseded,
                 Warnings: warnings,
-                ErrorMessage: null);
+                ErrorMessage: null,
+                CarriedArtefacts: carriedArtefacts);
         }
         catch (OperationCanceledException)
         {
@@ -757,6 +774,44 @@ public sealed class IngestPipeline
                 Warnings: warnings,
                 ErrorMessage: ClientSafeErrorMessage(corpus.Id));
         }
+    }
+
+    /// <summary>
+    /// Copies the non-code files of one version into another by reference: same blob, same hash,
+    /// a new row under the new version. Anything whose path is in <paramref name="incomingPaths"/>
+    /// is skipped — what the caller sent now replaces what was attached before. The rows are only
+    /// added to the context here; the caller's next save writes them, inside the same
+    /// rollback scope as the rest of the new version.
+    /// </summary>
+    private async Task<int> CarryArtefactsForwardAsync(
+        Guid? fromVersionId, Guid toVersionId, HashSet<string> incomingPaths, CancellationToken ct)
+    {
+        if (fromVersionId is not { } sourceVersionId) return 0;
+
+        var artefacts = await _db.SourceFiles.AsNoTracking()
+            .Where(f => f.SourceVersionId == sourceVersionId && f.Kind != Artefacts.ArtefactKinds.Code)
+            .ToListAsync(ct);
+
+        var carried = 0;
+        foreach (var a in artefacts)
+        {
+            if (incomingPaths.Contains(a.RelativePath)) continue;
+            _db.SourceFiles.Add(new SourceFile
+            {
+                Id = Guid.NewGuid(),
+                SourceVersionId = toVersionId,
+                RelativePath = a.RelativePath,
+                FileHash = a.FileHash,
+                LineCount = a.LineCount,
+                BlobUri = a.BlobUri,
+                Kind = a.Kind,
+                ContentType = a.ContentType,
+                SizeBytes = a.SizeBytes,
+                MetaJson = a.MetaJson,
+            });
+            carried++;
+        }
+        return carried;
     }
 
     /// <summary>

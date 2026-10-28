@@ -182,8 +182,9 @@ public sealed class ProjectExportService
         if (version is null) return new SourceStats(0, 0, 0, 0);
 
         // Original source tree.
+        // Source code only: artefacts (including binary audio) are not part of the source tree.
         var files = await _db.SourceFiles.AsNoTracking()
-            .Where(f => f.SourceVersionId == version.Id)
+            .Where(f => f.SourceVersionId == version.Id && f.Kind == "code")
             .OrderBy(f => f.RelativePath)
             .ToListAsync(ct);
         var sourceCount = 0;

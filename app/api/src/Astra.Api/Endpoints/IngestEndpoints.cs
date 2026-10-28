@@ -83,6 +83,7 @@ public static class IngestEndpoints
                 return BadRequest("ingest.no_files", "At least one file or a .zip archive is required.");
 
             var collected = new List<IngestPipeline.IncomingFile>();
+            var tally = new IntakeTally();
             var totalBytes = 0L;
             foreach (var file in form.Files)
             {
@@ -95,7 +96,7 @@ public static class IngestEndpoints
                 var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant() ?? "";
                 if (ext == ".zip")
                 {
-                    await foreach (var entry in ReadZipEntriesAsync(file, ct))
+                    await foreach (var entry in ReadZipEntriesAsync(file, tally, ct))
                     {
                         collected.Add(entry);
                         if (collected.Count > MaxFilesPerCorpus)
@@ -132,7 +133,8 @@ public static class IngestEndpoints
                 SourceUrl: null,
                 Branch: null,
                 SourceRoot: null,
-                Files: collected), actor.Persona, actor.DisplayName);
+                Files: collected,
+                IntakeNotes: tally.Notes()), actor.Persona, actor.DisplayName);
             return await AwaitIngestRunAsync(runs, runId, r => Results.Ok(IngestBody((IngestPipeline.IngestResult)r)), ct);
         })
         .DisableAntiforgery()
@@ -166,7 +168,8 @@ public static class IngestEndpoints
                     return BadRequest("ingest.source_root_missing",
                         $"sourceRoot '{rootRel}' was not found in the cloned repo.");
 
-                var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, out var error);
+                var tally = new IntakeTally();
+                var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, tally, out var error);
                 if (error is not null) return BadRequest("ingest.scan_failed", error);
                 if (files.Count == 0)
                     return BadRequest("ingest.no_supported_files",
@@ -186,7 +189,8 @@ public static class IngestEndpoints
                     SourceUrl: body.Url,
                     Branch: body.Branch,
                     SourceRoot: rootRel,
-                    Files: files), actor.Persona, actor.DisplayName);
+                    Files: files,
+                    IntakeNotes: tally.Notes()), actor.Persona, actor.DisplayName);
 
                 return await AwaitIngestRunAsync(runs, runId, r =>
                 {
@@ -290,7 +294,8 @@ public static class IngestEndpoints
             return await RunReingest(runs, actor, new IngestPipeline.ReingestRequest(
                 CorpusId: corpusId,
                 SourceUrl: null, Branch: null, SourceRoot: null, GitCommitHash: null,
-                Files: collected.Files), ct);
+                Files: collected.Files,
+                IntakeNotes: collected.Notes), ct);
         })
         .DisableAntiforgery()
         .WithName("reingestUpload");
@@ -312,7 +317,8 @@ public static class IngestEndpoints
                     return BadRequest("ingest.source_root_missing",
                         $"sourceRoot '{rootRel}' was not found in the cloned repo.");
 
-                var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, out var error);
+                var tally = new IntakeTally();
+                var files = CollectFortranFiles(root, MaxFilesPerCorpus, MaxFileBytes, tally, out var error);
                 if (error is not null) return BadRequest("ingest.scan_failed", error);
                 if (files.Count == 0)
                     return BadRequest("ingest.no_supported_files",
@@ -332,7 +338,8 @@ public static class IngestEndpoints
                     Branch: body.Branch,
                     SourceRoot: rootRel,
                     GitCommitHash: commitHash,
-                    Files: files), ct);
+                    Files: files,
+                    IntakeNotes: tally.Notes()), ct);
             }
             catch (LibGit2SharpException ex)
             {
@@ -430,6 +437,7 @@ public static class IngestEndpoints
         subroutineCount = r.SubroutineCount,
         carriedForwardCount = r.CarriedForwardCount,
         supersededCount = r.SupersededCount,
+        carriedArtefacts = r.CarriedArtefacts,
         warnings = r.Warnings,
         errorMessage = r.ErrorMessage,
     };
@@ -437,11 +445,13 @@ public static class IngestEndpoints
     private sealed record FormFiles(
         List<IngestPipeline.IncomingFile> Files,
         string? ErrorCode,
-        string? Error);
+        string? Error,
+        IReadOnlyList<string>? Notes = null);
 
     private static async Task<FormFiles> ReadFortranFilesFromForm(IFormCollection form)
     {
         var collected = new List<IngestPipeline.IncomingFile>();
+        var tally = new IntakeTally();
         var totalBytes = 0L;
         foreach (var file in form.Files)
         {
@@ -454,7 +464,7 @@ public static class IngestEndpoints
             var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant() ?? "";
             if (ext == ".zip")
             {
-                await foreach (var entry in ReadZipEntriesAsync(file, CancellationToken.None))
+                await foreach (var entry in ReadZipEntriesAsync(file, tally, CancellationToken.None))
                 {
                     collected.Add(entry);
                     if (collected.Count > MaxFilesPerCorpus)
@@ -478,7 +488,7 @@ public static class IngestEndpoints
                     $"Unsupported file type: {file.FileName}. Use {Ingest.SourceLanguageDetector.SupportedLanguagesDescription()}, or a .zip archive.");
             }
         }
-        return new(collected, null, null);
+        return new(collected, null, null, tally.Notes());
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -486,19 +496,30 @@ public static class IngestEndpoints
     // ────────────────────────────────────────────────────────────────────
 
     private static async IAsyncEnumerable<IngestPipeline.IncomingFile> ReadZipEntriesAsync(
-        IFormFile file, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        IFormFile file, IntakeTally tally, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         using var stream = file.OpenReadStream();
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries)
         {
             if (string.IsNullOrEmpty(entry.Name)) continue;  // directory
-            if (entry.Length > MaxFileBytes) continue;       // silently skip oversize
-            var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
-            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null) continue;
-
             var relativePath = entry.FullName.Replace('\\', '/');
-            if (!IsSafeZipEntryPath(relativePath)) continue;  // path traversal / absolute path attempt
+            var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
+            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null)
+            {
+                tally.Skip(IntakeTally.NotSource, relativePath);
+                continue;
+            }
+            if (entry.Length > MaxFileBytes)
+            {
+                tally.Skip(IntakeTally.TooLarge, relativePath);
+                continue;
+            }
+            if (!IsSafeZipEntryPath(relativePath))  // path traversal / absolute path attempt
+            {
+                tally.Skip(IntakeTally.Unsafe, relativePath);
+                continue;
+            }
 
             string text;
             using (var es = entry.Open())
@@ -530,24 +551,35 @@ public static class IngestEndpoints
     }
 
     private static List<IngestPipeline.IncomingFile> CollectFortranFiles(
-        string root, int maxFiles, int maxFileBytes, out string? error)
+        string root, int maxFiles, int maxFileBytes, IntakeTally tally, out string? error)
     {
         error = null;
         var result = new List<IngestPipeline.IncomingFile>();
         foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
+            var rel = Path.GetRelativePath(root, path).Replace('\\', '/');
+            // Repository internals are not part of the project, so they are not "skipped files".
+            if (rel.Split('/').Contains(".git")) continue;
+
             var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null) continue;
+            if (Ingest.SourceLanguageDetector.FromExtension(ext) is null)
+            {
+                tally.Skip(IntakeTally.NotSource, rel);
+                continue;
+            }
 
             var fi = new FileInfo(path);
-            if (fi.Length > maxFileBytes) continue;
+            if (fi.Length > maxFileBytes)
+            {
+                tally.Skip(IntakeTally.TooLarge, rel);
+                continue;
+            }
             if (result.Count >= maxFiles)
             {
                 error = $"Corpus exceeds {maxFiles} files; provide a more specific sourceRoot.";
                 return result;
             }
 
-            var rel = Path.GetRelativePath(root, path).Replace('\\', '/');
             result.Add(new IngestPipeline.IncomingFile(rel, File.ReadAllText(path)));
         }
         return result;
