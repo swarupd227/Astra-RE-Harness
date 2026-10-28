@@ -35,6 +35,7 @@ public sealed class IngestPipeline
     private readonly IAuditLogger _audit;
     private readonly DevPersonaContext _persona;
     private readonly DriftDetectionService _drift;
+    private readonly Evidence.EvidenceService _evidence;
     private readonly ILogger<IngestPipeline> _logger;
     private readonly IHostApplicationLifetime? _lifetime;
 
@@ -46,6 +47,7 @@ public sealed class IngestPipeline
         IAuditLogger audit,
         DevPersonaContext persona,
         DriftDetectionService drift,
+        Evidence.EvidenceService evidence,
         ILogger<IngestPipeline> logger,
         IHostApplicationLifetime? lifetime = null)
     {
@@ -56,8 +58,32 @@ public sealed class IngestPipeline
         _audit = audit;
         _persona = persona;
         _drift = drift;
+        _evidence = evidence;
         _logger = logger;
         _lifetime = lifetime;
+    }
+
+    /// <summary>
+    /// Indexes a finished version's routines as citable evidence. Best effort: a version without
+    /// an index is still a good version (the index is built the first time it is read), so a failure
+    /// is a note on the result, never a failed ingest.
+    /// </summary>
+    private async Task IndexEvidenceAsync(Guid versionId, List<string> warnings, CancellationToken ct)
+    {
+        try
+        {
+            Report("persisting", "Indexing the routines as citable evidence");
+            await _evidence.BuildCodeAsync(versionId, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Indexing evidence for version {Version} failed", versionId);
+            warnings.Add("The evidence index could not be built just now; it is built the first time it is needed.");
+        }
     }
 
     /// <summary>
@@ -334,6 +360,8 @@ public sealed class IngestPipeline
             corpus.State = "PARSED";
             corpus.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
+
+            await IndexEvidenceAsync(versionId, warnings, ct);
 
             await _audit.LogAsync("corpus.ingested", "corpus", corpus.Id, actor: _persona,
                 payload: new
@@ -713,6 +741,8 @@ public sealed class IngestPipeline
             // reason to stay.
             await DeleteEmptyVersionsAsync(corpus.Id, priorVersion?.IngestedAt, keepId: newVersionId, ct);
 
+            await IndexEvidenceAsync(newVersionId, warnings, ct);
+
             await _audit.LogAsync(
                 "corpus.reingested", "corpus", corpus.Id, actor: _persona,
                 payload: new
@@ -793,10 +823,11 @@ public sealed class IngestPipeline
             .ToListAsync(ct);
 
         var carried = 0;
+        var newFileIds = new Dictionary<Guid, Guid>();
         foreach (var a in artefacts)
         {
             if (incomingPaths.Contains(a.RelativePath)) continue;
-            _db.SourceFiles.Add(new SourceFile
+            var copy = new SourceFile
             {
                 Id = Guid.NewGuid(),
                 SourceVersionId = toVersionId,
@@ -808,8 +839,41 @@ public sealed class IngestPipeline
                 ContentType = a.ContentType,
                 SizeBytes = a.SizeBytes,
                 MetaJson = a.MetaJson,
-            });
+            };
+            _db.SourceFiles.Add(copy);
+            newFileIds[a.Id] = copy.Id;
             carried++;
+        }
+
+        // The evidence chunks come with their files, under the same short ids: a statement that
+        // cited a ticket before the re-sync still cites it after.
+        if (newFileIds.Count > 0)
+        {
+            var oldIds = newFileIds.Keys.ToList();
+            var chunks = await _db.EvidenceChunks.AsNoTracking()
+                .Where(c => oldIds.Contains(c.SourceFileId))
+                .ToListAsync(ct);
+            var now = DateTimeOffset.UtcNow;
+            foreach (var c in chunks)
+            {
+                _db.EvidenceChunks.Add(new EvidenceChunk
+                {
+                    Id = Guid.NewGuid(),
+                    ShortId = c.ShortId,
+                    SourceVersionId = toVersionId,
+                    SourceFileId = newFileIds[c.SourceFileId],
+                    Kind = c.Kind,
+                    TrustTier = c.TrustTier,
+                    Locator = c.Locator,
+                    Label = c.Label,
+                    Text = c.Text,
+                    StructuredJson = c.StructuredJson,
+                    TextHash = c.TextHash,
+                    LineStart = c.LineStart,
+                    LineEnd = c.LineEnd,
+                    CreatedAt = now,
+                });
+            }
         }
         return carried;
     }

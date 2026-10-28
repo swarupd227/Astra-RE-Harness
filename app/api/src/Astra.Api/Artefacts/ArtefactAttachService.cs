@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
+using Astra.Api.Evidence;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Astra.Api.Storage;
@@ -20,7 +21,9 @@ public sealed record AttachFileResult(
     string? Message,
     long SizeBytes,
     int LineCount,
-    bool Ambiguous);
+    bool Ambiguous,
+    /// <summary>How many citable evidence chunks the file was indexed into (0 when none, or not indexed yet).</summary>
+    int Chunks = 0);
 
 public sealed record AttachOutcome(Guid CorpusId, Guid VersionId, IReadOnlyList<AttachFileResult> Files)
 {
@@ -47,15 +50,18 @@ public sealed class ArtefactAttachService
     private readonly IBlobClient _blob;
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
+    private readonly EvidenceService _evidence;
     private readonly ILogger<ArtefactAttachService> _logger;
 
     public ArtefactAttachService(
-        AppDbContext db, IBlobClient blob, StorageOptions storage, IAuditLogger audit, ILogger<ArtefactAttachService> logger)
+        AppDbContext db, IBlobClient blob, StorageOptions storage, IAuditLogger audit, EvidenceService evidence,
+        ILogger<ArtefactAttachService> logger)
     {
         _db = db;
         _blob = blob;
         _storage = storage;
         _audit = audit;
+        _evidence = evidence;
         _logger = logger;
     }
 
@@ -76,6 +82,7 @@ public sealed class ArtefactAttachService
 
         var results = new List<AttachFileResult>(incoming.Count);
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        var toIndex = new List<ArtefactIndexItem>();
         var changed = false;
 
         foreach (var file in incoming)
@@ -160,6 +167,7 @@ public sealed class ArtefactAttachService
                 row.SizeBytes = size;
                 row.ContentType = ArtefactContentTypes.For(ext);
                 changed = true;
+                toIndex.Add(new ArtefactIndexItem(row, text, binary ? file.Content : null));
                 results.Add(new AttachFileResult(path, kind.Id, "replaced", null, null, size, lines, placement.Ambiguous));
                 continue;
             }
@@ -180,6 +188,7 @@ public sealed class ArtefactAttachService
             _db.SourceFiles.Add(created);
             existing[path] = created;
             changed = true;
+            toIndex.Add(new ArtefactIndexItem(created, text, binary ? file.Content : null));
             results.Add(new AttachFileResult(path, kind.Id, "added", null, null, size, lines, placement.Ambiguous));
         }
 
@@ -193,6 +202,28 @@ public sealed class ArtefactAttachService
             {
                 _logger.LogWarning(ex, "Attaching artefacts to corpus {Corpus} lost a race with another change", corpusId);
                 return AttachResult.Failure("attach.conflict");
+            }
+
+            // Evidence is additive: if indexing fails the files are still attached, and the index is
+            // built the first time the evidence is read.
+            try
+            {
+                var indexed = await _evidence.IndexFilesAsync(toIndex, ct);
+                var byPath = toIndex.ToDictionary(i => i.File.RelativePath, i => i.File.Id, StringComparer.Ordinal);
+                for (var i = 0; i < results.Count; i++)
+                {
+                    if (byPath.TryGetValue(results[i].Path, out var fileId) && results[i].Status is "added" or "replaced"
+                        && indexed.ChunksByFile.TryGetValue(fileId, out var n))
+                        results[i] = results[i] with { Chunks = n };
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Indexing evidence for corpus {Corpus} failed; it will be built when first read", corpusId);
             }
         }
 
@@ -252,13 +283,16 @@ public sealed class ArtefactAttachService
 
         var settings = ProjectSettings.Parse(corpus.SettingsJson);
         var files = new List<SummaryRow>();
+        IReadOnlyDictionary<Guid, int> chunks = new Dictionary<Guid, int>();
         if (corpus.LatestVersionId is { } vid)
         {
             files = await _db.SourceFiles.AsNoTracking()
                 .Where(f => f.SourceVersionId == vid)
                 .Select(f => new SummaryRow(f.Id, f.RelativePath, f.Kind, f.SizeBytes, f.LineCount, f.FileHash))
                 .ToListAsync(ct);
+            chunks = await _evidence.CountsByFileAsync(vid, ct);
         }
+        int ChunksOf(Guid fileId) => chunks.TryGetValue(fileId, out var n) ? n : 0;
 
         var kinds = ArtefactKinds.All.Select(k =>
         {
@@ -266,7 +300,7 @@ public sealed class ArtefactAttachService
             // Source files can number in the thousands and are listed elsewhere.
             var listed = new List<object>();
             if (!k.Core)
-                listed.AddRange(mine.Select(f => (object)new { id = f.Id, path = f.RelativePath, sizeBytes = f.SizeBytes, lineCount = f.LineCount, hash = f.FileHash }));
+                listed.AddRange(mine.Select(f => (object)new { id = f.Id, path = f.RelativePath, sizeBytes = f.SizeBytes, lineCount = f.LineCount, hash = f.FileHash, chunkCount = ChunksOf(f.Id) }));
             return new
             {
                 id = k.Id,
@@ -278,6 +312,7 @@ public sealed class ArtefactAttachService
                 fileCount = mine.Count,
                 totalBytes = mine.Sum(f => f.SizeBytes ?? 0),
                 sizeKnown = mine.All(f => f.SizeBytes is not null),
+                chunkCount = mine.Sum(f => ChunksOf(f.Id)),
                 files = listed,
             };
         }).ToList();

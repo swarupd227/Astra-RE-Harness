@@ -14,84 +14,19 @@
  *   - Engineers, SMEs and Admins write; Observers read.
  *   - UI: Sources tiles, dropzone, per-file result list, remove with confirmation, read-only.
  */
-import { expect, test, type Page } from '@playwright/test';
-
-const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
-const JSON_ENG = { 'X-Dev-Persona': 'engineer', 'Content-Type': 'application/json' };
-
-const FORTRAN = `\
-      SUBROUTINE E2EART(X, Y)
-      INTEGER X, Y
-      Y = X + 1
-      RETURN
-      END
-`;
+import { expect, test } from '@playwright/test';
+import {
+  API_BASE,
+  FORTRAN,
+  JSON_ENG,
+  attach,
+  byPath,
+  newProject,
+  summary,
+  type FileResult,
+} from './helpers/projects';
 
 const ALL_KINDS = ['sql', 'job', 'transcript', 'ticket', 'document', 'audio'];
-
-type Item = { path: string; data: string | Buffer };
-type FileResult = {
-  path: string;
-  kind: string | null;
-  status: 'added' | 'replaced' | 'unchanged' | 'rejected';
-  code: string | null;
-  message: string | null;
-  sizeBytes: number;
-  ambiguous: boolean;
-};
-
-async function newProject(page: Page, kinds: string[] = []): Promise<string> {
-  const res = await page.request.post(`${API_BASE}/api/v1/ingest/text`, {
-    headers: JSON_ENG,
-    data: { name: `artefacts-e2e-${Date.now()}-${Math.floor(Math.random() * 1e4)}`, files: [{ path: 'e2eart.f', content: FORTRAN }] },
-  });
-  expect(res.ok()).toBe(true);
-  const { corpusId } = await res.json();
-  if (kinds.length > 0) await setKinds(page, corpusId, kinds);
-  return corpusId as string;
-}
-
-async function setKinds(page: Page, id: string, kinds: string[]) {
-  const put = await page.request.put(`${API_BASE}/api/v1/corpora/${id}/settings`, {
-    headers: JSON_ENG,
-    data: {
-      artefactKinds: kinds,
-      pack: null,
-      banner: null,
-      metadata: { tier: null, knowledgeHolder: null, wave: null },
-      expectedCounts: {},
-      demo: false,
-    },
-  });
-  expect(put.status()).toBe(200);
-}
-
-/** Multipart through Node's own fetch: Playwright's `multipart` option cannot repeat a field name. */
-async function attach(id: string, items: Item[], opts: { persona?: string; kind?: string } = {}) {
-  const fd = new FormData();
-  for (const it of items) {
-    const bytes = typeof it.data === 'string' ? Buffer.from(it.data, 'utf8') : it.data;
-    fd.append('files', new Blob([bytes]), it.path.split('/').pop() ?? 'file');
-    fd.append('path', it.path);
-  }
-  if (opts.kind) fd.append('kind', opts.kind);
-  const res = await fetch(`${API_BASE}/api/v1/corpora/${id}/artefacts`, {
-    method: 'POST',
-    headers: { 'X-Dev-Persona': opts.persona ?? 'engineer' },
-    body: fd,
-  });
-  return { status: res.status, body: await res.json() };
-}
-
-function byPath(files: FileResult[], path: string): FileResult {
-  const f = files.find((x) => x.path === path);
-  if (!f) throw new Error(`no result for ${path}; got ${files.map((x) => x.path).join(', ')}`);
-  return f;
-}
-
-async function summary(page: Page, id: string, persona = 'engineer') {
-  return page.request.get(`${API_BASE}/api/v1/corpora/${id}/artefacts`, { headers: { 'X-Dev-Persona': persona } }).then((r) => r.json());
-}
 
 /** A zip with every entry stored uncompressed, so no compression library is needed. */
 function storedZip(entries: { name: string; data: string }[]): Buffer {

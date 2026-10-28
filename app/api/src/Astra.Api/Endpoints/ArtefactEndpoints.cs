@@ -1,5 +1,8 @@
 using Astra.Api.Artefacts;
 using Astra.Api.Auth;
+using Astra.Api.Persistence;
+using Astra.Api.Storage;
+using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Endpoints;
 
@@ -107,6 +110,27 @@ public static class ArtefactEndpoints
                 "invalid_path" => BadRequest("artefact.invalid_path", "The path is not valid."),
                 _ => Results.NotFound(new { error = new { code = "artefact.not_found" } }),
             };
+        });
+
+        // The stored bytes of an artefact, with Range support so an <audio> element can seek.
+        // Source code is served by the routine and source routes, not here. Ungated, like every read.
+        app.MapGet("/api/v1/artefacts/{fileId:guid}/content", async (
+            Guid fileId, AppDbContext db, IBlobClient blob, HttpResponse response, CancellationToken ct) =>
+        {
+            var file = await db.SourceFiles.AsNoTracking()
+                .Where(f => f.Id == fileId && f.Kind != ArtefactKinds.Code)
+                .Select(f => new { f.BlobUri, f.ContentType, f.FileHash })
+                .FirstOrDefaultAsync(ct);
+            if (file is null)
+                return Results.NotFound(new { error = new { code = "artefact.not_found", message = "No such artefact." } });
+
+            var bytes = await blob.GetBytesAsync(file.BlobUri, ct);
+            response.Headers.CacheControl = "private, max-age=300";
+            return Results.File(
+                new MemoryStream(bytes, writable: false),
+                file.ContentType ?? "application/octet-stream",
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue("\"" + file.FileHash + "\""),
+                enableRangeProcessing: true);
         });
 
         return app;

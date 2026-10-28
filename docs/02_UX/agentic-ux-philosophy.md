@@ -86,6 +86,27 @@ scaffoldTree · planWaves · flowBoard · assessment · docSection · text`. A c
 message's `artifacts`; the same component powers the card size, the pane size, and (where one exists) the
 page. Props contracts live in `ArtifactBuilders.cs`; the frontend must be defensive (`props.items ?? []`).
 
+## Citations and evidence (`src/evidence/`)
+
+Whatever a statement rests on is **evidence**: a *chunk* of a file in one source version — a routine's lines,
+a window of a script, later a ticket or a transcript turn — with a short id that says what it is
+(`SRC-…` code, `SQL-…`, `TKT-…`, `TRN-…`; eight hex digits of a hash of file path + locator, so the same piece
+of evidence has the same id on every rebuild and in every environment). The API is
+`/api/v1/corpora/:id/evidence` (browse), `/evidence/:shortId` (one, with the surrounding lines) and
+`/evidence/resolve` (many ids at once). Rules for any surface that cites:
+
+- Render a citation with `CitationChip` (or `CitationList` for everything one statement cites: the chips plus
+  *All n sources*, which opens the **stacked view** — the sources side by side). Never a bare id, never a
+  link to a file. A citation that does not resolve in the current version is shown as unresolved, not hidden.
+- One panel for the whole app: `EvidenceProvider` (mounted once in `App.tsx`) owns the drawer; open it with
+  `useEvidence().open({corpusId, ids, focus})`. It floats over the page, Esc closes it and returns focus.
+- Source is shown with `EvidenceCode` — highlight.js from the bundle, never Monaco (Monaco loads from a CDN and
+  breaks offline). A kind with a richer view (transcript with a play button, ticket as a record) registers it in
+  `EVIDENCE_VIEWS`; nothing else changes.
+- A link can open evidence on arrival: `/corpora/:id/evidence?open=ID,ID`.
+- Agent tools to search and open evidence ship with the deliverables work (`search_evidence`); until then the
+  evidence page is reached from the project's Sources card.
+
 ## Design system v2 (tokens are the only vocabulary)
 
 `src/theme/palette.json` is the single source → generated RGB-triplet CSS variables (`theme.css`) → Tailwind

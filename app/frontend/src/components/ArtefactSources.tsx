@@ -121,13 +121,22 @@ export function ArtefactSources({ corpusId, canWrite }: { corpusId: string; canW
         title="Sources"
         description="The evidence this project holds. Source code is read into routines; everything else is kept as evidence to cite."
         action={
-          <Link
-            to={`/corpora/${corpusId}/settings`}
-            className="text-body text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
-            data-testid="artefact-sources-settings"
-          >
-            Choose kinds
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to={`/corpora/${corpusId}/evidence`}
+              className="text-body text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
+              data-testid="artefact-sources-evidence"
+            >
+              Browse evidence
+            </Link>
+            <Link
+              to={`/corpora/${corpusId}/settings`}
+              className="text-body text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
+              data-testid="artefact-sources-settings"
+            >
+              Choose kinds
+            </Link>
+          </div>
         }
       />
       <CardBody className="space-y-5">
@@ -144,6 +153,7 @@ export function ArtefactSources({ corpusId, canWrite }: { corpusId: string; canW
 
         {expanded && (
           <FileList
+            corpusId={corpusId}
             kind={expanded}
             canWrite={canWrite}
             confirming={confirming}
@@ -324,6 +334,7 @@ function KindTile({ kind, selected, onSelect }: { kind: ArtefactSummaryKind; sel
 }
 
 function FileList({
+  corpusId,
   kind,
   canWrite,
   confirming,
@@ -332,6 +343,7 @@ function FileList({
   onAsk,
   onRemove,
 }: {
+  corpusId: string;
   kind: ArtefactSummaryKind;
   canWrite: boolean;
   confirming: string | null;
@@ -353,6 +365,15 @@ function FileList({
               {formatBytes(f.sizeBytes)}
               {f.lineCount > 0 ? ` · ${f.lineCount.toLocaleString()} lines` : ''}
             </span>
+            {f.chunkCount > 0 && (
+              <Link
+                to={`/corpora/${corpusId}/evidence?path=${encodeURIComponent(f.path)}`}
+                className="shrink-0 text-micro text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
+                data-testid="artefact-file-evidence"
+              >
+                {f.chunkCount.toLocaleString()} {f.chunkCount === 1 ? 'chunk' : 'chunks'}
+              </Link>
+            )}
             {canWrite &&
               (confirming === f.path ? (
                 <span className="flex shrink-0 items-center gap-2">
@@ -426,7 +447,10 @@ function AttachResult({
               </span>
               <span className="min-w-0 flex-1 truncate font-mono text-caption text-ink-primary" title={f.path}>{f.path}</span>
               {f.kind && f.status !== 'rejected' && (
-                <span className="shrink-0 text-micro text-ink-secondary">{kindLabel(f.kind)}</span>
+                <span className="shrink-0 text-micro text-ink-secondary">
+                  {kindLabel(f.kind)}
+                  {f.chunks > 0 ? ` · ${f.chunks} ${f.chunks === 1 ? 'chunk' : 'chunks'}` : ''}
+                </span>
               )}
             </div>
             {f.message && <p className="mt-1 pl-[5.75rem] text-caption text-status-fail">{f.message}</p>}

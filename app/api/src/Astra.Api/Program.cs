@@ -409,6 +409,7 @@ builder.Services.AddSingleton<IFortranParserClient, FortranParserClient>();
 
 // ─── Ingest pipeline (Phase C.1) ──────────────────────────────────────
 builder.Services.AddScoped<IngestPipeline>();
+builder.Services.AddScoped<Astra.Api.Evidence.EvidenceService>();
 builder.Services.AddScoped<Astra.Api.Artefacts.ArtefactAttachService>();
 
 // ─── Docs drift detection (Phase 11.0.f) ─────────────────────────────
@@ -543,6 +544,34 @@ using (var scope = app.Services.CreateScope())
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS content_type varchar(128) NULL;
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS size_bytes bigint NULL;
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS meta_json jsonb NULL;
+            """);
+
+        // WS7 K2 — evidence chunks: the citable pieces of a version's files. Rows go
+        // with their version and file (ON DELETE CASCADE), which also covers the
+        // rollback of a failed re-sync, so no code has to remember to clean them up.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS evidence_chunks (
+                id                 uuid          PRIMARY KEY,
+                short_id           varchar(40)   NOT NULL,
+                source_version_id  uuid          NOT NULL REFERENCES source_versions(id) ON DELETE CASCADE,
+                source_file_id     uuid          NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+                kind               varchar(32)   NOT NULL,
+                trust_tier         varchar(16)   NOT NULL,
+                locator            varchar(400)  NOT NULL,
+                label              varchar(300)  NOT NULL,
+                text               text          NULL,
+                structured_json    jsonb         NULL,
+                text_hash          varchar(80)   NOT NULL,
+                line_start         integer       NULL,
+                line_end           integer       NULL,
+                created_at         timestamptz   NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_evidence_chunks_version_short
+              ON evidence_chunks (source_version_id, short_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_evidence_chunks_file_locator
+              ON evidence_chunks (source_file_id, locator);
+            CREATE INDEX IF NOT EXISTS ix_evidence_chunks_version_kind
+              ON evidence_chunks (source_version_id, kind);
             """);
 
         // Phase 6.0 — Golden dataset tables. Additive create-if-not-exists
@@ -1213,6 +1242,7 @@ app.MapDependencyEndpoints();
 app.MapMigrationPlanEndpoints();
 app.MapFlowBoardEndpoints();
 app.MapArtefactEndpoints();
+app.MapEvidenceChunkEndpoints();
 app.MapProjectSettingsEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();

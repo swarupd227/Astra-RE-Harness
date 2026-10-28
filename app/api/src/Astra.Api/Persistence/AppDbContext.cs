@@ -12,6 +12,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<SourceVersion> SourceVersions => Set<SourceVersion>();
     public DbSet<SourceFile> SourceFiles => Set<SourceFile>();
     public DbSet<Subroutine> Subroutines => Set<Subroutine>();
+    public DbSet<EvidenceChunk> EvidenceChunks => Set<EvidenceChunk>();
     public DbSet<Spec> Specs => Set<Spec>();
     public DbSet<LlmCall> LlmCalls => Set<LlmCall>();
     public DbSet<ClaimReview> ClaimReviews => Set<ClaimReview>();
@@ -120,6 +121,33 @@ public sealed class AppDbContext : DbContext
             b.HasOne(x => x.SourceVersion).WithMany(v => v.Files)
              .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.SourceVersionId, x.RelativePath }).IsUnique();
+        });
+
+        modelBuilder.Entity<EvidenceChunk>(b =>
+        {
+            b.ToTable("evidence_chunks");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.ShortId).HasColumnName("short_id").HasMaxLength(40).IsRequired();
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.SourceFileId).HasColumnName("source_file_id");
+            b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();
+            b.Property(x => x.TrustTier).HasColumnName("trust_tier").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Locator).HasColumnName("locator").HasMaxLength(400).IsRequired();
+            b.Property(x => x.Label).HasColumnName("label").HasMaxLength(300).IsRequired();
+            b.Property(x => x.Text).HasColumnName("text");
+            b.Property(x => x.StructuredJson).HasColumnName("structured_json").HasColumnType("jsonb");
+            b.Property(x => x.TextHash).HasColumnName("text_hash").HasMaxLength(80).IsRequired();
+            b.Property(x => x.LineStart).HasColumnName("line_start");
+            b.Property(x => x.LineEnd).HasColumnName("line_end");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasOne<SourceVersion>().WithMany()
+             .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.SourceFile).WithMany()
+             .HasForeignKey(x => x.SourceFileId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.SourceVersionId, x.ShortId }).IsUnique();
+            b.HasIndex(x => new { x.SourceFileId, x.Locator }).IsUnique();
+            b.HasIndex(x => new { x.SourceVersionId, x.Kind });
         });
 
         modelBuilder.Entity<Subroutine>(b =>

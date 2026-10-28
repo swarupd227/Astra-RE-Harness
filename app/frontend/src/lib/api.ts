@@ -51,6 +51,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return body as T;
 }
 
+/** The stored bytes of an artefact (audio plays from here; the server honours Range requests). */
+export const artefactContentUrl = (fileId: string) => `${API_BASE}/api/v1/artefacts/${fileId}/content`;
+
 // ─── Endpoint helpers (Phase A surface) ──────────────────────────────
 export type HealthResponse = { status: string; service: string };
 export type ReadinessDep = { name: string; status: 'ok' | 'down'; error: string | null };
@@ -860,6 +863,8 @@ export type AttachFileResult = {
   lineCount: number;
   /** More than one enabled kind takes this extension; the first was chosen. */
   ambiguous: boolean;
+  /** How many citable evidence chunks the file was indexed into. */
+  chunks: number;
 };
 
 export type AttachResponse = {
@@ -875,6 +880,8 @@ export type ArtefactSummaryFile = {
   sizeBytes: number | null;
   lineCount: number;
   hash: string;
+  /** Citable evidence chunks the file is indexed into (0 until it has been read once). */
+  chunkCount: number;
 };
 
 export type ArtefactSummaryKind = {
@@ -889,6 +896,7 @@ export type ArtefactSummaryKind = {
   totalBytes: number;
   /** False when some files predate size tracking, so totalBytes undercounts. */
   sizeKnown: boolean;
+  chunkCount: number;
   /** Empty for source code, which is listed elsewhere. */
   files: ArtefactSummaryFile[];
 };
@@ -901,6 +909,50 @@ export type ArtefactSummary = {
 
 /** A file picked or dropped, with the path it should keep inside the project. */
 export type ArtefactUpload = { file: File; path: string };
+
+// ─── Evidence (WS7 K2) ───────────────────────────────────────────────
+/** One citable piece of a file: a routine's lines, a window of a script, a ticket … */
+export type EvidenceSummary = {
+  /** The citation handle, e.g. SQL-f7f575c5. Unique within a version. */
+  shortId: string;
+  kind: string;
+  kindLabel: string;
+  trustTier: 'structured' | 'narrative';
+  label: string;
+  path: string;
+  /** Where in the file: L120-168, row:INC-1, t=00:14:32-00:15:40 … */
+  locator: string;
+  lineStart: number | null;
+  lineEnd: number | null;
+  fileId: string;
+};
+
+/** A window of the file around the cited lines, with the cited ones marked. */
+export type EvidenceView = {
+  startLine: number;
+  endLine: number;
+  highlightStart: number;
+  highlightEnd: number;
+  text: string;
+  /** The cited range was longer than the window shows. */
+  truncated: boolean;
+};
+
+export type EvidenceDetail = EvidenceSummary & {
+  text: string | null;
+  view: EvidenceView | null;
+  structured: Record<string, unknown> | null;
+  sizeBytes: number | null;
+  /** The chunks before and after this one in the same file. */
+  previous: string | null;
+  next: string | null;
+};
+
+export type EvidencePage = {
+  data: EvidenceSummary[];
+  total: number;
+  kinds: { kind: string; label: string; count: number }[];
+};
 
 export const EMPTY_PROJECT_SETTINGS: ProjectSettings = {
   artefactKinds: [],
@@ -1397,6 +1449,28 @@ export const api = {
       body: fd,
     });
   },
+  // Evidence behind citations (WS7 K2). Every call reads the project's current version.
+  listEvidence: (
+    id: string,
+    params: { kind?: string; q?: string; path?: string; limit?: number; offset?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.kind) qs.set('kind', params.kind);
+    if (params.q) qs.set('q', params.q);
+    if (params.path) qs.set('path', params.path);
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<EvidencePage>(`/api/v1/corpora/${encodeURIComponent(id)}/evidence${suffix}`);
+  },
+  getEvidence: (id: string, shortId: string) =>
+    apiFetch<EvidenceDetail>(`/api/v1/corpora/${encodeURIComponent(id)}/evidence/${encodeURIComponent(shortId)}`),
+  /** Many ids at once; an id that does not resolve comes back null. */
+  resolveEvidence: (id: string, ids: string[]) =>
+    apiFetch<{ data: Record<string, EvidenceSummary | null>; found: number; missing: string[] }>(
+      `/api/v1/corpora/${encodeURIComponent(id)}/evidence/resolve`,
+      { method: 'POST', body: JSON.stringify({ ids }) },
+    ),
   removeArtefact: (id: string, path: string) =>
     apiFetch<{ removed: boolean; path: string }>(
       `/api/v1/corpora/${encodeURIComponent(id)}/artefacts?path=${encodeURIComponent(path)}`,

@@ -9,6 +9,8 @@ import { AgentDock } from '@/agentdock/AgentDock';
 import { RoutineFlowBoard } from '@/board/RoutineFlowBoard';
 import { ProjectBanner } from '@/components/ProjectBanner';
 import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
+import { EvidencePage } from '@/pages/EvidencePage';
+import { EvidenceProvider } from '@/evidence/EvidenceProvider';
 import { HomePage } from '@/pages/HomePage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CorporaPage } from '@/pages/CorporaPage';
@@ -100,6 +102,7 @@ export function App() {
   }, [navigate, openHelp]);
 
   return (
+    <EvidenceProvider>
     <div className="flex h-screen flex-col bg-canvas text-ink-primary">
       <a
         href="#main-content"
@@ -133,6 +136,8 @@ export function App() {
             <Route path="/corpora/:id/migration-plan" element={<MigrationPlanPage />} />
             <Route path="/corpora/:id/board" element={<RoutineFlowBoard />} />
             <Route path="/corpora/:id/settings" element={<ProjectSettingsPage />} />
+            <Route path="/corpora/:id/evidence" element={<EvidencePage />} />
+            <Route path="/projects/:id/evidence" element={<EvidencePage />} />
             <Route path="/corpora/:id/docs" element={<DocsPage />} />
             <Route path="/projects/:id/docs" element={<DocsPage />} />
             <Route path="/corpora/:id/pattern-analysis" element={<PatternAnalysisPage />} />
@@ -171,5 +176,6 @@ export function App() {
       <KeyboardOverlay open={helpOpen} onClose={closeHelp} />
       <CommandPalette />
     </div>
+    </EvidenceProvider>
   );
 }
