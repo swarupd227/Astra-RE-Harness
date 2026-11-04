@@ -78,9 +78,37 @@ export function AgentDock() {
     staleTime: 5 * 60_000,
   });
 
-  const conversationId =
-    scope === 'global' ? globalThread.data?.id : programmeThread.data?.data?.[0]?.id;
-  const resolver = scope === 'global' ? globalThread : scope === 'routine' && !corpusId ? routine : programmeThread;
+  // Generated code and its audit trail belong to a spec, not a programme: the
+  // dock opens that spec's own thread — the one spec review uses (same query
+  // key, so the two share the cache). A scaffold page gets there through the
+  // scaffold it has already loaded.
+  const isSpecScope = scope === 'spec' || scope === 'scaffold';
+  const scaffold = useQuery({
+    queryKey: ['scaffold', match?.id],
+    queryFn: () => api.getScaffold(match!.id as string),
+    enabled: show && scope === 'scaffold' && !!match?.id,
+  });
+  const specId = scope === 'spec' ? match?.id : scope === 'scaffold' ? scaffold.data?.specId : undefined;
+  const specThread = useQuery({
+    queryKey: ['conversations', 'spec', specId],
+    queryFn: () => conversationsApi.forSpec(specId as string),
+    enabled: show && !!specId,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+
+  const conversationId = scope === 'global'
+    ? globalThread.data?.id
+    : isSpecScope
+      ? specThread.data?.data?.[0]?.id
+      : programmeThread.data?.data?.[0]?.id;
+  const resolver = scope === 'global'
+    ? globalThread
+    : isSpecScope
+      ? (specId ? specThread : scaffold)
+      : scope === 'routine' && !corpusId
+        ? routine
+        : programmeThread;
 
   useEffect(() => {
     if (!show || isXl) return;
@@ -106,7 +134,9 @@ export function AgentDock() {
         <AgentAvatar agent={meta.agent} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-caption font-medium text-ink-primary">{meta.agentName} agent</p>
-          <p className="truncate text-micro text-ink-tertiary">Same thread as the Workspace</p>
+          <p className="truncate text-micro text-ink-tertiary">
+            {isSpecScope ? "This spec's thread, shared with spec review" : 'Same thread as the Workspace'}
+          </p>
         </div>
         {conversationId && (
           <Link

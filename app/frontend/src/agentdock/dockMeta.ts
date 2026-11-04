@@ -9,9 +9,15 @@ import type { Starter } from '@/workspace/ThreadPanel';
  * simply absent.
  *
  * `scope` says how the thread is found: `corpus` (id in the URL),
- * `routine` (the routine's own corpus) or `global` (Mission Control's thread).
+ * `routine` (the routine's own corpus), `spec` (id in the URL is a spec —
+ * that spec's own thread, the one spec review uses), `scaffold` (id in the
+ * URL is generated code; its spec's thread) or `global` (Mission Control's).
+ *
+ * Starters are read-only on purpose and each one is something a tool can
+ * answer (`get_spec`, `get_validation_results` …): a starter that promises
+ * what no tool can ground just invites the model to improvise.
  */
-export type DockScope = 'corpus' | 'routine' | 'global';
+export type DockScope = 'corpus' | 'routine' | 'spec' | 'scaffold' | 'global';
 
 export type DockMeta = {
   pattern: string;
@@ -40,6 +46,15 @@ const corpusPage = (
     about,
     starters: () => starters,
   }));
+
+const specPage = (
+  pattern: string,
+  scope: 'spec' | 'scaffold',
+  agent: AgentId,
+  agentName: string,
+  about: string,
+  starters: Starter[],
+): DockMeta[] => [{ pattern, scope, agent, agentName, about, starters: () => starters }];
 
 export const DOCK_META: DockMeta[] = [
   ...corpusPage('', 'programme', 'Programme', 'this project', [
@@ -89,6 +104,23 @@ export const DOCK_META: DockMeta[] = [
       s(routine ? `Extract a spec for ${routine}` : 'Extract a spec for this routine'),
     ],
   })),
+  ...specPage('/scaffolds/:id', 'scaffold', 'migration', 'Migration', 'this generated code', [
+    s('Which validation gates pass on this code?'),
+    s('Which spec claims does this code implement?'),
+    s('Who signed the spec this was generated from?'),
+  ]),
+  ...specPage('/scaffolds/:id/validation', 'scaffold', 'validation', 'Validation', 'this validation report', [
+    s('Which gates have passed, and which still need to run?'),
+    s('What spec is this code checked against?'),
+  ]),
+  ...specPage('/specs/:id/scaffold', 'spec', 'migration', 'Migration', 'this code generation', [
+    s('Explain the spec this code is generated from'),
+    s('Have the gates run on this code yet?'),
+  ]),
+  ...specPage('/specs/:id/audit', 'spec', 'spec', 'Spec', "this spec's audit trail", [
+    s('Who signed this spec, and when?'),
+    s('Summarise the review decisions on this spec'),
+  ]),
   {
     pattern: '/platform/portfolio',
     scope: 'global',

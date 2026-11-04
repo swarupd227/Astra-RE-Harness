@@ -11,6 +11,7 @@
  * user's turn landing) — what the agent answers is the copilot's business.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { ensureScaffold } from './helpers/scaffold';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const STARTER = 'Explain the migration plan wave by wave';
@@ -108,5 +109,63 @@ test.describe('Agent dock · narrow screen', () => {
     await expect(page.getByTestId('agent-dock')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('agent-dock')).toHaveCount(0);
+  });
+});
+
+// Generated code and its audit trail belong to a spec, so their dock opens that
+// spec's own thread — the one spec review uses — not the programme's.
+test.describe('Agent dock · spec-scoped pages', () => {
+  test.setTimeout(300_000);
+  // Generated code on screen needs a scaffold; build one through the API if the
+  // local data has none (the helper returns an existing one first).
+  async function scaffoldOf(page: Page): Promise<{ id: string; specId: string }> {
+    const s = await ensureScaffold(page.request, API_BASE);
+    test.skip(!s, 'no scaffold in the local data and none could be built');
+    return { id: s!.id, specId: s!.specId };
+  }
+
+  const cases = (ids: { id: string; specId: string }) => [
+    { path: `/scaffolds/${ids.id}`, agent: 'Migration', starter: 'Which validation gates pass on this code?' },
+    { path: `/scaffolds/${ids.id}/validation`, agent: 'Validation', starter: 'Which gates have passed, and which still need to run?' },
+    { path: `/specs/${ids.specId}/scaffold`, agent: 'Migration', starter: 'Have the gates run on this code yet?' },
+    { path: `/specs/${ids.specId}/audit`, agent: 'Spec', starter: 'Who signed this spec, and when?' },
+  ];
+
+  test('each page offers its agent, in the spec thread, with starters that a tool can answer', async ({ page }) => {
+    const ids = await scaffoldOf(page);
+    // The live generation page starts generating the moment it mounts (and a
+    // reload would regenerate again). This test only wants the dock, so the
+    // request that would write a scaffold is cut before it leaves the browser.
+    await page.route('**/api/v1/specs/*/scaffold*', (route) => route.abort());
+    const specThread = await page.request
+      .get(`${API_BASE}/api/v1/conversations?specId=${ids.specId}`)
+      .then((r) => r.json());
+    const specThreadId = specThread.data[0].id;
+
+    for (const c of cases(ids)) {
+      await page.goto(c.path);
+      const toggle = page.getByTestId('agent-dock-toggle');
+      await expect(toggle, c.path).toHaveAttribute('aria-label', `Ask the ${c.agent} agent`);
+      await toggle.click();
+
+      const dock = page.getByTestId('agent-dock');
+      await expect(dock.locator('header').getByText(`${c.agent} agent`, { exact: true }), c.path).toBeVisible();
+      await expect(dock.locator(`[data-testid="suggestion-chip"][data-intent="${c.starter}"]`), c.path).toBeVisible();
+      // The thread it opens is this spec's own.
+      await expect(dock.getByTestId('agent-dock-open-workspace'), c.path).toHaveAttribute('href', `/w/${specThreadId}`);
+      await dock.getByTestId('agent-dock-close').click();
+    }
+  });
+
+  test('a starter on the validation report is answered with the gate results card', async ({ page }) => {
+    const ids = await scaffoldOf(page);
+    await page.addInitScript(() => window.localStorage.setItem('astra.agentDock', 'open'));
+    await page.goto(`/scaffolds/${ids.id}/validation`);
+
+    const dock = page.getByTestId('agent-dock');
+    await expect(dock).toBeVisible();
+    await dock.locator('[data-testid="suggestion-chip"][data-intent="Which gates have passed, and which still need to run?"]').click();
+    // The mock brain routes "gates" to get_validation_results; its card carries the gates.
+    await expect(dock.getByTestId('artifact-card').last()).toContainText(/COMPILE/i, { timeout: 30_000 });
   });
 });
