@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Endpoints;
 
+public sealed record ArtefactLinkRequest(string? Path, string? Transcript);
+
 public static class ArtefactEndpoints
 {
     // The transport ceiling in Program.cs (640 MiB) sits above this, so the friendly
@@ -108,6 +110,27 @@ public static class ArtefactEndpoints
                 "removed" => Results.Ok(new { removed = true, path }),
                 "is_code" => BadRequest("artefact.is_code", "That is a source-code file; remove it by re-syncing the project without it."),
                 "invalid_path" => BadRequest("artefact.invalid_path", "The path is not valid."),
+                _ => Results.NotFound(new { error = new { code = "artefact.not_found" } }),
+            };
+        });
+
+        // Link a recording to the transcript it plays with when their names do not say so, or clear the
+        // link (transcript: null) to go back to matching by name.
+        app.MapPut("/api/v1/corpora/{id:guid}/artefacts/link", async (
+            Guid id,
+            ArtefactLinkRequest body,
+            ArtefactAttachService svc,
+            DevPersonaContext actor,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!CanWrite(actor)) return WriterRequired();
+            return await svc.LinkAudioAsync(id, body.Path ?? "", body.Transcript, actor, http, ct) switch
+            {
+                "linked" or "cleared" => Results.Ok(new { path = body.Path, transcript = body.Transcript }),
+                "invalid_path" => BadRequest("artefact.invalid_path", "The path is not valid."),
+                "not_audio" => BadRequest("artefact.not_audio", "Only a recording can be linked to a transcript."),
+                "transcript_not_found" => BadRequest("artefact.transcript_not_found", "That transcript is not in this project."),
                 _ => Results.NotFound(new { error = new { code = "artefact.not_found" } }),
             };
         });

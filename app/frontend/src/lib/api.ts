@@ -865,6 +865,8 @@ export type AttachFileResult = {
   ambiguous: boolean;
   /** How many citable evidence chunks the file was indexed into. */
   chunks: number;
+  /** Sentences about a file that was kept: what could not be read, or which transcript a recording plays with. */
+  notes?: string[];
 };
 
 export type AttachResponse = {
@@ -882,6 +884,8 @@ export type ArtefactSummaryFile = {
   hash: string;
   /** Citable evidence chunks the file is indexed into (0 until it has been read once). */
   chunkCount: number;
+  /** Recordings only: the transcript this one plays with, or null when it plays with none. */
+  linkedTo?: string | null;
 };
 
 export type ArtefactSummaryKind = {
@@ -938,6 +942,23 @@ export type EvidenceView = {
   truncated: boolean;
 };
 
+/** A chunk beside the one being read, with enough of itself to show in context. */
+export type EvidenceNeighbour = {
+  shortId: string;
+  locator: string;
+  label: string;
+  text: string | null;
+  structured: Record<string, unknown> | null;
+};
+
+/** The recording a transcript chunk can be played from. */
+export type EvidenceAudio = {
+  fileId: string;
+  path: string;
+  contentType: string;
+  sizeBytes: number | null;
+};
+
 export type EvidenceDetail = EvidenceSummary & {
   text: string | null;
   view: EvidenceView | null;
@@ -946,6 +967,10 @@ export type EvidenceDetail = EvidenceSummary & {
   /** The chunks before and after this one in the same file. */
   previous: string | null;
   next: string | null;
+  /** The turns or sections around this one (transcripts and documents only). */
+  context?: { before: EvidenceNeighbour[]; after: EvidenceNeighbour[] } | null;
+  /** The recording linked to this transcript, if any. */
+  audio?: EvidenceAudio | null;
 };
 
 export type EvidencePage = {
@@ -1475,6 +1500,12 @@ export const api = {
     apiFetch<{ removed: boolean; path: string }>(
       `/api/v1/corpora/${encodeURIComponent(id)}/artefacts?path=${encodeURIComponent(path)}`,
       { method: 'DELETE' },
+    ),
+  /** Links a recording to the transcript it plays with; a null transcript goes back to matching by name. */
+  linkArtefact: (id: string, path: string, transcript: string | null) =>
+    apiFetch<{ path: string; transcript: string | null }>(
+      `/api/v1/corpora/${encodeURIComponent(id)}/artefacts/link`,
+      { method: 'PUT', body: JSON.stringify({ path, transcript }) },
     ),
   getSubroutine: (id: string) => apiFetch<SubroutineDetail>(`/api/v1/subroutines/${id}`),
   getSubroutineSource: (id: string) => apiFetch<SubroutineSource>(`/api/v1/subroutines/${id}/source`),

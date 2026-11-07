@@ -431,8 +431,9 @@ test.describe('Evidence · UI', () => {
     await expect(drawer.locator('[data-kind="code"]')).toHaveCount(1);
     await expect(drawer.locator('[data-kind="sql"]')).toHaveCount(1);
     await expect(drawer.locator('[data-kind="ticket"]')).toHaveCount(1);
-    // The three sources side by side: the routine, the SQL window and the ticket's own words.
-    await expect(drawer.locator('[data-kind="ticket"]').getByTestId('evidence-code')).toContainText('Interface fails after midnight');
+    // The three sources side by side: the routine, the SQL window and the ticket's own words
+    // (a ticket is shown as a record since K3, not as lines of the export).
+    await expect(drawer.locator('[data-kind="ticket"]').getByTestId('ticket-view')).toContainText('Interface fails after midnight');
 
     await drawer.getByTestId('evidence-mode-one').click();
     await expect(cards).toHaveCount(1);

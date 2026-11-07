@@ -231,7 +231,7 @@ public class EvidenceAdapterTests
         var text = Numbered(LineWindowAdapter.WindowLines * (LineWindowAdapter.MaxChunksPerFile + 5));
         var r = new LineWindowAdapter().Build(Text("big.sql", "sql", text));
         Assert.Equal(LineWindowAdapter.MaxChunksPerFile, r.Chunks.Count);
-        Assert.Contains("only the first 2,000 windows", Assert.Single(r.Warnings));
+        Assert.Contains("Only the first 2,000 windows", Assert.Single(r.Warnings));
     }
 
     [Fact]
@@ -250,10 +250,10 @@ public class EvidenceAdapterTests
     }
 
     [Fact]
-    public void Registry_TextFilesGetTheLineWindows()
+    public void Registry_AKindWithoutItsOwnAdapterGetsTheLineWindows()
     {
-        var r = EvidenceAdapters.Build(Text("kt/s.vtt", "transcript", "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello\n"));
-        Assert.Single(r.Chunks);
+        var r = EvidenceAdapters.Build(Text("db/ddl.sql", "sql", Numbered(50)));
+        Assert.Equal(new[] { "L1-40", "L41-50" }, r.Chunks.Select(c => c.Locator));
     }
 
     [Theory]

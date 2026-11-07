@@ -40,6 +40,7 @@ export type FileResult = {
   sizeBytes: number;
   ambiguous: boolean;
   chunks: number;
+  notes?: string[];
 };
 
 export async function newProject(
@@ -133,6 +134,23 @@ export async function listEvidence(
     total: number;
     kinds: { kind: string; label: string; count: number }[];
   };
+}
+
+/** One piece of evidence with its text, the file around it and its neighbours. */
+export async function getEvidence(page: Page, id: string, shortId: string, persona = 'engineer') {
+  const res = await page.request.get(`${API_BASE}/api/v1/corpora/${id}/evidence/${encodeURIComponent(shortId)}`, {
+    headers: { 'X-Dev-Persona': persona },
+  });
+  return { status: res.status(), body: await res.json() };
+}
+
+/** Links a recording to a transcript (or clears the link with a null transcript). */
+export async function linkAudio(page: Page, id: string, path: string, transcript: string | null, persona = 'engineer') {
+  const res = await page.request.put(`${API_BASE}/api/v1/corpora/${id}/artefacts/link`, {
+    headers: { 'X-Dev-Persona': persona, 'Content-Type': 'application/json' },
+    data: { path, transcript },
+  });
+  return { status: res.status(), body: await res.json() };
 }
 
 /** `count` numbered lines, "line 1" … — enough for several 40-line windows. */

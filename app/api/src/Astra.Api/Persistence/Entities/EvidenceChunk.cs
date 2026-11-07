@@ -35,6 +35,9 @@ public sealed class EvidenceChunk
     public string TextHash { get; set; } = "";
     public int? LineStart { get; set; }
     public int? LineEnd { get; set; }
+
+    /// <summary>Position among the file's chunks, in reading order (0 for code, which is ordered by its lines).</summary>
+    public int Ordinal { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     public SourceFile? SourceFile { get; set; }

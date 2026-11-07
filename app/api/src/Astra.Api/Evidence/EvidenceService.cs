@@ -25,17 +25,30 @@ public class EvidenceSummary
 /// <summary>A window of the file with the cited lines marked, for the evidence viewer.</summary>
 public sealed record EvidenceView(int StartLine, int EndLine, int HighlightStart, int HighlightEnd, string Text, bool Truncated);
 
+/// <summary>A chunk next to the one being read, with enough of itself to show in context.</summary>
+public sealed record EvidenceNeighbour(string ShortId, string Locator, string Label, string? Text, JsonElement? Structured);
+
+/// <summary>What surrounds a chunk in its file, for kinds read in sequence (a transcript's turns, a document's sections).</summary>
+public sealed record EvidenceContext(IReadOnlyList<EvidenceNeighbour> Before, IReadOnlyList<EvidenceNeighbour> After);
+
+/// <summary>The recording a transcript chunk can be played from.</summary>
+public sealed record EvidenceAudio(Guid FileId, string Path, string ContentType, long? SizeBytes);
+
 public sealed class EvidenceDetail : EvidenceSummary
 {
     /// <summary>The cited text itself.</summary>
     public string? Text { get; init; }
-    /// <summary>Lines around the cited ones; null when the locator is not a line range.</summary>
+    /// <summary>Lines around the cited ones; null when the chunk has no lines in a text file.</summary>
     public EvidenceView? View { get; init; }
     public JsonElement? Structured { get; init; }
     public long? SizeBytes { get; init; }
     /// <summary>The chunks before and after this one in the same file.</summary>
     public string? Previous { get; init; }
     public string? Next { get; init; }
+    /// <summary>The turns or sections around this one (transcripts and documents only).</summary>
+    public EvidenceContext? Context { get; init; }
+    /// <summary>The recording linked to this transcript, if any.</summary>
+    public EvidenceAudio? Audio { get; init; }
 }
 
 public sealed record EvidenceKindCount(string Kind, string Label, int Count);
@@ -45,7 +58,12 @@ public sealed record EvidencePage(IReadOnlyList<EvidenceSummary> Data, int Total
 /// <summary>A file whose chunks are to be (re)built from the content just stored for it.</summary>
 public sealed record ArtefactIndexItem(SourceFile File, string? Text, byte[]? Bytes);
 
-public sealed record IndexOutcome(IReadOnlyDictionary<Guid, int> ChunksByFile, IReadOnlyList<string> Warnings);
+/// <param name="NotesByFile">Sentences about how a file was indexed (what an adapter could not read), by file id.</param>
+/// <param name="Warnings">The same, each naming its file, for places that list them together.</param>
+public sealed record IndexOutcome(
+    IReadOnlyDictionary<Guid, int> ChunksByFile,
+    IReadOnlyDictionary<Guid, IReadOnlyList<string>> NotesByFile,
+    IReadOnlyList<string> Warnings);
 
 /// <summary>
 /// Builds and reads the evidence behind citations. Source code is indexed from the routines the
@@ -164,6 +182,7 @@ public sealed class EvidenceService
     public async Task<IndexOutcome> IndexFilesAsync(IReadOnlyList<ArtefactIndexItem> items, CancellationToken ct)
     {
         var counts = new Dictionary<Guid, int>();
+        var notes = new Dictionary<Guid, IReadOnlyList<string>>();
         var warnings = new List<string>();
 
         foreach (var item in items)
@@ -172,7 +191,11 @@ public sealed class EvidenceService
             await _db.EvidenceChunks.Where(c => c.SourceFileId == file.Id).ExecuteDeleteAsync(ct);
 
             var built = EvidenceAdapters.Build(new AdapterInput(file.RelativePath, file.Kind, item.Text, item.Bytes));
-            warnings.AddRange(built.Warnings);
+            if (built.Warnings.Count > 0)
+            {
+                notes[file.Id] = built.Warnings;
+                warnings.AddRange(built.Warnings.Select(w => $"{file.RelativePath}: {w}"));
+            }
             if (built.Chunks.Count == 0)
             {
                 counts[file.Id] = 0;
@@ -213,13 +236,14 @@ public sealed class EvidenceService
                     TextHash = d.Text is null ? CodeEvidence.TextHash(file.FileHash, d.Locator) : EvidenceAdapters.TextHash(d.Text),
                     LineStart = d.LineStart,
                     LineEnd = d.LineEnd,
+                    Ordinal = i,
                     CreatedAt = now,
                 });
             }
             await InsertAsync(rows, ct);
             counts[file.Id] = rows.Count;
         }
-        return new IndexOutcome(counts, warnings);
+        return new IndexOutcome(counts, notes, warnings);
     }
 
     /// <summary>
@@ -237,15 +261,18 @@ public sealed class EvidenceService
                 await BuildCodeAsync(versionId, ct);
             }
 
+            // A recording has no chunks of its own, so it is never "missing" its index.
             var unindexed = await _db.SourceFiles
-                .Where(f => f.SourceVersionId == versionId && f.Kind != ArtefactKinds.Code
+                .Where(f => f.SourceVersionId == versionId && f.Kind != ArtefactKinds.Code && f.Kind != ArtefactKinds.Audio
                             && !_db.EvidenceChunks.Any(c => c.SourceFileId == f.Id))
                 .ToListAsync(ct);
             var items = new List<ArtefactIndexItem>();
             foreach (var f in unindexed)
             {
-                if (ArtefactContentTypes.IsBinary(System.IO.Path.GetExtension(f.RelativePath))) continue;
-                items.Add(new ArtefactIndexItem(f, await _blob.GetTextAsync(f.BlobUri, ct), null));
+                if (EvidenceAdapters.NeedsBytes(f.RelativePath))
+                    items.Add(new ArtefactIndexItem(f, null, await _blob.GetBytesAsync(f.BlobUri, ct)));
+                else if (!ArtefactContentTypes.IsBinary(System.IO.Path.GetExtension(f.RelativePath)))
+                    items.Add(new ArtefactIndexItem(f, await _blob.GetTextAsync(f.BlobUri, ct), null));
             }
             if (items.Count > 0) await IndexFilesAsync(items, ct);
         }
@@ -309,6 +336,7 @@ public sealed class EvidenceService
         var total = await filtered.CountAsync(ct);
         var rows = await filtered
             .OrderBy(x => x.RelativePath)
+            .ThenBy(x => x.Chunk.Ordinal)
             .ThenBy(x => x.Chunk.LineStart ?? int.MaxValue)
             .ThenBy(x => x.Chunk.Locator)
             .Skip(offset).Take(limit)
@@ -358,26 +386,21 @@ public sealed class EvidenceService
         string? text = c0.Text;
         EvidenceView? view = null;
 
-        if (EvidenceLocator.TryParseLines(c0.Locator, out var from, out var to) && !ArtefactContentTypes.IsBinary(System.IO.Path.GetExtension(row.RelativePath)))
+        // Anything with lines in a text file can be shown in place: a routine, a setting, a ticket's row,
+        // a turn of a transcript. The chunk keeps its own lines, so the locator need not be a line range.
+        int from = 0, to = 0;
+        if (c0.LineStart is { } storedFrom && c0.LineEnd is { } storedTo) { from = storedFrom; to = storedTo; }
+        else if (EvidenceLocator.TryParseLines(c0.Locator, out var parsedFrom, out var parsedTo)) { from = parsedFrom; to = parsedTo; }
+        if (from > 0 && to >= from && !ArtefactContentTypes.IsBinary(System.IO.Path.GetExtension(row.RelativePath)))
         {
-            view = await TryBuildViewAsync(row.BlobUri, from, to, ct);
+            view = await TryBuildViewAsync(row.BlobUri, from, to, redactSecrets: c0.Kind == ArtefactKinds.Config, ct);
             if (text is null && view is not null)
                 text = SliceLines(view, from, to);
         }
 
-        var siblings = await _db.EvidenceChunks.AsNoTracking()
-            .Where(s => s.SourceFileId == c0.SourceFileId)
-            .OrderBy(s => s.LineStart ?? int.MaxValue).ThenBy(s => s.Locator)
-            .Select(s => s.ShortId)
-            .ToListAsync(ct);
-        var at = siblings.IndexOf(c0.ShortId);
-
-        JsonElement? structured = null;
-        if (!string.IsNullOrWhiteSpace(c0.StructuredJson))
-        {
-            try { structured = JsonDocument.Parse(c0.StructuredJson).RootElement.Clone(); }
-            catch (JsonException) { /* a malformed blob is not worth failing the read for */ }
-        }
+        var (previous, next) = await NeighbourIdsAsync(c0, ct);
+        var context = ContextKinds.Contains(c0.Kind) ? await ContextAsync(c0, ct) : null;
+        var audio = c0.Kind == ArtefactKinds.Transcript ? await AudioForAsync(versionId, row.RelativePath, ct) : null;
 
         return new EvidenceDetail
         {
@@ -393,11 +416,89 @@ public sealed class EvidenceService
             FileId = c0.SourceFileId,
             Text = text,
             View = view,
-            Structured = structured,
+            Structured = ParseJson(c0.StructuredJson),
             SizeBytes = row.SizeBytes,
-            Previous = at > 0 ? siblings[at - 1] : null,
-            Next = at >= 0 && at < siblings.Count - 1 ? siblings[at + 1] : null,
+            Previous = previous,
+            Next = next,
+            Context = context,
+            Audio = audio,
         };
+    }
+
+    // Kinds read in sequence: the reader wants what was said just before and after, not one line alone.
+    private static readonly HashSet<string> ContextKinds = new() { ArtefactKinds.Transcript, ArtefactKinds.Document };
+    private const int ContextChunks = 2;
+
+    private static JsonElement? ParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonDocument.Parse(json).RootElement.Clone(); }
+        catch (JsonException) { return null; /* a malformed blob is not worth failing the read for */ }
+    }
+
+    /// <summary>The chunks either side of this one in reading order. Code is ordered by its lines, everything else by position.</summary>
+    private async Task<(string? Previous, string? Next)> NeighbourIdsAsync(EvidenceChunk c, CancellationToken ct)
+    {
+        if (c.Kind != ArtefactKinds.Code)
+        {
+            var same = _db.EvidenceChunks.AsNoTracking().Where(s => s.SourceFileId == c.SourceFileId);
+            var prev = await same.Where(s => s.Ordinal < c.Ordinal).OrderByDescending(s => s.Ordinal).Select(s => s.ShortId).FirstOrDefaultAsync(ct);
+            var following = await same.Where(s => s.Ordinal > c.Ordinal).OrderBy(s => s.Ordinal).Select(s => s.ShortId).FirstOrDefaultAsync(ct);
+            // Chunks indexed before positions were kept all have position 0: fall back to their lines.
+            if (prev is not null || following is not null || c.Ordinal > 0) return (prev, following);
+        }
+
+        var siblings = await _db.EvidenceChunks.AsNoTracking()
+            .Where(s => s.SourceFileId == c.SourceFileId)
+            .OrderBy(s => s.Ordinal).ThenBy(s => s.LineStart ?? int.MaxValue).ThenBy(s => s.Locator)
+            .Select(s => s.ShortId)
+            .ToListAsync(ct);
+        var at = siblings.IndexOf(c.ShortId);
+        return (at > 0 ? siblings[at - 1] : null, at >= 0 && at < siblings.Count - 1 ? siblings[at + 1] : null);
+    }
+
+    private async Task<EvidenceContext> ContextAsync(EvidenceChunk c, CancellationToken ct)
+    {
+        var same = _db.EvidenceChunks.AsNoTracking().Where(s => s.SourceFileId == c.SourceFileId);
+        var before = await same.Where(s => s.Ordinal < c.Ordinal)
+            .OrderByDescending(s => s.Ordinal).Take(ContextChunks)
+            .Select(s => new { s.ShortId, s.Locator, s.Label, s.Text, s.StructuredJson, s.Ordinal })
+            .ToListAsync(ct);
+        var after = await same.Where(s => s.Ordinal > c.Ordinal)
+            .OrderBy(s => s.Ordinal).Take(ContextChunks)
+            .Select(s => new { s.ShortId, s.Locator, s.Label, s.Text, s.StructuredJson, s.Ordinal })
+            .ToListAsync(ct);
+        return new EvidenceContext(
+            before.AsEnumerable().Reverse().Select(s => new EvidenceNeighbour(s.ShortId, s.Locator, s.Label, s.Text, ParseJson(s.StructuredJson))).ToList(),
+            after.Select(s => new EvidenceNeighbour(s.ShortId, s.Locator, s.Label, s.Text, ParseJson(s.StructuredJson))).ToList());
+    }
+
+    // ── recordings ──────────────────────────────────────────────────────
+
+    /// <summary>For each recording in a version, the transcript it plays with (null when it plays with none).</summary>
+    public async Task<IReadOnlyDictionary<Guid, string?>> AudioLinksAsync(Guid versionId, CancellationToken ct)
+    {
+        var files = await _db.SourceFiles.AsNoTracking()
+            .Where(f => f.SourceVersionId == versionId && (f.Kind == ArtefactKinds.Audio || f.Kind == ArtefactKinds.Transcript))
+            .Select(f => new { f.Id, f.RelativePath, f.Kind, f.MetaJson })
+            .ToListAsync(ct);
+        var transcripts = files.Where(f => f.Kind == ArtefactKinds.Transcript).Select(f => f.RelativePath).ToList();
+        return files.Where(f => f.Kind == ArtefactKinds.Audio)
+            .ToDictionary(f => f.Id, f => AudioLinking.Resolve(f.RelativePath, AudioLinking.AttachesTo(f.MetaJson), transcripts));
+    }
+
+    private async Task<EvidenceAudio?> AudioForAsync(Guid versionId, string transcriptPath, CancellationToken ct)
+    {
+        var links = await AudioLinksAsync(versionId, ct);
+        var playing = links.Where(kv => kv.Value == transcriptPath).Select(kv => kv.Key).ToList();
+        if (playing.Count == 0) return null;
+
+        var file = await _db.SourceFiles.AsNoTracking()
+            .Where(f => playing.Contains(f.Id))
+            .OrderBy(f => f.RelativePath)
+            .Select(f => new { f.Id, f.RelativePath, f.ContentType, f.SizeBytes })
+            .FirstAsync(ct);
+        return new EvidenceAudio(file.Id, file.RelativePath, file.ContentType ?? "audio/mpeg", file.SizeBytes);
     }
 
     /// <summary>Chunks per file for a version, for the Sources view.</summary>
@@ -410,7 +511,7 @@ public sealed class EvidenceService
 
     // ── helpers ─────────────────────────────────────────────────────────
 
-    private async Task<EvidenceView?> TryBuildViewAsync(string blobUri, int from, int to, CancellationToken ct)
+    private async Task<EvidenceView?> TryBuildViewAsync(string blobUri, int from, int to, bool redactSecrets, CancellationToken ct)
     {
         string whole;
         try { whole = await _blob.GetTextAsync(blobUri, ct); }
@@ -430,7 +531,9 @@ public sealed class EvidenceService
 
         var start = Math.Max(1, from - ContextLines);
         var end = Math.Min(count, hiTo + ContextLines);
-        var text = string.Join('\n', lines[(start - 1)..end]);
+        var window = lines[(start - 1)..end];
+        // A configuration file's secrets stay out of the panel as they stay out of the chunks.
+        var text = string.Join('\n', redactSecrets ? window.Select(ConfigAdapter.RedactLine) : window);
         return new EvidenceView(start, end, from, hiTo, text, truncated);
     }
 

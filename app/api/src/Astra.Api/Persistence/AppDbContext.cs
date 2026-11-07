@@ -140,6 +140,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.TextHash).HasColumnName("text_hash").HasMaxLength(80).IsRequired();
             b.Property(x => x.LineStart).HasColumnName("line_start");
             b.Property(x => x.LineEnd).HasColumnName("line_end");
+            b.Property(x => x.Ordinal).HasColumnName("ordinal");
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.HasOne<SourceVersion>().WithMany()
              .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);

@@ -23,7 +23,14 @@ public sealed record AttachFileResult(
     int LineCount,
     bool Ambiguous,
     /// <summary>How many citable evidence chunks the file was indexed into (0 when none, or not indexed yet).</summary>
-    int Chunks = 0);
+    int Chunks = 0)
+{
+    /// <summary>
+    /// Plain sentences about a file that was kept: what the indexer could not read, or what it plays with.
+    /// A file is not refused for these; they say what to expect of it.
+    /// </summary>
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+}
 
 public sealed record AttachOutcome(Guid CorpusId, Guid VersionId, IReadOnlyList<AttachFileResult> Files)
 {
@@ -214,7 +221,13 @@ public sealed class ArtefactAttachService
                 {
                     if (byPath.TryGetValue(results[i].Path, out var fileId) && results[i].Status is "added" or "replaced"
                         && indexed.ChunksByFile.TryGetValue(fileId, out var n))
-                        results[i] = results[i] with { Chunks = n };
+                    {
+                        results[i] = results[i] with
+                        {
+                            Chunks = n,
+                            Notes = indexed.NotesByFile.TryGetValue(fileId, out var fileNotes) ? fileNotes : results[i].Notes,
+                        };
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -224,6 +237,19 @@ public sealed class ArtefactAttachService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Indexing evidence for corpus {Corpus} failed; it will be built when first read", corpusId);
+            }
+
+            try
+            {
+                await AddPlaybackNotesAsync(versionId, existing, results, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Working out which recordings play with which transcripts failed for corpus {Corpus}", corpusId);
             }
         }
 
@@ -272,6 +298,75 @@ public sealed class ArtefactAttachService
         return "removed";
     }
 
+    /// <summary>
+    /// A recording is cited through its transcript, so say at once which transcript each recording
+    /// added now plays with, and which recording a transcript added now plays from. A recording with no
+    /// transcript is kept, with a note saying why a citation cannot play it yet.
+    /// </summary>
+    private async Task AddPlaybackNotesAsync(
+        Guid versionId, Dictionary<string, SourceFile> files, List<AttachFileResult> results, CancellationToken ct)
+    {
+        if (!results.Any(r => r.Status is "added" or "replaced" && r.Kind is ArtefactKinds.Audio or ArtefactKinds.Transcript)) return;
+
+        var links = await _evidence.AudioLinksAsync(versionId, ct);
+        var pathOf = files.Values.ToDictionary(f => f.Id, f => f.RelativePath);
+        for (var i = 0; i < results.Count; i++)
+        {
+            var r = results[i];
+            if (r.Status is not ("added" or "replaced") || !files.TryGetValue(r.Path, out var file)) continue;
+
+            string? note = null;
+            if (r.Kind == ArtefactKinds.Audio)
+            {
+                var target = links.GetValueOrDefault(file.Id);
+                note = target is null
+                    ? "No transcript has the same name, so a citation cannot play this recording yet. Add the transcript, or link it from the file list."
+                    : $"Plays with {target}.";
+            }
+            else if (r.Kind == ArtefactKinds.Transcript)
+            {
+                var audio = links.Where(kv => kv.Value == r.Path).Select(kv => pathOf.GetValueOrDefault(kv.Key)).Where(p => p is not null).OrderBy(p => p, StringComparer.Ordinal).FirstOrDefault();
+                if (audio is not null) note = $"A citation of this transcript can play {audio}.";
+            }
+            if (note is not null) results[i] = r with { Notes = r.Notes.Append(note).ToList() };
+        }
+    }
+
+    /// <summary>Links a recording to a transcript by hand (or clears the link) when their names do not match.</summary>
+    public async Task<string> LinkAudioAsync(
+        Guid corpusId, string path, string? transcriptPath, DevPersonaContext actor, HttpContext? http, CancellationToken ct)
+    {
+        var audioPath = ArtefactPlacement.NormalisePath(path, out _);
+        if (audioPath is null) return "invalid_path";
+        string? target = null;
+        if (!string.IsNullOrWhiteSpace(transcriptPath))
+        {
+            target = ArtefactPlacement.NormalisePath(transcriptPath, out _);
+            if (target is null) return "invalid_path";
+        }
+
+        var versionId = await _db.Corpora.AsNoTracking()
+            .Where(c => c.Id == corpusId)
+            .Select(c => c.LatestVersionId)
+            .FirstOrDefaultAsync(ct);
+        if (versionId is null) return "not_found";
+
+        var audio = await _db.SourceFiles.FirstOrDefaultAsync(f => f.SourceVersionId == versionId && f.RelativePath == audioPath, ct);
+        if (audio is null) return "not_found";
+        if (audio.Kind != ArtefactKinds.Audio) return "not_audio";
+
+        if (target is not null
+            && !await _db.SourceFiles.AnyAsync(f => f.SourceVersionId == versionId && f.RelativePath == target && f.Kind == ArtefactKinds.Transcript, ct))
+            return "transcript_not_found";
+
+        audio.MetaJson = AudioLinking.WithAttachesTo(audio.MetaJson, target);
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            target is null ? "corpus.artefact.unlinked" : "corpus.artefact.linked", "corpus", corpusId, actor,
+            new { versionId, path = audioPath, transcript = target }, http, ct);
+        return target is null ? "cleared" : "linked";
+    }
+
     /// <summary>Per-kind counts and sizes for the current version, plus the artefact files themselves.</summary>
     public async Task<object?> SummaryAsync(Guid corpusId, CancellationToken ct)
     {
@@ -284,6 +379,7 @@ public sealed class ArtefactAttachService
         var settings = ProjectSettings.Parse(corpus.SettingsJson);
         var files = new List<SummaryRow>();
         IReadOnlyDictionary<Guid, int> chunks = new Dictionary<Guid, int>();
+        IReadOnlyDictionary<Guid, string?> links = new Dictionary<Guid, string?>();
         if (corpus.LatestVersionId is { } vid)
         {
             files = await _db.SourceFiles.AsNoTracking()
@@ -291,6 +387,7 @@ public sealed class ArtefactAttachService
                 .Select(f => new SummaryRow(f.Id, f.RelativePath, f.Kind, f.SizeBytes, f.LineCount, f.FileHash))
                 .ToListAsync(ct);
             chunks = await _evidence.CountsByFileAsync(vid, ct);
+            links = await _evidence.AudioLinksAsync(vid, ct);
         }
         int ChunksOf(Guid fileId) => chunks.TryGetValue(fileId, out var n) ? n : 0;
 
@@ -300,7 +397,10 @@ public sealed class ArtefactAttachService
             // Source files can number in the thousands and are listed elsewhere.
             var listed = new List<object>();
             if (!k.Core)
-                listed.AddRange(mine.Select(f => (object)new { id = f.Id, path = f.RelativePath, sizeBytes = f.SizeBytes, lineCount = f.LineCount, hash = f.FileHash, chunkCount = ChunksOf(f.Id) }));
+                listed.AddRange(mine.Select(f => k.Id == ArtefactKinds.Audio
+                    // A recording also says which transcript it plays with (null: none, so nothing plays it).
+                    ? (object)new { id = f.Id, path = f.RelativePath, sizeBytes = f.SizeBytes, lineCount = f.LineCount, hash = f.FileHash, chunkCount = ChunksOf(f.Id), linkedTo = links.GetValueOrDefault(f.Id) }
+                    : new { id = f.Id, path = f.RelativePath, sizeBytes = f.SizeBytes, lineCount = f.LineCount, hash = f.FileHash, chunkCount = ChunksOf(f.Id), linkedTo = (string?)null }));
             return new
             {
                 id = k.Id,

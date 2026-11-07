@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, FileUp, FolderUp, Trash2 } from 'lucide-reac
 import { clsx } from 'clsx';
 import {
   api,
+  type ArtefactSummaryFile,
   type ArtefactSummaryKind,
   type ArtefactUpload,
   type AttachFileResult,
@@ -86,6 +87,11 @@ export function ArtefactSources({ corpusId, canWrite }: { corpusId: string; canW
     },
   });
 
+  const link = useMutation({
+    mutationFn: (v: { path: string; transcript: string | null }) => api.linkArtefact(corpusId, v.path, v.transcript),
+    onSuccess: refresh,
+  });
+
   const add = (uploads: ArtefactUpload[]) => {
     if (uploads.length === 0) {
       setResult(null);
@@ -161,6 +167,10 @@ export function ArtefactSources({ corpusId, canWrite }: { corpusId: string; canW
             removeError={remove.isError ? remove.error.message : null}
             onAsk={setConfirming}
             onRemove={(p) => remove.mutate(p)}
+            transcripts={kinds.find((k) => k.id === 'transcript')?.files ?? []}
+            linking={link.isPending}
+            linkError={link.isError ? link.error.message : null}
+            onLink={(path, transcript) => link.mutate({ path, transcript })}
           />
         )}
 
@@ -342,6 +352,10 @@ function FileList({
   removeError,
   onAsk,
   onRemove,
+  transcripts,
+  linking,
+  linkError,
+  onLink,
 }: {
   corpusId: string;
   kind: ArtefactSummaryKind;
@@ -351,6 +365,10 @@ function FileList({
   removeError: string | null;
   onAsk: (path: string | null) => void;
   onRemove: (path: string) => void;
+  transcripts: ArtefactSummaryFile[];
+  linking: boolean;
+  linkError: string | null;
+  onLink: (path: string, transcript: string | null) => void;
 }) {
   return (
     <div className="rounded-md border border-line-subtle" data-testid={`artefact-files-${kind.id}`}>
@@ -359,8 +377,17 @@ function FileList({
       </p>
       <ul className="max-h-72 divide-y divide-line-subtle overflow-auto">
         {kind.files.map((f) => (
-          <li key={f.id} className="flex items-center gap-3 px-4 py-2" data-testid="artefact-file-row">
-            <span className="min-w-0 flex-1 truncate font-mono text-caption text-ink-primary" title={f.path}>{f.path}</span>
+          <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2" data-testid="artefact-file-row">
+            <span className="min-w-[10rem] flex-1 truncate font-mono text-caption text-ink-primary" title={f.path}>{f.path}</span>
+            {kind.id === 'audio' && (
+              <AudioLink
+                file={f}
+                transcripts={transcripts}
+                canWrite={canWrite}
+                busy={linking}
+                onLink={(t) => onLink(f.path, t)}
+              />
+            )}
             <span className="shrink-0 font-mono text-micro text-ink-tertiary">
               {formatBytes(f.sizeBytes)}
               {f.lineCount > 0 ? ` · ${f.lineCount.toLocaleString()} lines` : ''}
@@ -401,7 +428,57 @@ function FileList({
       {removeError && (
         <p className="border-t border-line-subtle px-4 py-2 text-caption text-status-fail" role="alert">{removeError}</p>
       )}
+      {linkError && (
+        <p className="border-t border-line-subtle px-4 py-2 text-caption text-status-fail" role="alert" data-testid="artefact-link-error">{linkError}</p>
+      )}
     </div>
+  );
+}
+
+/**
+ * Which transcript a recording plays with. A recording is cited through its transcript, so one with no
+ * transcript cannot be played from a citation; this says so and lets a person pick the transcript when
+ * the names do not match. "Match by name" goes back to the automatic rule.
+ */
+function AudioLink({
+  file,
+  transcripts,
+  canWrite,
+  busy,
+  onLink,
+}: {
+  file: ArtefactSummaryFile;
+  transcripts: ArtefactSummaryFile[];
+  canWrite: boolean;
+  busy: boolean;
+  onLink: (transcript: string | null) => void;
+}) {
+  const linked = file.linkedTo ?? null;
+  return (
+    <span className="flex shrink-0 items-center gap-2 text-micro" data-testid="artefact-audio-link">
+      {linked ? (
+        <span className="text-ink-secondary" data-testid="artefact-audio-linked">
+          Plays with <span className="font-mono text-ink-primary">{linked}</span>
+        </span>
+      ) : (
+        <span className="text-status-warn" data-testid="artefact-audio-unlinked">Not linked to a transcript</span>
+      )}
+      {canWrite && transcripts.length > 0 && (
+        <select
+          value={linked ?? ''}
+          disabled={busy}
+          onChange={(e) => onLink(e.target.value || null)}
+          aria-label={`Transcript that ${file.path} plays with`}
+          className="h-7 max-w-[14rem] rounded-md border border-line bg-raised px-1.5 font-mono text-micro text-ink-primary focus-visible:outline-2 focus-visible:outline-volt"
+          data-testid="artefact-audio-select"
+        >
+          <option value="">Match by name</option>
+          {transcripts.map((t) => (
+            <option key={t.id} value={t.path}>{t.path}</option>
+          ))}
+        </select>
+      )}
+    </span>
   );
 }
 
@@ -454,6 +531,12 @@ function AttachResult({
               )}
             </div>
             {f.message && <p className="mt-1 pl-[5.75rem] text-caption text-status-fail">{f.message}</p>}
+            {f.status !== 'rejected' &&
+              (f.notes ?? []).map((note) => (
+                <p key={note} className="mt-1 pl-[5.75rem] text-caption text-ink-secondary" data-testid="artefact-result-note">
+                  {note}
+                </p>
+              ))}
             {f.ambiguous && f.status !== 'rejected' && (
               <p className="mt-1 pl-[5.75rem] text-caption text-ink-secondary">
                 Several kinds take this file type; it was kept as {kindLabel(f.kind)}. Use “Treat as” to choose another.

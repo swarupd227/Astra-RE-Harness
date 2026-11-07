@@ -871,6 +871,7 @@ public sealed class IngestPipeline
                     TextHash = c.TextHash,
                     LineStart = c.LineStart,
                     LineEnd = c.LineEnd,
+                    Ordinal = c.Ordinal,
                     CreatedAt = now,
                 });
             }

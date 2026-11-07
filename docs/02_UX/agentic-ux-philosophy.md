@@ -101,8 +101,19 @@ of evidence has the same id on every rebuild and in every environment). The API 
 - One panel for the whole app: `EvidenceProvider` (mounted once in `App.tsx`) owns the drawer; open it with
   `useEvidence().open({corpusId, ids, focus})`. It floats over the page, Esc closes it and returns focus.
 - Source is shown with `EvidenceCode` — highlight.js from the bundle, never Monaco (Monaco loads from a CDN and
-  breaks offline). A kind with a richer view (transcript with a play button, ticket as a record) registers it in
-  `EVIDENCE_VIEWS`; nothing else changes.
+  breaks offline). A kind with a richer view registers it in `EVIDENCE_VIEWS` (`src/evidence/views/`); nothing
+  else changes. Today: a **transcript** opens as the cited turn between the turns around it, with a player that
+  starts at the cited moment and stops where the turn ends (no recording linked → it says so, no dead player); a
+  **ticket** as a record (number, priority, state, every column; its row in the file is one click away); a
+  **setting** as name and value (a secret-looking value is never kept in the evidence, is hidden in the file lines
+  shown around it, and the card says so); a
+  **document** section under its headings. Everything else gets the numbered source with the cited lines marked.
+- What each kind is cut into, and how a piece is located (`Evidence/Adapters/`, one pure adapter per kind): code
+  routines `L120-168`; settings `json:$.Ofac.TimeoutSeconds`; tickets `row:INC-T-0412`; transcript turns
+  `t=00:14:32-00:15:40`; document sections `h=Restart`; XML elements `xpath:/JOBP/Tasks/Task[3]`. A file an adapter
+  cannot read is kept as line windows with a sentence saying why — never refused, never silently dropped. A
+  recording has no chunks of its own: it is cited through the transcript it plays with (same name, or linked by
+  hand on the Sources card).
 - A link can open evidence on arrival: `/corpora/:id/evidence?open=ID,ID`.
 - Agent tools to search and open evidence ship with the deliverables work (`search_evidence`); until then the
   evidence page is reached from the project's Sources card.

@@ -572,6 +572,7 @@ using (var scope = app.Services.CreateScope())
               ON evidence_chunks (source_file_id, locator);
             CREATE INDEX IF NOT EXISTS ix_evidence_chunks_version_kind
               ON evidence_chunks (source_version_id, kind);
+            ALTER TABLE evidence_chunks ADD COLUMN IF NOT EXISTS ordinal integer NOT NULL DEFAULT 0;
             """);
 
         // Phase 6.0 — Golden dataset tables. Additive create-if-not-exists
