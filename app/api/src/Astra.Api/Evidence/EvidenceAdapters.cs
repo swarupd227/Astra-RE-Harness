@@ -20,7 +20,13 @@ public sealed record AdapterInput(string Path, string Kind, string? Text, byte[]
     public string Extension => System.IO.Path.GetExtension(Path).ToLowerInvariant();
 }
 
-public sealed record AdapterResult(IReadOnlyList<EvidenceChunkDraft> Chunks, IReadOnlyList<string> Warnings)
+/// <param name="Facts">The things and relations the file states (tables, jobs …), each pointing at the chunk that shows it; null for kinds with none.</param>
+/// <param name="Summary">One plain sentence on what was found ("Read 14 tables and 9 procedures"), shown under the file after an upload.</param>
+public sealed record AdapterResult(
+    IReadOnlyList<EvidenceChunkDraft> Chunks,
+    IReadOnlyList<string> Warnings,
+    FactSet? Facts = null,
+    string? Summary = null)
 {
     public static readonly AdapterResult Empty = new(Array.Empty<EvidenceChunkDraft>(), Array.Empty<string>());
 
@@ -50,6 +56,9 @@ public static class EvidenceAdapters
     private static readonly MarkdownAdapter Markdown = new();
     private static readonly DocxAdapter Docx = new();
     private static readonly XmlElementAdapter Xml = new();
+    private static readonly SqlAdapter Sql = new();
+    private static readonly JobAdapter Job = new();
+    private static readonly SsisAdapter Ssis = new();
 
     /// <summary>
     /// The adapter for a file, chosen by its kind and extension. Null means the kind yields no chunks of
@@ -59,12 +68,15 @@ public static class EvidenceAdapters
     public static IEvidenceAdapter? AdapterFor(string kind, string extension) => (kind, extension) switch
     {
         (ArtefactKinds.Audio, _) => null,
+        (ArtefactKinds.Sql, ".sql" or ".ddl") => Sql,
         (ArtefactKinds.Config, ".json") => Config,
         (ArtefactKinds.Ticket, ".csv") => Ticket,
         (ArtefactKinds.Transcript, ".vtt" or ".txt") => Transcript,
         (ArtefactKinds.Document, ".docx") => Docx,
         (ArtefactKinds.Document, ".md") => Markdown,
-        (ArtefactKinds.Document or ArtefactKinds.Job or ArtefactKinds.Etl, ".xml" or ".dtsx") => Xml,
+        (ArtefactKinds.Job, ".xml") => Job,
+        (ArtefactKinds.Etl, ".dtsx" or ".xml") => Ssis,
+        (ArtefactKinds.Document, ".xml") => Xml,
         _ => LineWindowAdapter.Instance,
     };
 
@@ -74,6 +86,14 @@ public static class EvidenceAdapters
 
     /// <summary>True when indexing this file can yield chunks at all.</summary>
     public static bool Indexes(string kind) => kind != ArtefactKinds.Audio;
+
+    /// <summary>
+    /// Kinds whose adapters also state facts for the entity graph. Their files always get a facts row
+    /// (empty if nothing was found), so a file indexed before its adapter could read facts is told apart
+    /// from one that simply has none, and is indexed again.
+    /// </summary>
+    public static bool ProducesFacts(string kind) =>
+        kind is ArtefactKinds.Sql or ArtefactKinds.Job or ArtefactKinds.Etl or ArtefactKinds.Config;
 
     public static int MaxChunksFor(string kind) => kind == ArtefactKinds.Ticket ? TicketMaxChunks : DefaultMaxChunks;
 
@@ -127,7 +147,28 @@ public static class EvidenceAdapters
             warnings.Add($"Only the first {maxChunks:N0} of {kept.Count:N0} pieces were indexed.");
             kept.RemoveRange(maxChunks, kept.Count - maxChunks);
         }
-        return new AdapterResult(EnsureUniqueLocators(kept), warnings);
+
+        var unique = EnsureUniqueLocators(kept);
+        return new AdapterResult(unique, warnings, RemapFacts(built.Facts, kept, unique), built.Summary);
+    }
+
+    /// <summary>
+    /// A fact names its chunk by locator. If making locators unique or bounded changed one, the fact
+    /// follows it (a repeated locator keeps its first holder, so only a bounded one moves).
+    /// </summary>
+    private static FactSet? RemapFacts(FactSet? facts, IReadOnlyList<EvidenceChunkDraft> before, IReadOnlyList<EvidenceChunkDraft> after)
+    {
+        if (facts is null) return null;
+        var moved = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var i = 0; i < before.Count; i++)
+            if (before[i].Locator != after[i].Locator && !moved.ContainsKey(before[i].Locator) && BoundLocator(before[i].Locator) == after[i].Locator)
+                moved[before[i].Locator] = after[i].Locator;
+        if (moved.Count == 0) return facts;
+
+        string? Map(string? locator) => locator is not null && moved.TryGetValue(locator, out var m) ? m : locator;
+        return new FactSet(
+            facts.Entities.Select(e => e with { Locator = Map(e.Locator) }).ToList(),
+            facts.Links.Select(l => l with { Locator = Map(l.Locator) }).ToList());
     }
 
     /// <summary>

@@ -47,6 +47,16 @@ internal static class AdapterJson
     {
         if (!string.IsNullOrWhiteSpace(value)) w.WriteString(name, value);
     }
+
+    /// <summary>A list of strings, left out when there is nothing in it.</summary>
+    public static void Strings(Utf8JsonWriter w, string name, IEnumerable<string> values)
+    {
+        var list = values.ToList();
+        if (list.Count == 0) return;
+        w.WriteStartArray(name);
+        foreach (var v in list) w.WriteStringValue(v);
+        w.WriteEndArray();
+    }
 }
 
 internal static class AdapterText

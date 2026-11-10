@@ -74,6 +74,8 @@ public sealed class IngestPipeline
         {
             Report("persisting", "Indexing the routines as citable evidence");
             await _evidence.BuildCodeAsync(versionId, ct);
+            // A re-sync carries artefacts (and what they state) forward; the entity graph follows them.
+            await _evidence.RefreshGraphAsync(versionId, ct);
         }
         catch (OperationCanceledException)
         {
@@ -873,6 +875,21 @@ public sealed class IngestPipeline
                     LineEnd = c.LineEnd,
                     Ordinal = c.Ordinal,
                     CreatedAt = now,
+                });
+            }
+
+            // What those files state (tables, jobs …) comes with them; the graph is rebuilt from it.
+            var facts = await _db.FileFacts.AsNoTracking()
+                .Where(f => oldIds.Contains(f.SourceFileId))
+                .ToListAsync(ct);
+            foreach (var f in facts)
+            {
+                _db.FileFacts.Add(new FileFactsRow
+                {
+                    SourceFileId = newFileIds[f.SourceFileId],
+                    SourceVersionId = toVersionId,
+                    FactsJson = f.FactsJson,
+                    BuiltAt = now,
                 });
             }
         }

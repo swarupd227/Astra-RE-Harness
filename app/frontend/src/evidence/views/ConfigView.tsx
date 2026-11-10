@@ -16,7 +16,8 @@ export function ConfigView({ detail }: EvidenceBodyProps) {
     <div className="space-y-3" data-testid="config-view">
       <div className="rounded-md border border-line-subtle bg-sunken px-3 py-2">
         <p className="break-words font-mono text-micro text-ink-tertiary" data-testid="config-key">{key}</p>
-        <p className="mt-1 break-words font-mono text-body font-medium text-ink-primary" data-testid="config-value">
+        {/* No ligatures: a value is shown exactly as it is, and the font would draw "<<" and "=<" as single marks. */}
+        <p className="mt-1 break-words font-mono text-body font-medium text-ink-primary [font-variant-ligatures:none]" data-testid="config-value">
           {value === '' ? <span className="text-ink-tertiary">(empty)</span> : value}
         </p>
         {masked && (

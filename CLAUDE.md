@@ -38,6 +38,13 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   result when the run ends within 60 s (the shape every caller always got) and with `202 {runId, corpusId,
   statusUrl}` otherwise; `GET /api/v1/ingest/runs/{runId}` carries the same result once done and the frontend's
   `awaitIngestRun` polls it. Never make a route wait on a long pipeline: App Service cuts requests at 230 s.
+- **Evidence and the entity graph** (WS7): every artefact file is cut into citable chunks by a pure adapter per kind
+  (`Evidence/Adapters/`), and SQL, job, package and config adapters also state *facts* (entities and links, each
+  pointing at its chunk) stored per file in `file_facts`; the graph (`graph_entities`/`graph_links`) is the
+  deterministic merge of those facts, rebuilt after any attach/replace/remove/re-sync, never patched. Anything that
+  cites uses `CitationChip`; secrets never enter a chunk or a fact. Formats, locators and how to add an adapter:
+  **`docs/03_Evidence/artefact-adapters.md`**. jsonb does not keep object key order — store anything order-sensitive
+  as an array.
 - **Target stacks**: `.NET 10` (`dotnet10`, and the `dotnet10-*` variants for C#/VB6/VB.NET) is the default
   target for every .NET-bound source language; `dotnet8` stays selectable for estates on the older LTS,
   `java-spring` is the default for COBOL/UniBasic/ABL/Java. Prompts live under

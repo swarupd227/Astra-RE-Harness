@@ -88,7 +88,16 @@ public sealed class ConfigAdapter : IEvidenceAdapter
         }
 
         foreach (var n in top.Children) Emit(n);
-        return new AdapterResult(chunks, Array.Empty<string>());
+
+        // Each setting is also a thing in the entity graph, keyed by the name the application reads it by.
+        // A setting has a value per environment, so the value is kept with the file it came from.
+        var facts = chunks
+            .Where(c => c.Label is not ("(value)" or "(list)"))
+            .Select(c => new EntityFact(EntityVocabulary.ConfigKey, c.Label, c.Locator,
+                Attrs.Of(("values", new[] { new { file = input.Path, value = c.Text![(c.Label.Length + 3)..] } }))))
+            .ToList();
+        return new AdapterResult(chunks, Array.Empty<string>(), new FactSet(facts, Array.Empty<LinkFact>()),
+            chunks.Count == 0 ? null : $"Read {facts.Count} setting{(facts.Count == 1 ? "" : "s")}.");
     }
 
     private static Node Parse(byte[] bytes)

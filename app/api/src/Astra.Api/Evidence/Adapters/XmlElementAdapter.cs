@@ -27,8 +27,22 @@ public sealed class XmlElementAdapter : IEvidenceAdapter
 
     private static readonly string[] NameAttributes = { "Name", "name", "Id", "id", "ID", "Label", "label", "Key", "key", "Title", "title" };
 
+    private readonly Func<string, int, bool> _alwaysOpen;
+    private readonly Func<string, bool> _keepApart;
+
+    public XmlElementAdapter() : this(null, null) { }
+
+    /// <param name="alwaysOpen">Elements (by local name and depth, the root being 0) opened up whatever their size, so their children are the chunks.</param>
+    /// <param name="keepApart">Elements (by local name) that are never merged with their same-named neighbours, however tiny: each is a chunk of its own.</param>
+    public XmlElementAdapter(Func<string, int, bool>? alwaysOpen, Func<string, bool>? keepApart)
+    {
+        _alwaysOpen = alwaysOpen ?? ((_, _) => false);
+        _keepApart = keepApart ?? (_ => false);
+    }
+
     private sealed class XNode
     {
+        public int Depth;
         public string Name = "";
         public readonly List<KeyValuePair<string, string>> Attributes = new();
         public int Start;
@@ -108,7 +122,7 @@ public sealed class XmlElementAdapter : IEvidenceAdapter
             if (xml.NodeType == XmlNodeType.Element)
             {
                 if (++count > MaxElements) throw new XmlException($"more than {MaxElements:N0} elements");
-                var node = new XNode { Name = xml.LocalName, Start = at.LineNumber, Parent = open.Count > 0 ? open.Peek() : null };
+                var node = new XNode { Name = xml.LocalName, Start = at.LineNumber, Parent = open.Count > 0 ? open.Peek() : null, Depth = open.Count };
                 var last = node.Start;
                 var empty = xml.IsEmptyElement;
                 if (xml.HasAttributes)
@@ -160,7 +174,7 @@ public sealed class XmlElementAdapter : IEvidenceAdapter
 
     // ── choosing the pieces ─────────────────────────────────────────────
 
-    private static List<Unit> Units(XNode root, string[] lines)
+    private List<Unit> Units(XNode root, string[] lines)
     {
         var units = new List<Unit>();
         var prefix = new long[lines.Length + 1];
@@ -170,7 +184,7 @@ public sealed class XmlElementAdapter : IEvidenceAdapter
         void Visit(XNode n)
         {
             var size = n.End - n.Start + 1;
-            if (n.Children.Count == 0 || (size <= TargetLines && CharsOf(n.Start, n.End) <= MaxUnitChars))
+            if (n.Children.Count == 0 || (!_alwaysOpen(n.Name, n.Depth) && size <= TargetLines && CharsOf(n.Start, n.End) <= MaxUnitChars))
             {
                 units.Add(new Unit(n, UnitKind.Whole, n.Start, n.End));
                 return;
@@ -194,7 +208,7 @@ public sealed class XmlElementAdapter : IEvidenceAdapter
 
             foreach (var c in parent.Children)
             {
-                var tiny = c.Children.Count == 0 && c.End - c.Start + 1 <= TinyLeafLines;
+                var tiny = c.Children.Count == 0 && c.End - c.Start + 1 <= TinyLeafLines && !_keepApart(c.Name);
                 if (!tiny)
                 {
                     Flush();

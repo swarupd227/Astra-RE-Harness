@@ -18,10 +18,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The unit tests exercise internal readers (script commands, SQL patterns) directly. -->
+    <InternalsVisibleTo Include="Astra.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- EF Core + Postgres -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+
+    <!-- T-SQL parsing for database-script evidence (tables, procedures, what reads and writes what) -->
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.117.0" />
 
     <!-- MediatR + FluentValidation -->
     <PackageReference Include="MediatR" Version="12.4.1" />

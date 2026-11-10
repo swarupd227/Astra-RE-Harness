@@ -292,6 +292,8 @@ public sealed class ArtefactAttachService
 
         _db.SourceFiles.Remove(row);
         await _db.SaveChangesAsync(ct);
+        // The file's chunks and facts went with it; the entity graph must not still describe it.
+        await _evidence.RefreshGraphAsync(versionId.Value, ct);
         await _audit.LogAsync(
             "corpus.artefact.removed", "corpus", corpusId, actor,
             new { versionId, path = normalised, kind = row.Kind }, http, ct);

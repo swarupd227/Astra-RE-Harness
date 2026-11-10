@@ -409,6 +409,7 @@ builder.Services.AddSingleton<IFortranParserClient, FortranParserClient>();
 
 // ─── Ingest pipeline (Phase C.1) ──────────────────────────────────────
 builder.Services.AddScoped<IngestPipeline>();
+builder.Services.AddScoped<Astra.Api.Evidence.GraphService>();
 builder.Services.AddScoped<Astra.Api.Evidence.EvidenceService>();
 builder.Services.AddScoped<Astra.Api.Artefacts.ArtefactAttachService>();
 
@@ -573,6 +574,49 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_evidence_chunks_version_kind
               ON evidence_chunks (source_version_id, kind);
             ALTER TABLE evidence_chunks ADD COLUMN IF NOT EXISTS ordinal integer NOT NULL DEFAULT 0;
+            """);
+
+        // WS7 K4 — what each artefact file states (tables, jobs, packages …) and the entity graph
+        // merged from it. All of it belongs to a source version and goes with it (ON DELETE CASCADE);
+        // the graph is derived, so it is rebuilt from file_facts and never patched.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS file_facts (
+                source_file_id     uuid         PRIMARY KEY REFERENCES source_files(id) ON DELETE CASCADE,
+                source_version_id  uuid         NOT NULL REFERENCES source_versions(id) ON DELETE CASCADE,
+                facts_json         jsonb        NOT NULL,
+                built_at           timestamptz  NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS ix_file_facts_version ON file_facts (source_version_id);
+
+            CREATE TABLE IF NOT EXISTS graph_entities (
+                id                 uuid         PRIMARY KEY,
+                source_version_id  uuid         NOT NULL REFERENCES source_versions(id) ON DELETE CASCADE,
+                type               varchar(32)  NOT NULL,
+                key                text         NOT NULL,
+                name               text         NOT NULL,
+                declared           boolean      NOT NULL,
+                attrs_json         jsonb        NULL,
+                evidence_json      jsonb        NULL,
+                paths_json         jsonb        NULL,
+                created_at         timestamptz  NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_graph_entities_version_type_key
+              ON graph_entities (source_version_id, type, key);
+
+            CREATE TABLE IF NOT EXISTS graph_links (
+                id                 uuid         PRIMARY KEY,
+                source_version_id  uuid         NOT NULL REFERENCES source_versions(id) ON DELETE CASCADE,
+                relation           varchar(32)  NOT NULL,
+                from_entity_id     uuid         NOT NULL REFERENCES graph_entities(id) ON DELETE CASCADE,
+                to_entity_id       uuid         NOT NULL REFERENCES graph_entities(id) ON DELETE CASCADE,
+                confidence         varchar(16)  NOT NULL,
+                origin             varchar(16)  NOT NULL,
+                attrs_json         jsonb        NULL,
+                evidence_json      jsonb        NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_graph_links_edge
+              ON graph_links (source_version_id, relation, from_entity_id, to_entity_id);
+            CREATE INDEX IF NOT EXISTS ix_graph_links_to ON graph_links (to_entity_id);
             """);
 
         // Phase 6.0 — Golden dataset tables. Additive create-if-not-exists
@@ -1244,6 +1288,7 @@ app.MapMigrationPlanEndpoints();
 app.MapFlowBoardEndpoints();
 app.MapArtefactEndpoints();
 app.MapEvidenceChunkEndpoints();
+app.MapEntityGraphEndpoints();
 app.MapProjectSettingsEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();

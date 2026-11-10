@@ -13,6 +13,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<SourceFile> SourceFiles => Set<SourceFile>();
     public DbSet<Subroutine> Subroutines => Set<Subroutine>();
     public DbSet<EvidenceChunk> EvidenceChunks => Set<EvidenceChunk>();
+    public DbSet<FileFactsRow> FileFacts => Set<FileFactsRow>();
+    public DbSet<GraphEntity> GraphEntities => Set<GraphEntity>();
+    public DbSet<GraphLink> GraphLinks => Set<GraphLink>();
     public DbSet<Spec> Specs => Set<Spec>();
     public DbSet<LlmCall> LlmCalls => Set<LlmCall>();
     public DbSet<ClaimReview> ClaimReviews => Set<ClaimReview>();
@@ -149,6 +152,64 @@ public sealed class AppDbContext : DbContext
             b.HasIndex(x => new { x.SourceVersionId, x.ShortId }).IsUnique();
             b.HasIndex(x => new { x.SourceFileId, x.Locator }).IsUnique();
             b.HasIndex(x => new { x.SourceVersionId, x.Kind });
+        });
+
+        // What each artefact file states (tables, jobs …) and the entity graph merged from it.
+        modelBuilder.Entity<FileFactsRow>(b =>
+        {
+            b.ToTable("file_facts");
+            b.HasKey(x => x.SourceFileId);
+            b.Property(x => x.SourceFileId).HasColumnName("source_file_id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.FactsJson).HasColumnName("facts_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.BuiltAt).HasColumnName("built_at");
+            b.HasOne(x => x.SourceFile).WithMany()
+             .HasForeignKey(x => x.SourceFileId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<SourceVersion>().WithMany()
+             .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => x.SourceVersionId);
+        });
+
+        modelBuilder.Entity<GraphEntity>(b =>
+        {
+            b.ToTable("graph_entities");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.Type).HasColumnName("type").HasMaxLength(32).IsRequired();
+            b.Property(x => x.Key).HasColumnName("key").IsRequired();
+            b.Property(x => x.Name).HasColumnName("name").IsRequired();
+            b.Property(x => x.Declared).HasColumnName("declared");
+            b.Property(x => x.AttrsJson).HasColumnName("attrs_json").HasColumnType("jsonb");
+            b.Property(x => x.EvidenceJson).HasColumnName("evidence_json").HasColumnType("jsonb");
+            b.Property(x => x.PathsJson).HasColumnName("paths_json").HasColumnType("jsonb");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasOne<SourceVersion>().WithMany()
+             .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.SourceVersionId, x.Type, x.Key }).IsUnique();
+        });
+
+        modelBuilder.Entity<GraphLink>(b =>
+        {
+            b.ToTable("graph_links");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.Relation).HasColumnName("relation").HasMaxLength(32).IsRequired();
+            b.Property(x => x.FromEntityId).HasColumnName("from_entity_id");
+            b.Property(x => x.ToEntityId).HasColumnName("to_entity_id");
+            b.Property(x => x.Confidence).HasColumnName("confidence").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Origin).HasColumnName("origin").HasMaxLength(16).IsRequired();
+            b.Property(x => x.AttrsJson).HasColumnName("attrs_json").HasColumnType("jsonb");
+            b.Property(x => x.EvidenceJson).HasColumnName("evidence_json").HasColumnType("jsonb");
+            b.HasOne<SourceVersion>().WithMany()
+             .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.From).WithMany()
+             .HasForeignKey(x => x.FromEntityId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.To).WithMany()
+             .HasForeignKey(x => x.ToEntityId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.SourceVersionId, x.Relation, x.FromEntityId, x.ToEntityId }).IsUnique();
+            b.HasIndex(x => x.ToEntityId);
         });
 
         modelBuilder.Entity<Subroutine>(b =>

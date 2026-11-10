@@ -82,12 +82,14 @@ public sealed class EvidenceService
 
     private readonly AppDbContext _db;
     private readonly IBlobClient _blob;
+    private readonly GraphService _graph;
     private readonly ILogger<EvidenceService> _logger;
 
-    public EvidenceService(AppDbContext db, IBlobClient blob, ILogger<EvidenceService> logger)
+    public EvidenceService(AppDbContext db, IBlobClient blob, GraphService graph, ILogger<EvidenceService> logger)
     {
         _db = db;
         _blob = blob;
+        _graph = graph;
         _logger = logger;
     }
 
@@ -184,18 +186,41 @@ public sealed class EvidenceService
         var counts = new Dictionary<Guid, int>();
         var notes = new Dictionary<Guid, IReadOnlyList<string>>();
         var warnings = new List<string>();
+        var graphsToRebuild = new HashSet<Guid>();
 
         foreach (var item in items)
         {
             var file = item.File;
+            var hadFacts = await _db.FileFacts.AnyAsync(f => f.SourceFileId == file.Id, ct);
             await _db.EvidenceChunks.Where(c => c.SourceFileId == file.Id).ExecuteDeleteAsync(ct);
+            await _db.FileFacts.Where(f => f.SourceFileId == file.Id).ExecuteDeleteAsync(ct);
 
             var built = EvidenceAdapters.Build(new AdapterInput(file.RelativePath, file.Kind, item.Text, item.Bytes));
-            if (built.Warnings.Count > 0)
+
+            // What the file said about itself: one sentence on what was read, then anything that could not be.
+            var fileNotes = new List<string>();
+            if (built.Summary is not null) fileNotes.Add(built.Summary);
+            fileNotes.AddRange(built.Warnings);
+            if (fileNotes.Count > 0) notes[file.Id] = fileNotes;
+            warnings.AddRange(built.Warnings.Select(w => $"{file.RelativePath}: {w}"));
+
+            // A kind that produces facts always leaves a row, even an empty one: that is how a file read
+            // before its adapter could state facts is told from one that simply has none.
+            if (EvidenceAdapters.ProducesFacts(file.Kind))
             {
-                notes[file.Id] = built.Warnings;
-                warnings.AddRange(built.Warnings.Select(w => $"{file.RelativePath}: {w}"));
+                var row = new FileFactsRow
+                {
+                    SourceFileId = file.Id,
+                    SourceVersionId = file.SourceVersionId,
+                    FactsJson = (built.Facts ?? FactSet.Empty).ToJson(),
+                    BuiltAt = DateTimeOffset.UtcNow,
+                };
+                _db.FileFacts.Add(row);
+                await _db.SaveChangesAsync(ct);
+                _db.Entry(row).State = EntityState.Detached;
             }
+            if (EvidenceAdapters.ProducesFacts(file.Kind) || hadFacts) graphsToRebuild.Add(file.SourceVersionId);
+
             if (built.Chunks.Count == 0)
             {
                 counts[file.Id] = 0;
@@ -243,8 +268,14 @@ public sealed class EvidenceService
             await InsertAsync(rows, ct);
             counts[file.Id] = rows.Count;
         }
+
+        // The graph is derived from the facts, so it follows every change to them.
+        foreach (var versionId in graphsToRebuild) await _graph.RebuildAsync(versionId, ct);
         return new IndexOutcome(counts, notes, warnings);
     }
+
+    /// <summary>Rebuilds a version's entity graph from the facts its files hold (after a file is removed, or a re-sync).</summary>
+    public Task RefreshGraphAsync(Guid versionId, CancellationToken ct) => _graph.RebuildAsync(versionId, ct);
 
     /// <summary>
     /// Makes sure a version's evidence is built before it is read: its code (indexed at ingest, but
@@ -264,7 +295,10 @@ public sealed class EvidenceService
             // A recording has no chunks of its own, so it is never "missing" its index.
             var unindexed = await _db.SourceFiles
                 .Where(f => f.SourceVersionId == versionId && f.Kind != ArtefactKinds.Code && f.Kind != ArtefactKinds.Audio
-                            && !_db.EvidenceChunks.Any(c => c.SourceFileId == f.Id))
+                            && (!_db.EvidenceChunks.Any(c => c.SourceFileId == f.Id)
+                                // Read before its adapter could state facts (K4): read again.
+                                || ((f.Kind == ArtefactKinds.Sql || f.Kind == ArtefactKinds.Job || f.Kind == ArtefactKinds.Etl || f.Kind == ArtefactKinds.Config)
+                                    && !_db.FileFacts.Any(x => x.SourceFileId == f.Id))))
                 .ToListAsync(ct);
             var items = new List<ArtefactIndexItem>();
             foreach (var f in unindexed)

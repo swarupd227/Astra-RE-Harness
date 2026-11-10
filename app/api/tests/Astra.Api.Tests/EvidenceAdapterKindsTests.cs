@@ -29,9 +29,9 @@ public class AdapterRegistryTests
     [InlineData("document", ".docx", typeof(DocxAdapter))]
     [InlineData("document", ".md", typeof(MarkdownAdapter))]
     [InlineData("document", ".xml", typeof(XmlElementAdapter))]
-    [InlineData("job", ".xml", typeof(XmlElementAdapter))]
-    [InlineData("etl", ".dtsx", typeof(XmlElementAdapter))]
-    [InlineData("sql", ".sql", typeof(LineWindowAdapter))]
+    [InlineData("job", ".xml", typeof(JobAdapter))]
+    [InlineData("etl", ".dtsx", typeof(SsisAdapter))]
+    [InlineData("sql", ".sql", typeof(SqlAdapter))]
     public void EachKindGetsItsOwnAdapter(string kind, string ext, Type expected) =>
         Assert.IsType(expected, EvidenceAdapters.AdapterFor(kind, ext));
 
@@ -1022,7 +1022,7 @@ public class XmlElementAdapterTests
     [Fact]
     public void ASmallFile_IsOneChunk_LocatedByItsRoot()
     {
-        var r = Build(AdapterTestKit.Lines("<JOBP Name=\"TLR_EOD\">", "  <Tasks>", "    <Task Name=\"A\"/>", "    <Task Name=\"B\"/>", "  </Tasks>", "</JOBP>"), "job", "batch/uc4/TLR_EOD.xml");
+        var r = Build(AdapterTestKit.Lines("<JOBP Name=\"TLR_EOD\">", "  <Tasks>", "    <Task Name=\"A\"/>", "    <Task Name=\"B\"/>", "  </Tasks>", "</JOBP>"), "document", "src/web/Plan.xml");
         var chunk = Assert.Single(r.Chunks);
         Assert.Equal("xpath:/JOBP", chunk.Locator);
         Assert.Equal("JOBP TLR_EOD", chunk.Label);
