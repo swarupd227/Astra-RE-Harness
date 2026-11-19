@@ -34,15 +34,22 @@ What v0 handles
   declared in the same file (heuristic; over-counts on identifiers shared
   with variables — matches the Delphi v0 behaviour).
 
+- VBA as exported from Office documents (see `Office/OfficeVba` in the
+  API): ` _` line continuations are joined into logical lines; `:`
+  statement separators are split (so one-line routines and `x = 1: End
+  Sub` work); `'` inside a string is not a comment; `#If/#ElseIf/#Else/
+  #End If` and `#Const` are evaluated for 64-bit Windows Office (VBA7 and
+  Win64 true, Mac false, undefined constants false) and the skipped
+  branches are blanked, so a routine defined in both arms appears once
+  (with a warning saying which environment was assumed); a routine whose
+  End is missing or mismatched ends where the next routine begins.
+  Measured on 109 real modules (2,325 routines): every routine found,
+  no duplicates.
+
 What v0 does NOT handle (deferred to ANTLR4 per ADR-035)
 --------------------------------------------------------
-- `#If VBA7 Then` / `#If Win64 Then` preprocessor branches. v0 strips
-  comments and processes ALL branches; if the corpus uses conditional
-  compilation extensively, ANTLR4 (production path) is required.
 - `Declare Sub|Function NAME Lib "kernel32" ...` P/Invoke declarations
   (recorded as warnings, not as routines — they're external bindings).
-- Implicit line continuations (`_` at end of line). v0 doesn't physically
-  join continued lines; the production parser does.
 - Default-property access (`rs!FieldName`, `rs("col")`). v0 does not
   resolve these; the spec extractor surfaces them based on context.
 - Late-bound `Set obj = ...` against `Variant` — v0 records the Set; the
@@ -119,15 +126,199 @@ class FormLayout:
 # ──────────────────────────────────────────────────────────────────────
 
 
-_COMMENT_RE = re.compile(r"(?:'|\bREM\b).*$", re.IGNORECASE)
-
-
 def _strip_comments(line: str) -> str:
-    """Strip VB6 line comments (`'` or `REM `). Conservative — does not
-    parse strings, so a `'` inside a `"..."` string is treated as the
-    start of a comment. v0 accepts this over-strip; ANTLR4 (production)
-    handles it correctly."""
-    return _COMMENT_RE.sub("", line).rstrip()
+    """Strip a VB line comment (`'`, or `REM` at the start of a statement),
+    leaving `'` inside a `"..."` string alone (`""` is an escaped quote,
+    which toggles twice and so needs no special case)."""
+    in_str = False
+    for i, c in enumerate(line):
+        if c == '"':
+            in_str = not in_str
+        elif not in_str:
+            if c == "'":
+                return line[:i].rstrip()
+            if (c in "Rr" and line[i:i + 3].upper() == "REM"
+                    and (i + 3 == len(line) or line[i + 3] in " \t:")
+                    and (line[:i].strip() == "" or line[:i].rstrip().endswith(":"))):
+                return line[:i].rstrip()
+    return line.rstrip()
+
+
+def _statements(code: str) -> List[str]:
+    """Split a logical line on `:` statement separators outside strings
+    (`Dim x: x = 1`, `Property Get W(): W = 1: End Property`). A named
+    argument's `:=` is not a separator."""
+    parts: List[str] = []
+    cur: List[str] = []
+    in_str = False
+    for i, c in enumerate(code):
+        if c == '"':
+            in_str = not in_str
+        if c == ":" and not in_str and not code.startswith(":=", i):
+            parts.append("".join(cur))
+            cur = []
+            continue
+        cur.append(c)
+    parts.append("".join(cur))
+    return [p.strip() for p in parts if p.strip()]
+
+
+@dataclass(frozen=True)
+class _Logical:
+    """One logical line: physical lines joined across ` _` continuations,
+    comments stripped. `first`/`last` are 0-based physical line indexes."""
+    text: str
+    first: int
+    last: int
+
+
+_CONTINUATION_RE = re.compile(r"(?:^|\s)_$")
+
+
+def _logical_lines(lines: List[str], start: int = 0) -> List[_Logical]:
+    out: List[_Logical] = []
+    i = start
+    while i < len(lines):
+        first = i
+        parts: List[str] = []
+        while True:
+            code = _strip_comments(lines[i])
+            if _CONTINUATION_RE.search(code) and i + 1 < len(lines):
+                parts.append(code[:-1].strip())
+                i += 1
+                continue
+            parts.append(code.strip())
+            break
+        out.append(_Logical(" ".join(p for p in parts if p), first, i))
+        i += 1
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Conditional compilation — #If / #ElseIf / #Else / #End If / #Const
+# ──────────────────────────────────────────────────────────────────────
+
+# The environment the branches are evaluated for: 64-bit Windows Office,
+# which is where a migrated workbook was last running. A constant the code
+# never defines is Empty in VBA, i.e. False.
+_TARGET_CONSTANTS = {"vba7": True, "vba6": True, "win64": True, "win32": True, "mac": False, "win16": False}
+_DIRECTIVE_RE = re.compile(r"^\s*#\s*(If|ElseIf|Else|End\s*If|Const)\b(.*)$", re.IGNORECASE)
+_CC_TOKEN_RE = re.compile(r"\s*(<>|<=|>=|[()=<>]|&H[0-9A-Fa-f]+|\d+|\w+)")
+
+
+def _cc_eval(expr: str, consts: Dict[str, object], unknown: set) -> object:
+    """Evaluate a compiler-constant expression: True/False, numbers,
+    constants, Not/And/Or/Xor, comparisons and parentheses."""
+    expr = re.sub(r"\bThen\s*$", "", expr.strip(), flags=re.IGNORECASE)
+    toks = [m.group(1) for m in _CC_TOKEN_RE.finditer(expr)]
+    pos = 0
+
+    def peek() -> str:
+        return toks[pos].lower() if pos < len(toks) else ""
+
+    def take() -> str:
+        nonlocal pos
+        pos += 1
+        return toks[pos - 1]
+
+    def atom() -> object:
+        t = take() if pos < len(toks) else "0"
+        lt = t.lower()
+        if lt == "(":
+            v = disj()
+            if peek() == ")":
+                take()
+            return v
+        if lt == "not":
+            return not bool(atom())
+        if lt in ("true", "false"):
+            return lt == "true"
+        if lt.startswith("&h"):
+            return int(lt[2:], 16)
+        if t.isdigit():
+            return int(t)
+        if lt in consts:
+            return consts[lt]
+        unknown.add(t)
+        return False
+
+    def comparison() -> object:
+        v = atom()
+        while peek() in ("=", "<>", "<", ">", "<=", ">="):
+            op = take()
+            r = atom()
+            v = {"=": v == r, "<>": v != r, "<": v < r, ">": v > r, "<=": v <= r, ">=": v >= r}[op]  # type: ignore[operator]
+        return v
+
+    def conj() -> object:
+        v = comparison()
+        while peek() == "and":
+            take()
+            r = comparison()
+            v = bool(v) and bool(r)
+        return v
+
+    def disj() -> object:
+        v = conj()
+        while peek() in ("or", "xor"):
+            op = take().lower()
+            r = conj()
+            v = (bool(v) or bool(r)) if op == "or" else (bool(v) != bool(r))
+        return v
+
+    return disj()
+
+
+def _apply_conditional_compilation(lines: List[str], warnings: List[str]) -> List[str]:
+    """Blank out the lines of every branch the compiler would skip (and the
+    directives themselves), keeping line numbers. Without this, both arms of
+    `#If VBA7 Then ... #Else ... #End If` are parsed and a routine defined in
+    each comes out twice."""
+    consts: Dict[str, object] = dict(_TARGET_CONSTANTS)
+    unknown: set = set()
+    stack: List[List[bool]] = []      # [parent_active, branch_taken]
+    active = True
+    seen = False
+    out: List[str] = []
+    for raw in lines:
+        m = _DIRECTIVE_RE.match(_strip_comments(raw))
+        if not m:
+            out.append(raw if active else "")
+            continue
+        seen = True
+        out.append("")
+        kw = re.sub(r"\s+", "", m.group(1)).lower()
+        rest = m.group(2)
+        if kw == "const":
+            if active and "=" in rest:
+                name, value = rest.split("=", 1)
+                consts[name.strip().lower()] = _cc_eval(value, consts, unknown)
+        elif kw == "if":
+            cond = bool(_cc_eval(rest, consts, unknown))
+            stack.append([active, cond])
+            active = active and cond
+        elif kw == "elseif" and stack:
+            parent, taken = stack[-1]
+            if taken:
+                active = False
+            else:
+                cond = bool(_cc_eval(rest, consts, unknown))
+                stack[-1][1] = cond
+                active = parent and cond
+        elif kw == "else" and stack:
+            parent, taken = stack[-1]
+            active = parent and not taken
+            stack[-1][1] = True
+        elif kw == "endif" and stack:
+            active = stack.pop()[0]
+    if seen:
+        warnings.append("vb6: conditional compilation evaluated for 64-bit Windows Office "
+                        "(VBA7, Win64 true; Mac false); the other branches were skipped")
+    if unknown:
+        warnings.append("vb6: undefined compiler constant(s) treated as False: " + ", ".join(sorted(unknown)))
+    if stack:
+        warnings.append("vb6: #If without a matching #End If")
+    return out
 
 
 def _normalise(content: str) -> str:
@@ -228,20 +419,23 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
     # Collect module-level attributes (Attribute VB_Name = "Foo")
     module_name = _extract_module_name(lines[code_block_start:])
 
-    # Walk the code block for routine declarations.
+    # Walk the code block for routine declarations, one logical line at a
+    # time (continuations joined, skipped #If branches blanked).
+    code_lines = _apply_conditional_compilation(lines, warnings)
+    logical = _logical_lines(code_lines, code_block_start)
     subroutines: List[SubroutineSummary] = []
     declare_routines: List[str] = []      # P/Invoke declarations — flagged as warnings
-    i = code_block_start
-    while i < len(lines):
-        raw = lines[i]
-        stripped = _strip_comments(raw)
+    j = 0
+    while j < len(logical):
+        stmts = _statements(logical[j].text)
+        stripped = stmts[0] if stmts else ""
 
-        # P/Invoke declarations — single-line, no body to walk into.
+        # P/Invoke declarations — no body to walk into.
         declare_match = _DECLARE_RE.match(stripped)
         if declare_match:
             kind, name, lib = declare_match.groups()
             declare_routines.append(f"{name} (Lib \"{lib}\")")
-            i += 1
+            j += 1
             continue
 
         sub_match = _SUB_DECL_RE.match(stripped)
@@ -249,24 +443,31 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
         prop_match = _PROPERTY_DECL_RE.match(stripped) if not sub_match and not func_match else None
 
         if sub_match or func_match or prop_match:
-            line_start = i + 1     # 1-based
+            line_start = logical[j].first + 1     # 1-based physical line of the declaration
+            signature = stripped
             if sub_match:
                 name = sub_match.group(1)
-                signature = _trim_signature(raw)
                 end_re = _END_SUB_RE
             elif func_match:
                 name = func_match.group(1)
-                signature = _trim_signature(raw)
                 end_re = _END_FUNCTION_RE
             else:
                 accessor = prop_match.group(1)
                 base_name = prop_match.group(2)
                 name = f"{base_name} ({accessor})"
-                signature = _trim_signature(raw)
                 end_re = _END_PROPERTY_RE
 
-            # Walk forward until the matching End block.
-            line_end, body = _consume_routine_body(lines, i + 1, end_re)
+            # A one-line routine ends on its own line (`...: End Property`);
+            # otherwise walk forward to the matching End statement.
+            rest = stmts[1:]
+            end_at = next((k for k, s in enumerate(rest) if end_re.match(s)), None)
+            if end_at is not None:
+                line_end, body, next_j = logical[j].last + 1, rest[:end_at], j + 1
+            else:
+                line_end, body, next_j, closed = _consume_routine_body(logical, j + 1, end_re, rest)
+                if not closed:
+                    warnings.append(f"vb6: routine '{name}' (line {line_start}) has no matching End statement; "
+                                    f"it was ended where the next routine begins (or at the end of the file)")
             calls = _collect_calls(body)
             # Emit a warning for routines that use On Error Resume Next.
             for body_line in body:
@@ -292,9 +493,9 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
                 common_block_refs=(module_name,) if module_name else tuple(),
                 called_subroutines=tuple(sorted(calls)),
             ))
-            i = line_end
+            j = next_j
             continue
-        i += 1
+        j += 1
 
     if declare_routines:
         warnings.append(
@@ -311,29 +512,31 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
     )
 
 
-def _trim_signature(raw: str) -> str:
-    """Return the declaration line as written, stripped of leading whitespace
-    and trailing comments. Preserves the full Sub/Function/Property prefix
-    for display in the routine catalogue."""
-    return _strip_comments(raw).strip()
-
-
 def _consume_routine_body(
-    lines: List[str], start: int, end_re: re.Pattern
-) -> Tuple[int, List[str]]:
-    """Walk forward from `start` (0-based) until we hit the matching
-    End block. Returns (1-based line_end, body_lines)."""
-    body: List[str] = []
-    i = start
-    while i < len(lines):
-        raw = lines[i]
-        if end_re.match(_strip_comments(raw)):
-            return i + 1, body  # 1-based, inclusive of the End line
-        body.append(raw)
-        i += 1
-    # Unterminated routine — return EOF as the end. Production parser will
-    # surface this as a syntax warning; v0 silently runs to EOF.
-    return len(lines), body
+    logical: List[_Logical], start: int, end_re: re.Pattern, carried: List[str]
+) -> Tuple[int, List[str], int, bool]:
+    """Walk forward from logical line `start` until a statement matches the
+    End statement (it may follow a colon: `x = 1: End Sub`). Returns the
+    1-based physical line of the End, the body statements, the index of the
+    next logical line, and whether a matching End was found."""
+    body: List[str] = list(carried)
+    j = start
+    while j < len(logical):
+        stmts = _statements(logical[j].text)
+        # Routines do not nest: a new declaration means this one's End was
+        # missing or mismatched (`Property Get … End Function`), so it ends
+        # on the line before rather than swallowing the routines after it.
+        if stmts and j > start and (_SUB_DECL_RE.match(stmts[0]) or _FUNCTION_DECL_RE.match(stmts[0])
+                                    or _PROPERTY_DECL_RE.match(stmts[0])):
+            return logical[j - 1].last + 1, body, j, False
+        for s in stmts:
+            if end_re.match(s):
+                return logical[j].last + 1, body, j + 1, True
+            body.append(s)
+        j += 1
+    # Unterminated routine — run to EOF, as before.
+    last = logical[-1].last + 1 if logical else 0
+    return last, body, len(logical), False
 
 
 def _collect_calls(body: List[str]) -> List[str]:

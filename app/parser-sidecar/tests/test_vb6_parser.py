@@ -296,3 +296,122 @@ def test_multiple_routines_track_line_ranges():
     assert first.line_end < second.line_start
     # Ranges should be non-overlapping.
     assert first.line_end < second.line_start
+
+
+# ──────────────────────────────────────────────────────────────────────
+# VBA as found in Office documents (patterns taken from real workbooks)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_declaration_split_across_continuation_lines_is_found():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "WebHelpers"
+        Public Function UrlEncode(Text As Variant, _
+            Optional SpaceAsPlus As Boolean = False, _
+            Optional EncodeUnsafe As Boolean = True) As String
+            UrlEncode = Text
+        End Function
+    """).strip()
+    out = parse_source("WebHelpers.bas", src)
+    assert [s.name for s in out.subroutines] == ["UrlEncode"]
+    sub = out.subroutines[0]
+    assert sub.line_start == 2 and sub.line_end == 6
+    # The signature is the whole logical declaration, not its first line.
+    assert "EncodeUnsafe As Boolean = True) As String" in sub.signature
+
+
+def test_one_line_routines_do_not_swallow_the_next_routine():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "stdImage"
+        Public Property Get Width() As Long: Width = This.W: End Property
+        Public Property Get Height() As Long: Height = This.H: End Property
+        Public Sub Draw()
+            Call Paint(1): End Sub
+    """).strip()
+    out = parse_source("stdImage.cls", src)
+    assert [s.name for s in out.subroutines] == ["Width (Get)", "Height (Get)", "Draw"]
+    assert [(s.line_start, s.line_end) for s in out.subroutines] == [(2, 2), (3, 3), (4, 5)]
+    assert "Paint" in out.subroutines[2].called_subroutines
+
+
+def test_conditional_compilation_keeps_one_branch_for_64_bit_windows_office():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "Clip"
+        #If VBA7 Then
+            Private Declare PtrSafe Function OpenClipboard Lib "user32" (ByVal hwnd As LongPtr) As Long
+            Public Function Handle() As LongPtr
+                Handle = 1
+            End Function
+        #ElseIf Mac Then
+            Public Function Handle() As Long
+                Handle = 2
+            End Function
+        #Else
+            Private Declare Function OpenClipboard Lib "user32" (ByVal hwnd As Long) As Long
+            Public Function Handle() As Long
+                Handle = 3
+            End Function
+        #End If
+    """).strip()
+    out = parse_source("Clip.cls", src)
+    assert [s.name for s in out.subroutines] == ["Handle"]
+    assert out.subroutines[0].line_start == 4     # the VBA7 branch
+    assert any("64-bit Windows Office" in w for w in out.warnings)
+    assert any("OpenClipboard" in w and "1 Win32" in w for w in out.warnings)
+
+
+def test_const_and_unknown_constants_follow_vba_rules():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "M"
+        #Const DEBUG_MODE = 1
+        #If DEBUG_MODE And Not Mac Then
+        Sub A()
+        End Sub
+        #End If
+        #If NEVER_DEFINED Then
+        Sub B()
+        End Sub
+        #End If
+    """).strip()
+    out = parse_source("M.bas", src)
+    assert [s.name for s in out.subroutines] == ["A"]
+    assert any("NEVER_DEFINED" in w for w in out.warnings)
+
+
+def test_a_quote_inside_a_string_is_not_a_comment():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "M"
+        Sub Greet()
+            MsgBox "it's done": End Sub
+        Sub Next1()
+        End Sub
+    """).strip()
+    out = parse_source("M.bas", src)
+    assert [(s.name, s.line_end) for s in out.subroutines] == [("Greet", 3), ("Next1", 5)]
+
+
+def test_mismatched_end_ends_the_routine_where_the_next_begins():
+    # Seen in the wild: a Property Get closed with End Function.
+    src = textwrap.dedent("""
+        Attribute VB_Name = "P"
+        Public Property Get Measurement() As Double
+            Measurement = 1
+        End Function
+        Public Sub AddMeasurement()
+        End Sub
+    """).strip()
+    out = parse_source("P.cls", src)
+    assert [s.name for s in out.subroutines] == ["Measurement (Get)", "AddMeasurement"]
+    assert out.subroutines[0].line_end == 4
+    assert any("no matching End" in w and "Measurement (Get)" in w for w in out.warnings)
+
+
+def test_named_argument_colon_equals_is_not_a_statement_separator():
+    src = textwrap.dedent("""
+        Attribute VB_Name = "M"
+        Sub Save()
+            Call Persist(Path:="out.xlsx", Overwrite:=True)
+        End Sub
+    """).strip()
+    out = parse_source("M.bas", src)
+    assert out.subroutines[0].called_subroutines == ("Persist",)
