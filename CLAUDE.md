@@ -46,7 +46,10 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   endpoints and queues it uses and the SQL it names; a fact points at lines and is shown by the routine containing them
   (or a chunk of just those lines). `LinkingRules` then joins files deterministically (setting ↔ address ↔ endpoint;
   tickets/transcripts/documents that name a thing are listed on it as `mentions`, kept apart from structured
-  evidence) and `/inventory` counts what was found beside `expectedCounts` and names the gaps. Anything that
+  evidence) and `/inventory` counts what was found beside `expectedCounts` and names the gaps. Office documents with
+  macros (`.xlsm`, `.xls`, `.docm` …) are read statically (`Office/`): at intake their VBA becomes source files under
+  the document (`Book.xlsm/Module1.bas`), and a spreadsheet is also attached as the `workbook` kind (sheets, named
+  inputs, input rules, formulas, controls → the macros they run). Anything that
   cites uses `CitationChip`; secrets never enter a chunk or a fact. Formats, locators and how to add an adapter:
   **`docs/03_Evidence/artefact-adapters.md`**. jsonb does not keep object key order — store anything order-sensitive
   as an array.

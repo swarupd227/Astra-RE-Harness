@@ -368,6 +368,12 @@ public static class WorkbookSurface
                         text.Length > 0 ? text : null, macro, module, routine, found, null, null, Array.Empty<string>()));
                 }
             }
+            // Two controls can share a name (copied buttons keep it); a control is cited by its name, so keep them apart.
+            foreach (var g in list.Select((c, i) => (c, i)).GroupBy(x => x.c.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+            {
+                var n = 1;
+                foreach (var (c, i) in g.Skip(1)) list[i] = c with { Name = $"{c.Name} ({++n})" };
+            }
             return list;
         }
 
@@ -397,7 +403,8 @@ public static class WorkbookSurface
             {
                 var attrs = AttrRe.Matches(m.Groups["attrs"].Value).ToDictionary(a => a.Groups["k"].Value, a => a.Groups["v"].Value, StringComparer.OrdinalIgnoreCase);
                 var body = m.Groups["body"].Value;
-                var spid = attrs.GetValueOrDefault("o:spid");
+                // Excel writes the shape id as o:spid, or (older files) only as the id itself.
+                var spid = attrs.GetValueOrDefault("o:spid") ?? attrs.GetValueOrDefault("id");
                 var shapeId = spid is not null && spid.StartsWith("_x0000_s", StringComparison.Ordinal) ? spid[8..] : null;
                 var objectType = Regex.Match(body, @"<x:ClientData\s+ObjectType=""(\w+)""").Groups[1].Value;
                 string? Tag(string t) { var v = Regex.Match(body, $@"<x:{t}>(.*?)</x:{t}>", RegexOptions.Singleline).Groups[1].Value.Trim(); return v.Length > 0 ? System.Net.WebUtility.HtmlDecode(v) : null; }
@@ -520,7 +527,10 @@ public static class WorkbookSurface
             {
                 var lr = Rels(rel.Target);
                 var target = lr.Values.FirstOrDefault(r => r.External)?.RawTarget;
-                list.Add(new WorkbookExternal("workbook", Path.GetFileName(rel.Target), target is null ? null : Redact(Uri.UnescapeDataString(target))));
+                var shown = target is null ? null : Redact(Uri.UnescapeDataString(target));
+                // Named by the workbook it points at; the package part (externalLink1.xml) means nothing to a reader.
+                var linkName = shown is null ? Path.GetFileName(rel.Target) : Path.GetFileName(shown.Replace('\\', '/').TrimEnd('/'));
+                list.Add(new WorkbookExternal("workbook", string.IsNullOrEmpty(linkName) ? Path.GetFileName(rel.Target) : linkName, shown));
             }
             if (Load("xl/connections.xml")?.Root is { } conns)
                 foreach (var c in conns.Elements(S + "connection"))

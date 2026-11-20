@@ -25,6 +25,7 @@ public static class EvidenceIds
         "ticket" => "TKT",
         "document" => "DOC",
         "audio" => "AUD",
+        "workbook" => "XLS",
         _ => "EVD",
     };
 

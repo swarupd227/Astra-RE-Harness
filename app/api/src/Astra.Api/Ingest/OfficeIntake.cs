@@ -28,6 +28,9 @@ public static class OfficeIntake
     {
         var result = new List<IngestPipeline.IncomingFile>();
         var name = Path.GetFileName(relativePath);
+        // A spreadsheet is kept whole as well, so its sheets, inputs and buttons can be cited.
+        if (Artefacts.ArtefactKinds.WorkbookExtensions.Contains(Path.GetExtension(relativePath).ToLowerInvariant()))
+            tally.Keep(new Artefacts.IncomingArtefact(relativePath, bytes, Artefacts.ArtefactKinds.Workbook));
         var read = OfficeVba.Read(bytes, name);
         foreach (var w in read.Warnings) tally.Note(w);
         if (!read.HasVba)

@@ -18,6 +18,15 @@ public sealed class IntakeTally
 
     private readonly Dictionary<string, List<string>> _byReason = new(StringComparer.Ordinal);
     private readonly List<string> _notes = new();
+    private readonly List<Artefacts.IncomingArtefact> _documents = new();
+
+    /// <summary>
+    /// Documents intake read code out of that are also worth keeping as evidence (a workbook's sheets,
+    /// names and buttons). The ingest run attaches them once the project exists.
+    /// </summary>
+    public IReadOnlyList<Artefacts.IncomingArtefact> Documents => _documents;
+
+    public void Keep(Artefacts.IncomingArtefact document) => _documents.Add(document);
 
     public int Total => _byReason.Values.Sum(l => l.Count);
 

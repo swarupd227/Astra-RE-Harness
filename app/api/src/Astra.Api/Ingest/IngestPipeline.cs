@@ -120,7 +120,9 @@ public sealed class IngestPipeline
         Guid? CorpusId = null,
         // What the intake left out (unsupported or oversize files in an archive or
         // repository), reported first among the result's warnings.
-        IReadOnlyList<string>? IntakeNotes = null);
+        IReadOnlyList<string>? IntakeNotes = null,
+        // Documents to attach as evidence once the version exists (workbooks the code came out of).
+        IReadOnlyList<Artefacts.IncomingArtefact>? Documents = null);
 
     /// <summary>One progress tick: a stage name, a human line, and done/total
     /// where the stage counts something (files uploaded, files parsed).</summary>
@@ -153,7 +155,8 @@ public sealed class IngestPipeline
         string? SourceRoot,
         string? GitCommitHash,
         IReadOnlyList<IncomingFile> Files,
-        IReadOnlyList<string>? IntakeNotes = null);
+        IReadOnlyList<string>? IntakeNotes = null,
+        IReadOnlyList<Artefacts.IncomingArtefact>? Documents = null);
 
     public sealed record ReingestResult(
         Guid CorpusId,

@@ -59,6 +59,7 @@ public static class EvidenceAdapters
     private static readonly SqlAdapter Sql = new();
     private static readonly JobAdapter Job = new();
     private static readonly SsisAdapter Ssis = new();
+    private static readonly WorkbookAdapter Workbook = new();
 
     /// <summary>
     /// The adapter for a file, chosen by its kind and extension. Null means the kind yields no chunks of
@@ -77,12 +78,16 @@ public static class EvidenceAdapters
         (ArtefactKinds.Job, ".xml") => Job,
         (ArtefactKinds.Etl, ".dtsx" or ".xml") => Ssis,
         (ArtefactKinds.Document, ".xml") => Xml,
+        (ArtefactKinds.Workbook, _) => Workbook,
         _ => LineWindowAdapter.Instance,
     };
 
     /// <summary>True when the file has to be read as bytes to be indexed (a Word file is a zip).</summary>
     public static bool NeedsBytes(string path) =>
-        string.Equals(System.IO.Path.GetExtension(path), ".docx", StringComparison.OrdinalIgnoreCase);
+        Artefacts.ArtefactContentTypes.IsBinary(System.IO.Path.GetExtension(path)) && !IsAudio(path);
+
+    private static bool IsAudio(string path) =>
+        System.IO.Path.GetExtension(path).ToLowerInvariant() is ".mp3" or ".wav" or ".m4a";
 
     /// <summary>True when indexing this file can yield chunks at all.</summary>
     public static bool Indexes(string kind) => kind != ArtefactKinds.Audio;
@@ -93,7 +98,7 @@ public static class EvidenceAdapters
     /// from one that simply has none, and is indexed again.
     /// </summary>
     public static bool ProducesFacts(string kind) =>
-        kind is ArtefactKinds.Sql or ArtefactKinds.Job or ArtefactKinds.Etl or ArtefactKinds.Config;
+        kind is ArtefactKinds.Sql or ArtefactKinds.Job or ArtefactKinds.Etl or ArtefactKinds.Config or ArtefactKinds.Workbook;
 
     /// <summary>Kinds that are what people said or wrote: the entity graph lists them as mentions of the things they name.</summary>
     public static bool IsNarrative(string kind) =>

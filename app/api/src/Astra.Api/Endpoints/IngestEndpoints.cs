@@ -142,7 +142,7 @@ public static class IngestEndpoints
                 Branch: null,
                 SourceRoot: null,
                 Files: collected,
-                IntakeNotes: tally.Notes()), actor.Persona, actor.DisplayName);
+                IntakeNotes: tally.Notes(), Documents: tally.Documents), actor.Persona, actor.DisplayName);
             return await AwaitIngestRunAsync(runs, runId, r => Results.Ok(IngestBody((IngestPipeline.IngestResult)r)), ct);
         })
         .DisableAntiforgery()
@@ -198,7 +198,7 @@ public static class IngestEndpoints
                     Branch: body.Branch,
                     SourceRoot: rootRel,
                     Files: files,
-                    IntakeNotes: tally.Notes()), actor.Persona, actor.DisplayName);
+                    IntakeNotes: tally.Notes(), Documents: tally.Documents), actor.Persona, actor.DisplayName);
 
                 return await AwaitIngestRunAsync(runs, runId, r =>
                 {
@@ -304,7 +304,7 @@ public static class IngestEndpoints
                 CorpusId: corpusId,
                 SourceUrl: null, Branch: null, SourceRoot: null, GitCommitHash: null,
                 Files: collected.Files,
-                IntakeNotes: collected.Notes), ct);
+                IntakeNotes: collected.Notes, Documents: collected.Documents), ct);
         })
         .DisableAntiforgery()
         .WithName("reingestUpload");
@@ -348,7 +348,7 @@ public static class IngestEndpoints
                     SourceRoot: rootRel,
                     GitCommitHash: commitHash,
                     Files: files,
-                    IntakeNotes: tally.Notes()), ct);
+                    IntakeNotes: tally.Notes(), Documents: tally.Documents), ct);
             }
             catch (LibGit2SharpException ex)
             {
@@ -455,7 +455,8 @@ public static class IngestEndpoints
         List<IngestPipeline.IncomingFile> Files,
         string? ErrorCode,
         string? Error,
-        IReadOnlyList<string>? Notes = null);
+        IReadOnlyList<string>? Notes = null,
+        IReadOnlyList<Artefacts.IncomingArtefact>? Documents = null);
 
     private static async Task<FormFiles> ReadFortranFilesFromForm(IFormCollection form)
     {
@@ -504,7 +505,7 @@ public static class IngestEndpoints
                     $"Unsupported file type: {file.FileName}. Use {Ingest.SourceLanguageDetector.SupportedLanguagesDescription()}, or a .zip archive.");
             }
         }
-        return new(collected, null, null, tally.Notes());
+        return new(collected, null, null, tally.Notes(), tally.Documents);
     }
 
     // ────────────────────────────────────────────────────────────────────

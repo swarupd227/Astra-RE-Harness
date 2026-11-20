@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Database,
   FileCode,
+  FileSpreadsheet,
   FileText,
   MessageSquareText,
   Settings2,
@@ -22,6 +23,7 @@ const ICONS: Record<string, LucideIcon> = {
   ticket: Ticket,
   document: FileText,
   audio: AudioLines,
+  workbook: FileSpreadsheet,
 };
 
 // The prefix of a short id says what kind of evidence it is (mirrors Evidence/EvidenceIds.cs).
@@ -35,6 +37,7 @@ const KIND_BY_PREFIX: Record<string, string> = {
   TKT: 'ticket',
   DOC: 'document',
   AUD: 'audio',
+  XLS: 'workbook',
 };
 
 export function kindOfShortId(shortId: string): string | undefined {

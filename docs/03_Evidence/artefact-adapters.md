@@ -30,6 +30,7 @@ column, and a cap on chunks per file.
 | Tickets (`.csv`) | a row | `row:INC-T-0412` | — |
 | Documents (`.docx`, `.md`) | a section | `h=Restart` | — |
 | Documents (`.xml`) | an element | `xpath:/Module/Screens/Screen[2]` | — |
+| Spreadsheets (`.xlsm`, `.xlsx`, `.xls` …) | a sheet, named range, input rule, control, event, link out; per sheet the formulas that reach other sheets | `sheet:Quote`, `control:Quote/cmdStart`, `input:Quote!B4` | workbook, sheets, named ranges, inputs, controls, macros, VBA modules, data connections; contains, reads, writes, runs, triggers, references |
 | Audio | none — it plays with a transcript | — | — |
 
 A short id (`SQL-3fa9c01e`) is a hash of the file path and the locator, so the same piece has the same id on
@@ -206,6 +207,32 @@ contains `Source`/`Destination` yields *reads*/*writes* of the connection's file
 touches; a **Script** task's source (`ProjectItem`) is searched for strings shaped like a setting
 (`"Reconciliation:VaultFilePath"`), giving a medium-confidence *configures* link from the config key to the package.
 Nothing is executed or evaluated.
+
+## Spreadsheets (and VBA in Office documents)
+
+Read statically from the package (`Office/WorkbookSurface`, `Office/OfficeVba`): nothing is calculated, no
+macro runs, no Office is involved. A workbook's pieces are an overview (`workbook`), each sheet (code name,
+visibility — a *very hidden* sheet is only reachable from code — used range, value and formula counts), each
+defined name with the text beside its cell as its label, each data-validation rule (list items or bounds, label,
+prompt; both the plain and the x14 extension forms), each control (form controls from the VML, ActiveX controls by
+their Forms 2.0 class id, shapes with a macro) with the macro it runs checked against the VBA project, each
+workbook/sheet event handler (`Workbook_Open`, `Worksheet_Change`, `Auto_Open`), what each VBA module names
+(sheets, names, cells) and each link out (other workbooks; data connections with credentials removed). Per sheet,
+the formulas that read another sheet, a name, a table (`mortality[age]`) or another workbook are one piece.
+
+Facts are named under the workbook's path (`Rating.xlsm/Quote`, `Rating.xlsm/Pricing.Quote`): the workbook
+`contains` sheets; a sheet `contains` its named ranges, inputs and controls and `reads` the sheets and names its
+formulas use (attr `formulas`: how many); a control `runs` its macro (high when the routine is in the project,
+medium when not) and `writes` its linked cell (to the named range on it where there is one); the workbook or a
+sheet `triggers` an event handler; a VBA module `contains` those macros and `references` (medium) what its code
+names; the workbook `reads` linked files and data connections. A macro carries `codePath` — the source file it is
+in once the workbook is uploaded as code.
+
+**At intake**, an Office document with macros given as source (an upload, a file in a zip, a re-sync, a cloned
+repository) becomes its modules, `Rating.xlsm/Pricing.bas|.cls|.frm`, parsed as VB; document modules with no code
+are left out and the result says what was read. A spreadsheet is also kept whole: once the version is parsed, the
+run switches the Spreadsheets kind on and attaches it, so code, evidence and graph come from one upload.
+Legacy binary workbooks (`.xls`) give their VBA; their sheets are not read yet (a note says so).
 
 ## Configuration
 

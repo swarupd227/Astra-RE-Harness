@@ -47,6 +47,14 @@ public static class EntityVocabulary
         [Class] = "Class",
         [Endpoint] = "Web endpoint",
         [Queue] = "Message queue or exchange",
+        [WorkbookAdapter.WorkbookType] = "Workbook",
+        [WorkbookAdapter.SheetType] = "Worksheet",
+        [WorkbookAdapter.NamedRangeType] = "Named range",
+        [WorkbookAdapter.InputType] = "Input cell",
+        [WorkbookAdapter.ControlType] = "Button or control",
+        [WorkbookAdapter.MacroType] = "Macro",
+        [WorkbookAdapter.ModuleType] = "VBA module",
+        [WorkbookAdapter.DataSourceType] = "Data connection",
     };
 
     public static readonly IReadOnlyDictionary<string, string> Relations = new Dictionary<string, string>

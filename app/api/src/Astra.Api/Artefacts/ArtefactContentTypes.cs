@@ -22,11 +22,20 @@ public static class ArtefactContentTypes
         [".mp3"] = "audio/mpeg",
         [".wav"] = "audio/wav",
         [".m4a"] = "audio/mp4",
+        [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        [".xlsm"] = "application/vnd.ms-excel.sheet.macroEnabled.12",
+        [".xltx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+        [".xltm"] = "application/vnd.ms-excel.template.macroEnabled.12",
+        [".xlam"] = "application/vnd.ms-excel.addin.macroEnabled.12",
+        [".xls"] = "application/vnd.ms-excel",
+        [".xlt"] = "application/vnd.ms-excel",
+        [".xla"] = "application/vnd.ms-excel",
     };
 
     private static readonly HashSet<string> BinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".docx", ".mp3", ".wav", ".m4a",
+        ".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xls", ".xlt", ".xla",
     };
 
     public static string For(string extension) =>

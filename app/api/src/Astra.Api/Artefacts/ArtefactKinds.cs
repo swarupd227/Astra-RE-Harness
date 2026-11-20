@@ -35,10 +35,15 @@ public static class ArtefactKinds
     public const string Transcript = "transcript";
     public const string Ticket = "ticket";
     public const string Document = "document";
+    public const string Workbook = "workbook";
     public const string Audio = "audio";
 
     private const long TextCap = 8L * 1024 * 1024;
     private const long AudioCap = 64L * 1024 * 1024;
+    private const long WorkbookCap = Office.OfficeVba.MaxInputBytes;
+
+    /// <summary>Spreadsheet formats whose sheets are read; the legacy binary ones yield their VBA and a note.</summary>
+    public static readonly string[] WorkbookExtensions = { ".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xls", ".xlt", ".xla" };
 
     /// <summary>Registry order is display order and the order settings are normalised to.</summary>
     public static IReadOnlyList<ArtefactKind> All { get; } = new ArtefactKind[]
@@ -59,6 +64,9 @@ public static class ArtefactKinds
         new(Config, "Configuration",
             "Endpoints, queues, timeouts and paths per environment.",
             new[] { ".json" }, TrustTier.Structured, TextCap, true),
+        new(Workbook, "Spreadsheets",
+            "Excel workbooks and templates: sheets, named inputs, input rules, formulas, and the buttons and events that run their macros.",
+            WorkbookExtensions, TrustTier.Structured, WorkbookCap, false),
         new(Transcript, "Transcripts",
             "Knowledge-transfer or interview transcripts with speakers and timestamps.",
             new[] { ".vtt", ".txt" }, TrustTier.Narrative, TextCap, true),

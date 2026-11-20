@@ -65,13 +65,14 @@ public class WorkbookSurfaceTests
               <dataValidations count="2"><dataValidation type="list" sqref="B4" promptTitle="Smoker"><formula1>"Yes,No"</formula1></dataValidation>
                 <dataValidation type="whole" operator="between" sqref="B3"><formula1>1000</formula1><formula2>5000000</formula2></dataValidation></dataValidations>
               <legacyDrawing r:id="rId1"/>
+              <controls><control shapeId="1026" r:id="rId2" name="chkSmoker"/></controls>
               <extLst><ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}"><x14:dataValidations count="1">
                 <x14:dataValidation type="list"><x14:formula1><xm:f>Rates!$A$1:$A$10</xm:f></x14:formula1><xm:sqref>B2</xm:sqref></x14:dataValidation>
               </x14:dataValidations></ext></extLst>
             </worksheet>
             """,
         ["xl/worksheets/_rels/sheet1.xml.rels"] = $"""
-            <Relationships {RelNs}><Relationship Id="rId1" Type="{RelType}vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>
+            <Relationships {RelNs}><Relationship Id="rId1" Type="{RelType}vmlDrawing" Target="../drawings/vmlDrawing1.vml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2007/relationships/ctrlProp" Target="../ctrlProps/ctrlProp1.xml"/></Relationships>
             """,
         // Excel's VML is not well-formed XML (the bare <br>); the reader must cope.
         ["xl/drawings/vmlDrawing1.vml"] = """
@@ -80,7 +81,7 @@ public class WorkbookSurfaceTests
               <v:textbox><div><font>Get<br>quote</font></div></v:textbox>
               <x:ClientData ObjectType="Button"><x:FmlaMacro>[0]!Pricing.Quote</x:FmlaMacro></x:ClientData>
              </v:shape>
-             <v:shape id="Check Box 2" o:spid="_x0000_s1026" type="#_x0000_t201">
+             <v:shape id="_x0000_s1026" type="#_x0000_t201">
               <x:ClientData ObjectType="Checkbox"><x:Checked>1</x:Checked><x:FmlaLink>$D$4</x:FmlaLink></x:ClientData>
              </v:shape>
              <v:shape id="_x0000_s1027" o:spid="_x0000_s1027" type="#_x0000_t202">
@@ -141,7 +142,10 @@ public class WorkbookSurfaceTests
         Assert.Equal("Button 1025", button.Name);       // no <controls> entry: kind and shape id, not "_x0000_s1025"
         Assert.Equal(("form", "Get quote", "[0]!Pricing.Quote", "Pricing", "Quote"), (button.Technology, button.Text, button.Macro, button.MacroModule, button.MacroRoutine));
         Assert.False(button.MacroFound);                 // this package carries no VBA, so the target cannot be found
-        Assert.Equal("$D$4", quote.Controls.Single(c => c.Kind == "CheckBox").LinkedCell);
+        var box = quote.Controls.Single(c => c.Kind == "CheckBox");
+        Assert.Equal("$D$4", box.LinkedCell);
+        // Older files write no o:spid; the shape's id still finds its name in the sheet's <controls>.
+        Assert.Equal("chkSmoker", box.Name);
 
         // A connection keeps where it points but never its credentials.
         var db = Assert.Single(r.Externals);

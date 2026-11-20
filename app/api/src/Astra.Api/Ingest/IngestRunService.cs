@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Astra.Api.Artefacts;
 using Astra.Api.Auth;
 using Astra.Api.Conversations;
 using Astra.Api.Copilot;
@@ -68,7 +69,7 @@ public sealed class IngestRunService
         _bus.State(runId, Agent, "RUNNING", $"Ingesting **{req.Name}** — {req.Files.Count:N0} files from {req.SourceType}…");
         var request = req;
         _ = Task.Run(() => RunAsync(runId, request.Name, corpusId, persona, displayName, isNew: true,
-            work: async pipeline => await pipeline.IngestAsync(request, _lifetime.ApplicationStopping)));
+            work: async pipeline => await pipeline.IngestAsync(request, _lifetime.ApplicationStopping), request.Documents));
         return runId;
     }
 
@@ -85,7 +86,7 @@ public sealed class IngestRunService
         Register(runId, req.CorpusId, "reingest");
         _bus.State(runId, Agent, "RUNNING", $"Re-syncing **{corpusName}** — {req.Files.Count:N0} files…");
         _ = Task.Run(() => RunAsync(runId, corpusName, req.CorpusId, persona, displayName, isNew: false,
-            work: async pipeline => await pipeline.ReingestAsync(req, _lifetime.ApplicationStopping)));
+            work: async pipeline => await pipeline.ReingestAsync(req, _lifetime.ApplicationStopping), req.Documents));
         return runId;
     }
 
@@ -111,7 +112,7 @@ public sealed class IngestRunService
 
     private async Task RunAsync(
         Guid runId, string label, Guid corpusId, Persona persona, string displayName, bool isNew,
-        Func<IngestPipeline, Task<object>> work)
+        Func<IngestPipeline, Task<object>> work, IReadOnlyList<IncomingArtefact>? documents = null)
     {
         var entry = _runs[runId];
         try
@@ -134,6 +135,8 @@ public sealed class IngestRunService
             };
 
             var result = await work(pipeline);
+            if (documents is { Count: > 0 } && IsParsed(result))
+                result = WithNotes(result, await AttachDocumentsAsync(scope.ServiceProvider, corpusId, documents, actor));
             var (state, summary, item) = Describe(result, label, isNew);
             _bus.Publish(runId, Agent, "", "item", item);
             Finish(entry, state, result, null, null);
@@ -168,6 +171,65 @@ public sealed class IngestRunService
         finally
         {
             _bus.Complete(runId);
+        }
+    }
+
+    private static bool IsParsed(object result) => result switch
+    {
+        IngestPipeline.IngestResult r => r.State == "PARSED",
+        IngestPipeline.ReingestResult r => r.State == "PARSED",
+        _ => false,
+    };
+
+    private static object WithNotes(object result, IReadOnlyList<string> notes) => notes.Count == 0 ? result : result switch
+    {
+        IngestPipeline.IngestResult r => r with { Warnings = r.Warnings.Concat(notes).ToList() },
+        IngestPipeline.ReingestResult r => r with { Warnings = r.Warnings.Concat(notes).ToList() },
+        _ => result,
+    };
+
+    /// <summary>
+    /// The workbooks the code came out of are kept as evidence on the new version, so their sheets,
+    /// inputs and buttons can be cited and joined to the macros in the entity graph. The spreadsheet
+    /// kind is switched on for the project first (attaching follows the project's kinds). Best effort:
+    /// the code is already in, so a failure here is a note on the result, never a failed ingest.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> AttachDocumentsAsync(
+        IServiceProvider services, Guid corpusId, IReadOnlyList<IncomingArtefact> documents, DevPersonaContext actor)
+    {
+        try
+        {
+            var db = services.GetRequiredService<AppDbContext>();
+            var corpus = await db.Corpora.FirstAsync(c => c.Id == corpusId, _lifetime.ApplicationStopping);
+            var settings = ProjectSettings.Parse(corpus.SettingsJson);
+            var kinds = documents.Select(d => d.Kind).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var missing = kinds.Where(k => !settings.Has(k)).ToList();
+            if (missing.Count > 0)
+            {
+                var all = settings.ArtefactKinds.Concat(missing).OrderBy(ArtefactKinds.OrderOf).ToList();
+                corpus.SettingsJson = (settings with { ArtefactKinds = all }).ToJson();
+                await db.SaveChangesAsync(_lifetime.ApplicationStopping);
+            }
+
+            var attach = services.GetRequiredService<ArtefactAttachService>();
+            var result = await attach.AttachAsync(corpusId, documents, actor, null, _lifetime.ApplicationStopping);
+            if (result.Outcome is not { } outcome)
+                return new[] { $"The workbooks were not kept as evidence ({result.ErrorCode})." };
+            var notes = new List<string>();
+            var kept = outcome.Files.Where(f => f.Status is "added" or "replaced" or "unchanged").ToList();
+            if (kept.Count > 0)
+                notes.Add($"Kept {(kept.Count == 1 ? $"{kept[0].Path}" : $"{kept.Count} workbooks")} as evidence: " +
+                          $"{kept.Sum(f => f.Chunks):N0} citable pieces (sheets, named ranges, inputs, buttons), joined to the macros in the entity graph.");
+            foreach (var f in outcome.Files.Where(f => f.Status == "rejected"))
+                notes.Add($"{f.Path} was not kept as evidence: {f.Message}");
+            foreach (var f in kept)
+                notes.AddRange(f.Notes.Select(n => $"{f.Path}: {n}"));
+            return notes;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Attaching workbooks to {CorpusId} failed", corpusId);
+            return new[] { "The workbooks were not kept as evidence; attach them from the project's Sources panel." };
         }
     }
 
