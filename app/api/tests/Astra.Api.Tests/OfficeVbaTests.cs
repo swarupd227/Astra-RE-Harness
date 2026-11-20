@@ -140,6 +140,14 @@ public class OfficeVbaTests
                            (r.Warnings.Count > 0 ? $" warnings={r.Warnings.Count}: {r.Warnings[0]}" : ""));
             foreach (var form in mods.Where(m => m.Kind == VbaModuleKind.Form))
                 _out.WriteLine($"    form {form.Name}: header {(form.FormHeader is null ? "missing" : form.FormHeader.Length + " chars")}");
+            // ASTRA_VBA_DUMP: write each module out as the editor would export it, for parser work.
+            var dump = Environment.GetEnvironmentVariable("ASTRA_VBA_DUMP");
+            if (!string.IsNullOrEmpty(dump))
+            {
+                var dir = Path.Combine(dump, Path.GetFileNameWithoutExtension(f));
+                Directory.CreateDirectory(dir);
+                foreach (var m in mods) File.WriteAllText(Path.Combine(dir, m.ExportFileName), m.Source, Encoding.Latin1);
+            }
         }
     }
 }
