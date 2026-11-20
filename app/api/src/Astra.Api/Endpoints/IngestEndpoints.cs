@@ -104,6 +104,13 @@ public static class IngestEndpoints
                                 $"Corpus exceeds {MaxFilesPerCorpus} files. Split or filter the archive.");
                     }
                 }
+                else if (OfficeIntake.IsOfficeDocument(file.FileName))
+                {
+                    if (file.Length > OfficeIntake.MaxDocumentBytes)
+                        return BadRequest("ingest.file_too_large",
+                            $"{file.FileName} exceeds {OfficeIntake.MaxDocumentBytes / (1024 * 1024)} MiB.");
+                    collected.AddRange(OfficeIntake.Expand(Path.GetFileName(file.FileName), await ReadAllBytesAsync(file, ct), tally));
+                }
                 else if (Ingest.SourceLanguageDetector.FromExtension(ext) is not null)
                 {
                     if (file.Length > MaxFileBytes)
@@ -125,7 +132,8 @@ public static class IngestEndpoints
 
             if (collected.Count == 0)
                 return BadRequest("ingest.no_supported_files",
-                    $"Archive contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
+                    $"Archive contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}." +
+                    string.Concat(tally.Notes().Select(n => " " + n)));
 
             var runId = runs.StartIngest(new IngestPipeline.IngestRequest(
                 Name: name,
@@ -289,7 +297,8 @@ public static class IngestEndpoints
             if (collected.Error is not null) return BadRequest(collected.ErrorCode!, collected.Error);
             if (collected.Files.Count == 0)
                 return BadRequest("ingest.no_supported_files",
-                    $"Upload contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}.");
+                    $"Upload contained no source files. Supported: {Ingest.SourceLanguageDetector.SupportedLanguageNames()}." +
+                    string.Concat((collected.Notes ?? Array.Empty<string>()).Select(n => " " + n)));
 
             return await RunReingest(runs, actor, new IngestPipeline.ReingestRequest(
                 CorpusId: corpusId,
@@ -472,6 +481,13 @@ public static class IngestEndpoints
                             $"Corpus exceeds {MaxFilesPerCorpus} files. Split or filter the archive.");
                 }
             }
+            else if (OfficeIntake.IsOfficeDocument(file.FileName))
+            {
+                if (file.Length > OfficeIntake.MaxDocumentBytes)
+                    return new(collected, "ingest.file_too_large",
+                        $"{file.FileName} exceeds {OfficeIntake.MaxDocumentBytes / (1024 * 1024)} MiB.");
+                collected.AddRange(OfficeIntake.Expand(Path.GetFileName(file.FileName), await ReadAllBytesAsync(file, CancellationToken.None), tally));
+            }
             else if (Ingest.SourceLanguageDetector.FromExtension(ext) is not null)
             {
                 if (file.Length > MaxFileBytes)
@@ -505,6 +521,15 @@ public static class IngestEndpoints
             if (string.IsNullOrEmpty(entry.Name)) continue;  // directory
             var relativePath = entry.FullName.Replace('\\', '/');
             var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
+            if (OfficeIntake.IsOfficeDocument(entry.Name))
+            {
+                if (entry.Length > OfficeIntake.MaxDocumentBytes) { tally.Skip(IntakeTally.TooLarge, relativePath); continue; }
+                if (!IsSafeZipEntryPath(relativePath)) { tally.Skip(IntakeTally.Unsafe, relativePath); continue; }
+                using var ms = new MemoryStream();
+                using (var es = entry.Open()) await es.CopyToAsync(ms, ct);
+                foreach (var module in OfficeIntake.Expand(relativePath, ms.ToArray(), tally)) yield return module;
+                continue;
+            }
             if (Ingest.SourceLanguageDetector.FromExtension(ext) is null)
             {
                 tally.Skip(IntakeTally.NotSource, relativePath);
@@ -562,6 +587,18 @@ public static class IngestEndpoints
             if (rel.Split('/').Contains(".git")) continue;
 
             var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (OfficeIntake.IsOfficeDocument(path))
+            {
+                if (new FileInfo(path).Length > OfficeIntake.MaxDocumentBytes) { tally.Skip(IntakeTally.TooLarge, rel); continue; }
+                var modules = OfficeIntake.Expand(rel, File.ReadAllBytes(path), tally);
+                if (result.Count + modules.Count > maxFiles)
+                {
+                    error = $"Corpus exceeds {maxFiles} files; provide a more specific sourceRoot.";
+                    return result;
+                }
+                result.AddRange(modules);
+                continue;
+            }
             if (Ingest.SourceLanguageDetector.FromExtension(ext) is null)
             {
                 tally.Skip(IntakeTally.NotSource, rel);
@@ -583,6 +620,13 @@ public static class IngestEndpoints
             result.Add(new IngestPipeline.IncomingFile(rel, File.ReadAllText(path)));
         }
         return result;
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(IFormFile file, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        await using (var s = file.OpenReadStream()) await s.CopyToAsync(ms, ct);
+        return ms.ToArray();
     }
 
     private static object IngestBody(IngestPipeline.IngestResult r) => new

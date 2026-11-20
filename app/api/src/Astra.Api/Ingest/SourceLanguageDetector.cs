@@ -161,9 +161,10 @@ public static class SourceLanguageDetector
     public static string SupportedLanguagesDescription() =>
         "Fortran (.f/.for/.f90), COBOL (.cob/.cbl/.cpy), Delphi (.pas/.dpr/.inc), " +
         "C++ (.cpp/.h/.hpp), VB6 (.bas/.cls/.frm), C# (.cs), VB.NET (.vb), " +
-        "OpenEdge ABL (.p/.w/.i), Java (.java), PHP (.php), or UniBasic (.pick/.b)";
+        "OpenEdge ABL (.p/.w/.i), Java (.java), PHP (.php), UniBasic (.pick/.b), " +
+        "or VBA in an Office document (.xlsm/.xls/.docm/.pptm …)";
 
     /// <summary>Just the language names — for "no source files found" copy.</summary>
     public static string SupportedLanguageNames() =>
-        "Fortran, COBOL, Delphi, C++, VB6, C#, VB.NET, OpenEdge ABL, Java, PHP, or UniBasic";
+        "Fortran, COBOL, Delphi, C++, VB6, C#, VB.NET, OpenEdge ABL, Java, PHP, UniBasic, or VBA in Office documents";
 }

@@ -17,6 +17,7 @@ public sealed class IntakeTally
     private const int MaxExtensions = 5;
 
     private readonly Dictionary<string, List<string>> _byReason = new(StringComparer.Ordinal);
+    private readonly List<string> _notes = new();
 
     public int Total => _byReason.Values.Sum(l => l.Count);
 
@@ -26,10 +27,16 @@ public sealed class IntakeTally
         list.Add(path);
     }
 
-    /// <summary>One sentence per reason that occurred, most routine first. Empty when nothing was skipped.</summary>
+    /// <summary>
+    /// A sentence about something intake did besides keeping or skipping a file — reading the VBA
+    /// out of a workbook — reported before the skip summary.
+    /// </summary>
+    public void Note(string sentence) => _notes.Add(sentence);
+
+    /// <summary>The notes, then one sentence per skip reason that occurred, most routine first. Empty when there is nothing to say.</summary>
     public IReadOnlyList<string> Notes(long maxFileBytes = 8L * 1024 * 1024)
     {
-        var notes = new List<string>();
+        var notes = new List<string>(_notes);
 
         if (_byReason.TryGetValue(NotSource, out var notSource) && notSource.Count > 0)
         {

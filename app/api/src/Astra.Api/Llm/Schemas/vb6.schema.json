@@ -4,7 +4,7 @@
   "id": "vb6",
   "displayName": "Visual Basic 6 → .NET 10",
   "description": "VB6 source: .bas standard modules, .cls class modules, and .frm forms (property-bag header + code-behind). Calibrated against the Nous-authored 'VB6 Inventory Sample' seed corpus and on the long-tail quirks Rubberduck VBA's grammar enumerates: Variant arithmetic, On Error Resume Next swallow semantics, default-property access (rs!Field, rs(\"col\")), late-bound Set obj = CreateObject(...), implicit DAO/ADO record navigation. Per ADR-035 the production parser loads Rubberduck's ANTLR4 grammar via the antlr4-python3 runtime; until that lands, the v0 tokenizer in vb6_parser.py provides the structural surface.",
-  "supportedSourceExtensions": [".bas", ".cls", ".frm", ".ctl"],
+  "supportedSourceExtensions": [".bas", ".cls", ".frm", ".ctl", ".xlsm", ".xltm", ".xlam", ".xls", ".xla", ".xlt", ".docm", ".dotm", ".doc", ".dot", ".pptm", ".potm", ".ppam"],
   "compatibleTargetStacks": ["dotnet10"],
   "claimKinds": [
     {
