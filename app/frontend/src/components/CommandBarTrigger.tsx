@@ -32,7 +32,9 @@ export function CommandBarTrigger({ className }: { className?: string }) {
         'hidden h-8 items-center gap-2 rounded-md border border-line-subtle bg-raised/60 px-3 text-caption text-ink-secondary transition-colors duration-fast hover:border-line hover:bg-raised hover:text-ink-primary md:inline-flex',
         className,
       )}
-      aria-label="Ask Astra or jump to a view"
+      // No aria-label: the name is the visible text (WCAG 2.5.3 — a custom label that
+      // doesn't contain what is printed on the button breaks voice control).
+      aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
       data-testid="command-bar-trigger"
     >
       <Sparkles className="h-3.5 w-3.5 text-volt" aria-hidden="true" />

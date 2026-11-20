@@ -277,7 +277,12 @@ export function LiveExtractionPage() {
       )}
 
       {/* Body — two-pane */}
-      <div className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-line-subtle overflow-y-auto bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+      <div
+        role="region"
+        aria-label="Live extraction"
+        tabIndex={0}
+        className="grid flex-1 min-h-0 grid-cols-1 divide-y divide-line-subtle overflow-y-auto bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:divide-x lg:divide-y-0 lg:overflow-visible"
+      >
         {/* Streaming spec */}
         <div className="h-[420px] min-h-0 overflow-y-auto bg-raised lg:h-auto">
           {status === 'idle' && (

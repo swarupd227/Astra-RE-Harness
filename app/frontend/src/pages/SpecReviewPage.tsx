@@ -452,8 +452,15 @@ export function SpecReviewPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_minmax(0,520px)]">
-        <OutlinePane items={outlineItems} reviews={sp.claimReviews ?? []} activeId={activeId} onJump={onJump} />
+      {/* Below lg the three panes stack at their own height and <main> scrolls the page. */}
+      <div className="grid flex-none grid-cols-1 lg:min-h-0 lg:flex-1 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,520px)]">
+        <OutlinePane
+          items={outlineItems}
+          reviews={sp.claimReviews ?? []}
+          activeId={activeId}
+          onJump={onJump}
+          className="max-h-56 border-b border-r-0 lg:max-h-none lg:border-b-0 lg:border-r"
+        />
 
         <div className="min-h-0 overflow-y-auto bg-canvas">
           <div className="space-y-6 p-6">
@@ -488,7 +495,7 @@ export function SpecReviewPage() {
         </div>
 
         {/* Right column: the Spec agent + the source. */}
-        <div className="flex min-h-0 flex-col border-l border-line-subtle bg-canvas" data-testid="spec-right-column">
+        <div className="flex h-[480px] min-h-0 flex-col border-t border-line-subtle bg-canvas lg:h-auto lg:border-l lg:border-t-0" data-testid="spec-right-column">
           {stacked ? (
             <>
               <div className="flex min-h-0 flex-[3] flex-col border-b border-line-subtle">

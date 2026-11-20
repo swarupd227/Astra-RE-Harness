@@ -157,7 +157,7 @@ function ScaffoldRow({ scaffold: s }: { scaffold: ScaffoldSummary }) {
       <Card interactive>
         <CardBody>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-status-warn/10 text-status-scaffolded">
                 <Cog className="h-5 w-5" aria-hidden="true" />
               </span>

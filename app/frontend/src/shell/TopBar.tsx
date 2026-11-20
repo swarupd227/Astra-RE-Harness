@@ -55,7 +55,7 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
         <Link
           to="/"
           className="shrink-0 rounded-md transition-opacity duration-fast hover:opacity-80"
-          aria-label="Astra — Mission Control"
+          aria-label="Astra by Artizent — Mission Control"
         >
           <LogoLockup size="sm" />
         </Link>

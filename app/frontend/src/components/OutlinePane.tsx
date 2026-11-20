@@ -13,11 +13,14 @@ export function OutlinePane({
   reviews,
   activeId,
   onJump,
+  className,
 }: {
   items: OutlineItem[];
   reviews: ClaimReview[];
   activeId?: string | null;
   onJump?: (id: string) => void;
+  /** Layout from the page (e.g. a height bound when the panes stack). */
+  className?: string;
 }) {
   const reviewBy = new Map<string, ClaimReview>();
   for (const r of reviews) reviewBy.set(r.claimPath, r);
@@ -40,7 +43,7 @@ export function OutlinePane({
   const processed = total - counts.untouched;
 
   return (
-    <aside className="flex h-full flex-col gap-4 overflow-y-auto border-r border-line-subtle bg-raised p-4">
+    <aside className={clsx('flex h-full flex-col gap-4 overflow-y-auto border-r border-line-subtle bg-raised p-4', className)}>
       <header>
         <p className="label">Outline</p>
         <h2 className="mt-1 text-h-md font-semibold text-ink-primary">{processed} / {total} claims processed</h2>
@@ -53,7 +56,7 @@ export function OutlinePane({
           <section key={item.section}>
             <h3 className="mb-1 label">
               {item.label}
-              <span className="ml-1 text-ink-tertiary/70">({item.claims.length})</span>
+              <span className="ml-1 text-ink-tertiary">({item.claims.length})</span>
             </h3>
             <ul className="space-y-0.5">
               {item.claims.map((c) => {
@@ -118,7 +121,7 @@ function CountStrip({
       {items.map((it) => (
         <span key={it.key} className={clsx('inline-flex items-center gap-1', it.tone)}>
           <span>{counts[it.key]}</span>
-          <span className="text-ink-tertiary/80">{it.label}</span>
+          <span className="text-ink-tertiary">{it.label}</span>
         </span>
       ))}
     </div>

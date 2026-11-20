@@ -172,7 +172,7 @@ export function WorkspacePage() {
         <span
           className={clsx(
             'shrink-0 rounded-full border px-2 py-0.5 text-micro font-medium uppercase tracking-wide',
-            isGlobal ? 'border-volt/40 text-volt' : 'border-line text-ink-secondary',
+            isGlobal ? 'border-volt/40 text-volt-ink' : 'border-line text-ink-secondary',
           )}
           data-testid="workspace-kind"
         >

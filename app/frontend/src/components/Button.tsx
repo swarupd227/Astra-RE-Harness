@@ -33,6 +33,16 @@ const sizes: Record<Size, string> = {
   lg: 'h-12 px-5 text-body-lg',
 };
 
+/**
+ * The button's look for something that is really a link. Navigation is a link,
+ * not a button — and a link may not sit inside a button — so use this on a
+ * `<Link>` when it should read as a button.
+ */
+export function buttonClasses(opts: { variant?: Variant; size?: Size; className?: string } = {}): string {
+  const { variant = 'secondary', size = 'md', className } = opts;
+  return clsx(base, variants[variant], sizes[size], className);
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'secondary', size = 'md', loading, className, children, disabled, ...rest },
   ref,
@@ -40,7 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
-      className={clsx(base, variants[variant], sizes[size], className)}
+      className={buttonClasses({ variant, size, className })}
       disabled={disabled || loading}
       {...rest}
     >

@@ -258,7 +258,12 @@ export function LiveScaffoldPage() {
           )}
         </div>
 
-        <div className="max-h-64 min-h-0 overflow-y-auto bg-raised p-5 font-mono text-caption text-ink-secondary lg:max-h-none">
+        <div
+          role="region"
+          aria-label="Derived from"
+          tabIndex={0}
+          className="max-h-64 min-h-0 overflow-y-auto bg-raised p-5 font-mono text-caption text-ink-secondary lg:max-h-none"
+        >
           <p className="uppercase tracking-wider text-ink-tertiary">Derived from</p>
           {active && active.derivedFrom.length > 0 ? (
             <ul className="mt-3 space-y-1.5">

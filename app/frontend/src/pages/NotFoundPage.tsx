@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/Button';
+import { buttonClasses } from '@/components/Button';
 
 export function NotFoundPage() {
   return (
@@ -9,9 +9,9 @@ export function NotFoundPage() {
         This screen lands in a later phase of the development plan.
       </p>
       <div className="mt-6">
-        <Button variant="secondary">
-          <Link to="/">Back to Health</Link>
-        </Button>
+        <Link to="/" className={buttonClasses({ variant: 'secondary' })}>
+          Back to Health
+        </Link>
       </div>
     </div>
   );

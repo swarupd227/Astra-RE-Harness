@@ -239,7 +239,12 @@ function UsersPanel() {
             No users yet. Click "Add user" to create the first one.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-line-subtle">
+          <div
+            className="overflow-x-auto rounded-md border border-line-subtle"
+            role="region"
+            aria-label="Users"
+            tabIndex={0}
+          >
             <table className="w-full text-body">
               <thead className="bg-sunken/60 text-caption text-ink-tertiary">
                 <tr>
@@ -410,7 +415,12 @@ function CategoryBlock({
   return (
     <div data-testid={`matrix-category-${category.toLowerCase()}`}>
       <div className="mb-2 text-caption uppercase tracking-wide text-ink-tertiary">{category}</div>
-      <div className="overflow-x-auto rounded-md border border-line-subtle">
+      <div
+        className="overflow-x-auto rounded-md border border-line-subtle"
+        role="region"
+        aria-label={`${category} actions by persona`}
+        tabIndex={0}
+      >
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>

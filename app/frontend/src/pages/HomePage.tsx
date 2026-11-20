@@ -289,7 +289,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card data-testid="home-corpora">
           <CardHeader
             titleAs="h2"
@@ -397,7 +397,7 @@ function SmeHome() {
   });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Card data-testid="home-sme-reviews">
         <CardHeader
           title={<span className="inline-flex items-center gap-2"><ClipboardCheck className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Awaiting your review</span>}
@@ -483,7 +483,7 @@ function ObserverHome() {
     refetchInterval: 30_000,
   });
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <RecentActivityCard activity={recent.data?.data ?? []} loading={recent.isPending} dense limit={12} />
       <SignedSpecsCard />
     </div>
@@ -500,7 +500,7 @@ function AdminHome({
   llmModel: string | null;
 }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Card data-testid="home-admin-provider">
         <CardHeader
           title={<span className="inline-flex items-center gap-2"><Cpu className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Provider status</span>}

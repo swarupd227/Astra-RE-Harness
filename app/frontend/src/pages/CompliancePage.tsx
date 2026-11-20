@@ -273,7 +273,12 @@ function ColumnTable({ columns }: { columns: { id: string; header: string; descr
   return (
     <div>
       <div className="text-caption uppercase tracking-wide text-ink-tertiary">Columns in this bundle</div>
-      <div className="mt-2 overflow-x-auto rounded-md border border-line-subtle">
+      <div
+        className="mt-2 overflow-x-auto rounded-md border border-line-subtle"
+        role="region"
+        aria-label="Columns in this bundle"
+        tabIndex={0}
+      >
         <table className="w-full text-body">
           <thead className="bg-sunken/60 text-caption text-ink-tertiary">
             <tr>

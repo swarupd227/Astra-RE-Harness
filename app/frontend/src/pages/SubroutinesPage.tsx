@@ -206,7 +206,7 @@ export function SubroutinesPage() {
                         <FileCode className="h-4 w-4 shrink-0 text-ink-tertiary" aria-hidden="true" />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono font-semibold text-ink-primary">{hit.name}</span>
+                            <span className="min-w-0 break-words font-mono font-semibold text-ink-primary">{hit.name}</span>
                             <Badge tone={badgeTone(hit.state)} className="text-[10px]">
                               {hit.state}
                             </Badge>

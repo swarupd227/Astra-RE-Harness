@@ -73,6 +73,9 @@ export function LogoLockup({
       <LogoGlyph size={dims.glyph} className="text-ink-primary" />
       <span className="inline-flex items-baseline gap-1.5">
         <span className={clsx(dims.type, 'font-semibold tracking-tight text-ink-primary')}>Astra</span>
+        {/* A real space between the two words: flex items render no gap from it, but the
+            text reads "Astra by Artizent" to assistive tech and to a name that must contain it. */}
+        {byline && ' '}
         {byline && (
           <span className="text-micro font-medium tracking-wide text-ink-tertiary">by Artizent</span>
         )}

@@ -268,7 +268,7 @@ function ClaimCard({
                 ? 'border-volt bg-volt/10 text-volt-ink'
                 : 'border-line-subtle bg-canvas text-ink-secondary',
             )}
-            aria-label={`Cited lines ${c.lines}`}
+            aria-label={`L${c.lines}, cited lines`}
           >
             <ChevronRight className="h-3 w-3" />
             L{c.lines}

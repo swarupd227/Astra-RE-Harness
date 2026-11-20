@@ -260,7 +260,44 @@ function SignatureBlock({ e, onVerify }: { e: EvidenceResponse; onVerify: () => 
     return <BlockMissing label="Signature" hint="Not yet signed — the SME has not signed off on this spec." />;
 
   return (
-    <Block icon={ShieldCheck} label="Signature" tone="signed">
+    <Block
+      icon={ShieldCheck}
+      label="Signature"
+      tone="signed"
+      after={
+        <>
+          <div className="mt-2 rounded-sm border border-status-scaffolded/40 bg-status-warn/10 px-2.5 py-1.5">
+            <div className="flex items-start gap-1.5 text-caption">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
+              <p className="text-ink-secondary">
+                <span className="font-semibold text-ink-primary">Dev posture:</span> software RSA in
+                Postgres, dev-persona signer. Azure Key Vault Managed HSM + OIDC SME identity land in
+                Phase D. The signature is real and verifiable; legal weight comes with PROD wiring.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onVerify}
+              className="inline-flex items-center gap-1.5 rounded-md border border-volt bg-volt/10 px-3 py-1.5 text-caption font-medium text-volt-ink hover:bg-volt/20 focus-visible:outline-2 focus-visible:outline-ink-primary"
+              data-testid="verify-signature"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Verify signature
+            </button>
+            <a
+              href={`/api/v1/specs/${e.id}/signed-manifest`}
+              download={`signed-${e.subroutine?.name ?? 'spec'}.json`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-caption font-medium text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-ink-primary"
+              data-testid="download-manifest"
+            >
+              <Link2 className="h-3.5 w-3.5" aria-hidden="true" /> Download signed.json
+            </a>
+          </div>
+        </>
+      }
+    >
       <Row label="Signed by" value={<span className="font-medium text-ink-primary">{sig.signerDisplay}</span>} />
       <Row label="Signed at" mono value={new Date(sig.signedAt).toLocaleString()} />
       <Row label="Algorithm" mono value={sig.algorithm} />
@@ -268,36 +305,6 @@ function SignatureBlock({ e, onVerify }: { e: EvidenceResponse; onVerify: () => 
       <HashRow label="Canonical hash" value={sig.specCanonicalHash} />
       <HashRow label="Source hash" value={sig.sourceVersionHash} />
       <HashRow label="Signature" value={sig.signatureBase64} truncate={32} />
-
-      <div className="mt-2 rounded-sm border border-status-scaffolded/40 bg-status-warn/10 px-2.5 py-1.5">
-        <div className="flex items-start gap-1.5 text-caption">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
-          <p className="text-ink-secondary">
-            <span className="font-semibold text-ink-primary">Dev posture:</span> software RSA in
-            Postgres, dev-persona signer. Azure Key Vault Managed HSM + OIDC SME identity land in
-            Phase D. The signature is real and verifiable; legal weight comes with PROD wiring.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onVerify}
-          className="inline-flex items-center gap-1.5 rounded-md border border-volt bg-volt/10 px-3 py-1.5 text-caption font-medium text-volt-ink hover:bg-volt/20 focus-visible:outline-2 focus-visible:outline-ink-primary"
-          data-testid="verify-signature"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Verify signature
-        </button>
-        <a
-          href={`/api/v1/specs/${e.id}/signed-manifest`}
-          download={`signed-${e.subroutine?.name ?? 'spec'}.json`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-caption font-medium text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-ink-primary"
-          data-testid="download-manifest"
-        >
-          <Link2 className="h-3.5 w-3.5" aria-hidden="true" /> Download signed.json
-        </a>
-      </div>
     </Block>
   );
 }
@@ -355,11 +362,15 @@ function Block({
   label,
   tone = 'neutral',
   children,
+  after,
 }: {
   icon: typeof Sparkles;
   label: string;
   tone?: keyof typeof toneClass;
+  /** Label/value rows. They sit in a description list, so each must be a dt/dd pair (use Row / HashRow). */
   children: React.ReactNode;
+  /** Anything that is not a label/value row (notes, buttons, links) goes after the list, not inside it. */
+  after?: React.ReactNode;
 }) {
   return (
     <div
@@ -373,6 +384,7 @@ function Block({
         <span className="label">{label}</span>
       </header>
       <dl className="space-y-1">{children}</dl>
+      {after}
     </div>
   );
 }

@@ -18,7 +18,12 @@ export function SystemPage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
+    <div
+      className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10"
+      role="region"
+      aria-label="System status"
+      tabIndex={0}
+    >
       <header>
         <p className="label">
           System

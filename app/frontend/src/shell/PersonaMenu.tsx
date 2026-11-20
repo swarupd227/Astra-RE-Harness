@@ -78,6 +78,9 @@ export function PersonaMenu() {
         className="flex h-8 items-center gap-2 rounded-md border border-line-subtle bg-raised/60 px-2 text-caption transition-colors duration-fast hover:border-line hover:bg-raised"
         aria-haspopup="menu"
         aria-expanded={open}
+        // The text label is hidden below the sm breakpoint, which left the button with only
+        // decorative icons and no name. The label here contains the visible one (WCAG 2.5.3).
+        aria-label={`Persona: ${META[persona].label}`}
       >
         <span className={clsx('flex h-5 w-5 items-center justify-center rounded-full bg-sunken', META[persona].tone)}>
           <Icon className="h-3 w-3" aria-hidden="true" />

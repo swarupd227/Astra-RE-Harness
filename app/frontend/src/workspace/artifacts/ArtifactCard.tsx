@@ -32,25 +32,18 @@ export function ArtifactCard({
   const select = () => onSelect?.(artifact);
 
   return (
+    // A plain container, not role="button": a card holds real links and buttons, and
+    // interactive content may not nest inside a button. Clicking anywhere still selects it
+    // (mouse/touch); the keyboard path is the explicit toggle in the header.
     <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
       data-testid="artifact-card"
       data-kind={artifact.kind}
       data-ref-id={artifact.refId ?? undefined}
       data-expanded={expanded ? 'true' : undefined}
+      data-selected={selected ? 'true' : undefined}
       onClick={select}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          select();
-        }
-      }}
       className={clsx(
-        'group/card min-w-0 cursor-pointer rounded-xl border bg-raised text-left outline-none transition-colors duration-fast',
-        'focus-visible:ring-2 focus-visible:ring-volt',
+        'group/card min-w-0 cursor-pointer rounded-xl border bg-raised text-left transition-colors duration-fast',
         selected ? 'border-line-strong shadow-glow' : 'border-line-subtle hover:border-line',
         className,
       )}
@@ -75,13 +68,19 @@ export function ArtifactCard({
               <ArrowUpRight size={12} aria-hidden="true" />
             </Link>
           )}
-          <span
-            className="inline-flex items-center rounded-md p-1 text-ink-tertiary opacity-0 transition-opacity group-hover/card:opacity-100"
-            aria-hidden="true"
+          <button
+            type="button"
+            aria-pressed={selected}
+            aria-label={`${expanded ? 'Collapse' : 'Show in pane'}: ${artifactTitle(artifact)}`}
             title={expanded ? 'Collapse' : 'Show in pane'}
+            onClick={(e) => {
+              e.stopPropagation();
+              select();
+            }}
+            className="inline-flex items-center rounded-md p-1 text-ink-tertiary opacity-0 transition-opacity hover:bg-sunken hover:text-ink-primary focus-visible:opacity-100 group-hover/card:opacity-100"
           >
-            {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-          </span>
+            {expanded ? <Minimize2 size={12} aria-hidden="true" /> : <Maximize2 size={12} aria-hidden="true" />}
+          </button>
         </span>
       </div>
       <div className="px-3.5 py-3">{renderArtifact(artifact, { size: expanded ? 'pane' : 'card', onIntent })}</div>

@@ -131,7 +131,7 @@ export function ScaffoldArtifactPage() {
             </div>
             <Badge tone={isCommitted ? 'signed' : 'scaffolded'}>{sc.state}</Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               to={`/scaffolds/${sc.id}/validation`}
               className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-3 py-1.5 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
@@ -253,7 +253,12 @@ export function ScaffoldArtifactPage() {
         </div>
 
         {/* Traceability panel */}
-        <div className="max-h-64 min-h-0 overflow-y-auto bg-raised lg:max-h-none">
+        <div
+          role="region"
+          aria-label="Traceability"
+          tabIndex={0}
+          className="max-h-64 min-h-0 overflow-y-auto bg-raised lg:max-h-none"
+        >
           <TraceabilityPanel spec={spec.data ?? null} claimIds={active?.derivedFromClaimIds ?? []} />
         </div>
       </div>

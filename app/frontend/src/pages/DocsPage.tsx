@@ -332,13 +332,14 @@ export function DocsPage() {
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="border-b border-line-subtle bg-raised px-6 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Link
               to={`/corpora/${id}`}
               className="rounded p-1 text-ink-tertiary transition-colors hover:text-ink-primary"
+              aria-label="Back to project"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
               <p className="label">
@@ -348,9 +349,9 @@ export function DocsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Global state summary badges */}
-            <div className="flex items-center gap-1.5 mr-2">
+            <div className="mr-2 flex flex-wrap items-center gap-1.5">
               {Object.entries(globalCounts).map(([state, count]) => (
                 <Badge key={state} tone={stateTone(state)}>
                   {count} {stateLabel(state)}
@@ -659,10 +660,11 @@ export function DocsPage() {
       )}
 
       {/* ── Three-pane body ─────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-[220px_280px_minmax(0,1fr)] divide-x divide-line-subtle">
+      {/* Below lg the three panes stack and the body scrolls as one. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-line-subtle overflow-y-auto lg:grid-cols-[220px_280px_minmax(0,1fr)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
 
         {/* Pane 1 — Kind selector */}
-        <nav className="overflow-y-auto bg-raised py-2">
+        <nav className="max-h-56 overflow-y-auto bg-raised py-2 lg:max-h-none">
           {kindsWithData.length === 0 && !isGenerating && (
             <div className="px-4 py-8 text-center">
               <FileText className="mx-auto mb-3 h-9 w-9 text-ink-tertiary opacity-25" />
@@ -731,7 +733,7 @@ export function DocsPage() {
         </nav>
 
         {/* Pane 2 — Section list */}
-        <div className="flex min-h-0 flex-col">
+        <div className="flex max-h-80 min-h-0 flex-col lg:max-h-none">
           <div className="sticky top-0 z-10 border-b border-line-subtle bg-raised px-4 py-2.5">
             <h2 className="font-mono text-sm font-semibold text-ink-primary">
               {KIND_LABELS[selectedKind] ?? selectedKind}
