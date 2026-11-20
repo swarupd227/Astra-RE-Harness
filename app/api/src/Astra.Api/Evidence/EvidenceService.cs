@@ -116,7 +116,7 @@ public sealed class EvidenceService
                 from c in _db.EvidenceChunks.AsNoTracking()
                 join f in _db.SourceFiles.AsNoTracking() on c.SourceFileId equals f.Id
                 where c.SourceVersionId == versionId && c.Kind == ArtefactKinds.Code
-                select new { c.Id, c.SourceFileId, c.Locator, c.ShortId, Path = f.RelativePath })
+                select new { c.Id, c.SourceFileId, c.Locator, c.ShortId, c.TextHash, Path = f.RelativePath })
                 .ToListAsync(ct);
 
             // One chunk per (file, locator): two routines on the same span share it.
@@ -127,7 +127,10 @@ public sealed class EvidenceService
                 desired.TryAdd((s.FileId, draft.Locator), (s.RelativePath, s.FileHash, draft));
             }
 
-            var stale = existing.Where(e => !desired.ContainsKey((e.SourceFileId, e.Locator))).Select(e => e.Id).ToList();
+            // A chunk made for a fact's lines (no routine covers them) belongs to the facts, not to the routines.
+            var stale = existing
+                .Where(e => !desired.ContainsKey((e.SourceFileId, e.Locator)) && !e.TextHash.StartsWith(FactChunkHashPrefix, StringComparison.Ordinal))
+                .Select(e => e.Id).ToList();
             if (stale.Count > 0)
             {
                 foreach (var chunk in stale.Chunk(5000))
@@ -219,7 +222,9 @@ public sealed class EvidenceService
                 await _db.SaveChangesAsync(ct);
                 _db.Entry(row).State = EntityState.Detached;
             }
-            if (EvidenceAdapters.ProducesFacts(file.Kind) || hadFacts) graphsToRebuild.Add(file.SourceVersionId);
+            // What people said or wrote is matched to the things in the graph, so it changes the graph too.
+            if (EvidenceAdapters.ProducesFacts(file.Kind) || hadFacts || EvidenceAdapters.IsNarrative(file.Kind))
+                graphsToRebuild.Add(file.SourceVersionId);
 
             if (built.Chunks.Count == 0)
             {
@@ -277,6 +282,183 @@ public sealed class EvidenceService
     /// <summary>Rebuilds a version's entity graph from the facts its files hold (after a file is removed, or a re-sync).</summary>
     public Task RefreshGraphAsync(Guid versionId, CancellationToken ct) => _graph.RebuildAsync(versionId, ct);
 
+    // ── code facts ──────────────────────────────────────────────────────
+
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> CodeFactLocks = new();
+    private const int CodeFactReadParallelism = 8;
+    private const int MaxFactChunksPerFile = 200;
+
+    private sealed record CodeChunkRef(Guid SourceFileId, string Locator, string ShortId, int? LineStart, int? LineEnd);
+
+    /// <summary>Marks a code chunk made for the lines of a fact that no routine covers (top-level statements, a field initialiser).</summary>
+    public const string FactChunkHashPrefix = "gap:";
+
+    /// <summary>What reading a version's C# for facts found, and what could not be read.</summary>
+    public sealed record CodeFactsOutcome(int Files, int Entities, int Links, IReadOnlyList<string> Warnings);
+
+    /// <summary>
+    /// Reads every C# file of a version for facts (settings read, web endpoints and queues used, SQL named) and
+    /// stores them per file. The whole set is read together because some facts only make sense across files (an
+    /// options class bound in Program.cs and read elsewhere), so one changed file means all are read again; a
+    /// version's code only changes with an ingest or a re-sync, which build a version anew. The entity graph is
+    /// rebuilt from them unless the caller is about to.
+    /// </summary>
+    public async Task<CodeFactsOutcome> BuildCodeFactsAsync(Guid versionId, bool rebuildGraph, CancellationToken ct)
+    {
+        var gate = CodeFactLocks.GetOrAdd(versionId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var files = (await _db.SourceFiles.AsNoTracking()
+                    .Where(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code)
+                    .Select(f => new { f.Id, f.RelativePath, f.BlobUri, f.FileHash })
+                    .ToListAsync(ct))
+                .Where(f => CSharpFacts.IsCSharp(f.RelativePath))
+                .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
+                .ToList();
+            if (files.Count == 0) return new CodeFactsOutcome(0, 0, 0, Array.Empty<string>());
+
+            var warnings = new List<string>();
+            var unreadable = new ConcurrentBag<string>();
+            var sources = new ConcurrentBag<CodeSource>();
+            await Parallel.ForEachAsync(files, new ParallelOptions { MaxDegreeOfParallelism = CodeFactReadParallelism, CancellationToken = ct },
+                async (f, token) =>
+                {
+                    try
+                    {
+                        sources.Add(new CodeSource(f.RelativePath, await _blob.GetTextAsync(f.BlobUri, token)));
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Could not read {Blob} for code facts", f.BlobUri);
+                        unreadable.Add($"{f.RelativePath}: It could not be read for facts.");
+                    }
+                });
+            warnings.AddRange(unreadable.OrderBy(w => w, StringComparer.Ordinal));
+
+            // Parsing is CPU work; keep it off the request's thread.
+            var read = await Task.Run(() => CSharpFacts.Read(sources.ToList(), ct), ct);
+
+            foreach (var batch in files.Select(f => f.Id).Chunk(2000))
+                await _db.FileFacts.Where(x => batch.Contains(x.SourceFileId)).ExecuteDeleteAsync(ct);
+
+            var now = DateTimeOffset.UtcNow;
+            int entities = 0, links = 0;
+            var factsByFile = new Dictionary<Guid, FactSet>();
+            foreach (var batch in files.Chunk(500))
+            {
+                var rows = new List<FileFactsRow>(batch.Length);
+                foreach (var f in batch)
+                {
+                    var facts = FactSet.Empty;
+                    if (read.TryGetValue(f.RelativePath, out var r))
+                    {
+                        facts = r.Facts;
+                        warnings.AddRange(r.Notes.Select(n => $"{f.RelativePath}: {n}"));
+                    }
+                    entities += facts.Entities.Count;
+                    links += facts.Links.Count;
+                    factsByFile[f.Id] = facts;
+                    rows.Add(new FileFactsRow { SourceFileId = f.Id, SourceVersionId = versionId, FactsJson = facts.ToJson(), BuiltAt = now });
+                }
+                _db.FileFacts.AddRange(rows);
+                await _db.SaveChangesAsync(ct);
+                foreach (var row in rows) _db.Entry(row).State = EntityState.Detached;
+            }
+
+            await AddFactChunksAsync(versionId, files.Select(f => (f.Id, f.RelativePath, f.FileHash)).ToList(), factsByFile, ct);
+
+            if (rebuildGraph) await _graph.RebuildAsync(versionId, ct);
+            return new CodeFactsOutcome(files.Count, entities, links, warnings);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// A fact points at lines. Where a routine contains them the routine is the evidence; where none does (top-level
+    /// statements, a field initialiser, a routine the parser missed) a chunk of just those lines is made, so every
+    /// fact can be cited. Chunks made earlier for the file's facts are replaced, never accumulated.
+    /// </summary>
+    private async Task AddFactChunksAsync(
+        Guid versionId,
+        IReadOnlyList<(Guid Id, string Path, string FileHash)> files,
+        IReadOnlyDictionary<Guid, FactSet> facts,
+        CancellationToken ct)
+    {
+        foreach (var batch in files.Select(f => f.Id).Chunk(2000))
+            await _db.EvidenceChunks.Where(c => batch.Contains(c.SourceFileId) && c.TextHash.StartsWith(FactChunkHashPrefix)).ExecuteDeleteAsync(ct);
+
+        var existing = (await _db.EvidenceChunks.AsNoTracking()
+                .Where(c => c.SourceVersionId == versionId && c.Kind == ArtefactKinds.Code)
+                .Select(c => new { c.SourceFileId, c.Locator, c.ShortId, c.LineStart, c.LineEnd })
+                .ToListAsync(ct))
+            .Select(c => new CodeChunkRef(c.SourceFileId, c.Locator, c.ShortId, c.LineStart, c.LineEnd))
+            .GroupBy(c => c.SourceFileId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var wanted = new List<(Guid FileId, string Path, string FileHash, string Locator)>();
+        foreach (var f in files)
+        {
+            if (!facts.TryGetValue(f.Id, out var set) || set.IsEmpty) continue;
+            var have = existing.GetValueOrDefault(f.Id) ?? new List<CodeChunkRef>();
+            var covering = new FileFactSet(
+                f.Path, set,
+                have.ToDictionary(c => c.Locator, c => c.ShortId, StringComparer.Ordinal),
+                have.Where(c => c.LineStart is not null && c.LineEnd is not null)
+                    .Select(c => new ChunkSpan(c.LineStart!.Value, c.LineEnd!.Value, c.ShortId)).ToList());
+
+            var locators = set.Entities.Select(e => e.Locator).Concat(set.Links.Select(l => l.Locator))
+                .Where(l => l is not null && EvidenceLocator.TryParseLines(l, out _, out _))
+                .Select(l => l!)
+                .Distinct(StringComparer.Ordinal)
+                .Where(l => covering.EvidenceFor(l) is null)
+                .OrderBy(l => l, StringComparer.Ordinal)
+                .Take(MaxFactChunksPerFile);
+            foreach (var l in locators) wanted.Add((f.Id, f.Path, f.FileHash, l));
+        }
+        if (wanted.Count == 0) return;
+
+        var candidates = wanted
+            .SelectMany(w =>
+            {
+                var b = EvidenceIds.Base(ArtefactKinds.Code, w.Path, w.Locator);
+                return new[] { b, b + "-2", b + "-3", b + "-4" };
+            })
+            .Distinct().ToList();
+        var taken = await TakenAsync(versionId, candidates, ct);
+        var ids = EvidenceIds.Assign(wanted.Select(w => (ArtefactKinds.Code, w.Path, w.Locator)).ToList(), taken);
+
+        var now = DateTimeOffset.UtcNow;
+        var rows = new List<EvidenceChunk>(wanted.Count);
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            var w = wanted[i];
+            EvidenceLocator.TryParseLines(w.Locator, out var from, out var to);
+            var name = System.IO.Path.GetFileName(w.Path);
+            rows.Add(new EvidenceChunk
+            {
+                Id = Guid.NewGuid(),
+                ShortId = ids[i],
+                SourceVersionId = versionId,
+                SourceFileId = w.FileId,
+                Kind = ArtefactKinds.Code,
+                TrustTier = EvidenceAdapters.TrustTierOf(ArtefactKinds.Code),
+                Locator = w.Locator,
+                Label = Trim(from == to ? $"{name} · line {from}" : $"{name} · lines {from}–{to}", 300),
+                Text = null,
+                StructuredJson = null,
+                TextHash = FactChunkHashPrefix + CodeEvidence.TextHash(w.FileHash, w.Locator),
+                LineStart = from,
+                LineEnd = to,
+                CreatedAt = now,
+            });
+        }
+        await InsertAsync(rows, ct);
+    }
+
     /// <summary>
     /// Makes sure a version's evidence is built before it is read: its code (indexed at ingest, but
     /// not for projects that predate evidence) and any text artefact attached without an index.
@@ -290,6 +472,14 @@ public sealed class EvidenceService
                 && await _db.Subroutines.AnyAsync(s => s.SourceFile!.SourceVersionId == versionId && s.SourceFile.Kind == ArtefactKinds.Code, ct))
             {
                 await BuildCodeAsync(versionId, ct);
+            }
+
+            // C# read before its facts could be stated (K5), or never read: read now, for the whole project at once.
+            if (await _db.SourceFiles.AnyAsync(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code
+                    && (EF.Functions.ILike(f.RelativePath, "%.cs") || EF.Functions.ILike(f.RelativePath, "%.csx"))
+                    && !_db.FileFacts.Any(x => x.SourceFileId == f.Id), ct))
+            {
+                await BuildCodeFactsAsync(versionId, rebuildGraph: true, ct);
             }
 
             // A recording has no chunks of its own, so it is never "missing" its index.

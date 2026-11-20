@@ -41,7 +41,12 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
 - **Evidence and the entity graph** (WS7): every artefact file is cut into citable chunks by a pure adapter per kind
   (`Evidence/Adapters/`), and SQL, job, package and config adapters also state *facts* (entities and links, each
   pointing at its chunk) stored per file in `file_facts`; the graph (`graph_entities`/`graph_links`) is the
-  deterministic merge of those facts, rebuilt after any attach/replace/remove/re-sync, never patched. Anything that
+  deterministic merge of those facts, rebuilt after any attach/replace/remove/re-sync, never patched. C# code is read
+  with Roslyn (syntax only, the whole version at once, `Evidence/Code/`) for the settings a class reads, the web
+  endpoints and queues it uses and the SQL it names; a fact points at lines and is shown by the routine containing them
+  (or a chunk of just those lines). `LinkingRules` then joins files deterministically (setting ↔ address ↔ endpoint;
+  tickets/transcripts/documents that name a thing are listed on it as `mentions`, kept apart from structured
+  evidence) and `/inventory` counts what was found beside `expectedCounts` and names the gaps. Anything that
   cites uses `CitationChip`; secrets never enter a chunk or a fact. Formats, locators and how to add an adapter:
   **`docs/03_Evidence/artefact-adapters.md`**. jsonb does not keep object key order — store anything order-sensitive
   as an array.

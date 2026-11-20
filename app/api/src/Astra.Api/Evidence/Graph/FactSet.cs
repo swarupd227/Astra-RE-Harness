@@ -19,6 +19,9 @@ public static class EntityVocabulary
     public const string File = "file";
     public const string Script = "script";
     public const string ConfigKey = "config-key";
+    public const string Class = "class";
+    public const string Endpoint = "endpoint";
+    public const string Queue = "queue";
 
     public const string Reads = "reads";
     public const string Writes = "writes";
@@ -41,6 +44,9 @@ public static class EntityVocabulary
         [File] = "File",
         [Script] = "Script",
         [ConfigKey] = "Configuration key",
+        [Class] = "Class",
+        [Endpoint] = "Web endpoint",
+        [Queue] = "Message queue or exchange",
     };
 
     public static readonly IReadOnlyDictionary<string, string> Relations = new Dictionary<string, string>

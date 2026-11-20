@@ -21,7 +21,7 @@ column, and a cap on chunks per file.
 
 | Kind | Chunk | Locator | Facts |
 |---|---|---|---|
-| Source code | a routine | `L120-168` | (from the parser) |
+| Source code | a routine | `L120-168` | (C# only) classes, web endpoints, queues; reads, calls, writes, configures |
 | SQL (`.sql`, `.ddl`) | a statement that defines something, comments above included | `L10-42` | tables, views, procedures, functions; reads, writes, calls, references |
 | Job schedules (`.xml`) | a plan header element, each task, a whole job | `xpath:/JOBP/Tasks/Task[3]` | jobs and plans; contains, precedes, runs, reads, writes, triggers |
 | ETL packages (`.dtsx`) | each connection, variable and task | `xpath:/Executable/Executables/Executable[2]` | the package; what its data flow reads and writes, what it runs, which settings it names |
@@ -50,12 +50,94 @@ file's facts for a source version, rebuilt after any attach, replace, remove or 
   command); `medium` for a pattern match (SQL ScriptDom could not read, a table named inside a command-line
   query, a string in a script that looks like a setting). `origin` is `rule` today; a model's proposals will
   be `model`.
-- Types: `table view procedure function job package file script config-key`. Relations:
+- Types: `table view procedure function job package file script config-key class endpoint queue`. Relations:
   `reads writes calls runs precedes contains triggers configures references`.
 
 API (open to every persona): `GET /api/v1/corpora/{id}/entity-graph?type=job,table`,
 `GET /api/v1/corpora/{id}/entities?type=&q=&limit=&offset=`,
-`GET /api/v1/corpora/{id}/entities/{type}/{name}` (a name may be a path).
+`GET /api/v1/corpora/{id}/entities/{type}/{name}` (a name may be a path),
+`GET /api/v1/corpora/{id}/inventory` (see below).
+
+### Evidence for a fact that points at lines
+
+A fact read from code names the lines it was found on (`L45-47`), not a chunk. The graph shows it by the
+**smallest routine that contains those lines**, else the routine it overlaps most, else the routine that starts
+within 30 lines below (a class header sits just above its first method). Where no routine can show it
+(top-level statements, a field initialiser, a routine the parser missed) a chunk of just those lines is made when
+the facts are stored (`text_hash` starts `gap:`, kind `code`), so every fact can be cited. Those chunks belong to
+the facts: they are replaced whenever the file's facts are read, and `BuildCodeAsync` leaves them alone.
+
+## C# (code facts)
+
+Read with Roslyn, syntax only — no compilation, nothing is run (`Evidence/Code/`). The whole set of a version's
+`.cs`/`.csx` files is read together, in two passes, because some facts only make sense across files; one changed
+file means all are read again, which is fine because a version's code only changes with an ingest or a re-sync.
+Facts are stored per file like the artefacts' (`file_facts`, one row per C# file, empty if nothing was found) and are
+built at ingest/re-sync after the routines are indexed, or on first read for a project that predates them.
+Limits: 1,000,000 characters per file, 40,000,000 in all (the rest is skipped with a note).
+
+Pass 1 (`RegistryWalker`) collects what only the project knows: which settings section each options class is bound to
+(`Configure<T>(config.GetSection("X"))`, `AddOptions<T>().Bind(…)`, `.BindConfiguration("X")`,
+`GetSection("X").Get<T>()`), the base address and timeout each registered HTTP client gets
+(`AddHttpClient<T>(c => c.BaseAddress = …)`, named clients, `.ConfigureHttpClient`), the properties of each type and
+the text constants. Pass 2 (`FactWalker`) reads each file against that.
+
+What is stated, per **class** (a class appears only if it touches something outside itself; its name is
+namespace-qualified, nested types included; top-level statements are the class `Program`):
+
+| Found | Entity | Link from the class | Notes |
+|---|---|---|---|
+| a setting read | `config-key` (named as the app reads it, `A:B`; `env:X`; `ConnectionStrings:N`) | `reads` | indexer, `GetValue`, `GetSection(…)[…]`, `GetConnectionString`, `ConfigurationManager.AppSettings`, `Environment.GetEnvironmentVariable`, and `options.Value.Prop` through a bound options class (high; medium if the receiver is only recognised by its name) |
+| a web call | `endpoint` named `VERB {Setting:Key}/path` or `VERB https://host/path` | `calls` (high) | `HttpClient` verbs, `HttpRequestMessage`, RestSharp `RestRequest`; the setting is also `configures` the endpoint (`role: base-address`/`timeout`); a literal fallback is kept as `fallbackUrl` |
+| a message queue | `queue` (exchange or queue, name literal or `{Setting:Key}`), `broker` | `writes` (publish) / `reads` (consume) / `references` (declare) | RabbitMQ `BasicPublish`/`BasicConsume`/`QueueDeclare`/`ExchangeDeclare`, Service Bus `CreateSender`/`CreateProcessor`/`CreateReceiver` |
+| SQL text | `procedure`, `table` | `calls` / `reads` / `writes` | `SqlCommand("…")`, `CommandText = "…"`, Dapper/EF raw SQL; a bare name is a call only where the member says `CommandType.StoredProcedure`; names inside SQL text are medium confidence |
+
+Every link keeps its **sites** (`attrs.sites`: routine, line, and where it applies `retry: loop|policy`,
+`timeoutSeconds`, `timeoutSource: code|setting`, `timeoutKey`, `form`, `routingKey`). A timeout the code writes as a
+number, next to a setting that was meant to hold it, is how "the setting is ignored" shows: the setting has no `reads`
+link and the endpoint says `timeoutSource: code`.
+
+What it deliberately does not do: it does not guess. A web call whose address is built at run time, or a setting read
+whose key is, is counted and reported as a note (`… were not read`), never turned into an entity. It is not a semantic
+analysis: a name is followed back through locals, fields, constants and a few helpers (`TimeSpan.FromSeconds`,
+`Uri`, `string.Format`, interpolation, `??`), not through calls.
+
+## Linking rules
+
+`LinkingRules.Apply` runs on the merged graph (after the merge, before it is stored) and only adds what a rule can
+justify; every link or attribute it adds carries `rule`, and links are `origin: rule`.
+
+- **Setting ↔ address ↔ endpoint.** An endpoint whose base is a setting gets `resolved` — that setting's value in every
+  attached configuration file. An endpoint with a literal base address is `configures`-linked (medium, `rule:
+  config-url`) from a setting that holds the same address. A queue named by a setting is linked from it (high,
+  `config-name`) and resolved the same way; a literal queue name equal to a setting's value is linked medium.
+- **Mentions.** A ticket row, a transcript turn or a document section that names a thing is listed on that thing as
+  `mentions: [{evidenceId, kind, via}]` with `mentionCounts` per kind (at most 25 kept per kind). It is kept apart from
+  the thing's own `evidenceIds`, which are structured: what people said has to be checked against what the files show.
+  A thing is named by its name, by its last part (`dbo.TLR_STAGE`, a class without its namespace), for a table by a
+  constraint it owns (`via: constraint UQ_…`), and for a ticket also by its `cmdb_ci` / configuration item column
+  (`via: cmdb_ci`, an exact match, any name). A name is only looked for in text when it is *distinctive* (an underscore,
+  digit, colon, a dot between names or the capitals of a compound name; 5+ characters), so the word "Drawer" does not
+  mention a table of that name. Tickets and transcripts are read up to 30,000 pieces of 4,000 characters.
+
+Narrative evidence changes the graph, so attaching, replacing or removing a ticket, transcript or document rebuilds it.
+
+## Inventory
+
+`GET /api/v1/corpora/{id}/inventory` counts what a project's evidence holds, each count checkable by listing the
+entities of that type: files and chunks by kind; routines and languages in the code; things in the graph (declared, and
+only referenced); and the **measures** — `tables views procedures functions jobs packages config-keys classes endpoints
+queues routines interfaces` — each beside the count the project's settings expect (`expectedCounts[key]`). An expected
+count with no measure of that name is returned with `found: null`, not dropped. `interfaces` is an upper bound, not the
+interface map: endpoints, queues and files a job, package or class reads, writes or is triggered by.
+
+Findings (only listed when there is something to say):
+
+| Code | Says |
+|---|---|
+| `referenced-not-defined` | a job, procedure, table, view, function or package is named by something and defined by no attached file |
+| `setting-not-configured` | code reads a setting that no attached configuration has |
+| `setting-never-read` | a configuration setting no attached code or package reads (only said once there is code or a package that could have) |
 
 ## SQL
 

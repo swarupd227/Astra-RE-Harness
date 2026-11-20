@@ -95,6 +95,10 @@ public static class EvidenceAdapters
     public static bool ProducesFacts(string kind) =>
         kind is ArtefactKinds.Sql or ArtefactKinds.Job or ArtefactKinds.Etl or ArtefactKinds.Config;
 
+    /// <summary>Kinds that are what people said or wrote: the entity graph lists them as mentions of the things they name.</summary>
+    public static bool IsNarrative(string kind) =>
+        kind is ArtefactKinds.Ticket or ArtefactKinds.Transcript or ArtefactKinds.Document;
+
     public static int MaxChunksFor(string kind) => kind == ArtefactKinds.Ticket ? TicketMaxChunks : DefaultMaxChunks;
 
     /// <summary>

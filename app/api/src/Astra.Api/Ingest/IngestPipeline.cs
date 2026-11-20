@@ -74,6 +74,13 @@ public sealed class IngestPipeline
         {
             Report("persisting", "Indexing the routines as citable evidence");
             await _evidence.BuildCodeAsync(versionId, ct);
+            // C# is read for what it reads, calls and publishes; the facts go into the entity graph with the artefacts'.
+            var code = await _evidence.BuildCodeFactsAsync(versionId, rebuildGraph: false, ct);
+            if (code.Files > 0)
+            {
+                warnings.AddRange(code.Warnings.Take(10));
+                if (code.Warnings.Count > 10) warnings.Add($"{code.Warnings.Count - 10:N0} more notes on reading the C# for facts are not shown.");
+            }
             // A re-sync carries artefacts (and what they state) forward; the entity graph follows them.
             await _evidence.RefreshGraphAsync(versionId, ct);
         }

@@ -31,6 +31,10 @@
     <!-- T-SQL parsing for database-script evidence (tables, procedures, what reads and writes what) -->
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.117.0" />
 
+    <!-- C# syntax trees for code evidence (what a class reads, calls and publishes). Syntax only: no
+         compilation, no references, nothing is built or run. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+
     <!-- MediatR + FluentValidation -->
     <PackageReference Include="MediatR" Version="12.4.1" />
     <PackageReference Include="FluentValidation" Version="11.10.0" />

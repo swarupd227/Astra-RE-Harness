@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Astra.Api.Artefacts;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -88,19 +89,32 @@ public sealed class GraphService
                 select new { f.SourceFileId, file.RelativePath, f.FactsJson })
                 .ToListAsync(ct);
 
-            var chunks = files.Count == 0
-                ? new Dictionary<Guid, Dictionary<string, string>>()
+            var parsed = files.ToDictionary(f => f.SourceFileId, f => FactSet.FromJson(f.FactsJson));
+
+            // Only a file that states something needs its chunks (a C# estate has far more code chunks than facts).
+            var stating = parsed.Where(kv => !kv.Value.IsEmpty).Select(kv => kv.Key).ToArray();
+            var chunkRows = stating.Length == 0
+                ? new List<(Guid SourceFileId, string Locator, string ShortId, string Kind, int? LineStart, int? LineEnd)>()
                 : (await _db.EvidenceChunks.AsNoTracking()
-                        .Where(c => c.SourceVersionId == versionId && _db.FileFacts.Any(ff => ff.SourceFileId == c.SourceFileId))
-                        .Select(c => new { c.SourceFileId, c.Locator, c.ShortId })
+                        .Where(c => c.SourceVersionId == versionId && stating.Contains(c.SourceFileId))
+                        .Select(c => new { c.SourceFileId, c.Locator, c.ShortId, c.Kind, c.LineStart, c.LineEnd })
                         .ToListAsync(ct))
-                    .GroupBy(c => c.SourceFileId)
-                    .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.Locator, x => x.ShortId, StringComparer.Ordinal));
+                    .Select(c => (c.SourceFileId, c.Locator, c.ShortId, c.Kind, c.LineStart, c.LineEnd))
+                    .ToList();
+            var chunks = chunkRows.GroupBy(c => c.SourceFileId)
+                .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.Locator, x => x.ShortId, StringComparer.Ordinal));
+            // A fact read from code names the lines it was found on; the routine that contains them shows it.
+            var spans = chunkRows
+                .Where(c => c.Kind == ArtefactKinds.Code && c.LineStart is not null && c.LineEnd is not null)
+                .GroupBy(c => c.SourceFileId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<ChunkSpan>)g.Select(x => new ChunkSpan(x.LineStart!.Value, x.LineEnd!.Value, x.ShortId)).ToList());
 
             var merged = GraphMerger.Merge(files.Select(f => new FileFactSet(
                 f.RelativePath,
-                FactSet.FromJson(f.FactsJson),
-                chunks.GetValueOrDefault(f.SourceFileId) ?? new Dictionary<string, string>())));
+                parsed[f.SourceFileId],
+                chunks.GetValueOrDefault(f.SourceFileId) ?? new Dictionary<string, string>(),
+                spans.GetValueOrDefault(f.SourceFileId))));
+            merged = LinkingRules.Apply(merged, await NarrativeAsync(versionId, ct));
 
             await using var tx = await _db.Database.BeginTransactionAsync(ct);
             await _db.GraphLinks.Where(l => l.SourceVersionId == versionId).ExecuteDeleteAsync(ct);
@@ -155,6 +169,25 @@ public sealed class GraphService
         {
             gate.Release();
         }
+    }
+
+    // What people said or wrote, for the rules that find which things they name. A ticket export can be large, so
+    // each piece is cut to its first characters and the number read is bounded.
+    private const int NarrativeChunkLimit = 30_000;
+    private const int NarrativeChunkChars = 4_000;
+
+    private async Task<IReadOnlyList<NarrativeChunk>> NarrativeAsync(Guid versionId, CancellationToken ct)
+    {
+        var rows = await (
+            from c in _db.EvidenceChunks.AsNoTracking()
+            join f in _db.SourceFiles.AsNoTracking() on c.SourceFileId equals f.Id
+            where c.SourceVersionId == versionId && c.Text != null
+                  && (c.Kind == ArtefactKinds.Ticket || c.Kind == ArtefactKinds.Transcript || c.Kind == ArtefactKinds.Document)
+            orderby f.RelativePath, c.Ordinal
+            select new { c.ShortId, c.Kind, Text = c.Text!.Length > NarrativeChunkChars ? c.Text.Substring(0, NarrativeChunkChars) : c.Text })
+            .Take(NarrativeChunkLimit)
+            .ToListAsync(ct);
+        return rows.Select(r => new NarrativeChunk(r.ShortId, r.Kind, r.Text!)).ToList();
     }
 
     /// <summary>Builds the graph if the version has facts but no graph yet (a re-sync that carried files forward, say).</summary>

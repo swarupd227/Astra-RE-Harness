@@ -2,11 +2,55 @@ using System.Text.Json;
 
 namespace Astra.Api.Evidence;
 
-/// <summary>One file's facts, with the short id of each chunk they point at (locator → id).</summary>
+/// <summary>The lines a chunk of a source file covers, with its short id.</summary>
+public sealed record ChunkSpan(int From, int To, string ShortId);
+
+/// <summary>
+/// One file's facts, with the short id of each chunk they point at (locator → id). A fact read from
+/// source code points at the lines it was found on, not at a chunk; <see cref="Spans"/> (the routines of
+/// the file) lets those lines be shown by the routine that contains them.
+/// </summary>
 public sealed record FileFactSet(
     string Path,
     FactSet Facts,
-    IReadOnlyDictionary<string, string> ShortIdByLocator);
+    IReadOnlyDictionary<string, string> ShortIdByLocator,
+    IReadOnlyList<ChunkSpan>? Spans = null)
+{
+    /// <summary>How far above a routine a line may sit and still be shown by it (a class header above its first method).</summary>
+    public const int NearestFollowingLines = 30;
+
+    /// <summary>
+    /// The chunk that shows a fact: the one with exactly that locator; for a line range, the smallest routine
+    /// containing it, else the routine it overlaps most, else the routine that starts just below it.
+    /// </summary>
+    public string? EvidenceFor(string? locator)
+    {
+        if (locator is null) return null;
+        if (ShortIdByLocator.TryGetValue(locator, out var exact)) return exact;
+        if (Spans is not { Count: > 0 } || !EvidenceLocator.TryParseLines(locator, out var from, out var to)) return null;
+
+        ChunkSpan? best = null;
+        var bestScore = long.MinValue;
+        foreach (var s in Spans)
+        {
+            var overlap = Math.Min(to, s.To) - Math.Max(from, s.From) + 1;
+            if (overlap <= 0) continue;
+            var contains = s.From <= from && s.To >= to;
+            var score = contains ? 1_000_000_000L - (s.To - s.From) : overlap;
+            if (score > bestScore || (score == bestScore && string.CompareOrdinal(s.ShortId, best!.ShortId) < 0))
+            {
+                best = s;
+                bestScore = score;
+            }
+        }
+        if (best is not null) return best.ShortId;
+
+        var below = Spans.Where(s => s.From > to && s.From - to <= NearestFollowingLines)
+            .OrderBy(s => s.From).ThenBy(s => s.ShortId, StringComparer.Ordinal)
+            .FirstOrDefault();
+        return below?.ShortId;
+    }
+}
 
 public sealed class MergedEntity
 {
@@ -139,7 +183,7 @@ public static class GraphMerger
 
     private static void AddEvidence(List<string> ids, FileFactSet file, string? locator)
     {
-        if (locator is null || !file.ShortIdByLocator.TryGetValue(locator, out var id)) return;
+        if (file.EvidenceFor(locator) is not { } id) return;
         if (!ids.Contains(id)) ids.Add(id);
     }
 

@@ -410,6 +410,7 @@ builder.Services.AddSingleton<IFortranParserClient, FortranParserClient>();
 // ─── Ingest pipeline (Phase C.1) ──────────────────────────────────────
 builder.Services.AddScoped<IngestPipeline>();
 builder.Services.AddScoped<Astra.Api.Evidence.GraphService>();
+builder.Services.AddScoped<Astra.Api.Evidence.InventoryService>();
 builder.Services.AddScoped<Astra.Api.Evidence.EvidenceService>();
 builder.Services.AddScoped<Astra.Api.Artefacts.ArtefactAttachService>();
 
@@ -1289,6 +1290,7 @@ app.MapFlowBoardEndpoints();
 app.MapArtefactEndpoints();
 app.MapEvidenceChunkEndpoints();
 app.MapEntityGraphEndpoints();
+app.MapInventoryEndpoints();
 app.MapProjectSettingsEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();
