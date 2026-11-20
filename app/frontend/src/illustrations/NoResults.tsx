@@ -11,17 +11,17 @@ export function NoResultsIllustration({ size = 160 }: { size?: number }) {
     >
       <title>No matching results</title>
       {/* Document */}
-      <rect x="36" y="36" width="72" height="92" rx="3" fill="#FFFFFF" stroke="#101728" strokeWidth="1.5" />
+      <rect x="36" y="36" width="72" height="92" rx="3" strokeWidth="1.5" className="fill-raised stroke-ink-primary" />
       {/* Lines */}
-      <path d="M48 56 L96 56" stroke="#CFD3DA" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M48 68 L88 68" stroke="#CFD3DA" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M48 80 L80 80" stroke="#CFD3DA" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M48 56 L96 56" strokeWidth="1.5" strokeLinecap="round" className="stroke-line" />
+      <path d="M48 68 L88 68" strokeWidth="1.5" strokeLinecap="round" className="stroke-line" />
+      <path d="M48 80 L80 80" strokeWidth="1.5" strokeLinecap="round" className="stroke-line" />
       {/* Magnifier */}
-      <circle cx="106" cy="100" r="22" fill="#FBE7D6" stroke="#101728" strokeWidth="1.5" />
-      <path d="M122 116 L138 132" stroke="#101728" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="106" cy="100" r="22" strokeWidth="1.5" className="fill-sunken stroke-ink-primary" />
+      <path d="M122 116 L138 132" strokeWidth="3" strokeLinecap="round" className="stroke-ink-primary" />
       {/* Empty marker */}
-      <path d="M96 100 L116 100" stroke="#101728" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="106" cy="100" r="3" fill="#E5732C" />
+      <path d="M96 100 L116 100" strokeWidth="2" strokeLinecap="round" className="stroke-ink-primary" />
+      <circle cx="106" cy="100" r="3" className="fill-ink-tertiary" />
     </svg>
   );
 }
