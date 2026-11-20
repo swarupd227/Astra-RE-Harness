@@ -18,7 +18,7 @@
   --line-strong: 94 86 81; /* #5E5651 */
   --ink-primary: 239 232 224; /* #EFE8E0 */
   --ink-secondary: 189 175 163; /* #BDAFA3 */
-  --ink-tertiary: 123 113 109; /* #7B716D */
+  --ink-tertiary: 154 143 137; /* #9A8F89 */
   --ink-inverse: 11 11 12; /* #0B0B0C */
   --ink-link: 125 211 252; /* #7DD3FC */
   --volt: 255 221 0; /* #FFDD00 */
@@ -48,7 +48,7 @@
   --wave-2: 233 207 77; /* #E9CF4D */
   --wave-3: 216 206 195; /* #D8CEC3 */
   --wave-4: 189 175 163; /* #BDAFA3 */
-  --wave-5: 123 113 109; /* #7B716D */
+  --wave-5: 140 130 125; /* #8C827D */
   --accent: 255 221 0; /* #FFDD00 */
   --accent-hover: 230 199 0; /* #E6C700 */
   --accent-muted: 42 39 8; /* #2A2708 */
@@ -96,7 +96,7 @@
   --line-strong: 94 86 81; /* #5E5651 */
   --ink-primary: 239 232 224; /* #EFE8E0 */
   --ink-secondary: 189 175 163; /* #BDAFA3 */
-  --ink-tertiary: 123 113 109; /* #7B716D */
+  --ink-tertiary: 154 143 137; /* #9A8F89 */
   --ink-inverse: 11 11 12; /* #0B0B0C */
   --ink-link: 125 211 252; /* #7DD3FC */
   --volt: 255 221 0; /* #FFDD00 */
@@ -126,7 +126,7 @@
   --wave-2: 233 207 77; /* #E9CF4D */
   --wave-3: 216 206 195; /* #D8CEC3 */
   --wave-4: 189 175 163; /* #BDAFA3 */
-  --wave-5: 123 113 109; /* #7B716D */
+  --wave-5: 140 130 125; /* #8C827D */
   --accent: 255 221 0; /* #FFDD00 */
   --accent-hover: 230 199 0; /* #E6C700 */
   --accent-muted: 42 39 8; /* #2A2708 */
@@ -174,34 +174,34 @@
   --line-strong: 94 86 81; /* #5E5651 */
   --ink-primary: 20 20 20; /* #141414 */
   --ink-secondary: 74 68 63; /* #4A443F */
-  --ink-tertiary: 123 113 109; /* #7B716D */
+  --ink-tertiary: 100 91 86; /* #645B56 */
   --ink-inverse: 239 232 224; /* #EFE8E0 */
   --ink-link: 31 79 168; /* #1F4FA8 */
   --volt: 255 221 0; /* #FFDD00 */
-  --volt-ink: 122 105 0; /* #7A6900 */
+  --volt-ink: 111 95 0; /* #6F5F00 */
   --on-volt: 11 11 12; /* #0B0B0C */
   --sand-100: 239 232 224; /* #EFE8E0 */
   --sand-200: 216 206 195; /* #D8CEC3 */
   --sand-300: 189 175 163; /* #BDAFA3 */
   --sand-400: 123 113 109; /* #7B716D */
   --sand-500: 94 86 81; /* #5E5651 */
-  --status-ok: 14 124 102; /* #0E7C66 */
-  --status-warn: 180 83 9; /* #B45309 */
+  --status-ok: 11 102 82; /* #0B6652 */
+  --status-warn: 146 64 14; /* #92400E */
   --status-fail: 180 35 24; /* #B42318 */
-  --status-info: 3 105 161; /* #0369A1 */
-  --status-draft: 180 83 9; /* #B45309 */
-  --status-review: 14 124 102; /* #0E7C66 */
-  --status-signed: 3 105 161; /* #0369A1 */
-  --status-scaffolded: 180 83 9; /* #B45309 */
+  --status-info: 7 89 133; /* #075985 */
+  --status-draft: 146 64 14; /* #92400E */
+  --status-review: 11 102 82; /* #0B6652 */
+  --status-signed: 7 89 133; /* #075985 */
+  --status-scaffolded: 146 64 14; /* #92400E */
   --status-failed: 180 35 24; /* #B42318 */
   --status-superseded: 123 113 109; /* #7B716D */
   --status-untouched: 208 198 186; /* #D0C6BA */
-  --persona-engineer: 122 105 0; /* #7A6900 */
+  --persona-engineer: 111 95 0; /* #6F5F00 */
   --persona-sme: 94 86 81; /* #5E5651 */
   --persona-observer: 123 113 109; /* #7B716D */
-  --persona-admin: 180 83 9; /* #B45309 */
+  --persona-admin: 146 64 14; /* #92400E */
   --wave-1: 138 117 0; /* #8A7500 */
-  --wave-2: 125 110 37; /* #7D6E25 */
+  --wave-2: 111 97 32; /* #6F6120 */
   --wave-3: 117 105 74; /* #75694A */
   --wave-4: 123 113 109; /* #7B716D */
   --wave-5: 94 86 81; /* #5E5651 */

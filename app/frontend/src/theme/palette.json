@@ -11,7 +11,7 @@
 
     "ink-primary": "#EFE8E0",
     "ink-secondary": "#BDAFA3",
-    "ink-tertiary": "#7B716D",
+    "ink-tertiary": "#9A8F89",
     "ink-inverse": "#0B0B0C",
     "ink-link": "#7DD3FC",
 
@@ -46,7 +46,7 @@
     "wave-2": "#E9CF4D",
     "wave-3": "#D8CEC3",
     "wave-4": "#BDAFA3",
-    "wave-5": "#7B716D",
+    "wave-5": "#8C827D",
 
     "accent": "#FFDD00",
     "accent-hover": "#E6C700",
@@ -98,12 +98,12 @@
 
     "ink-primary": "#141414",
     "ink-secondary": "#4A443F",
-    "ink-tertiary": "#7B716D",
+    "ink-tertiary": "#645B56",
     "ink-inverse": "#EFE8E0",
     "ink-link": "#1F4FA8",
 
     "volt": "#FFDD00",
-    "volt-ink": "#7A6900",
+    "volt-ink": "#6F5F00",
     "on-volt": "#0B0B0C",
 
     "sand-100": "#EFE8E0",
@@ -112,25 +112,25 @@
     "sand-400": "#7B716D",
     "sand-500": "#5E5651",
 
-    "status-ok": "#0E7C66",
-    "status-warn": "#B45309",
+    "status-ok": "#0B6652",
+    "status-warn": "#92400E",
     "status-fail": "#B42318",
-    "status-info": "#0369A1",
-    "status-draft": "#B45309",
-    "status-review": "#0E7C66",
-    "status-signed": "#0369A1",
-    "status-scaffolded": "#B45309",
+    "status-info": "#075985",
+    "status-draft": "#92400E",
+    "status-review": "#0B6652",
+    "status-signed": "#075985",
+    "status-scaffolded": "#92400E",
     "status-failed": "#B42318",
     "status-superseded": "#7B716D",
     "status-untouched": "#D0C6BA",
 
-    "persona-engineer": "#7A6900",
+    "persona-engineer": "#6F5F00",
     "persona-sme": "#5E5651",
     "persona-observer": "#7B716D",
-    "persona-admin": "#B45309",
+    "persona-admin": "#92400E",
 
     "wave-1": "#8A7500",
-    "wave-2": "#7D6E25",
+    "wave-2": "#6F6120",
     "wave-3": "#75694A",
     "wave-4": "#7B716D",
     "wave-5": "#5E5651",
