@@ -415,3 +415,17 @@ def test_named_argument_colon_equals_is_not_a_statement_separator():
     """).strip()
     out = parse_source("M.bas", src)
     assert out.subroutines[0].called_subroutines == ("Persist",)
+
+
+def test_dispatcher_falls_back_quietly_while_the_antlr_grammar_is_absent():
+    # The ANTLR grammar is not vendored yet: every file goes to v0, and
+    # that expected state is not reported as a "panic" on every file.
+    import pytest
+
+    pytest.importorskip("parser_sidecar.parser_pb2")  # generated when the image is built
+    from parser_sidecar import server
+
+    server._vb6_parse_antlr = None
+    out = server._vb6_parse("M.bas", 'Attribute VB_Name = "M"\nSub A()\nEnd Sub\n')
+    assert [s.name for s in out.subroutines] == ["A"]
+    assert not any("ANTLR" in w for w in out.warnings)

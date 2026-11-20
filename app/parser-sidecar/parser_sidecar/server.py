@@ -96,6 +96,13 @@ def _vb6_parse(filename: str, content: str):
     if _vb6_parse_antlr:
         try:
             return _vb6_parse_antlr(filename=filename, content=content)
+        except (ImportError, NotImplementedError) as e:
+            # The grammar or its walker is not in this build: that is the
+            # expected state, not a failure of this file. Use v0 from now on
+            # without a warning on every file.
+            log.info("vb6 ANTLR4 parser not available (%s); using v0 tokenizer", e)
+            _vb6_parse_antlr = False
+            return _vb6_parse_v0(filename=filename, content=content)
         except Exception as e:  # noqa: BLE001 — grammar panics surface broadly
             log.info("vb6 ANTLR4 panic on %s (%s); v0 fallback", filename, e)
             outcome = _vb6_parse_v0(filename=filename, content=content)
