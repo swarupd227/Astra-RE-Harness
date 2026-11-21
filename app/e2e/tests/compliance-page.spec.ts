@@ -15,12 +15,13 @@ import { expect, test, type Page } from '@playwright/test';
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ENG = { 'X-Dev-Persona': 'engineer' };
 
-async function lastAuditEvent(page: Page, action: string): Promise<{ id: string; createdAt: string } | null> {
+// /api/v1/audit rows carry the event name as `eventType` and the time as `occurredAt`.
+async function lastAuditEvent(page: Page, eventType: string): Promise<{ id: string; occurredAt: string } | null> {
   const res = await page.request.get(`${API_BASE}/api/v1/audit?limit=20`, { headers: ENG });
   if (!res.ok()) return null;
   const body = await res.json();
-  const evt = body.data?.find((e: { action: string }) => e.action === action);
-  return evt ? { id: evt.id, createdAt: evt.createdAt } : null;
+  const evt = body.data?.find((e: { eventType: string }) => e.eventType === eventType);
+  return evt ? { id: evt.id, occurredAt: evt.occurredAt } : null;
 }
 
 test.describe('Phase #4 · Compliance feed page', () => {
