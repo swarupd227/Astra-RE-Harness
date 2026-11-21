@@ -1,0 +1,119 @@
+{
+  "id": "knowledge-transfer",
+  "title": "Knowledge transfer",
+  "version": 1,
+  "vocabulary": { "knowledgeHolder": "contractor" },
+  "credit": { "approvedAllSupported": 1.0, "approvedWithUnverified": 0.5, "otherwise": 0.0 },
+  "bands": { "highAbove": 60, "mediumFrom": 30 },
+  "targets": { "day90": 50, "day180": 25, "day365": 10 },
+  "tierWeights": { "1": 3, "2": 2, "3": 1 },
+  "deliverables": [
+    {
+      "id": "overview",
+      "label": "System overview",
+      "weight": 10,
+      "generator": "overview",
+      "slots": {
+        "static": [
+          { "key": "overview:purpose", "label": "Purpose", "brief": "What the system is for and what would stop if it did not run." },
+          { "key": "overview:users", "label": "Users", "brief": "Who uses it, in what roles, and how they sign in." },
+          { "key": "overview:business-process", "label": "Business process", "brief": "The business process it supports, in the order the work happens." },
+          { "key": "overview:tier", "label": "Tier and criticality", "brief": "How critical it is, and what depends on it." },
+          { "key": "overview:owners", "label": "Owners", "brief": "Who owns it and who knows it best." }
+        ]
+      }
+    },
+    {
+      "id": "context-diagram",
+      "label": "Context diagram",
+      "weight": 10,
+      "generator": "context-diagram",
+      "slots": {
+        "static": [
+          { "key": "context:diagram", "label": "Context diagram", "brief": "The system, the systems and people around it, and what passes between them." }
+        ]
+      }
+    },
+    {
+      "id": "interface-map",
+      "label": "Interface map",
+      "weight": 15,
+      "generator": "interface-map",
+      "slots": {
+        "entity": {
+          "keyPrefix": "entity:interface:",
+          "countKey": "interfaces",
+          "label": "Interface",
+          "brief": "One interface: what it connects to, the protocol and direction, how often, who is on the other side, and where its address is configured."
+        }
+      }
+    },
+    {
+      "id": "batch-sheets",
+      "label": "Batch job sheets",
+      "weight": 15,
+      "generator": "batch-sheets",
+      "slots": {
+        "entity": {
+          "keyPrefix": "entity:job:",
+          "countKey": "jobs",
+          "label": "Batch job",
+          "brief": "One scheduled job: when it runs, what it runs, what it needs first, whether it can be re-run, and what to do when it fails."
+        }
+      }
+    },
+    {
+      "id": "runbook",
+      "label": "Runbook",
+      "weight": 20,
+      "generator": "runbook",
+      "slots": {
+        "static": [
+          { "key": "runbook:start-of-day", "label": "Start of day", "brief": "What is checked or done at the start of the working day." },
+          { "key": "runbook:end-of-day", "label": "End of day", "brief": "What happens at the end of the day, in order, and how to tell it worked." },
+          { "key": "runbook:failure-handling", "label": "Failure handling", "brief": "For each way the nightly or daily work fails: the symptom, the cause, and the step that fixes it." },
+          { "key": "runbook:restart", "label": "Restart and recovery", "brief": "Where a failed run is restarted from, and what must not be re-run." },
+          { "key": "runbook:escalation", "label": "Escalation", "brief": "Who to call, in what order, in and out of hours." }
+        ]
+      }
+    },
+    {
+      "id": "known-errors",
+      "label": "Known errors",
+      "weight": 15,
+      "generator": "known-errors",
+      "slots": {
+        "entity": {
+          "keyPrefix": "entity:error:",
+          "countKey": "known-errors",
+          "label": "Known error",
+          "brief": "One recurring problem: how it shows, why it happens, how it is fixed or worked around, and how often it has happened."
+        }
+      }
+    },
+    {
+      "id": "environments-access-contacts",
+      "label": "Environments, access and contacts",
+      "weight": 10,
+      "generator": "environments",
+      "slots": {
+        "static": [
+          { "key": "env:environments", "label": "Environments", "brief": "The environments there are, and what differs between them." },
+          { "key": "env:access-groups", "label": "Access groups", "brief": "Who has access, through which groups or accounts." },
+          { "key": "env:contacts", "label": "Contacts", "brief": "People and teams to contact, for what, and how." }
+        ]
+      }
+    },
+    {
+      "id": "open-questions",
+      "label": "Open questions",
+      "weight": 5,
+      "generator": "open-questions",
+      "slots": {
+        "static": [
+          { "key": "openq:closed", "label": "Open questions closed", "brief": "Every question the evidence could not answer has an answer from a person." }
+        ]
+      }
+    }
+  ]
+}

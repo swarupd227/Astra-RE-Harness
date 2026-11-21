@@ -246,6 +246,7 @@ builder.Services.AddSingleton<Astra.Api.Docs.DocsGenerationOrchestrator>();
 // WS6 — model-authored prose, style guide + exemplars, critic/revise pass
 // (IDocWriter, DocPromptAssets, DocCriticPass; see Docs/DocsQualityRegistration.cs).
 Astra.Api.Docs.DocsQualityRegistration.AddDocsQuality(builder.Services);
+Astra.Api.Knowledge.KnowledgeRegistration.AddKnowledge(builder.Services, builder.Configuration);
 // Phase 11.0.f — in-process SSE log bus for generation runs.
 builder.Services.AddSingleton<Astra.Api.Docs.DocRunLogger>();
 
@@ -1291,6 +1292,7 @@ app.MapArtefactEndpoints();
 app.MapEvidenceChunkEndpoints();
 app.MapEntityGraphEndpoints();
 app.MapInventoryEndpoints();
+app.MapKnowledgeEndpoints();
 app.MapProjectSettingsEndpoints();
 app.MapPortfolioEndpoints();
 app.MapComplianceEndpoints();

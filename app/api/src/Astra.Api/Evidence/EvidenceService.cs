@@ -725,6 +725,28 @@ public sealed class EvidenceService
         return new EvidenceAudio(file.Id, file.RelativePath, file.ContentType ?? "audio/mpeg", file.SizeBytes);
     }
 
+    /// <summary>
+    /// Pieces of evidence as the grounding gate and the statement writer read them: kind, trust tier, label, where it
+    /// is, and the text itself (the lines, for code). An id that is not evidence of this version is simply absent, which
+    /// is how a citation that was made up is found out.
+    /// </summary>
+    public async Task<IReadOnlyList<Astra.Api.Knowledge.GateChunk>> LoadGateChunksAsync(
+        Guid versionId, IEnumerable<string> shortIds, CancellationToken ct)
+    {
+        var result = new List<Astra.Api.Knowledge.GateChunk>();
+        foreach (var id in shortIds.Distinct(StringComparer.Ordinal))
+        {
+            var d = await GetDetailAsync(versionId, id, ct);
+            if (d is null) continue;
+            result.Add(new Astra.Api.Knowledge.GateChunk(d.ShortId, d.Kind, d.TrustTier, d.Label, d.Text ?? "", $"{d.Path} {d.Locator}"));
+        }
+        return result;
+    }
+
+    /// <summary>The short ids of the pieces of evidence that best match a few words (the label, the file, or the text), most relevant file order first.</summary>
+    public async Task<IReadOnlyList<string>> SearchEvidenceIdsAsync(Guid versionId, string query, int limit, CancellationToken ct) =>
+        (await ListAsync(versionId, null, query, null, limit, 0, ct)).Data.Select(e => e.ShortId).ToList();
+
     /// <summary>Chunks per file for a version, for the Sources view.</summary>
     public async Task<IReadOnlyDictionary<Guid, int>> CountsByFileAsync(Guid versionId, CancellationToken ct) =>
         await _db.EvidenceChunks.AsNoTracking()

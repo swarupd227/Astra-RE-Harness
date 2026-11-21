@@ -15,6 +15,14 @@ namespace Astra.Api.Docs;
 /// calling a model — every call site knows what a plausible answer to its
 /// own prompt looks like, so the mock path exercises the same parsing and
 /// persistence as the real one.
+/// <para>
+/// The trailing optional fields are for pipelines that must be repeatable
+/// (knowledge capture): <see cref="Temperature"/> is sent when set (0 for every
+/// capture call; the other pipelines send none and keep the model's default),
+/// <see cref="ReplayKey"/> names the call so a recorded or fixture answer can be
+/// found again (<c>step:item:purpose:attempt</c>), and <see cref="RunMode"/> says
+/// how a run is being made ("live" | "cached"). Existing callers set none of them.
+/// </para>
 /// </summary>
 public sealed record DocWriteRequest(
     string PromptId,
@@ -27,7 +35,10 @@ public sealed record DocWriteRequest(
     string Model,
     int MaxTokens,
     string CacheKey,
-    Func<string> MockPayload);
+    Func<string> MockPayload,
+    string? ReplayKey = null,
+    double? Temperature = null,
+    string? RunMode = null);
 
 public sealed record DocWriteResult(
     string ToolInputJson,
@@ -82,7 +93,8 @@ public sealed class AnthropicDocWriter : IDocWriter
     public bool IsMock => false;
     public string ConfigVersion => _anthropic.ConfigVersion;
 
-    public async Task<DocWriteResult> WriteAsync(DocWriteRequest request, CancellationToken ct)
+    /// <summary>The Messages API request body for one writer call (a method of its own so a test can read it).</summary>
+    internal static string BuildBodyJson(DocWriteRequest request)
     {
         var system = new List<Dictionary<string, object?>>(request.SystemBlocks.Count);
         for (var i = 0; i < request.SystemBlocks.Count; i++)
@@ -120,7 +132,14 @@ public sealed class AnthropicDocWriter : IDocWriter
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = request.UserMessage },
             },
         };
-        var bodyJson = JsonSerializer.Serialize(body);
+        // Sent only when asked for: every other pipeline keeps the model's default, as it always did.
+        if (request.Temperature is { } temperature) body["temperature"] = temperature;
+        return JsonSerializer.Serialize(body);
+    }
+
+    public async Task<DocWriteResult> WriteAsync(DocWriteRequest request, CancellationToken ct)
+    {
+        var bodyJson = BuildBodyJson(request);
 
         // Long documents at 16k output tokens run for minutes; the default
         // 100 s client timeout is far too short (the catalog stage timed out

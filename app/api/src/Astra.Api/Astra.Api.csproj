@@ -82,6 +82,9 @@
          — we just have to flip CopyToOutputDirectory so they ship next
          to the binary. -->
     <Content Update="Llm/Schemas/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Knowledge-capture packs (pack.json per pack, plus fixtures for the offline writer). Read once at
+         startup by Knowledge/Packs/PackRegistry, from next to the binary or from src/ in dev-watch mode. -->
+    <Content Update="Llm/Packs/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

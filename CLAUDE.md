@@ -46,7 +46,14 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   endpoints and queues it uses and the SQL it names; a fact points at lines and is shown by the routine containing them
   (or a chunk of just those lines). `LinkingRules` then joins files deterministically (setting ↔ address ↔ endpoint;
   tickets/transcripts/documents that name a thing are listed on it as `mentions`, kept apart from structured
-  evidence) and `/inventory` counts what was found beside `expectedCounts` and names the gaps. Office documents with
+  evidence) and `/inventory` counts what was found beside `expectedCounts` and names the gaps. Deliverables are
+  written as **statements** (`statements/v1`, `Knowledge/`): each cites evidence and fills a slot, a pure
+  `GroundingGate` drops what is uncited, cites nothing real, uses a name the evidence lacks, or is not said by its
+  evidence (a separate small model checks that; the writer never grades itself) and gives the rest a status by rule
+  (Supported / Unverified / Conflict). Packs (`Llm/Packs/<id>/pack.json`) are data — deliverables, weights, slots,
+  credit rules — and `Completeness` scores approved slots as pure arithmetic. Every knowledge model call goes through
+  `IDocWriter` at temperature 0 with a replay key (no `HttpClient` under `Knowledge/`, enforced by a test).
+  Rules and formats: **`docs/03_Evidence/statements-and-grounding.md`**. Office documents with
   macros (`.xlsm`, `.xls`, `.docm` …) are read statically (`Office/`): at intake their VBA becomes source files under
   the document (`Book.xlsm/Module1.bas`), and a spreadsheet is also attached as the `workbook` kind (sheets, named
   inputs, input rules, formulas, controls → the macros they run). Anything that
