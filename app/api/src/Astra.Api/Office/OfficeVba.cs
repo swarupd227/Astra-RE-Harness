@@ -10,6 +10,9 @@ public enum VbaModuleKind { Standard, Class, Document, Form }
 /// the form's own properties. Its controls live in a binary stream not read yet.</param>
 public sealed record VbaModule(string Name, VbaModuleKind Kind, string Source, string? FormHeader)
 {
+    /// <summary>For a UserForm, its controls as the designer stores them; null when they could not be read.</summary>
+    public UserFormLayout? Layout { get; init; }
+
     /// <summary>The name the VBA editor would export it under.</summary>
     public string ExportFileName => Name + Kind switch
     {
@@ -140,13 +143,15 @@ public static class OfficeVba
             }
             var kind = kinds.TryGetValue(name, out var k) ? k : m.Procedural ? VbaModuleKind.Standard : VbaModuleKind.Class;
             string? header = null;
+            UserFormLayout? layout = null;
             if (kind == VbaModuleKind.Form)
             {
                 var designer = cf.Child(parent, name);
                 var frame = designer is null ? null : cf.Child(designer, "\u0003VBFrame");
                 if (frame is not null) header = enc.GetString(cf.ReadStream(frame));
+                if (designer is { IsStorage: true }) layout = UserForms.Read(cf, designer, name, warnings);
             }
-            modules.Add(new VbaModule(name, kind, source, header));
+            modules.Add(new VbaModule(name, kind, source, header) { Layout = layout });
         }
         return new VbaProject(projectName, codePage, modules);
     }

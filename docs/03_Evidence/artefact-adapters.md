@@ -234,6 +234,16 @@ are left out and the result says what was read. A spreadsheet is also kept whole
 run switches the Spreadsheets kind on and attaches it, so code, evidence and graph come from one upload.
 Legacy binary workbooks (`.xls`) give their VBA; their sheets are not read yet (a note says so).
 
+**UserForms** (`Office/UserForms`, [MS-OFORMS]): each form's designer storage is read for its controls — kind,
+name, caption, tab order, position and size in points, design-time value, option group, `ControlSource` and
+`RowSource` — following Frames and MultiPage pages (nested `i<id>` storages). Every record declares its size and the
+reader checks it consumed exactly that; a mismatch is a warning and the form is marked incomplete, never laid out
+wrong. A form is one piece (`form:frmQuotation`) listing its controls with each input's label (the Label overlapping
+its first line, nearest on the left; else just above). Facts: the workbook `contains` the `user-form`, which
+`contains` its controls (a Frame or page contains its own); a control `runs` the handlers its form's code defines
+for it (`cmdNext1_Click`), `writes` its `ControlSource` cell and `reads` its `RowSource` range. Custom ActiveX
+controls (a class table in the form) are not read yet.
+
 ## Configuration
 
 One chunk per setting, located by JSON path and named as the application reads it (`Ofac:TimeoutSeconds`). A list

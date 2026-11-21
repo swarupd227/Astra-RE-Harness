@@ -218,6 +218,55 @@ public sealed class WorkbookAdapter : IEvidenceAdapter
                 links.Add(new(EntityVocabulary.References, Ref(ModuleType, Q(c.Module)), Ref(NamedRangeType, Q(n)), mloc, EntityVocabulary.Medium));
         }
 
+        // ── UserForms: the dialogs the macros show ────────────────────
+        foreach (var m in modules.Where(x => x.Layout is not null))
+        {
+            var floc = $"form:{m.Name}";
+            var formName = Q(m.Name);
+            var handlers = HandlerNames(m.Source);
+            var flat = Flatten(m.Layout!.Controls, null).ToList();
+            var text = new StringBuilder();
+            text.AppendLine($"UserForm {m.Name}" + (m.Layout.Width is { } w && m.Layout.Height is { } h ? $" ({w:0} x {h:0} pt)" : "") +
+                            $": {Count(flat.Count, "control")}" + (m.Layout.Complete ? "." : " (part of its designer data could not be read)."));
+            foreach (var (c, parent, indent, label) in flat)
+            {
+                var caption = c.Caption is null ? "" : $" \"{Clip(c.Caption, 120)}\"";
+                var labelled = label is null ? "" : $" labelled \"{Clip(label, 60)}\"";
+                var bound = c.ControlSource is null ? "" : $", bound to {c.ControlSource}";
+                var items = c.RowSource is null ? "" : $", items from {c.RowSource}";
+                var group = c.GroupName is null ? "" : $", group {c.GroupName}";
+                var runs = handlers.Where(hn => hn.StartsWith(c.Name + "_", StringComparison.OrdinalIgnoreCase)).ToList();
+                text.AppendLine($"{new string(' ', indent * 2)}- {c.Kind} {c.Name}{caption}{labelled}{bound}{items}{group}" +
+                                (runs.Count > 0 ? $"; runs {string.Join(", ", runs)}" : ""));
+            }
+            chunks.Add(new(floc, $"{name} · {m.Name}", text.ToString().TrimEnd(),
+                JsonSerializer.Serialize(new { m.Name, m.Layout.Width, m.Layout.Height, m.Layout.Complete, controls = m.Layout.Controls }, Json)));
+            entities.Add(new(UserFormType, formName, floc, Attrs(("controls", flat.Count), ("complete", m.Layout.Complete),
+                ("codePath", $"{wb}/{m.ExportFileName}"))));
+            links.Add(new(EntityVocabulary.Contains, self, Ref(UserFormType, formName), floc));
+
+            foreach (var (c, parent, _, label) in flat)
+            {
+                var controlName = Q($"{m.Name}/{c.Name}");
+                entities.Add(new(ControlType, controlName, floc, Attrs(("kind", c.Kind), ("technology", "userform"), ("caption", c.Caption is null ? null : Clip(c.Caption, 200)),
+                    ("label", label), ("controlSource", c.ControlSource), ("rowSource", c.RowSource), ("group", c.GroupName), ("tabIndex", c.TabIndex))));
+                var owner = parent is null ? Ref(UserFormType, formName) : Ref(ControlType, Q($"{m.Name}/{parent.Name}"));
+                links.Add(new(EntityVocabulary.Contains, owner, Ref(ControlType, controlName), floc));
+                foreach (var hn in handlers.Where(hn => hn.StartsWith(c.Name + "_", StringComparison.OrdinalIgnoreCase)))
+                {
+                    AddMacro(m.Name, hn, floc, true);
+                    links.Add(new(EntityVocabulary.Runs, Ref(ControlType, controlName), Ref(MacroType, Q($"{m.Name}.{hn}")), floc,
+                        EntityVocabulary.High, Attrs(("event", hn[(hn.IndexOf('_') + 1)..]))));
+                }
+                if (c.ControlSource is not null)
+                    links.Add(new(EntityVocabulary.Writes, Ref(ControlType, controlName), Ref(SheetType, Q(SheetOf(c.ControlSource) ?? "?")), floc,
+                        EntityVocabulary.High, Attrs(("cell", c.ControlSource))));
+                if (c.RowSource is not null && SheetOf(c.RowSource) is { } rs)
+                    links.Add(new(EntityVocabulary.Reads, Ref(ControlType, controlName), Ref(SheetType, Q(rs)), floc,
+                        EntityVocabulary.High, Attrs(("range", c.RowSource))));
+            }
+        }
+
         // ── Links out ─────────────────────────────────────────────────
         foreach (var x in r.Externals)
         {
@@ -237,7 +286,10 @@ public sealed class WorkbookAdapter : IEvidenceAdapter
 
         var summary = $"Read {Count(r.Sheets.Count, "sheet")}, {Count(r.Names.Count, "named range")}, " +
                       $"{Count(r.Sheets.Sum(s => s.Validations.Count), "input rule")}, {Count(r.Sheets.Sum(s => s.Controls.Count), "control")} " +
-                      $"({r.Sheets.SelectMany(s => s.Controls).Count(c => c.MacroFound)} bound to VBA) and {Count(r.Events.Count, "event handler")}.";
+                      $"({r.Sheets.SelectMany(s => s.Controls).Count(c => c.MacroFound)} bound to VBA) and {Count(r.Events.Count, "event handler")}" +
+                      (modules.Any(x => x.Layout is not null)
+                          ? $"; {Count(modules.Count(x => x.Layout is not null), "UserForm")} with {modules.Where(x => x.Layout is not null).Sum(x => CountControls(x.Layout!.Controls)):N0} controls."
+                          : ".");
         return new AdapterResult(chunks, warnings, new FactSet(Dedupe(entities), links), summary);
 
         void AddModule(string module, string locator)
@@ -259,6 +311,61 @@ public sealed class WorkbookAdapter : IEvidenceAdapter
             links.Add(new(EntityVocabulary.Contains, new EntityRefFact(ModuleType, Q(module)), new EntityRefFact(MacroType, full), locator));
         }
     }
+
+    public const string UserFormType = "user-form";
+
+    private static int CountControls(IReadOnlyList<FormControl> controls) => controls.Sum(c => 1 + CountControls(c.Children));
+
+    private static readonly System.Text.RegularExpressions.Regex HandlerRe = new(
+        @"^[ \t]*(?:(?:Public|Private)[ \t]+)?Sub[ \t]+(\w+_\w+)\b", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static List<string> HandlerNames(string source) =>
+        HandlerRe.Matches(source).Select(x => x.Groups[1].Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Every control depth-first, with its container, nesting depth and the label beside it.</summary>
+    private static IEnumerable<(FormControl Control, FormControl? Parent, int Depth, string? Label)> Flatten(
+        IReadOnlyList<FormControl> controls, FormControl? parent, int depth = 0)
+    {
+        foreach (var c in controls.OrderBy(c => c.TabIndex ?? int.MaxValue))
+        {
+            yield return (c, parent, depth, LabelFor(c, controls));
+            foreach (var x in Flatten(c.Children, c, depth + 1)) yield return x;
+        }
+    }
+
+    /// <summary>
+    /// The caption of the Label a user reads as this input's name: on the same line and to its left (nearest
+    /// first), else directly above. Only for inputs, which carry no caption of their own.
+    /// </summary>
+    private static string? LabelFor(FormControl c, IReadOnlyList<FormControl> siblings)
+    {
+        if (c.Kind is not ("TextBox" or "ComboBox" or "ListBox" or "SpinButton" or "ScrollBar")) return null;
+        // A tall list's label sits by its first line, not its middle: compare against the top 20 pt only.
+        var lineTop = c.Top;
+        var lineBottom = c.Top + Math.Min(c.Height ?? 12, 20);
+        var lineMid = (lineTop + lineBottom) / 2;
+        var labels = siblings.Where(s => s.Kind == "Label" && s.Caption is not null && s.Width is not null).ToList();
+        var left = labels
+            .Where(l => l.Left + l.Width!.Value <= c.Left + 2
+                        && Math.Min(l.Top + (l.Height ?? 12), lineBottom) - Math.Max(l.Top, lineTop) >= 2)   // overlaps the first line
+            .OrderBy(l => (c.Left - (l.Left + l.Width!.Value)) + 3 * Math.Abs(l.Top + (l.Height ?? 12) / 2 - lineMid))
+            .FirstOrDefault();
+        var above = left is null
+            ? labels.Where(l => l.Top + (l.Height ?? 0) <= c.Top + 2 && c.Top - (l.Top + (l.Height ?? 0)) <= 18 && Math.Abs(l.Left - c.Left) <= 24)
+                .OrderBy(l => c.Top - l.Top).FirstOrDefault()
+            : null;
+        var caption = (left ?? above)?.Caption;
+        return caption is null ? null : System.Text.RegularExpressions.Regex.Replace(caption, @"\s+", " ").Trim();
+    }
+
+    private static string Clip(string s, int max)
+    {
+        var one = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
+        return one.Length <= max ? one : one[..max] + "…";
+    }
+
+    /// <summary>Exposed for tests: the label a user reads as this input's name.</summary>
+    internal static string? LabelForTest(FormControl c, IReadOnlyList<FormControl> siblings) => LabelFor(c, siblings);
 
     private static List<EntityFact> Dedupe(List<EntityFact> entities) =>
         entities.GroupBy(e => (e.Type, e.Name.ToLowerInvariant())).Select(g => g.First()).ToList();

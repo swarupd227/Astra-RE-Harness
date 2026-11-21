@@ -55,6 +55,7 @@ public static class EntityVocabulary
         [WorkbookAdapter.MacroType] = "Macro",
         [WorkbookAdapter.ModuleType] = "VBA module",
         [WorkbookAdapter.DataSourceType] = "Data connection",
+        [WorkbookAdapter.UserFormType] = "UserForm (dialog)",
     };
 
     public static readonly IReadOnlyDictionary<string, string> Relations = new Dictionary<string, string>
