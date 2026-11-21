@@ -108,10 +108,17 @@ public sealed class TestPackGenerator
         // backend/tests/ or backend/src/test/java/, not at the scaffold
         // root, and its namespace/package is never the one hardcoded
         // archetype this was originally built against.
+        // react-python has a Python back end: a pytest module next to the
+        // scaffold's own backend tests, named the way pytest collects it.
+        var isPythonBackend = string.Equals(scaffold.TargetPlatform, CompileValidator.ReactPythonStack, StringComparison.OrdinalIgnoreCase);
+
         var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
         using var manifestDoc = JsonDocument.Parse(manifestText);
-        var (testDir, testNamespace) = DeriveTestFileLocation(manifestDoc.RootElement, subroutineName, isJavaBackend);
-        var testFilePath = isJavaBackend ? $"{testDir}/{className}.java" : $"{testDir}/{className}.cs";
+        var (testDir, testNamespace) = isPythonBackend
+            ? (DerivePythonTestDir(manifestDoc.RootElement), "")
+            : DeriveTestFileLocation(manifestDoc.RootElement, subroutineName, isJavaBackend);
+        var testFilePath = isPythonBackend ? $"{testDir}/test_{SnakeCase(subroutineName)}_signed_spec_pack.py"
+            : isJavaBackend ? $"{testDir}/{className}.java" : $"{testDir}/{className}.cs";
 
         // ── Walk the spec JSON via the externalised schema (Phase #3a) ──
         // The schema declares which kinds exist for this source language
@@ -133,12 +140,14 @@ public sealed class TestPackGenerator
         }
 
         // ── Render the file ──────────────────────────────────────────────
-        var content = RenderTestFile(className, testNamespace, subroutineName, spec.Id, schema, claimsByKind, isJavaBackend);
+        var content = isPythonBackend
+            ? RenderPythonTestFile(subroutineName, spec.Id, schema, claimsByKind)
+            : RenderTestFile(className, testNamespace, subroutineName, spec.Id, schema, claimsByKind, isJavaBackend);
 
         // ── Update the scaffold manifest in MinIO ────────────────────────
         var allClaims = claimsByKind.SelectMany(kv => kv.Value).ToList();
         var newManifest = ReplaceOrAppendFile(
-            manifestDoc.RootElement, testFilePath, isJavaBackend ? "java" : "csharp", content,
+            manifestDoc.RootElement, testFilePath, isPythonBackend ? "python" : isJavaBackend ? "java" : "csharp", content,
             claimIds: allClaims.Select(c => c.Id).ToArray());
 
         // Re-upload the manifest under the same key so the scaffold detail
@@ -374,6 +383,82 @@ public sealed class TestPackGenerator
 
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// pytest counterpart of RenderTestFile, for react-python scaffolds. One test function per
+    /// signed-spec claim, named after the claim id (so `pytest -k inv_1` selects it — the closest pytest
+    /// has to xUnit's [Trait] / JUnit's @Tag without a conftest), the claim as a comment, and the same
+    /// soft-assertion contract.
+    /// </summary>
+    private static string RenderPythonTestFile(
+        string subroutineName,
+        Guid specId,
+        SpecSchema schema,
+        Dictionary<string, List<Claim>> claimsByKind)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# =====================================================================");
+        sb.AppendLine("# AUTO-GENERATED — Astra TestPackGenerator");
+        sb.AppendLine($"# Subroutine: {subroutineName}");
+        sb.AppendLine($"# Source spec id: {specId}");
+        sb.AppendLine($"# Schema: {schema.Id} ({schema.DisplayName})");
+        sb.AppendLine("#");
+        sb.AppendLine("# One test per signed-spec claim. Soft assertions pass trivially —");
+        sb.AppendLine("# the contract this file enforces is \"every signed claim has a named");
+        sb.AppendLine("# test fixture\". Engineers replace each body with a behavioural");
+        sb.AppendLine("# assertion as the implementation lands; each test is named after its");
+        sb.AppendLine("# claim id, so the spec→test mapping is queryable (pytest -k inv_1).");
+        sb.AppendLine("#");
+        sb.AppendLine("# Regenerate this file when the spec is re-signed.");
+        sb.AppendLine("# =====================================================================");
+
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var kind in schema.ClaimKinds)
+        {
+            if (!claimsByKind.TryGetValue(kind.Id, out var claims) || claims.Count == 0) continue;
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine($"# ── {PluraliseLabel(kind.Label)} ──");
+            foreach (var c in claims)
+            {
+                var name = "test_" + SnakeCase(c.Id) + "_" + SnakeCase(ShortenForIdentifier(c.Text));
+                for (var n = 2; !used.Add(name); n++) name = $"{name}_{n}";
+                var citation = c.Citation is null ? "" : $" — {c.Citation}";
+                sb.AppendLine();
+                sb.AppendLine();
+                sb.AppendLine($"def {name}():");
+                sb.AppendLine($"    # CLAIM ({c.Id}{citation}):");
+                foreach (var line in WrapForComment(c.Text, 80))
+                    sb.AppendLine($"    # {line}");
+                sb.AppendLine($"    assert True, \"{EscapeForString($"Soft assertion for {c.Id}. Replace with a behaviour check.")}\"");
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>The folder of the scaffold's own backend tests (a <c>test_*.py</c>), else backend/tests.</summary>
+    private static string DerivePythonTestDir(JsonElement manifestRoot)
+    {
+        if (manifestRoot.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+            foreach (var f in files.EnumerateArray())
+            {
+                var path = TryGetString(f, "path");
+                if (path is null || !path.EndsWith(".py", StringComparison.OrdinalIgnoreCase)) continue;
+                var name = path[(path.LastIndexOf('/') + 1)..];
+                if (name.StartsWith("test_", StringComparison.Ordinal) && path.Contains('/'))
+                    return path[..path.LastIndexOf('/')];
+            }
+        return "backend/tests";
+    }
+
+    /// <summary>CalcPremium / INV-1 / "Total is rounded" → calc_premium / inv_1 / total_is_rounded.</summary>
+    internal static string SnakeCase(string s)
+    {
+        var spaced = Regex.Replace(s, "(?<=[a-z0-9])(?=[A-Z])", "_");
+        var snake = Regex.Replace(spaced, "[^A-Za-z0-9]+", "_").Trim('_').ToLowerInvariant();
+        if (snake.Length == 0) return "unnamed";
+        return char.IsDigit(snake[0]) ? "_" + snake : snake;
     }
 
     private static string PluraliseLabel(string label)

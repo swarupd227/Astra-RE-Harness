@@ -1,0 +1,40 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "canonical-form-calculation",
+  "targetStack": "react-python",
+  "displayName": "Form-driven calculation -> React + Python (FastAPI)",
+  "description": "Reference scaffold for a routine behind a form: the user fills in inputs that have rules (allowed values, ranges), presses a button, and the routine looks values up in a table, calculates a result and may record it — the shape of most spreadsheet macros and desktop forms. Produces two paired, independently buildable packages: a FastAPI back end (pydantic models carrying the input rules, a RatePort lookup with an in-memory table standing in for the sheet it came from, a CalculationService for the business rules, an APIRouter for HTTP) with pytest tests on the service and the routes, and a React 18 + Vite + TypeScript front end (types mirroring the models, an api module with one function per route, a CalculationForm component that checks the same rules before calling the API) with Jest + Testing Library tests. CompileValidator builds each half with its own toolchain (pip install + compileall + import for backend/, npm install + tsc + vite build for frontend/); TestPackValidator runs pytest and jest and reports one combined result.",
+  "compatibleSchemas": ["vb6", "vbnet", "csharp", "delphi", "cpp"],
+  "matches": {
+    "anyOf": [],
+    "fallback": "Only archetype registered for react-python today -- always picked for a compatible routine targeting this stack. Add anyOf entries once a second react-python archetype exists."
+  },
+  "owner": "Artizent · migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "backend/requirements.txt",              "language": "text",       "derivedFromClaimIds": [] },
+    { "path": "backend/pytest.ini",                    "language": "ini",        "derivedFromClaimIds": [] },
+    { "path": "backend/app/__init__.py",               "language": "python",     "derivedFromClaimIds": [] },
+    { "path": "backend/app/models.py",                 "language": "python",     "derivedFromClaimIds": ["INV-1"] },
+    { "path": "backend/app/rates.py",                  "language": "python",     "derivedFromClaimIds": ["SE-1"] },
+    { "path": "backend/app/service.py",                "language": "python",     "derivedFromClaimIds": ["INV-1", "EC-1", "SE-1"] },
+    { "path": "backend/app/api.py",                    "language": "python",     "derivedFromClaimIds": ["INV-1", "SE-1"] },
+    { "path": "backend/app/main.py",                   "language": "python",     "derivedFromClaimIds": [] },
+    { "path": "backend/tests/__init__.py",             "language": "python",     "derivedFromClaimIds": [] },
+    { "path": "backend/tests/test_service.py",         "language": "python",     "derivedFromClaimIds": ["INV-1", "EC-1", "SE-1"] },
+    { "path": "backend/tests/test_api.py",             "language": "python",     "derivedFromClaimIds": [] },
+    { "path": "frontend/package.json",                 "language": "json",       "derivedFromClaimIds": [] },
+    { "path": "frontend/tsconfig.json",                "language": "json",       "derivedFromClaimIds": [] },
+    { "path": "frontend/vite.config.ts",               "language": "typescript", "derivedFromClaimIds": [] },
+    { "path": "frontend/jest.config.cjs",              "language": "javascript", "derivedFromClaimIds": [] },
+    { "path": "frontend/index.html",                   "language": "html",       "derivedFromClaimIds": [] },
+    { "path": "frontend/src/main.tsx",                 "language": "typescript", "derivedFromClaimIds": [] },
+    { "path": "frontend/src/App.tsx",                  "language": "typescript", "derivedFromClaimIds": [] },
+    { "path": "frontend/src/types.ts",                 "language": "typescript", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "frontend/src/api.ts",                   "language": "typescript", "derivedFromClaimIds": ["INV-1", "SE-1"] },
+    { "path": "frontend/src/CalculationForm.tsx",      "language": "typescript", "derivedFromClaimIds": ["INV-1"] },
+    { "path": "frontend/src/styles.css",               "language": "css",        "derivedFromClaimIds": [] },
+    { "path": "frontend/src/api.test.ts",              "language": "typescript", "derivedFromClaimIds": [] },
+    { "path": "frontend/src/CalculationForm.test.tsx", "language": "typescript", "derivedFromClaimIds": [] }
+  ]
+}

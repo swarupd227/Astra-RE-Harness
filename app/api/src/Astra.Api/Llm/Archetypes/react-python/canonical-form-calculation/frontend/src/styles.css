@@ -1,0 +1,4 @@
+.page { max-width: 32rem; margin: 2rem auto; font-family: system-ui, sans-serif; }
+form { display: grid; gap: 0.75rem; }
+label { display: grid; gap: 0.25rem; }
+[role='alert'] { color: #b00020; }

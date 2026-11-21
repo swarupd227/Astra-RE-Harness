@@ -55,6 +55,8 @@ function compileSubtitle(targetPlatform: string | undefined): string {
       return 'dotnet build (backend) + npm run build (frontend)';
     case 'angular-java':
       return 'mvn -o test-compile (backend) + npm run build (frontend)';
+    case 'react-python':
+      return 'pip install + import every module (backend) + tsc + vite build (frontend)';
     default:
       return 'dotnet build against the generated package';
   }
@@ -68,6 +70,8 @@ function testPackSubtitle(targetPlatform: string | undefined): string {
       return 'generated xUnit + jest fixtures per signed claim + dotnet test + npm test';
     case 'angular-java':
       return 'generated JUnit + jest fixtures per signed claim + mvn test + npm test';
+    case 'react-python':
+      return 'generated pytest + jest fixtures per signed claim + pytest + npm test';
     default:
       return 'generated xUnit fixtures per signed claim + dotnet test';
   }

@@ -124,6 +124,10 @@ public sealed class CompileValidator
             {
                 await RunAngularJavaCompileAsync(scaffold, run, actor, ct);
             }
+            else if (string.Equals(scaffold.TargetPlatform, ReactPythonStack, StringComparison.OrdinalIgnoreCase))
+            {
+                await RunReactPythonCompileAsync(scaffold, run, actor, ct);
+            }
             else
             {
                 await RunDotnetCompileAsync(scaffold, run, actor, ct);
@@ -383,6 +387,109 @@ public sealed class CompileValidator
                 _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir);
             }
         }
+    }
+
+    public const string ReactPythonStack = "react-python";
+
+    /// <summary>
+    /// react-python: a FastAPI back end and a React front end, both checked in-process. backend/ gets
+    /// a virtual environment, its pinned requirements, a byte-compile and an import of every module
+    /// (<see cref="PythonRunner.CompileAsync"/>) — Python has no build step, so importing is what
+    /// proves the names and dependencies line up; frontend/ gets `npm install` + `npm run build`
+    /// (tsc + vite). One combined verdict, both exit codes in the metrics.
+    /// </summary>
+    private async Task RunReactPythonCompileAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-validate-{run.Id:N}");
+        try
+        {
+            var fileCount = await MaterialiseAsync(scaffold, tempDir, ct);
+            var backendDir = Path.Combine(tempDir, "backend");
+            var frontendDir = Path.Combine(tempDir, "frontend");
+
+            var (pyExit, pyLog) = Directory.Exists(backendDir)
+                ? await PythonRunner.CompileAsync(backendDir, ct)
+                : (-1, "=== backend/ directory missing from scaffold ===\n");
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmBuildAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            var combinedLogText = new StringBuilder()
+                .AppendLine("=== backend (pip install + compileall + import every module) ===").AppendLine(pyLog).AppendLine()
+                .AppendLine("=== frontend (npm install + tsc + vite build) ===").AppendLine(npmLog)
+                .ToString();
+            var (errorCount, warningCount) = CountDiagnostics(npmLog);
+            var importFailures = pyLog.Split('\n').Count(l => l.StartsWith("import FAIL ", StringComparison.Ordinal));
+
+            run.LogBlobUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, $"validation/{run.Id:N}/compile.log", combinedLogText, "text/plain", ct);
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "python+npm",
+                backendExitCode = pyExit,
+                frontendExitCode = npmExit,
+                importFailures,
+                errorCount,
+                warningCount,
+                fileCount,
+                logLines = combinedLogText.Count(c => c == '\n'),
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (pyExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                run.Summary = "Backend imports cleanly + frontend build succeeded";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "compile.build_failed";
+                var parts = new List<string>();
+                if (pyExit != 0) parts.Add(importFailures > 0 ? $"backend: {importFailures} module{(importFailures == 1 ? "" : "s")} failed to import" : $"backend exit {pyExit}");
+                if (npmExit != 0) parts.Add($"frontend exit {npmExit}");
+                run.Summary = $"Build failed · {string.Join(", ", parts)}";
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, summary = run.Summary, metrics = JsonDocument.Parse(run.MetricsJson) },
+                ct: ct);
+            _log.LogInformation("React+Python compile validation for scaffold {Scaffold}: {Status} ({Summary})", scaffold.Id, run.Status, run.Summary);
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch (Exception ex) { _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir); }
+        }
+    }
+
+    /// <summary>Writes every manifest file under <paramref name="tempDir"/> at its own path; returns the count.</summary>
+    private async Task<int> MaterialiseAsync(Persistence.Entities.Scaffold scaffold, string tempDir, CancellationToken ct)
+    {
+        var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+        using var manifest = JsonDocument.Parse(manifestText);
+        Directory.CreateDirectory(tempDir);
+        var root = Path.GetFullPath(tempDir) + Path.DirectorySeparatorChar;
+        var count = 0;
+        foreach (var file in manifest.RootElement.GetProperty("files").EnumerateArray())
+        {
+            var relPath = file.GetProperty("path").GetString()
+                ?? throw new InvalidOperationException("Manifest file entry missing 'path'.");
+            var abs = Path.GetFullPath(Path.Combine(tempDir, relPath));
+            // Generated paths come from a model: never let one write outside the run's folder.
+            if (!abs.StartsWith(root, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Manifest path '{relPath}' points outside the package.");
+            Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+            await File.WriteAllTextAsync(abs, file.GetProperty("content").GetString() ?? "", ct);
+            count++;
+        }
+        return count;
     }
 
     /// <summary>

@@ -87,9 +87,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # exactly the class of bug (a LibGit2Sharp SIGSEGV before the app even
 # printed its startup banner) that happened once already when the runtime
 # base didn't have them.
+#
+# python3-venv / python3-pip: react-python's backend half validates in-process
+# like the npm half — a virtual environment per run, `pip install -r
+# requirements.txt`, then an import of every module (CompileValidator) or
+# pytest (TestPackValidator). See Validation/PythonRunner.cs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     weasyprint \
+    python3 \
+    python3-venv \
+    python3-pip \
     libssl3 \
     libcurl4 \
     ca-certificates \

@@ -104,6 +104,7 @@ export function prettyStack(s: string): string {
     case 'java-spring':     return 'Java Spring';
     case 'angular-dotnet8': return 'Angular + .NET 8';
     case 'angular-java':    return 'Angular + Java';
+    case 'react-python':    return 'React + Python';
     default:                return s;
   }
 }

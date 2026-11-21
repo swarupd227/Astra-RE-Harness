@@ -133,6 +133,10 @@ public sealed class TestPackValidator
             {
                 return await RunAngularJavaTestPackAsync(scaffold, run, actor, ct);
             }
+            if (string.Equals(scaffold.TargetPlatform, CompileValidator.ReactPythonStack, StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunReactPythonTestPackAsync(scaffold, run, actor, ct);
+            }
             return await RunDotnetTestPackAsync(scaffold, run, actor, ct);
         }
         catch (Exception ex)
@@ -629,6 +633,114 @@ public sealed class TestPackValidator
                 "Angular+Java test pack validation for scaffold {Scaffold}: {Status} ({Summary})",
                 scaffold.Id, run.Status, run.Summary);
 
+            return run;
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch (Exception ex) { _log.LogWarning(ex, "Failed to clean up {Dir}", tempDir); }
+        }
+    }
+
+    /// <summary>
+    /// react-python: pytest on backend/ (in a per-run virtual environment, <see cref="PythonRunner"/>)
+    /// and `npm install` + `npm test` / jest on frontend/, in-process. Counts come from pytest's
+    /// summary line and Jest's "Tests:" line and are reported together, like the Angular stacks.
+    /// </summary>
+    private async Task<ValidationRun> RunReactPythonTestPackAsync(
+        Persistence.Entities.Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"astra-testpack-{run.Id:N}");
+        try
+        {
+            var manifestText = await _blob.GetTextAsync(scaffold.PackageBlobUri, ct);
+            using var manifest = JsonDocument.Parse(manifestText);
+            Directory.CreateDirectory(tempDir);
+            var root = Path.GetFullPath(tempDir) + Path.DirectorySeparatorChar;
+            var fileCount = 0;
+            foreach (var file in manifest.RootElement.GetProperty("files").EnumerateArray())
+            {
+                var relPath = file.GetProperty("path").GetString()!;
+                var abs = Path.GetFullPath(Path.Combine(tempDir, relPath));
+                if (!abs.StartsWith(root, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Manifest path '{relPath}' points outside the package.");
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, file.GetProperty("content").GetString() ?? "", ct);
+                fileCount++;
+            }
+
+            var backendDir = Path.Combine(tempDir, "backend");
+            var frontendDir = Path.Combine(tempDir, "frontend");
+            var (pyExit, pyLog) = Directory.Exists(backendDir)
+                ? await PythonRunner.TestAsync(backendDir, ct)
+                : (-1, "=== backend/ directory missing from scaffold ===\n");
+            var (npmExit, npmLog) = Directory.Exists(frontendDir)
+                ? await RunNpmTestAsync(frontendDir, ct)
+                : (-1, "=== frontend/ directory missing from scaffold ===\n");
+
+            var py = PythonRunner.ParseSummary(pyLog) ?? (0, 0, 0, 0);
+            int jsPassed = 0, jsFailed = 0, jsSkipped = 0, jsTotal = 0;
+            var jestLine = JestTestsLine.Match(npmLog);
+            if (jestLine.Success)
+            {
+                var body = jestLine.Groups["body"].Value;
+                var f = JestFailed.Match(body); if (f.Success) jsFailed = int.Parse(f.Groups["n"].Value);
+                var p = JestPassed.Match(body); if (p.Success) jsPassed = int.Parse(p.Groups["n"].Value);
+                var s = JestSkipped.Match(body); if (s.Success) jsSkipped = int.Parse(s.Groups["n"].Value);
+                var t = JestTotal.Match(body); if (t.Success) jsTotal = int.Parse(t.Groups["n"].Value);
+            }
+            int passed = py.Passed + jsPassed, failed = py.Failed + jsFailed, skipped = py.Skipped + jsSkipped, total = py.Total + jsTotal;
+
+            var combinedLogText = new StringBuilder()
+                .AppendLine("=== backend (pip install + pytest) ===").AppendLine(pyLog).AppendLine()
+                .AppendLine("=== frontend (npm install + npm test / jest) ===").AppendLine(npmLog)
+                .ToString();
+            run.LogBlobUri = await _blob.PutTextAsync(
+                _storage.Buckets.Scaffolds, $"validation/{run.Id:N}/test-pack.log", combinedLogText, "text/plain", ct);
+            run.MetricsJson = JsonSerializer.Serialize(new
+            {
+                runner = "pytest+jest",
+                backendExitCode = pyExit,
+                frontendExitCode = npmExit,
+                backend = new { passed = py.Passed, failed = py.Failed, skipped = py.Skipped, total = py.Total },
+                frontend = new { passed = jsPassed, failed = jsFailed, skipped = jsSkipped, total = jsTotal },
+                passed, failed, skipped, total, fileCount,
+            });
+            run.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (total == 0)
+            {
+                run.Status = "ERRORED";
+                run.ErrorCode = "test_pack.no_tests_detected";
+                run.Summary = pyExit == 0 && npmExit == 0
+                    ? "No tests detected"
+                    : $"backend exit {pyExit}, frontend exit {npmExit}; no test summary parsed";
+            }
+            else if (failed == 0 && pyExit == 0 && npmExit == 0)
+            {
+                run.Status = "PASSED";
+                run.Summary = skipped == 0
+                    ? $"All {total} tests passed ({py.Total} backend + {jsTotal} frontend)"
+                    : $"{passed}/{total} passed · {skipped} skipped ({py.Total} backend + {jsTotal} frontend)";
+            }
+            else
+            {
+                run.Status = "FAILED";
+                run.ErrorCode = "test_pack.tests_failed";
+                run.Summary = failed > 0
+                    ? $"{failed} of {total} tests failed · {passed} passed · {skipped} skipped"
+                    : $"backend exit {pyExit}, frontend exit {npmExit} · {passed} of {total} passed";
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await _audit.LogAsync(
+                "validation.completed", "scaffold", scaffold.Id, actor,
+                payload: new { runId = run.Id, stage = run.Stage, status = run.Status, summary = run.Summary, metrics = JsonDocument.Parse(run.MetricsJson) },
+                ct: ct);
+            _log.LogInformation("React+Python test pack validation for scaffold {Scaffold}: {Status} ({Summary})", scaffold.Id, run.Status, run.Summary);
             return run;
         }
         finally
