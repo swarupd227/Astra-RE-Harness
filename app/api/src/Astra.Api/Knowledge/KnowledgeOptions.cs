@@ -23,4 +23,16 @@ public sealed class KnowledgeOptions
 
     /// <summary>Attempts to write one slot: the first, plus one retry that rewrites only what the gate threw away.</summary>
     public int MaxAttempts { get; set; } = 2;
+
+    /// <summary>Model that cuts narrative evidence into claims. Empty means the standard documentation tier.</summary>
+    public string? ClaimsModel { get; set; }
+
+    /// <summary>The most pieces of narrative evidence read for claims in one run (the rest are said so, not silently skipped).</summary>
+    public int MaxNarrativeChunks { get; set; } = 300;
+
+    /// <summary>Tickets that mention one of these, and name nothing in the system, are routine requests and stay out of known errors.</summary>
+    public List<string> RoutineKeywords { get; set; } = new() { "password", "printer", "access request", "new starter", "leaver" };
+
+    /// <summary>Incidents that make a cluster worth a known-error article.</summary>
+    public int MinClusterSize { get; set; } = 3;
 }

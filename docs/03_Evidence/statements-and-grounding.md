@@ -145,8 +145,41 @@ the slot's brief from the pack), and the evidence the writer may cite as `eviden
 `limit`, at most 40). The answer carries the document, derived markdown, the gate's counts / attempts / what was dropped
 and why, notes, the evidence shown, the provider and every call (prompt, model, replay key, temperature, tokens).
 
+## Claims and ticket clusters (`Knowledge/Claims/`, K7)
+
+What people said or wrote is read into **claims**, and each claim is checked against what structured evidence states.
+Only the reading is a model call; matching, verdicts and clusters are rules.
+
+- **Claim** — `{id (cl-…, stable), text, evidence, at?, assertions[]}`: one fact from one piece of narrative evidence (a
+  transcript turn, a ticket, a note). An **assertion** is checkable: `{subject, predicate, object?, value?}` where the
+  predicate is a graph relation (`reads writes calls runs precedes triggers configures contains references`) or
+  `attribute` (the subject's attribute named by `object` has `value`: a job's `schedule`, a setting's `value`).
+- **`ClaimExtractor`** — one forced-tool-use call (`extract_claims`, temperature 0, replay key `claims:extract:{n}`) per batch of
+  6 items through `IDocWriter`. A claim is kept only if it names evidence that was shown and every name in it appears verbatim
+  in that evidence; an assertion with an unknown predicate is left out and said so. A failed batch is reported with the
+  provider's reason and the others still count. Offline, a fixture for the key stands in; without one, each line that names
+  something becomes a claim with nothing to check.
+- **`ClaimLinker`** (pure) — matches names to graph entities (by `type:name`, or a unique name) and decides: **Supported** when
+  every assertion is stated by structured evidence; **Conflict** when a structured source states the opposite (another
+  value, the reverse order of two jobs) *and* both sides' evidence exists (otherwise it is not recorded and the claim stays
+  Unverified); **Unverified** when nothing structured says either way (thing not in the inventory, no stated value, nothing to
+  check). A relation nothing states (a job "reads" a table) is never a conflict.
+- **`ClaimIndex.Apply`** (pure) — joins a written document to claims: a statement that cites a claim's evidence and names
+  everything the claim is about is **verified** when the claim is Supported (these become the gate's `VerifiedItemIds`) or
+  carries a **conflict** (claim evidence + the structured evidence) when it is contradicted. The per-deliverable writers (K8)
+  call this before the gate.
+- **`TicketClusterer`** (pure, no embeddings) — tickets belong together when they share an error code, or share a name and 25%
+  of their words, or are half the same words (union-find; deterministic whatever the order). Three or more is a **candidate
+  known error**. Tickets that match a routine keyword (`Knowledge:RoutineKeywords`: password, printer …) and name nothing in
+  the system are **routine** and stay out.
+- **`ClaimService.RunAsync`** reads every narrative chunk except routine tickets (at most `Knowledge:MaxNarrativeChunks`, saying so
+  when it cuts), links, clusters and keeps one `claims/v1` document per version (`claim_sets`), with the calls made and the time
+  taken. It never waits on a request: the capture run (K9) calls it from a background run.
+
+API: `POST /api/v1/corpora/{id}/claims/run` (Engineer/SME/Admin) → counts, model calls, elapsed ms; `GET …/claims[?status=]`
+(everyone; 404 `claims.not_run` before a run); `GET …/ticket-clusters` (everyone, no model, nothing stored).
+
 ## Not here yet
 
-Persisting statement documents as sections and approving them (K10a), the claims and conflict linker that supply
-`VerifiedItemIds` and `conflicts` (K7), the per-deliverable writers that choose a slot's evidence (K8), the capture run
+Persisting statement documents as sections and approving them (K10a), the per-deliverable writers that choose a slot's evidence (K8), the capture run
 and recordings (K9), and the first live run with a real key against the sample dataset (the "tracer bullet").

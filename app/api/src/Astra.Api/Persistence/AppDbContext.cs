@@ -14,6 +14,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Subroutine> Subroutines => Set<Subroutine>();
     public DbSet<EvidenceChunk> EvidenceChunks => Set<EvidenceChunk>();
     public DbSet<FileFactsRow> FileFacts => Set<FileFactsRow>();
+    public DbSet<ClaimSetRow> ClaimSets => Set<ClaimSetRow>();
     public DbSet<GraphEntity> GraphEntities => Set<GraphEntity>();
     public DbSet<GraphLink> GraphLinks => Set<GraphLink>();
     public DbSet<Spec> Specs => Set<Spec>();
@@ -168,6 +169,20 @@ public sealed class AppDbContext : DbContext
             b.HasOne<SourceVersion>().WithMany()
              .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => x.SourceVersionId);
+        });
+
+        // WS7 K7 — the claims read from narrative evidence and what structured evidence says about them.
+        modelBuilder.Entity<ClaimSetRow>(b =>
+        {
+            b.ToTable("claim_sets");
+            b.HasKey(x => x.SourceVersionId);
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.Json).HasColumnName("json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.ModelCalls).HasColumnName("model_calls");
+            b.Property(x => x.ElapsedMs).HasColumnName("elapsed_ms");
+            b.Property(x => x.BuiltAt).HasColumnName("built_at");
+            b.HasOne<SourceVersion>().WithMany()
+             .HasForeignKey(x => x.SourceVersionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<GraphEntity>(b =>

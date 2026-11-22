@@ -10,16 +10,19 @@ public sealed class StatementPrompts
 {
     public string Writer { get; }
     public string Support { get; }
+    public string Claims { get; }
 
-    public StatementPrompts(string writer, string support)
+    public StatementPrompts(string writer, string support, string claims = "")
     {
         Writer = writer;
         Support = support;
+        Claims = claims;
     }
 
     public static StatementPrompts Load(string contentRoot) => new(
         DocPromptAssets.ReadPrompt(contentRoot, "knowledge", "statement-writer.v1.md"),
-        DocPromptAssets.ReadPrompt(contentRoot, "knowledge", "support-check.v1.md"));
+        DocPromptAssets.ReadPrompt(contentRoot, "knowledge", "support-check.v1.md"),
+        DocPromptAssets.ReadPrompt(contentRoot, "knowledge", "claim-extractor.v1.md"));
 }
 
 /// <param name="DeliverableKind">The deliverable the statements are for (<c>runbook</c>).</param>

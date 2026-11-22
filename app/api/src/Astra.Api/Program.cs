@@ -578,6 +578,17 @@ using (var scope = app.Services.CreateScope())
             ALTER TABLE evidence_chunks ADD COLUMN IF NOT EXISTS ordinal integer NOT NULL DEFAULT 0;
             """);
 
+        // WS7 K7 — the claims read from narrative evidence, checked against structured evidence (one document per version).
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS claim_sets (
+                source_version_id  uuid         PRIMARY KEY REFERENCES source_versions(id) ON DELETE CASCADE,
+                json               jsonb        NOT NULL,
+                model_calls        integer      NOT NULL DEFAULT 0,
+                elapsed_ms         integer      NOT NULL DEFAULT 0,
+                built_at           timestamptz  NOT NULL DEFAULT now()
+            );
+            """);
+
         // WS7 K4 — what each artefact file states (tables, jobs, packages …) and the entity graph
         // merged from it. All of it belongs to a source version and goes with it (ON DELETE CASCADE);
         // the graph is derived, so it is rebuilt from file_facts and never patched.

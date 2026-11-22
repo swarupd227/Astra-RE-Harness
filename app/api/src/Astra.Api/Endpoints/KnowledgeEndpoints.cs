@@ -188,6 +188,79 @@ public static class KnowledgeEndpoints
             });
         });
 
+        // Claims: what people said, checked against what code, SQL, schedulers and configuration state.
+        app.MapPost("/api/v1/corpora/{id:guid}/claims/run", async (
+            Guid id,
+            DevPersonaContext actor,
+            EvidenceService evidence,
+            ClaimService claims,
+            AppDbContext db,
+            IDocWriter docWriter,
+            CancellationToken ct) =>
+        {
+            if (actor.Persona is not (Persona.Engineer or Persona.Sme or Persona.Admin))
+                return Results.Json(
+                    new { error = new { code = "auth.writer_required", message = "Reading claims needs an Engineer, SME or Admin." } },
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            var (found, version) = await evidence.ResolveVersionAsync(id, null, ct);
+            if (!found) return NotFound("corpus.not_found", "No such project.");
+            if (version is not { } v) return BadRequest("claims.no_version", "This project has no source version yet.");
+
+            ClaimRun run;
+            try
+            {
+                run = await claims.RunAsync(v, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.Json(
+                    new { error = new { code = "claims.run_failed", message = ex.Message } },
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            DocLlmCalls.RecordAll(db, docWriter, run.Calls);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new
+            {
+                counts = run.Counts,
+                modelCalls = run.Calls.Count,
+                elapsedMs = run.ElapsedMs,
+                notes = run.Notes,
+                provider = docWriter.ProviderName,
+            });
+        });
+
+        app.MapGet("/api/v1/corpora/{id:guid}/claims", async (Guid id, string? status, EvidenceService evidence, ClaimService claims, CancellationToken ct) =>
+        {
+            var (found, version) = await evidence.ResolveVersionAsync(id, null, ct);
+            if (!found) return NotFound("corpus.not_found", "No such project.");
+            if (version is not { } v) return BadRequest("claims.no_version", "This project has no source version yet.");
+            var stored = await claims.GetAsync(v, ct);
+            if (stored is null) return NotFound("claims.not_run", "No claims have been read for this project yet.");
+
+            var doc = System.Text.Json.Nodes.JsonNode.Parse(stored.Value.Json)!.AsObject();
+            if (!string.IsNullOrWhiteSpace(status) && doc["claims"] is System.Text.Json.Nodes.JsonArray all)
+            {
+                var kept = all.Where(c => string.Equals(c?["status"]?.GetValue<string>(), status, StringComparison.OrdinalIgnoreCase)).Select(c => c!.DeepClone()).ToArray();
+                doc["claims"] = new System.Text.Json.Nodes.JsonArray(kept);
+            }
+            doc["modelCalls"] = stored.Value.ModelCalls;
+            doc["elapsedMs"] = stored.Value.ElapsedMs;
+            doc["builtAt"] = stored.Value.BuiltAt;
+            return Results.Content(doc.ToJsonString(), "application/json");
+        });
+
+        // Groups of tickets about the same problem; three or more incidents is a candidate known error. No model.
+        app.MapGet("/api/v1/corpora/{id:guid}/ticket-clusters", async (Guid id, EvidenceService evidence, ClaimService claims, CancellationToken ct) =>
+        {
+            var (found, version) = await evidence.ResolveVersionAsync(id, null, ct);
+            if (!found) return NotFound("corpus.not_found", "No such project.");
+            if (version is not { } v) return BadRequest("claims.no_version", "This project has no source version yet.");
+            var result = await claims.ClustersAsync(v, ct);
+            return Results.Ok(new { clusters = result.Clusters, routine = result.Routine });
+        });
+
         return app;
     }
 

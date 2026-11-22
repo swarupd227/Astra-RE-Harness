@@ -25,6 +25,8 @@ public static class KnowledgeRegistration
             return new DirectoryStatementFixtures(folders);
         });
         services.AddSingleton<StatementWriter>();
+        services.AddSingleton<ClaimExtractor>();
+        services.AddScoped<ClaimService>();
         return services;
     }
 }
