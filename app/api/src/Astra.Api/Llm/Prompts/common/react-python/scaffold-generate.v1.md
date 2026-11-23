@@ -120,7 +120,13 @@ Rules:
    service calls; `main.py` creates the app and includes the router.
    Tests use the service directly and `fastapi.testclient.TestClient` for
    routes. Money and rates are rounded where the spec rounds them, the
-   same way (`round(x, 2)` unless the spec says otherwise).
+   same way (`round(x, 2)` unless the spec says otherwise). pydantic
+   COERCES by default: `1`, `"yes"` and `"true"` become `True` for a
+   `bool`, and `"42"` becomes `42` for an `int`. Where the spec says a
+   value must be refused rather than converted, declare it strict
+   (`StrictBool`, `StrictInt`, `StrictStr`, or `Field(strict=True)`);
+   never write a test expecting a `ValidationError` for a value pydantic
+   would quietly convert.
 9. **Frontend (React/TypeScript) conventions.** Function components and
    hooks only; `fetch` through the api module (one function per route,
    errors raised as `ApiError` with the API's reason); the form checks the

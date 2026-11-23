@@ -46,6 +46,15 @@ public sealed record GateFailureDigest(
     private static readonly Regex JestFailed = new(
         @"^\s*●\s+(?<name>.+?)\s*$",
         RegexOptions.Compiled | RegexOptions.Multiline);
+    // pytest -rA short summary: `FAILED tests/test_service.py::test_x - Failed: DID NOT RAISE <class …>`
+    private static readonly Regex PytestFailed = new(
+        @"^(?:FAILED|ERROR)\s+(?<name>\S+::\S+|\S+\.py)(?:\s+-\s+(?<msg>.*?))?\s*$",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+    // PythonRunner's import check: `import FAIL app.service`, then a traceback ending `ModuleNotFoundError: …`
+    private static readonly Regex PythonImportFail = new(
+        @"^import FAIL (?<module>\S+)\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex PythonExceptionLine = new(
+        @"^(?<type>[A-Za-z_][\w.]*(?:Error|Exception)):\s*(?<msg>.*)$", RegexOptions.Compiled);
     private static readonly Regex RunnerProblemLine = new(
         @"^(Runner error:|=== .* failed to start|.*did not finish within .*s\.?|.*No \.NET SDKs were found.*|.*command not found.*)$",
         RegexOptions.Compiled | RegexOptions.Multiline);
@@ -59,6 +68,20 @@ public sealed record GateFailureDigest(
             Add(errors, seen, new(Relative(m.Groups["file"].Value), int.Parse(m.Groups["line"].Value), m.Groups["code"].Value, m.Groups["msg"].Value));
         foreach (Match m in TsError.Matches(log))
             Add(errors, seen, new(Relative(m.Groups["file"].Value), int.Parse(m.Groups["line"].Value), m.Groups["code"].Value, m.Groups["msg"].Value));
+        // Python: a module that failed to import, with the exception its traceback ends in.
+        var logLines = log.Split('\n');
+        foreach (Match m in PythonImportFail.Matches(log))
+        {
+            var start = log[..m.Index].Count(c => c == '\n') + 1;
+            string code = "ImportError", msg = $"module {m.Groups["module"].Value} failed to import";
+            for (var i = start; i < Math.Min(logLines.Length, start + 60); i++)
+            {
+                var l = logLines[i].TrimEnd('\r');
+                if (l.StartsWith("import ", StringComparison.Ordinal)) break;
+                if (PythonExceptionLine.Match(l) is { Success: true } x) { code = x.Groups["type"].Value; msg = $"{m.Groups["module"].Value}: {x.Groups["msg"].Value}"; }
+            }
+            Add(errors, seen, new(m.Groups["module"].Value.Replace('.', '/') + ".py", null, code, msg));
+        }
         if (errors.Count == 0)
             foreach (Match m in BareError.Matches(log))
                 Add(errors, seen, new(null, null, m.Groups["code"].Value, m.Groups["msg"].Value));
@@ -71,8 +94,15 @@ public sealed record GateFailureDigest(
             var msg = NextMessageLine(lines, m.Index, log);
             if (tests.All(t => t.Name != name)) tests.Add(new(name, msg));
         }
-        if (tests.Count == 0)
-            foreach (Match m in JestFailed.Matches(log))
+        // pytest's short summary (react-python's backend half runs alongside jest).
+        foreach (Match m in PytestFailed.Matches(log))
+        {
+            var name = m.Groups["name"].Value;
+            var msg = m.Groups["msg"].Success ? m.Groups["msg"].Value : null;
+            if (tests.All(t => t.Name != name)) tests.Add(new(name, msg));
+        }
+        // jest (the frontend half of the two-runtime stacks) — collected alongside the backend's failures.
+        foreach (Match m in JestFailed.Matches(log))
             {
                 var name = m.Groups["name"].Value.Trim();
                 if (name.Length > 0 && tests.All(t => t.Name != name)) tests.Add(new(name, null));
@@ -191,6 +221,8 @@ public sealed record GateFailureDigest(
 
     private static string ShortName(string full)
     {
+        var colons = full.LastIndexOf("::", StringComparison.Ordinal);   // pytest: tests/test_x.py::test_name
+        if (colons >= 0) return full[(colons + 2)..];
         var i = full.LastIndexOf('.');
         return i > 0 && i < full.Length - 1 ? full[(i + 1)..] : full;
     }

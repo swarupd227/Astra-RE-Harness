@@ -78,11 +78,21 @@ public static class OfficeHostContext
         if (r.Names.Count > 0)
         {
             var rules = r.Sheets.SelectMany(s => s.Validations.Select(v => (Sheet: s.Name, v))).ToList();
-            sb.AppendLine("### Named cells (name = where — label beside it — input rule)");
+            // A control on a sheet that writes its value to a cell (a check box's linked cell) is how the user sets it.
+            var setBy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in r.Sheets)
+                foreach (var c in s.Controls.Where(c => c.LinkedCell is not null))
+                {
+                    var link = c.LinkedCell!.Contains('!') ? c.LinkedCell : $"{s.Name}!{c.LinkedCell}";
+                    if (CellOf(link, null) is { } cell)
+                        setBy.TryAdd(cell, $"set by the {c.Kind}{(c.Text is null ? "" : $" \"{Clip(c.Text, 50)}\"")} on sheet \"{s.Name}\"");
+                }
+            sb.AppendLine("### Named cells (name = where — label beside it — input rule — what sets it)");
             foreach (var n in r.Names.Take(MaxNames))
             {
                 var rule = RuleFor(n, rules);
-                sb.AppendLine($"- {n.Name} = {n.RefersTo}{(n.Label is null ? "" : $" — \"{n.Label}\"")}{(rule is null ? "" : $" — {rule}")}");
+                var by = CellOf(n.RefersTo, n.Scope) is { } cell && setBy.TryGetValue(cell, out var b) ? b : null;
+                sb.AppendLine($"- {n.Name} = {n.RefersTo}{(n.Label is null ? "" : $" — \"{n.Label}\"")}{(rule is null ? "" : $" — {rule}")}{(by is null ? "" : $" — {by}")}");
             }
             if (r.Names.Count > MaxNames) sb.AppendLine($"- … and {r.Names.Count - MaxNames} more");
             sb.AppendLine();
