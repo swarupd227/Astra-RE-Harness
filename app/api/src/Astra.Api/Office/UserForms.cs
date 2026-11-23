@@ -126,6 +126,31 @@ public static class UserForms
         return (form.Width is int fw ? Pt(fw) : null, form.Height is int fh ? Pt(fh) : null, controls);
     }
 
+    /// <summary>
+    /// The caption of the Label a user reads as this input's name: on the same line and to its left (nearest
+    /// first), else directly above. Only for inputs, which carry no caption of their own.
+    /// </summary>
+    public static string? LabelFor(FormControl c, IReadOnlyList<FormControl> siblings)
+    {
+        if (c.Kind is not ("TextBox" or "ComboBox" or "ListBox" or "SpinButton" or "ScrollBar")) return null;
+        // A tall list's label sits by its first line, not its middle: compare against the top 20 pt only.
+        var lineTop = c.Top;
+        var lineBottom = c.Top + Math.Min(c.Height ?? 12, 20);
+        var lineMid = (lineTop + lineBottom) / 2;
+        var labels = siblings.Where(s => s.Kind == "Label" && s.Caption is not null && s.Width is not null).ToList();
+        var left = labels
+            .Where(l => l.Left + l.Width!.Value <= c.Left + 2
+                        && Math.Min(l.Top + (l.Height ?? 12), lineBottom) - Math.Max(l.Top, lineTop) >= 2)   // overlaps the first line
+            .OrderBy(l => (c.Left - (l.Left + l.Width!.Value)) + 3 * Math.Abs(l.Top + (l.Height ?? 12) / 2 - lineMid))
+            .FirstOrDefault();
+        var above = left is null
+            ? labels.Where(l => l.Top + (l.Height ?? 0) <= c.Top + 2 && c.Top - (l.Top + (l.Height ?? 0)) <= 18 && Math.Abs(l.Left - c.Left) <= 24)
+                .OrderBy(l => c.Top - l.Top).FirstOrDefault()
+            : null;
+        var caption = (left ?? above)?.Caption;
+        return caption is null ? null : System.Text.RegularExpressions.Regex.Replace(caption, @"\s+", " ").Trim();
+    }
+
     private static double Pt(int himetric) => Math.Round(himetric * PointsPerHimetric, 1);
 
     // ── The f stream ──────────────────────────────────────────────────

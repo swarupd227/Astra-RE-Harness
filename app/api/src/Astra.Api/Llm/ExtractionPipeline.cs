@@ -3,6 +3,7 @@ using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Llm.Prompts;
+using Astra.Api.Office;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Astra.Api.Storage;
@@ -68,6 +69,37 @@ public sealed class ExtractionPipeline
             : (DefaultPromptTemplateId, DefaultPromptTemplateVersion);
     }
 
+    /// <summary>The prompt-library target holding the extract prompt for VBA in Office documents.</summary>
+    public const string OfficeExtractTarget = "office-vba";
+
+    /// <summary>
+    /// For a routine whose file sits under an Office document (<c>Rating.xlsm/Pricing.bas</c>), the host
+    /// workbook's view of it, read from the workbook kept as evidence on the same version; a short note when
+    /// that workbook is not there. Null for ordinary source. Best effort: extraction never fails on it.
+    /// </summary>
+    private async Task<string?> BuildHostContextAsync(Persistence.Entities.Subroutine sub, CancellationToken ct)
+    {
+        if (OfficeHostContext.SplitPath(sub.SourceFile!.RelativePath) is not { } split) return null;
+        try
+        {
+            var doc = await _db.SourceFiles.AsNoTracking()
+                .Where(f => f.SourceVersionId == sub.SourceFile.SourceVersionId && f.RelativePath == split.Document)
+                .Select(f => new { f.BlobUri, f.Kind })
+                .FirstOrDefaultAsync(ct);
+            if (doc is null || doc.Kind != Artefacts.ArtefactKinds.Workbook) return OfficeHostContext.Minimal(split.Document);
+            var bytes = await _blob.GetBytesAsync(doc.BlobUri, ct);
+            var surface = WorkbookSurface.Read(bytes, Path.GetFileName(split.Document));
+            return surface.Sheets.Count == 0
+                ? OfficeHostContext.Minimal(split.Document)
+                : OfficeHostContext.Build(surface, split.ModuleFile, sub.Name);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the host document of {Subroutine}; extracting without it", sub.Id);
+            return OfficeHostContext.Minimal(split.Document);
+        }
+    }
+
     public async IAsyncEnumerable<ExtractionEvent> RunAsync(
         Guid subroutineId,
         [EnumeratorCancellation] CancellationToken ct,
@@ -119,7 +151,12 @@ public sealed class ExtractionPipeline
         // the engineer-chosen target stack applies on the scaffold path.
         var sourceLanguage = string.IsNullOrEmpty(sub.SourceLanguage) ? "fortran-f77" : sub.SourceLanguage;
         const string defaultTargetStack = "dotnet10";
-        var (promptId, promptVersion) = ResolvePromptMeta(sourceLanguage, defaultTargetStack);
+        // VBA taken from an Office document is extracted with its own prompt and the host workbook's
+        // view of the routine: named cells, sheets, what starts it, its form.
+        var hostContext = await BuildHostContextAsync(sub, ct);
+        var extractTarget = hostContext is not null && _prompts.GetLatest(sourceLanguage, OfficeExtractTarget, "extract") is not null
+            ? OfficeExtractTarget : defaultTargetStack;
+        var (promptId, promptVersion) = ResolvePromptMeta(sourceLanguage, extractTarget);
         yield return new("provider_info", new
         {
             name = _provider.Info.Name,
@@ -144,6 +181,8 @@ public sealed class ExtractionPipeline
                 ex, "Could not build neighbourhood for {Subroutine}; proceeding without",
                 sub.Id);
         }
+        if (hostContext is not null)
+            yield return new("host_context_attached", new { document = OfficeHostContext.SplitPath(sub.SourceFile.RelativePath)?.Document, chars = hostContext.Length });
         if (neighbourhood is not null && !neighbourhood.IsEmpty)
         {
             // Surface to the UI so reviewers can see what context the
@@ -167,11 +206,12 @@ public sealed class ExtractionPipeline
             promptId,
             promptVersion,
             SourceLanguage: sourceLanguage,
-            TargetStack: defaultTargetStack,
+            TargetStack: extractTarget,
             Neighbourhood: neighbourhood,
             ModelOverride: tuning?.ModelOverride,
             MaxOutputTokensOverride: tuning?.MaxOutputTokensOverride,
-            BulkMode: tuning?.BulkMode ?? false);
+            BulkMode: tuning?.BulkMode ?? false,
+            HostContext: hostContext);
 
         object? finalPayload = null;
         var providerEmittedError = false;

@@ -36,6 +36,8 @@ public static class AnthropicPromptTemplate
             // string when no neighbourhood was supplied, so the
             // template's "## Neighbourhood" section collapses cleanly.
             ["neighbourhood"] = RenderNeighbourhood(req.Neighbourhood),
+            // VBA in an Office document: the host workbook's view of the routine (empty otherwise).
+            ["hostContext"] = req.HostContext ?? "",
             // Phase 15.2 — these placeholders existed in the Delphi/C++/VB6/
             // C#/PHP/ABL prompts since Phase 9 but nothing ever supplied
             // them, so Claude saw the literal "{{rtlMappingTable}}" text.

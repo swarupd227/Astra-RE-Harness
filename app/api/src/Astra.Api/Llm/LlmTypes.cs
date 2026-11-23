@@ -47,7 +47,10 @@ public sealed record ExtractionRequest(
     int? MaxOutputTokensOverride = null,
     // True when nobody is watching a live stream: skips the deliberate
     // pacing delays that exist to make the interactive UI readable.
-    bool BulkMode = false);
+    bool BulkMode = false,
+    // VBA from an Office document: what the host workbook says about the routine (named
+    // cells, sheets, what starts it, its form). Rendered as the prompt's {{hostContext}}.
+    string? HostContext = null);
 
 public sealed record ExtractionResult(
     string SpecJson,
