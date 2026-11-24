@@ -23,6 +23,13 @@ import {
 
 type Status = 'idle' | 'streaming' | 'success' | 'error';
 
+// The server refuses a second extraction while one is running (another tab, or an earlier visit to this page whose
+// stream is still going). That is not a failure: say so, and the page follows the run instead.
+const ALREADY_RUNNING = 'An extraction of this routine is already running (started from another tab or an earlier visit). It finishes on its own; this page opens the routine when it does.';
+function friendlyExtractError(message: string): string {
+  return /state EXTRACTING/i.test(message) ? ALREADY_RUNNING : message;
+}
+
 export function LiveExtractionPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -122,7 +129,7 @@ export function LiveExtractionPage() {
           setStage(null);
           break;
         case 'error':
-          setErrorMessage(evt.data.message);
+          setErrorMessage(friendlyExtractError(evt.data.message));
           setStatus('error');
           setStage(null);
           break;
@@ -131,7 +138,7 @@ export function LiveExtractionPage() {
 
     streamExtraction(id, controller.signal, onEvent).catch((err) => {
       if (controller.signal.aborted) return;
-      setErrorMessage(err instanceof Error ? err.message : String(err));
+      setErrorMessage(friendlyExtractError(err instanceof Error ? err.message : String(err)));
       setStatus('error');
       setStage(null);
     });
@@ -142,6 +149,18 @@ export function LiveExtractionPage() {
     // directly. Server-side BestEffortRevertExtractingAsync handles any real
     // client disconnect (navigation away) on its own.
   }, [id, sub.data, source.data]);
+
+  // An extraction already under way elsewhere: watch the routine and move on when it leaves EXTRACTING.
+  useEffect(() => {
+    if (status !== 'error' || errorMessage !== ALREADY_RUNNING || !id) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const s = await api.getSubroutine(id);
+        if (s.state !== 'EXTRACTING') navigate(`/subroutines/${id}`);
+      } catch { /* keep watching */ }
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [status, errorMessage, id, navigate]);
 
   const citations: Citation[] = useMemo(() => {
     const all: Citation[] = [];
@@ -305,7 +324,7 @@ export function LiveExtractionPage() {
               )}
               {status === 'error' && errorMessage && (
                 <div className="p-6">
-                  <ErrorBlock title="Extraction failed" message={errorMessage} />
+                  <ErrorBlock title={errorMessage === ALREADY_RUNNING ? 'Extraction already running' : 'Extraction failed'} message={errorMessage} />
                 </div>
               )}
               <StreamingSpecPanel
