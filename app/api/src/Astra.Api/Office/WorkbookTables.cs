@@ -194,6 +194,8 @@ def cell(name: str, row: int, col: int) -> object | None:
         sb.AppendLine("    table(\"<name>\")[i][j]   # the cell in sheet row i+1, column j+1; None when empty");
         sb.AppendLine("    cell(\"<name>\", row, col)  # Excel's 1-based row and column");
         sb.AppendLine("A macro's `Offset(r, c)` from cell A4 is therefore `table(name)[3 + r][c]` (A4 is row 4, column 1).");
+        sb.AppendLine("In tests assert only the verified values listed under each table (or rows quoted above); to check any other cell,");
+        sb.AppendLine("compare the service with `cell(...)`. Never type an expected number you were not shown.");
         sb.AppendLine();
         foreach (var t in tables)
         {
@@ -205,8 +207,24 @@ def cell(name: str, row: int, col: int) -> object | None:
                 sb.AppendLine($"    row {i + 1}: " + string.Join(", ", t.Grid[i].Take(8).Select(Show)) + (t.Columns > 8 ? ", …" : ""));
                 shown++;
             }
+            var spots = SpotValues(t);
+            if (spots.Count > 0)
+                sb.AppendLine("    Verified values a test may assert (1-based row, column): " + string.Join("; ", spots.Select(c => $"cell(\"{t.Slug}\", {c.Row}, {c.Col}) = {Show(c.Value)}")));
         }
         return sb.ToString();
+    }
+
+
+    /// <summary>Up to three real numeric cells per table (first, middle, last in reading order), for tests to assert on.</summary>
+    public static IReadOnlyList<(int Row, int Col, double Value)> SpotValues(DataTable t)
+    {
+        var numeric = new List<(int Row, int Col, double Value)>();
+        for (var r = 0; r < t.Grid.Length; r++)
+            for (var c = 0; c < t.Grid[r].Length; c++)
+                if (t.Grid[r][c] is double d) numeric.Add((r + 1, c + 1, d));
+        if (numeric.Count == 0) return numeric;
+        var picks = new[] { 0, numeric.Count / 2, numeric.Count - 1 }.Distinct();
+        return picks.Select(i => numeric[i]).ToList();
     }
 
     private static string Show(object? v) => v switch

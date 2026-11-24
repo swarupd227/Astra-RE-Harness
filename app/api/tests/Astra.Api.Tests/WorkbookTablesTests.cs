@@ -78,6 +78,20 @@ public class WorkbookTablesTests
         Assert.Contains("row 4: 18, 0.41, 4.5", prompt);
         Assert.Contains("from app.workbook_data import table, cell", prompt);
         Assert.Contains("table(name)[3 + r][c]", prompt);
+        Assert.Contains("Verified values a test may assert", prompt);
+        Assert.Contains("cell(\"rates\", 4, 1) = 18", prompt);        // first numeric cell, as stored
+        Assert.Contains("Never type an expected number you were not shown", prompt);
+    }
+
+    [Fact]
+    public void Spot_values_are_real_cells_first_middle_and_last_in_reading_order()
+    {
+        var t = Assert.Single(WorkbookTables.Read(Book(("Rates", "visible", RateBlock()))));
+        var spots = WorkbookTables.SpotValues(t);
+        Assert.Equal(3, spots.Count);
+        Assert.Equal((4, 1, 18.0), spots[0]);
+        Assert.All(spots, c => Assert.Equal(t.Grid[c.Row - 1][c.Col - 1], (object)c.Value));
+        Assert.Equal(t.Rows, spots[^1].Row);                          // the last numeric cell is on the last row
     }
 
     [Fact]

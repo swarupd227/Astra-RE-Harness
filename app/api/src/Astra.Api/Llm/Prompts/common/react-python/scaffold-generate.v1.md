@@ -143,9 +143,11 @@ Rules:
     `backend/app/workbook_data.py` (`table(name)`, `cell(name, row, col)`) —
     do not write either, do not parse the data files yourself, do not copy
     their values into code, and do not list them in your output. Read the
-    values only through that loader, behind the lookup port. In tests use only
-    values quoted in the "Data from the workbook" rows or in the signed spec,
-    verbatim. If the routine needs a table you were not given, expose it
+    values only through that loader, behind the lookup port. In tests assert
+    only the "Verified values" listed under each table, rows quoted in the
+    "Data from the workbook" section, or values in the signed spec, verbatim;
+    to check any other cell compare the service with the loader's `cell(...)`.
+    A number you were not shown must never appear as an expected value. If the routine needs a table you were not given, expose it
     through the port, leave the in-memory implementation empty, and say so in
     a `# TODO:` comment; never fill it with made-up numbers.
 11. **A lookup that finds nothing is an answer, not a crash.** When a value
