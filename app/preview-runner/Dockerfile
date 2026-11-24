@@ -10,6 +10,7 @@ RUN apt-get update \
 
 COPY run.sh /opt/run.sh
 COPY preview_main.py /opt/preview_main.py
+COPY preview.css /opt/preview.css
 RUN sed -i 's/\r$//' /opt/run.sh /opt/preview_main.py && chmod +x /opt/run.sh
 
 ENV PORT=8080

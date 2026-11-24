@@ -17,6 +17,9 @@ echo "[preview] building the front end"
 cd /app/frontend
 npm install --no-audit --no-fund --loglevel=error
 npx vite build
+# A standard look for packages generated before the archetype had one; later rules win, so it only fills gaps.
+cp /opt/preview.css dist/preview.css
+sed -i 's#</head>#<link rel="stylesheet" href="/preview.css"></head>#' dist/index.html
 
 echo "[preview] serving on $PORT"
 cp /opt/preview_main.py /app/backend/preview_main.py
