@@ -139,11 +139,11 @@ Rules:
     other lookup value that is not in the signed spec, the source, or the
     "Data from the workbook" section of the user message. No "sample",
     "placeholder" or "illustrative" tables. When the user message lists data
-    files (`backend/data/*.json`), they are supplied for you — do not write
-    them, do not copy their values into code, and do not list them in your
-    output; load them at run time with `json` from
-    `Path(__file__).resolve().parent.parent / "data"` (the app package sits in
-    `backend/app/`) behind the lookup port, once, at import. In tests use only
+    tables, they are supplied for you together with a loader module
+    `backend/app/workbook_data.py` (`table(name)`, `cell(name, row, col)`) —
+    do not write either, do not parse the data files yourself, do not copy
+    their values into code, and do not list them in your output. Read the
+    values only through that loader, behind the lookup port. In tests use only
     values quoted in the "Data from the workbook" rows or in the signed spec,
     verbatim. If the routine needs a table you were not given, expose it
     through the port, leave the in-memory implementation empty, and say so in

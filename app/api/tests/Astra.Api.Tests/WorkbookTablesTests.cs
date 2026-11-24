@@ -74,9 +74,19 @@ public class WorkbookTablesTests
         Assert.Contains("\"grid\":[[null,null,null],[null,null,null],[\"Age\",\"Rate\",null],[18,0.41,4.5]", json);
 
         var prompt = WorkbookTables.DescribeForPrompt(new[] { t });
-        Assert.Contains("backend/data/rates.json", prompt);
+        Assert.Contains("name \"rates\"", prompt);
         Assert.Contains("row 4: 18, 0.41, 4.5", prompt);
-        Assert.Contains("grid[3 + r][c]", prompt);
+        Assert.Contains("from app.workbook_data import table, cell", prompt);
+        Assert.Contains("table(name)[3 + r][c]", prompt);
+    }
+
+    [Fact]
+    public void The_loader_reads_the_grid_key_of_the_data_file_and_is_plain_python()
+    {
+        Assert.Equal("backend/app/workbook_data.py", WorkbookTables.LoaderPath);
+        Assert.Contains("[\"grid\"]", WorkbookTables.LoaderSource);
+        Assert.Contains("def cell(", WorkbookTables.LoaderSource);
+        Assert.Contains("from __future__ import annotations", WorkbookTables.LoaderSource);
     }
 
     [Fact]

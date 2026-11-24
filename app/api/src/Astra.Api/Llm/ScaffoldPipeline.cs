@@ -227,6 +227,17 @@ public sealed class ScaffoldPipeline
                     ["derivedFromClaimIds"] = new System.Text.Json.Nodes.JsonArray(),
                 });
             }
+            // The loader the generated code reads them through, so it never parses the data files itself.
+            foreach (var stale in array.Where(n => n?["path"]?.GetValue<string>() == WorkbookTables.LoaderPath).ToList()) array.Remove(stale);
+            array.Add(new System.Text.Json.Nodes.JsonObject
+            {
+                ["path"] = WorkbookTables.LoaderPath,
+                ["language"] = "python",
+                ["content"] = WorkbookTables.LoaderSource,
+                ["lineCount"] = WorkbookTables.LoaderSource.Count(c => c == '\n') + 1,
+                ["todoCount"] = 0,
+                ["derivedFromClaimIds"] = new System.Text.Json.Nodes.JsonArray(),
+            });
             filesJson = array.ToJsonString();
             (fileCount, totalLines) = (array.Count, array.Sum(n => n?["lineCount"]?.GetValue<int>() ?? 0));
         }

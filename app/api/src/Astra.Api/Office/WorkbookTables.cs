@@ -150,18 +150,54 @@ public static class WorkbookTables
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
-    /// <summary>What the code generator is told about the tables: where each file is, its shape and a few real rows.</summary>
+    /// <summary>The loader the platform adds beside the data files, so generated code never parses them itself.</summary>
+    public const string LoaderPath = "backend/app/workbook_data.py";
+
+    public const string LoaderSource = """"
+"""Values copied from the workbook's sheets. Added by the platform; the data files are exact copies, so do not edit.
+
+table("male_nonsmoker")[i][j] is the cell in sheet row i+1, column j+1 (None is an empty cell).
+cell("male_nonsmoker", row, col) takes Excel's 1-based row and column.
+"""
+from __future__ import annotations
+
+import json
+from functools import lru_cache
+from pathlib import Path
+
+_DATA = Path(__file__).resolve().parent.parent / "data"
+
+
+@lru_cache(maxsize=None)
+def table(name: str) -> list[list[object]]:
+    """The whole sheet as rows of cells."""
+    return json.loads((_DATA / f"{name}.json").read_text(encoding="utf-8"))["grid"]
+
+
+def cell(name: str, row: int, col: int) -> object | None:
+    """One cell by Excel's 1-based row and column; None when empty or outside the sheet."""
+    grid = table(name)
+    if row < 1 or col < 1 or row > len(grid) or col > len(grid[row - 1]):
+        return None
+    return grid[row - 1][col - 1]
+"""";
+
+    /// <summary>What the code generator is told about the tables: where each is, its shape and a few real rows.</summary>
     public static string DescribeForPrompt(IReadOnlyList<DataTable> tables)
     {
         var sb = new StringBuilder();
         sb.AppendLine("The workbook keeps its lookup values on these sheets. The platform copies them, unchanged, into the package");
-        sb.AppendLine("as the JSON files below (they are added to your output; do NOT write them yourself, and do NOT type or");
-        sb.AppendLine("invent any value from them). Load them at run time. `grid[i][j]` is the cell in sheet row i+1, column j+1,");
-        sb.AppendLine("so a macro's `Offset(r, c)` from cell A4 is `grid[3 + r][c]`.");
+        sb.AppendLine("as JSON data files, and adds a loader module `app/workbook_data.py` (backend/app/workbook_data.py). Do NOT write");
+        sb.AppendLine("those files yourself, do NOT parse the JSON yourself, and do NOT type or invent any value. In the lookup port's");
+        sb.AppendLine("implementation use only the loader:");
+        sb.AppendLine("    from app.workbook_data import table, cell");
+        sb.AppendLine("    table(\"<name>\")[i][j]   # the cell in sheet row i+1, column j+1; None when empty");
+        sb.AppendLine("    cell(\"<name>\", row, col)  # Excel's 1-based row and column");
+        sb.AppendLine("A macro's `Offset(r, c)` from cell A4 is therefore `table(name)[3 + r][c]` (A4 is row 4, column 1).");
         sb.AppendLine();
         foreach (var t in tables)
         {
-            sb.AppendLine($"- `backend/data/{t.Slug}.json` — sheet \"{t.Sheet}\"{(t.State == "visible" ? "" : $" ({t.State})")}, {t.Rows} rows × {t.Columns} columns, {t.NumericCells} numeric cells. First rows (real values, row number first):");
+            sb.AppendLine($"- name \"{t.Slug}\" — sheet \"{t.Sheet}\"{(t.State == "visible" ? "" : $" ({t.State})")}, {t.Rows} rows × {t.Columns} columns, {t.NumericCells} numeric cells. First rows (real values, row number first):");
             var shown = 0;
             for (var i = 0; i < t.Grid.Length && shown < 5; i++)
             {
