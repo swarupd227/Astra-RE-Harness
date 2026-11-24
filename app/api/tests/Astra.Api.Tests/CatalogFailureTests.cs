@@ -45,3 +45,29 @@ public class CatalogFailureTests
         Assert.EndsWith("…", long500);
     }
 }
+
+public class SectionTitleTests
+{
+    private static string? T(string json, string? md = null) =>
+        Astra.Api.Endpoints.DocsEndpoints.SectionTitle(System.Text.Json.JsonDocument.Parse(json), md);
+
+    [Fact]
+    public void A_requirement_is_named_by_its_reference_and_statement() =>
+        Assert.Equal("FR-003 — Rates come from the hidden sheet", T("{\"reference\":\"FR-003\",\"statement\":\"Rates come from the hidden sheet\"}"));
+
+    [Fact]
+    public void A_capability_or_flow_uses_its_name_and_a_diagram_falls_back_to_its_heading()
+    {
+        Assert.Equal("Quote a policy", T("{\"name\":\"Quote a policy\"}"));
+        Assert.Equal("Call graph", T("{}", "\n## Call graph\n\nx"));
+        Assert.Null(T("{}", null));
+    }
+
+    [Fact]
+    public void Long_titles_are_cut_to_one_line()
+    {
+        var t = T("{\"name\":\"" + new string('a', 400) + "\"}")!;
+        Assert.Equal(160, t.Length);
+        Assert.EndsWith("…", t);
+    }
+}

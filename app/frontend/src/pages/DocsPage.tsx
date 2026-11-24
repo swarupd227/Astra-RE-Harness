@@ -93,9 +93,10 @@ function sectionLabel(s: {
   moduleName?: string;
   subroutineName?: string;
   subroutineId?: string;
+  title?: string | null;
   id: string;
 }): string {
-  return s.moduleName ?? s.subroutineName ?? (s.subroutineId ? s.subroutineId.slice(0, 8) : s.id.slice(0, 8));
+  return s.moduleName ?? s.subroutineName ?? s.title ?? (s.subroutineId ? s.subroutineId.slice(0, 8) : s.id.slice(0, 8));
 }
 
 export function DocsPage() {
@@ -816,7 +817,7 @@ export function DocsPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className={`font-mono text-sm line-clamp-2 ${
+                    <span className={`text-sm line-clamp-3 ${
                       isActive ? 'font-semibold text-ink-primary' : 'font-medium text-ink-primary'
                     }`}>
                       {sectionLabel(s)}

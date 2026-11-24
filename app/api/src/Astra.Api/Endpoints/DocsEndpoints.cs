@@ -194,9 +194,19 @@ public static class DocsEndpoints
                     generationRunId = s.GenerationRunId,
                     createdAt = s.CreatedAt,
                     updatedAt = s.UpdatedAt,
+                    payload = s.PayloadJson,
+                    markdown = s.RenderedMarkdown,
                 })
                 .ToListAsync(ct);
-            return Results.Ok(new { total, page = pg, pageSize = sz, data = items });
+            // A short human title per section (the list used to show an 8-character id for any kind without a
+            // module or routine: requirements, capabilities, flows, diagrams, rules).
+            var data = items.Select(i => new
+            {
+                i.id, i.kind, i.scope, i.state, i.moduleName, i.subroutineId, i.subroutineName,
+                title = SectionTitle(i.payload, i.markdown),
+                i.generationRunId, i.createdAt, i.updatedAt,
+            }).ToList();
+            return Results.Ok(new { total, page = pg, pageSize = sz, data });
         });
 
         // GET /api/v1/docs/sections/{id}  — full section detail including payload + markdown
@@ -219,6 +229,7 @@ public static class DocsEndpoints
                 state = s.State,
                 moduleName = s.ModuleName,
                 subroutineId = s.SubroutineId,
+                title = SectionTitle(s.PayloadJson, s.RenderedMarkdown),
                 renderedMarkdown = s.RenderedMarkdown,
                 payload = s.PayloadJson.RootElement,
                 // WS6 — critic score + deterministic checks, when the section was quality-checked.
@@ -518,4 +529,36 @@ public static class DocsEndpoints
 
     private static IResult Forbid() =>
         Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
+
+    /// <summary>
+    /// The one-line name of a section for lists: "FR-003 — statement", else the payload's title / name / statement,
+    /// else the first markdown heading. Null when the section states nothing readable.
+    /// </summary>
+    internal static string? SectionTitle(System.Text.Json.JsonDocument? payload, string? markdown)
+    {
+        static string? Str(System.Text.Json.JsonElement e, string k) =>
+            e.ValueKind == System.Text.Json.JsonValueKind.Object
+            && e.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(v.GetString()) ? v.GetString()!.Trim() : null;
+
+        string? text = null;
+        if (payload is not null)
+        {
+            var r = payload.RootElement;
+            var reference = Str(r, "reference");
+            var main = Str(r, "title") ?? Str(r, "name") ?? Str(r, "statement") ?? Str(r, "summary");
+            text = reference is not null && main is not null ? $"{reference} — {main}" : main ?? reference;
+        }
+        if (text is null && !string.IsNullOrWhiteSpace(markdown))
+        {
+            foreach (var line in markdown.Split('\n'))
+            {
+                var t = line.Trim().TrimStart('#').Trim();
+                if (t.Length > 0) { text = t; break; }
+            }
+        }
+        if (text is null) return null;
+        text = text.Replace("\r", " ").Replace("\n", " ");
+        return text.Length > 160 ? text[..159] + "…" : text;
+    }
 }

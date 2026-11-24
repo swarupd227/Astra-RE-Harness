@@ -2209,6 +2209,7 @@ export type DocSectionSummaryItem = {
   scope: string;
   state: string;
   moduleName?: string;
+  title?: string | null;
   subroutineId?: string;
   subroutineName?: string;
   generationRunId?: string;
