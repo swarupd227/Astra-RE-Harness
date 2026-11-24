@@ -54,9 +54,11 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   credit rules — and `Completeness` scores approved slots as pure arithmetic. Every knowledge model call goes through
   `IDocWriter` at temperature 0 with a replay key (no `HttpClient` under `Knowledge/`, enforced by a test).
   Rules and formats: **`docs/03_Evidence/statements-and-grounding.md`**. Office documents with
-  macros (`.xlsm`, `.xls`, `.docm` …) are read statically (`Office/`): at intake their VBA becomes source files under
-  the document (`Book.xlsm/Module1.bas`), and a spreadsheet is also attached as the `workbook` kind (sheets, named
-  inputs, input rules, formulas, controls → the macros they run). Anything that
+  macros (`.xlsm`, `.xls`, `.docm` …) are read statically (`Office/`; `.xls` by `LegacyWorkbook`, BIFF8): at intake their
+  VBA becomes source files under the document (`Book.xlsm/Module1.bas`), and a spreadsheet is also attached as the
+  `workbook` kind (sheets, named inputs, input rules, formulas, controls → the macros they run, UserForm controls with
+  their labels). A routine from such a document is extracted with its own prompt and the workbook's view of it
+  (`Llm/Prompts/vb6/office-vba`, `Office/OfficeHostContext`). Anything that
   cites uses `CitationChip`; secrets never enter a chunk or a fact. Formats, locators and how to add an adapter:
   **`docs/03_Evidence/artefact-adapters.md`**. jsonb does not keep object key order — store anything order-sensitive
   as an array.
@@ -67,7 +69,12 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   variant shares `common/dotnet10`; see `AnthropicScaffoldProvider.ScaffoldPromptFamily`), archetypes under
   `Llm/Archetypes/<target>/<id>/` with `net10.0` csproj files. Adding a target = prompt + archetype + entry in
   `ScaffoldEndpoints.PreferredStack` / `AssessmentService.DefaultTarget` / frontend `targetStacks.ts`. The API
-  image carries the .NET 10 and .NET 8 SDKs so the compile gate can build either. The API itself runs on
+  image carries the .NET 10 and .NET 8 SDKs so the compile gate can build either. **`react-python`** (FastAPI back end +
+  React/Vite/TypeScript front end, archetype `react-python/canonical-form-calculation`, prompt
+  `common/react-python`) is the target for form-driven calculations such as workbook macros: its gates run in-process
+  like the Angular stacks' — `Validation/PythonRunner` (a venv per run, `pip install`, import every module / pytest)
+  plus `npm install` + build / jest — so the API image carries python3-venv and pip; the test pack is a pytest file
+  (`TestPackGenerator`). It is not a default for any language. The API itself runs on
   .NET 10 (`DOTNET_VERSION` in `app/api/Dockerfile`, EF Core 10, Npgsql 10); the worker (`app/worker`) is still
   on .NET 8 and moves separately.
 - **Two conversion modes** (WS3). The canonical path substitutes one routine into an archetype package. The

@@ -119,6 +119,55 @@ public class UserFormsTests
         Assert.Null(Astra.Api.Evidence.WorkbookAdapter.LabelForTest(month, all));          // labels have no label
     }
 
+    /// <summary>A form with one custom ActiveX control: its class (by CLSID) is in the form's class table, its site points at it.</summary>
+    private static (byte[] F, byte[] O) FormWithCustomControl(Guid clsid)
+    {
+        var cls = new W().Start();
+        cls.U16(0, false).U16(20, false).U32(1, false);                       // Version, cbClassTable (4 + one GUID), PropMask: fClsID
+        cls.B.AddRange(clsid.ToByteArray());
+        var site = Site("dtpBirth", 1, 8, 0, 0x8000, 500, 900);                // ClsidCacheIndex 0x8000 = class table entry 0; 8 bytes of its own data
+        var f = new W().Start();
+        f.U8(0).U8(4).U16(12, false).U32(1u << 10, false);                    // version 0.4, cbForm, mask: DisplayedSize
+        f.U32(7000).U32(3000);
+        f.U16(1, false);                                                       // one class
+        f.B.AddRange(cls.B);
+        f.U32(1, false).U32((uint)(4 + site.Length), false);                  // CountOfSites, CountOfBytes
+        f.U8(0).U8(1).U8(0).U8(0);                                             // depth 0, one control of type 1, padding
+        f.B.AddRange(site);
+        return (f.B.ToArray(), new byte[8]);
+    }
+
+    [Fact]
+    public void A_custom_ActiveX_control_is_named_by_its_class_and_does_not_spoil_the_form()
+    {
+        var (f, o) = FormWithCustomControl(new Guid("20DD1B9E-87C4-11D1-8BE3-0000F8754DA1"));
+        var problems = new List<string>();
+        var (_, _, controls) = UserForms.ReadLevel(f, o, _ => null, problems);
+        Assert.Empty(problems);
+        var c = Assert.Single(controls!);
+        Assert.Equal(("dtpBirth", "DatePicker", 0), (c.Name, c.Kind, c.TabIndex));
+        Assert.Equal((14.2, 25.5), (c.Left, c.Top));
+        Assert.Null(c.Width);                                                  // its size is in its own opaque data
+    }
+
+    [Fact]
+    public void An_unknown_ActiveX_class_keeps_its_id_instead_of_a_guess()
+    {
+        var (f, o) = FormWithCustomControl(new Guid("11111111-2222-3333-4444-555555555555"));
+        var problems = new List<string>();
+        var (_, _, controls) = UserForms.ReadLevel(f, o, _ => null, problems);
+        Assert.Empty(problems);
+        Assert.Equal("ActiveX {11111111-2222-3333-4444-555555555555}", Assert.Single(controls!).Kind);
+    }
+
+    [Fact]
+    public void A_date_picker_takes_the_label_beside_it()
+    {
+        var label = C("lbDob", "Label", 12, 60, 66, 18, "Date of birth:");
+        var picker = C("dtpDob", "DatePicker", 84, 60, 96, 18) with { Width = null, Height = null };
+        Assert.Equal("Date of birth:", UserForms.LabelFor(picker, new[] { label, picker }));
+    }
+
     /// <summary>With ASTRA_VBA_SAMPLES set: every control a form's code handles is one the designer data lists.</summary>
     [Fact]
     public void Local_samples_forms_match_their_code()

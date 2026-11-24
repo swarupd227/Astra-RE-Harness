@@ -252,8 +252,11 @@ reader checks it consumed exactly that; a mismatch is a warning and the form is 
 wrong. A form is one piece (`form:frmQuotation`) listing its controls with each input's label (the Label overlapping
 its first line, nearest on the left; else just above). Facts: the workbook `contains` the `user-form`, which
 `contains` its controls (a Frame or page contains its own); a control `runs` the handlers its form's code defines
-for it (`cmdNext1_Click`), `writes` its `ControlSource` cell and `reads` its `RowSource` range. Custom ActiveX
-controls (a class table in the form) are not read yet.
+for it (`cmdNext1_Click`), `writes` its `ControlSource` cell and `reads` its `RowSource` range. A custom ActiveX
+control (one in the form's class table: a date picker, tree view, list view …) is listed with its name, tab order and
+position, its kind taken from its CLSID (`DatePicker`, `TreeView`, … — an unknown class is `ActiveX {clsid}`, never a
+guess), and its handlers; its size and settings live in its own opaque data and are not read. A date picker takes
+the label beside it like a text box does.
 
 ## Configuration
 

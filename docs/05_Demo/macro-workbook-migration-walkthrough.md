@@ -40,7 +40,8 @@ capability — the workbook is whatever you upload.*
 - A form's **page tab captions** (the text on a MultiPage's tabs) are not read; pages show their internal names.
 - **Legacy `.xls`** workbooks give sheets, named cells, input rules, formulas and form buttons like newer files do;
   ActiveX controls on sheets and Excel 4 macro sheets are not read.
-- **Custom ActiveX controls** on a form (a class table in its designer data) are flagged, not laid out.
+- **Custom ActiveX controls** on a form (date pickers, tree views …) are listed with name, position and kind but
+  without their size or settings.
 - Calculation **formulas on the sheets** are cited and counted but not evaluated; business rules that live only in
   sheet formulas surface as the spec's open questions unless a macro touches them.
 - The generated **React + Python** package is the reference shape for a form-driven calculation. A workbook with

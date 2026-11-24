@@ -82,7 +82,9 @@ public static class UserForms
         var offset = 0;
         foreach (var site in form.Sites)
         {
-            var kind = site.ClassIndex is int ci && ClassCache.TryGetValue(ci, out var k) ? k : "Control";
+            var kind = site.ClassIndex is int ci
+                ? (ci >= 0x8000 ? CustomKind(form.Classes, ci - 0x8000) : ClassCache.TryGetValue(ci, out var k) ? k : "Control")
+                : "Control";
             ControlData data = default;
             if (site.ObjectStreamSize > 0)
             {
@@ -132,7 +134,7 @@ public static class UserForms
     /// </summary>
     public static string? LabelFor(FormControl c, IReadOnlyList<FormControl> siblings)
     {
-        if (c.Kind is not ("TextBox" or "ComboBox" or "ListBox" or "SpinButton" or "ScrollBar")) return null;
+        if (c.Kind is not ("TextBox" or "ComboBox" or "ListBox" or "SpinButton" or "ScrollBar" or "DatePicker")) return null;
         // A tall list's label sits by its first line, not its middle: compare against the top 20 pt only.
         var lineTop = c.Top;
         var lineBottom = c.Top + Math.Min(c.Height ?? 12, 20);
@@ -158,7 +160,7 @@ public static class UserForms
     private sealed record Site(string? Name, int? Id, int? TabIndex, int? ClassIndex, uint ObjectStreamSize, int Left, int Top,
         string? Tag, string? ToolTip, string? ControlSource, string? RowSource);
 
-    private sealed record FormHeader(int? Width, int? Height, List<Site> Sites);
+    private sealed record FormHeader(int? Width, int? Height, List<Site> Sites, List<Guid> Classes);
 
     private static FormHeader ReadForm(byte[] f)
     {
@@ -201,11 +203,12 @@ public static class UserForms
         if (Has(20)) SkipFont(r);
         if (Has(21)) SkipPicture(r);
 
+        var classes = new List<Guid>();
         const uint DontSaveClassTable = 0x8000;
         if ((boolProps & DontSaveClassTable) == 0)
         {
-            var classes = r.U16(align: false);
-            if (classes != 0) throw new InvalidDataException($"a class table of {classes} entries (custom ActiveX controls) is not read yet");
+            var n = r.U16(align: false);
+            for (var k = 0; k < n; k++) classes.Add(ReadClass(f, ref r.Pos));
         }
         var count = r.U32(align: false);
         var bytes = r.U32(align: false);
@@ -228,8 +231,49 @@ public static class UserForms
             r.Pos += size;
         }
         if (r.Pos - begin != bytes) throw new InvalidDataException($"the controls take {r.Pos - begin} bytes, declared {bytes}");
-        return new FormHeader(width, height, sites);
+        return new FormHeader(width, height, sites, classes);
     }
+
+    /// <summary>
+    /// One entry of the form's class table (a custom ActiveX control's class): Version, cbClassTable, a property mask,
+    /// then data and extra data. The entry is 4 + cbClassTable bytes; its CLSID, when stored, is the first GUID of the
+    /// extra data, which ends the entry (up to three 16-byte GUIDs: ClsID, DispEvent, DefaultProg).
+    /// </summary>
+    private static Guid ReadClass(byte[] f, ref int pos)
+    {
+        var start = pos;
+        if (start + 8 > f.Length) throw new InvalidDataException("the class table is cut off");
+        var cb = BinaryPrimitives.ReadUInt16LittleEndian(f.AsSpan(start + 2, 2));
+        var mask = BinaryPrimitives.ReadUInt32LittleEndian(f.AsSpan(start + 4, 4));
+        var end = start + 4 + cb;
+        if (end > f.Length) throw new InvalidDataException("a class table entry runs past the end of the stream");
+        var guids = ((mask & 1) != 0 ? 1 : 0) + ((mask & 2) != 0 ? 1 : 0) + ((mask & 8) != 0 ? 1 : 0);
+        pos = end;
+        if ((mask & 1) == 0 || end - 16 * guids < start + 8) return Guid.Empty;
+        return new Guid(f.AsSpan(end - 16 * guids, 16));
+    }
+
+    /// <summary>What a custom ActiveX control is called, by class id; an unknown class keeps its id so nothing is guessed.</summary>
+    private static string CustomKind(List<Guid> classes, int index)
+    {
+        if (index < 0 || index >= classes.Count || classes[index] == Guid.Empty) return "ActiveX";
+        return KnownActiveX.TryGetValue(classes[index], out var name) ? name : $"ActiveX {classes[index].ToString("B").ToUpperInvariant()}";
+    }
+
+    private static readonly Dictionary<Guid, string> KnownActiveX = new()
+    {
+        [new("20DD1B9E-87C4-11D1-8BE3-0000F8754DA1")] = "DatePicker",
+        [new("232E456A-87C3-11D1-8B7F-00A0C913D5CA")] = "MonthView",
+        [new("8E27C92B-1264-101C-8A2F-040224009C02")] = "Calendar",
+        [new("C74190B6-8589-11D1-B16A-00C0F0283628")] = "TreeView",
+        [new("BDD1F052-858B-11D1-B16A-00C0F0283628")] = "ListView",
+        [new("35053A22-8589-11D1-B16A-00C0F0283628")] = "ProgressBar",
+        [new("F08DF954-8592-11D1-B16A-00C0F0283628")] = "Slider",
+        [new("8E3867A3-8586-11D1-B16A-00C0F0283628")] = "StatusBar",
+        [new("66833FE6-8583-11D1-B16A-00C0F0283628")] = "Toolbar",
+        [new("2C247F23-8591-11D1-B16A-00C0F0283628")] = "ImageList",
+        [new("8856F961-340A-11D0-A96B-00C04FD705A2")] = "WebBrowser",
+    };
 
     private static void SkipFont(Reader r)
     {
