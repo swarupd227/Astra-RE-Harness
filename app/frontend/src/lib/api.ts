@@ -811,6 +811,8 @@ export type CorpusListItem = {
   state: string;
   fileCount: number;
   totalLoc: number;
+  /** True when the code is VBA inside Office documents (shown as "VBA"; the language id stays vb6). */
+  officeVba?: boolean;
   /**
    * Phase 10.1.b.2 — dominant source language across the corpus's
    * LATEST SourceVersion. Returns a SourceLanguageDetector constant

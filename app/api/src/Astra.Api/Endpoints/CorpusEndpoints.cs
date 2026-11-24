@@ -50,6 +50,17 @@ public static class CorpusEndpoints
                     .Select(g => new LangCount(g.Key.Vid, g.Key.SourceLanguage, g.Count()))
                     .ToListAsync(ct);
 
+            // VBA is read with the VB6 grammar, so its language id is "vb6"; what tells them apart is that VBA lives
+            // inside an Office document (paths like "Book.xlsm/Module1.bas"). The UI says "VBA" for those.
+            var officeVersionIds = latestVersionIds.Count == 0
+                ? new HashSet<Guid>()
+                : (await db.SourceFiles.AsNoTracking()
+                    .Where(f => latestVersionIds.Contains(f.SourceVersionId)
+                        && (f.RelativePath.Contains(".xlsm/") || f.RelativePath.Contains(".xls/") || f.RelativePath.Contains(".xlsx/")
+                            || f.RelativePath.Contains(".xlsb/") || f.RelativePath.Contains(".xlam/") || f.RelativePath.Contains(".docm/")
+                            || f.RelativePath.Contains(".doc/") || f.RelativePath.Contains(".dotm/") || f.RelativePath.Contains(".pptm/")
+                            || f.RelativePath.Contains(".ppt/") || f.RelativePath.Contains(".accdb/") || f.RelativePath.Contains(".mdb/")))
+                    .Select(f => f.SourceVersionId).Distinct().ToListAsync(ct)).ToHashSet();
             // Per-version: pick the language with the strict-majority
             // count. Ties resolve to null so the UI can render a
             // neutral pill instead of arbitrarily picking one branch.
@@ -80,7 +91,8 @@ public static class CorpusEndpoints
                     c.FileCount,
                     c.TotalLoc,
                     lang,
-                    c.UpdatedAt);
+                    c.UpdatedAt,
+                    c.LatestVersionId.HasValue && officeVersionIds.Contains(c.LatestVersionId.Value));
             }).ToList();
 
             return Results.Ok(new { data = rows });
@@ -157,7 +169,8 @@ public static class CorpusEndpoints
         int FileCount,
         int TotalLoc,
         string? SourceLanguage,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        bool OfficeVba);
 
     private sealed record LangCount(Guid VersionId, string SourceLanguage, int Count);
 }

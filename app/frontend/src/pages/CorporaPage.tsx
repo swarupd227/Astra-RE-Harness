@@ -109,19 +109,25 @@ const LANG_CPP: LanguageAccent = {
 };
 // Phase 10.0.i — VB6 accent. Sand keeps it distinct from the four
 // status-coloured pills in both themes.
+// VBA inside Office documents shares the VB6 grammar (language id stays 'vb6'); only the label differs.
+const LANG_VBA: LanguageAccent = {
+  id: 'vba', label: 'VBA',
+  pillBg: 'bg-sand-300/20', pillText: 'text-ink-secondary',
+  stripe: 'border-l-sand-300',
+};
 const LANG_VB6: LanguageAccent = {
   id: 'vb6', label: 'VB6',
   pillBg: 'bg-sand-300/20', pillText: 'text-ink-secondary',
   stripe: 'border-l-sand-300',
 };
 
-function accentForLanguage(schemaId: string | null): LanguageAccent | null {
+function accentForLanguage(schemaId: string | null, officeVba = false): LanguageAccent | null {
   switch (schemaId) {
     case 'fortran-f77': return LANG_FORTRAN;
     case 'cobol':       return LANG_COBOL;
     case 'delphi':      return LANG_DELPHI;
     case 'cpp':         return LANG_CPP;
-    case 'vb6':         return LANG_VB6;
+    case 'vb6':         return officeVba ? LANG_VBA : LANG_VB6;
     default:            return null;
   }
 }
@@ -131,7 +137,7 @@ function CorpusCard({ corpus }: { corpus: CorpusListItem }) {
   // so a single glance at the corpora grid tells you what's healthy vs failed.
   // Phase 9.2.b adds a language pill so the per-language story is visible
   // alongside the per-state story.
-  const language = accentForLanguage(corpus.sourceLanguage);
+  const language = accentForLanguage(corpus.sourceLanguage, corpus.officeVba);
   const accent = (() => {
     switch (corpus.state) {
       case 'PARSED':    return { edge: 'border-l-status-review', iconBg: 'bg-status-ok/10', iconFg: 'text-status-review' };

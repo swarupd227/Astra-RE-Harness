@@ -10,6 +10,7 @@ import {
   type ArtefactUpload,
   type AttachFileResult,
   type AttachResponse,
+  artefactContentUrl,
 } from '@/lib/api';
 import { fromDrop, fromPicker, formatBytes } from '@/lib/artefactFiles';
 import { Badge } from '@/components/Badge';
@@ -392,6 +393,15 @@ function FileList({
               {formatBytes(f.sizeBytes)}
               {f.lineCount > 0 ? ` · ${f.lineCount.toLocaleString()} lines` : ''}
             </span>
+            <a
+              href={`${artefactContentUrl(f.id)}?download=1`}
+              download
+              className="shrink-0 text-micro text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
+              data-testid="artefact-file-download"
+              title="Download the original file exactly as uploaded"
+            >
+              Download original
+            </a>
             {f.chunkCount > 0 && (
               <Link
                 to={`/corpora/${corpusId}/evidence?path=${encodeURIComponent(f.path)}`}
