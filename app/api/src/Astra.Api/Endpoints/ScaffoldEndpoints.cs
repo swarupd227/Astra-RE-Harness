@@ -303,6 +303,37 @@ public static class ScaffoldEndpoints
             return Results.Ok(await ToResponseAsync(scaffold, blob, ct));
         });
 
+        // ─── The generated package as a zip ──────────────────────────────
+        // Every file of the package under its own path, ready to unzip and run. Also what a preview container
+        // fetches. Ungated like every read; paths are checked so nothing escapes the archive root.
+        app.MapGet("/api/v1/scaffolds/{id:guid}/package.zip", async (
+            Guid id,
+            AppDbContext db,
+            IBlobClient blob,
+            CancellationToken ct) =>
+        {
+            var scaffold = await db.Scaffolds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
+            if (scaffold is null)
+                return Results.NotFound(new { error = new { code = "scaffold.not_found" } });
+
+            using var manifest = JsonDocument.Parse(await blob.GetTextAsync(scaffold.PackageBlobUri, ct));
+            var ms = new MemoryStream();
+            using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (var f in manifest.RootElement.GetProperty("files").EnumerateArray())
+                {
+                    var path = f.TryGetProperty("path", out var p) ? p.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(path) || path.StartsWith('/') || path.Contains("..")) continue;
+                    var content = f.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() ?? "" : "";
+                    var entry = zip.CreateEntry(path.Replace('\\', '/'), System.IO.Compression.CompressionLevel.Fastest);
+                    await using var w = new StreamWriter(entry.Open(), new System.Text.UTF8Encoding(false));
+                    await w.WriteAsync(content);
+                }
+            }
+            ms.Position = 0;
+            return Results.File(ms, "application/zip", $"{scaffold.TargetPlatform}-{id.ToString()[..8]}.zip");
+        });
+
         // ─── Stub commit-to-Git ──────────────────────────────────────────
         // Phase B.4: records a faux commit hash + URL so the demo flow has a
         // realistic "committed" state. Real Octokit lands in Phase C.
