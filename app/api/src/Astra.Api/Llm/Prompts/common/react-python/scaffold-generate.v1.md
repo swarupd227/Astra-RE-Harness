@@ -135,6 +135,24 @@ Rules:
    legacy form or sheet had. Jest with Testing Library in jsdom; tests set
    `globalThis.fetch` to a `jest.fn()` — no network, no other mocking
    library, no Vitest.
+10. **Data is never invented.** Never write a rate, factor, tariff or any
+    other lookup value that is not in the signed spec, the source, or the
+    "Data from the workbook" section of the user message. No "sample",
+    "placeholder" or "illustrative" tables. When the user message lists data
+    files (`backend/data/*.json`), they are supplied for you — do not write
+    them, do not copy their values into code, and do not list them in your
+    output; load them at run time with `json` from
+    `Path(__file__).resolve().parent.parent / "data"` (the app package sits in
+    `backend/app/`) behind the lookup port, once, at import. In tests use only
+    values quoted in the "Data from the workbook" rows or in the signed spec,
+    verbatim. If the routine needs a table you were not given, expose it
+    through the port, leave the in-memory implementation empty, and say so in
+    a `# TODO:` comment; never fill it with made-up numbers.
+11. **A lookup that finds nothing is an answer, not a crash.** When a value
+    asked for is not in a table, the port raises a `LookupError` subclass of
+    your own naming, and the router turns it into an `HTTPException`
+    (status 404) whose detail says which input had no match. An unhandled
+    `KeyError` must never reach the client as a 500.
 
 Output schema — emit a single JSON object with no surrounding prose:
 ```json

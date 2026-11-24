@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
+using Astra.Api.Office;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Astra.Api.Storage;
@@ -154,6 +155,12 @@ public sealed class ScaffoldPipeline
             }
         }
 
+        // A routine from an Office document looks values up on the workbook's own sheets. Those values are copied into
+        // the package as data (never typed by the model, which used to invent a "small sample" of them).
+        var dataTables = unit is null && string.Equals(targetStack, "react-python", StringComparison.OrdinalIgnoreCase)
+            ? await LoadDataTablesAsync(spec.Subroutine, ct)
+            : new List<DataTable>();
+
         var req = new ScaffoldRequest(
             spec.Id,
             spec.Subroutine?.Name ?? "",
@@ -166,7 +173,8 @@ public sealed class ScaffoldPipeline
             originalSourceText,
             repairHint,
             unit,
-            previousFiles);
+            previousFiles,
+            dataTables.Count == 0 ? null : WorkbookTables.DescribeForPrompt(dataTables));
 
         object? finalPayload = null;
         var providerReportedError = false;
@@ -199,6 +207,29 @@ public sealed class ScaffoldPipeline
 
         var (filesJson, inputTokens, outputTokens, latencyMs, fileCount, totalLines, todoCount,
                 promptTemplateId, promptTemplateVersion) = UnpackPayload(finalPayload);
+
+        // The workbook's own values go into the package as files, byte for byte as read from the sheets.
+        if (dataTables.Count > 0)
+        {
+            var array = System.Text.Json.Nodes.JsonNode.Parse(filesJson)!.AsArray();
+            foreach (var t in dataTables)
+            {
+                var content = WorkbookTables.ToJson(t);
+                var path = $"backend/data/{t.Slug}.json";
+                foreach (var stale in array.Where(n => n?["path"]?.GetValue<string>() == path).ToList()) array.Remove(stale);
+                array.Add(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["path"] = path,
+                    ["language"] = "json",
+                    ["content"] = content,
+                    ["lineCount"] = 1,
+                    ["todoCount"] = 0,
+                    ["derivedFromClaimIds"] = new System.Text.Json.Nodes.JsonArray(),
+                });
+            }
+            filesJson = array.ToJsonString();
+            (fileCount, totalLines) = (array.Count, array.Sum(n => n?["lineCount"]?.GetValue<int>() ?? 0));
+        }
 
         // Persist the LlmCall row — using the prompt id/version the
         // provider ACTUALLY resolved (from its __final__ payload), not
@@ -327,6 +358,27 @@ public sealed class ScaffoldPipeline
         _logger.LogInformation(
             "Scaffold complete: spec={Spec} scaffold={Scaffold} {Files} files {TodoCount} TODOs in {Ms}ms",
             spec.Id, scaffold.Id, fileCount, todoCount, latencyMs);
+    }
+
+    /// <summary>The lookup sheets of the Office document a routine lives in; empty for ordinary source or on any read problem.</summary>
+    private async Task<List<DataTable>> LoadDataTablesAsync(Subroutine? sub, CancellationToken ct)
+    {
+        var path = sub?.SourceFile?.RelativePath;
+        if (sub is null || path is null || OfficeHostContext.SplitPath(path) is not { } split) return new();
+        try
+        {
+            var doc = await _db.SourceFiles.AsNoTracking()
+                .Where(f => f.SourceVersionId == sub.SourceFile!.SourceVersionId && f.RelativePath == split.Document)
+                .Select(f => new { f.BlobUri, f.Kind })
+                .FirstOrDefaultAsync(ct);
+            if (doc is null || doc.Kind != Artefacts.ArtefactKinds.Workbook) return new();
+            return WorkbookTables.Read(await _blob.GetBytesAsync(doc.BlobUri, ct)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the lookup sheets of {Document}; generating without them", split.Document);
+            return new();
+        }
     }
 
     private static (string filesJson, int inputTokens, int outputTokens, long latencyMs,

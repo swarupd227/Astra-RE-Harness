@@ -152,6 +152,9 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             ? rendered.User
             : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
               "\n\nReturn the complete corrected package in the same JSON shape; every file, not only the changed ones.";
+        // Real values from the workbook's lookup sheets: described here, supplied as files by the pipeline.
+        if (!string.IsNullOrWhiteSpace(request.DataTablesNote))
+            userPrompt += "\n\n## Data from the workbook\n\n" + request.DataTablesNote.Trim();
 
         string? rawJson = null;
         int inputTokens = 0, outputTokens = 0;
