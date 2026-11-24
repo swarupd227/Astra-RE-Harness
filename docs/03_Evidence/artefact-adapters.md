@@ -232,7 +232,18 @@ in once the workbook is uploaded as code.
 repository) becomes its modules, `Rating.xlsm/Pricing.bas|.cls|.frm`, parsed as VB; document modules with no code
 are left out and the result says what was read. A spreadsheet is also kept whole: once the version is parsed, the
 run switches the Spreadsheets kind on and attaches it, so code, evidence and graph come from one upload.
-Legacy binary workbooks (`.xls`) give their VBA; their sheets are not read yet (a note says so).
+**Legacy `.xls`** (BIFF8, `Office/LegacyWorkbook`, [MS-XLS]) gives the same surface as `.xlsx`, read from the
+`Workbook` stream: sheets (visible / hidden / very hidden, VBA code name, used range, value and formula counts),
+defined names with the label beside their cell, formulas (rendered as Excel shows them — `Sheet2!$A$1`, `SUM(A1:B2)` —
+by `Office/BiffFormula`, shared and array formulas listed once at their first cell), data-validation rules (a literal
+list is one string token with its items NUL-separated; ranges and bounds as in `.xlsx`), and form controls: kind,
+caption (the TxO text), the macro each runs (FtMacro → a defined name flagged as a procedure, matched to the VBA
+project), the linked cell or input range, and the shape's own name from the drawing's `wzName` property (else
+`Button <id>`). An unreadable record is a warning and the rest is kept. Not read: Excel 4 macro sheets, ActiveX
+controls on sheets (a warning says so; their code handlers still appear through the VBA), Excel 5/95 (BIFF5) books,
+and formulas past a token the renderer does not know (listed with a "not fully readable" note). Verified against
+calamine's published expectations for Excel-written files and, for controls, a LibreOffice-converted copy of a
+workbook whose `.xlsx` is read by the other reader (names, controls, linked cells and macros agree).
 
 **UserForms** (`Office/UserForms`, [MS-OFORMS]): each form's designer storage is read for its controls — kind,
 name, caption, tab order, position and size in points, design-time value, option group, `ControlSource` and

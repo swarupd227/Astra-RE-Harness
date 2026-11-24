@@ -115,7 +115,15 @@ public static class WorkbookSurface
 
         if (vba.Container == "ole")
         {
-            warnings.Add($"{fileName} is a legacy binary workbook: its VBA was read, but its sheets, names and controls are not read yet.");
+            try
+            {
+                var legacy = LegacyWorkbook.Read(new CompoundFile(file), fileName, vba.Project, warnings);
+                if (legacy is not null) return legacy;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IndexOutOfRangeException or ArgumentOutOfRangeException or ArgumentException)
+            {
+                warnings.Add($"{fileName}: the legacy workbook could not be read ({ex.Message}); only its VBA was read.");
+            }
             return empty;
         }
         if (vba.Container != "ooxml") return empty;
@@ -136,6 +144,9 @@ public static class WorkbookSurface
         }
     }
 
+    /// <summary>Connection strings can carry credentials; those never leave the reader.</summary>
+    internal static string Redact(string s) => Reader.Redact(s);
+
     private sealed class Reader
     {
         private readonly ZipArchive _zip;
@@ -144,14 +155,13 @@ public static class WorkbookSurface
         private readonly List<string> _warnings;
         private readonly List<string> _shared = new();
         private readonly Dictionary<string, Dictionary<string, string>> _cellText = new();   // sheet → cell → text
-        private readonly Dictionary<string, List<string>> _routines;                          // module → routine names
+        private readonly VbaHost _host;
         private readonly HashSet<string> _tableNames = new(StringComparer.OrdinalIgnoreCase);
 
         public Reader(ZipArchive zip, string file, VbaProject? vba, List<string> warnings)
         {
             _zip = zip; _file = file; _vba = vba; _warnings = warnings;
-            _routines = (vba?.Modules ?? Array.Empty<VbaModule>())
-                .ToDictionary(m => m.Name, m => RoutineNames(m.Source), StringComparer.OrdinalIgnoreCase);
+            _host = new VbaHost(vba, file);
         }
 
         public WorkbookSurfaceResult Run()
@@ -198,8 +208,8 @@ public static class WorkbookSurface
                 sheets.Add(ReadSheet(name, state, part, doc, sheetNames, nameSet));
             }
 
-            var events = ReadEvents(sheets);
-            var reach = ReadCodeReach(sheets, names);
+            var events = _host.ReadEvents(sheets);
+            var reach = _host.ReadCodeReach(sheets, names);
             var externals = ReadExternals(wbRels);
             return new WorkbookSurfaceResult(_file, sheets, names, events, reach, externals, _vba, _warnings);
         }
@@ -241,7 +251,7 @@ public static class WorkbookSurface
                 formulaCells++;
                 // A shared formula's followers carry only its index; the leader holds the text and the range.
                 if (f.Value.Length == 0) continue;
-                var refs = FormulaRefs(f.Value, name, sheetNames, nameSet, _tableNames);
+                var refs = VbaHost.FormulaRefs(f.Value, name, sheetNames, nameSet, _tableNames);
                 foreach (var r in refs.Where(r => r.StartsWith("sheet:", StringComparison.Ordinal))) reads.Add(r[6..]);
                 if (formulas.Count < MaxFormulasPerSheet)
                     formulas.Add(new WorkbookFormula((string?)c.Attribute("r") ?? "", f.Value, (string?)f.Attribute("ref"),
@@ -310,7 +320,7 @@ public static class WorkbookSurface
         private List<WorkbookControl> ReadControls(XElement root, string part, Dictionary<string, Rel> rels, string sheet, string? codeName)
         {
             var list = new List<WorkbookControl>();
-            var sheetRoutines = codeName is not null && _routines.TryGetValue(codeName, out var rs) ? rs : new List<string>();
+            var sheetRoutines = codeName is not null && _host.Routines.TryGetValue(codeName, out var rs) ? rs : new List<string>();
 
             // <controls> names every control and points at its properties (form control) or its ActiveX part.
             var named = new Dictionary<string, (string Name, Rel Rel)>();          // shapeId → name, part
@@ -335,7 +345,7 @@ public static class WorkbookSurface
                         : shape.Id is { } vid && !vid.StartsWith("_x0000_", StringComparison.Ordinal) ? vid
                         : $"{KindOfFormControl(shape.ObjectType)} {shape.ShapeId}";
                     seen.Add(shape.ShapeId ?? display);
-                    var (module, routine, found) = ResolveMacro(shape.Macro);
+                    var (module, routine, found) = _host.ResolveMacro(shape.Macro);
                     list.Add(new WorkbookControl(display, "form", KindOfFormControl(shape.ObjectType), shape.Text,
                         shape.Macro, module, routine, found, shape.Link, shape.Range, Array.Empty<string>()));
                 }
@@ -363,7 +373,7 @@ public static class WorkbookSurface
                     var macro = el.Attribute("macro")!.Value;
                     var nv = el.Descendants(Xdr + "cNvPr").FirstOrDefault();
                     var text = string.Concat(el.Descendants(A + "t").Select(t => t.Value)).Trim();
-                    var (module, routine, found) = ResolveMacro(macro);
+                    var (module, routine, found) = _host.ResolveMacro(macro);
                     list.Add(new WorkbookControl((string?)nv?.Attribute("name") ?? "shape", "shape", el.Name.LocalName == "pic" ? "Picture" : "Shape",
                         text.Length > 0 ? text : null, macro, module, routine, found, null, null, Array.Empty<string>()));
                 }
@@ -415,107 +425,6 @@ public static class WorkbookSurface
             }
         }
 
-        /// <summary><c>[0]!Module.Routine</c>, <c>'Book.xlsm'!Routine</c> or a bare routine → where it is in this project.</summary>
-        private (string? Module, string? Routine, bool Found) ResolveMacro(string? macro)
-        {
-            if (string.IsNullOrWhiteSpace(macro)) return (null, null, false);
-            var m = macro.Trim();
-            var bang = m.LastIndexOf('!');
-            var external = false;
-            if (bang >= 0)
-            {
-                var book = m[..bang];
-                external = !(book == "[0]" || book.Length == 0 || book.Contains(_file, StringComparison.OrdinalIgnoreCase));
-                m = m[(bang + 1)..];
-            }
-            if (external) return (null, m, false);
-            var dot = m.LastIndexOf('.');
-            if (dot > 0)
-            {
-                var mod = m[..dot]; var routine = m[(dot + 1)..];
-                return (mod, routine, _routines.TryGetValue(mod, out var rs) && rs.Contains(routine, StringComparer.OrdinalIgnoreCase));
-            }
-            // Unqualified: Excel looks through the standard modules.
-            var standard = _vba?.Modules.Where(x => x.Kind == VbaModuleKind.Standard).Select(x => x.Name) ?? Enumerable.Empty<string>();
-            foreach (var mod in standard.Concat(_routines.Keys))
-                if (_routines[mod].Contains(m, StringComparer.OrdinalIgnoreCase)) return (mod, m, true);
-            return (null, m, false);
-        }
-
-        // ── Code ↔ workbook ────────────────────────────────────────────────
-
-        private static readonly HashSet<string> WorkbookEvents = new(StringComparer.OrdinalIgnoreCase)
-        { "Open", "BeforeClose", "BeforeSave", "AfterSave", "BeforePrint", "Activate", "Deactivate", "NewSheet",
-          "SheetChange", "SheetActivate", "SheetCalculate", "SheetSelectionChange", "SheetBeforeDoubleClick", "SheetBeforeRightClick",
-          "WindowActivate", "WindowResize", "AddinInstall", "AddinUninstall" };
-        private static readonly HashSet<string> SheetEvents = new(StringComparer.OrdinalIgnoreCase)
-        { "Change", "SelectionChange", "Activate", "Deactivate", "Calculate", "BeforeDoubleClick", "BeforeRightClick",
-          "FollowHyperlink", "PivotTableUpdate" };
-
-        private List<WorkbookEvent> ReadEvents(List<WorkbookSheet> sheets)
-        {
-            var list = new List<WorkbookEvent>();
-            if (_vba is null) return list;
-            var byCode = sheets.Where(s => s.CodeName is not null).ToDictionary(s => s.CodeName!, s => s.Name, StringComparer.OrdinalIgnoreCase);
-            foreach (var m in _vba.Modules.Where(m => m.Kind == VbaModuleKind.Document))
-                foreach (var r in _routines[m.Name])
-                {
-                    var us = r.IndexOf('_');
-                    if (us <= 0) continue;
-                    var (prefix, ev) = (r[..us], r[(us + 1)..]);
-                    if (prefix.Equals("Workbook", StringComparison.OrdinalIgnoreCase) && WorkbookEvents.Contains(ev))
-                        list.Add(new WorkbookEvent(m.Name, r, r, null));
-                    else if (prefix.Equals("Worksheet", StringComparison.OrdinalIgnoreCase) && SheetEvents.Contains(ev))
-                        list.Add(new WorkbookEvent(m.Name, r, r, byCode.GetValueOrDefault(m.Name)));
-                }
-            // Auto_Open in a standard module is the older spelling of Workbook_Open.
-            foreach (var m in _vba.Modules.Where(m => m.Kind == VbaModuleKind.Standard))
-                foreach (var r in _routines[m.Name].Where(r => r.Equals("Auto_Open", StringComparison.OrdinalIgnoreCase) || r.Equals("Auto_Close", StringComparison.OrdinalIgnoreCase)))
-                    list.Add(new WorkbookEvent(m.Name, r, r, null));
-            return list;
-        }
-
-        private static readonly Regex StringCallRe = new(@"\b(?<fn>Sheets|Worksheets|Range|Names)\s*\(\s*""(?<arg>[^""]+)""", RegexOptions.IgnoreCase);
-        private static readonly Regex BracketRe = new(@"(?<![\w\]""])\[(?<arg>[A-Za-z_][\w.]*|\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)\]");
-        private static readonly Regex CellAddrRe = new(@"^\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$", RegexOptions.IgnoreCase);
-        private static readonly Regex IdentRe = new(@"\b[A-Za-z_]\w*\b");
-
-        private List<WorkbookCodeReach> ReadCodeReach(List<WorkbookSheet> sheets, List<WorkbookName> names)
-        {
-            var list = new List<WorkbookCodeReach>();
-            if (_vba is null) return list;
-            var sheetByName = sheets.ToDictionary(s => s.Name, s => s.Name, StringComparer.OrdinalIgnoreCase);
-            var sheetByCode = sheets.Where(s => s.CodeName is not null).ToDictionary(s => s.CodeName!, s => s.Name, StringComparer.OrdinalIgnoreCase);
-            var nameSet = new HashSet<string>(names.Select(n => n.Name), StringComparer.OrdinalIgnoreCase);
-
-            foreach (var m in _vba.Modules)
-            {
-                var code = StripCommentsAndAttributes(m.Source);
-                var s = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-                var n = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-                var c = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Match x in StringCallRe.Matches(code))
-                {
-                    var arg = x.Groups["arg"].Value;
-                    var fn = x.Groups["fn"].Value;
-                    if (fn.EndsWith("heets", StringComparison.OrdinalIgnoreCase)) { if (sheetByName.TryGetValue(arg, out var sn)) s.Add(sn); }
-                    else if (nameSet.Contains(arg)) n.Add(arg);
-                    else if (CellAddrRe.IsMatch(arg)) c.Add(arg.Replace("$", "").ToUpperInvariant());
-                }
-                foreach (Match x in BracketRe.Matches(code))
-                {
-                    var arg = x.Groups["arg"].Value;
-                    if (nameSet.Contains(arg)) n.Add(arg);
-                    else if (CellAddrRe.IsMatch(arg)) c.Add(arg.Replace("$", "").ToUpperInvariant());
-                }
-                // A sheet's code name used as an object (Result.Range(...)) — but not the module itself.
-                foreach (Match x in IdentRe.Matches(StripStrings(code)))
-                    if (sheetByCode.TryGetValue(x.Value, out var sn) && !x.Value.Equals(m.Name, StringComparison.OrdinalIgnoreCase)) s.Add(sn);
-                if (s.Count + n.Count + c.Count > 0) list.Add(new WorkbookCodeReach(m.Name, s.ToList(), n.ToList(), c.ToList()));
-            }
-            return list;
-        }
-
         // ── Links out of the workbook ──────────────────────────────────────
 
         private static readonly Regex SecretRe = new(@"(?i)\b(password|pwd|user\s*id|uid|apikey|api_key|key|token|secret)\s*=\s*[^;""]*");
@@ -546,61 +455,6 @@ public static class WorkbookSurface
 
         /// <summary>Connection strings can carry credentials; those never leave the reader.</summary>
         public static string Redact(string s) => SecretRe.Replace(s, m => m.Groups[1].Value + "=***");
-
-        // ── Formulas ──────────────────────────────────────────────────────
-
-        private static readonly Regex QuotedSheetRefRe = new(@"'((?:[^']|'')+)'!");
-        private static readonly Regex PlainSheetRefRe = new(@"(?<![\w.'\]])([A-Za-z_][\w.]*)!");
-        private static readonly Regex ExternalRefRe = new(@"\[(\d+)\]");
-        private static readonly Regex TableRefRe = new(@"\b([A-Za-z_][\w.]*)\[");
-
-        private static List<string> FormulaRefs(string formula, string self, List<string> sheetNames, HashSet<string> nameSet, HashSet<string> tables)
-        {
-            var refs = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            var noStrings = StripFormulaStrings(formula);
-            foreach (Match m in QuotedSheetRefRe.Matches(noStrings)) AddSheet(m.Groups[1].Value.Replace("''", "'"));
-            foreach (Match m in PlainSheetRefRe.Matches(noStrings)) AddSheet(m.Groups[1].Value);
-            if (ExternalRefRe.IsMatch(noStrings)) refs.Add("external");
-            foreach (Match m in IdentRe.Matches(QuotedSheetRefRe.Replace(noStrings, "")))
-                if (nameSet.Contains(m.Value)) refs.Add("name:" + m.Value);
-            foreach (Match m in TableRefRe.Matches(noStrings))
-                if (tables.Contains(m.Groups[1].Value)) refs.Add("table:" + m.Groups[1].Value);
-            return refs.ToList();
-
-            void AddSheet(string s)
-            {
-                var bracket = s.LastIndexOf(']');
-                if (bracket >= 0) { refs.Add("external"); return; }
-                if (!s.Equals(self, StringComparison.OrdinalIgnoreCase) && sheetNames.Contains(s, StringComparer.OrdinalIgnoreCase)) refs.Add("sheet:" + s);
-            }
-        }
-
-        private static string StripFormulaStrings(string f) => Regex.Replace(f, "\"(?:[^\"]|\"\")*\"", "\"\"");
-        private static string StripStrings(string code) => Regex.Replace(code, "\"[^\"\\n]*\"", "\"\"");
-
-        private static string StripCommentsAndAttributes(string src)
-        {
-            var sb = new StringBuilder(src.Length);
-            foreach (var raw in src.Replace("\r\n", "\n").Split('\n'))
-            {
-                if (raw.StartsWith("Attribute ", StringComparison.Ordinal)) continue;
-                var inStr = false; var cut = raw.Length;
-                for (var i = 0; i < raw.Length; i++)
-                {
-                    if (raw[i] == '"') inStr = !inStr;
-                    else if (raw[i] == '\'' && !inStr) { cut = i; break; }
-                }
-                sb.Append(raw, 0, cut).Append('\n');
-            }
-            return sb.ToString();
-        }
-
-        private static readonly Regex RoutineRe = new(
-            @"^[ \t]*(?:(?:Public|Private|Friend)[ \t]+)?(?:Static[ \t]+)?(?:Sub|Function|Property[ \t]+(?:Get|Let|Set))[ \t]+(\w+)",
-            RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
-        private static List<string> RoutineNames(string source) =>
-            RoutineRe.Matches(source).Select(m => m.Groups[1].Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         // ── Cells and labels ──────────────────────────────────────────────
 

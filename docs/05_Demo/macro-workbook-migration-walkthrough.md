@@ -38,7 +38,8 @@ capability — the workbook is whatever you upload.*
 - The **entity graph** (buttons → macros → sheets → names → forms) is built and stored for every workbook but has
   no screen yet; it is available through the API (`/api/v1/corpora/{id}/entity-graph`). Show the evidence pieces instead.
 - A form's **page tab captions** (the text on a MultiPage's tabs) are not read; pages show their internal names.
-- **Legacy `.xls`** workbooks give their VBA, but their sheets, named cells and buttons are not read yet.
+- **Legacy `.xls`** workbooks give sheets, named cells, input rules, formulas and form buttons like newer files do;
+  ActiveX controls on sheets and Excel 4 macro sheets are not read.
 - **Custom ActiveX controls** on a form (a class table in its designer data) are flagged, not laid out.
 - Calculation **formulas on the sheets** are cited and counted but not evaluated; business rules that live only in
   sheet formulas surface as the spec's open questions unless a macro touches them.
