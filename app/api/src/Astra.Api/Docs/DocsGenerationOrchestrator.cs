@@ -108,6 +108,8 @@ public sealed class DocsGenerationOrchestrator
         // the run must not report clean success over them (EnvestNet's
         // data-dictionary failed silently on every run this way).
         var failedStages = new List<string>();
+        // Why each failed stage failed — the reason is what the run reports, not just which stage.
+        var stageErrors = new List<string>();
         _runLogger.Log(runId, $"Run started — {opts.Stages.Count} stage(s): {string.Join(", ", opts.Stages)}");
         try
         {
@@ -151,6 +153,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunDataDictionaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["data-dictionary"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  data-dictionary: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -160,6 +163,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunGlossaryAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["glossary"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  glossary: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -169,6 +173,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunInterfaceAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["interface"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  interface: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -178,6 +183,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunBusinessRulesAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["business-rules"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  business-rules: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -191,6 +197,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunCapabilityMapAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["capability-map"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  capability-map: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -200,6 +207,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunFunctionalRequirementsAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["functional-requirement"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  functional-requirement: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -209,6 +217,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunProcessFlowsAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["process-flow"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  process-flow: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -218,6 +227,7 @@ public sealed class DocsGenerationOrchestrator
                         var r = await _catalogPipeline.RunNfrAsync(
                             runId, corpusId, sourceVersionId, opts.Force, ct);
                         allStageMetrics["nfr"] = new { entries = r.Entries, failed = r.Failed };
+                        NoteStageError(stageErrors, runId, stage, r.Error);
                         if (r.Entries == 0 && r.Failed > 0) failedStages.Add(stage);
                         _runLogger.Log(runId, $"  nfr: {r.Entries} entries, {r.Failed} failed");
                         break;
@@ -256,7 +266,8 @@ public sealed class DocsGenerationOrchestrator
                     $"{opts.Stages.Count - failedStages.Count} of {opts.Stages.Count} stage(s) complete; " +
                     $"failed: {string.Join(", ", failedStages)}";
                 _runLogger.Log(runId, $"✗ {summary}");
-                await UpdateAsync(runId, state, summary, allStageMetrics, completed: true);
+                await UpdateAsync(runId, state, summary, allStageMetrics, completed: true,
+                    error: stageErrors.Count == 0 ? null : string.Join(" · ", stageErrors));
             }
             _runLogger.Complete(runId);
         }
@@ -269,7 +280,14 @@ public sealed class DocsGenerationOrchestrator
         }
     }
 
-    private async Task UpdateAsync(Guid runId, string state, string summary, IDictionary<string, object?>? metrics, bool completed = false)
+    private void NoteStageError(List<string> errors, Guid runId, string stage, string? error)
+    {
+        if (error is null) return;
+        errors.Add($"{stage}: {error}");
+        _runLogger.Log(runId, $"  ✗ {stage} failed — {error}");
+    }
+
+    private async Task UpdateAsync(Guid runId, string state, string summary, IDictionary<string, object?>? metrics, bool completed = false, string? error = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -279,6 +297,7 @@ public sealed class DocsGenerationOrchestrator
         row.Summary = summary.Length > 1024 ? summary[..1024] : summary;
         if (metrics is not null) row.MetricsJson = JsonSerializer.Serialize(metrics);
         if (completed) row.CompletedAt = DateTimeOffset.UtcNow;
+        if (error is not null) row.ErrorSummary = error.Length > 4000 ? error[..4000] : error;
         await db.SaveChangesAsync();
     }
 

@@ -90,7 +90,8 @@ public sealed class CatalogPipeline
         _nfrPrompt = DocPromptAssets.ReadPrompt(root, "requirements", "req-nfr.v1.md");
     }
 
-    public sealed record StageOutcome(int Entries, int Failed);
+    /// <param name="Error">Why the stage failed, in a sentence (the provider's own reason where there is one); null on success.</param>
+    public sealed record StageOutcome(int Entries, int Failed, string? Error = null);
 
     private sealed record Built(string UserMessage, Func<string> MockPayload);
 
@@ -208,7 +209,7 @@ public sealed class CatalogPipeline
         // because requirements already existed: re-running the stage should
         // converge on full coverage rather than doing nothing.
         var fill = await FillRequirementGapsAsync(runId, corpusId, sourceVersionId, ct);
-        return new StageOutcome(first.Entries + fill.Entries, first.Failed + fill.Failed);
+        return new StageOutcome(first.Entries + fill.Entries, first.Failed + fill.Failed, first.Error ?? fill.Error);
     }
 
     /// <summary>
@@ -494,8 +495,24 @@ public sealed class CatalogPipeline
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Catalog stage {Kind} failed for corpus {Corpus}", sectionKind, corpusId);
-            return new StageOutcome(0, 1);
+            return new StageOutcome(0, 1, DescribeFailure(ex));
         }
+    }
+
+    /// <summary>
+    /// A stage's failure as one sentence for the run's log and its error summary: the exception's own message
+    /// (for a provider error that is the provider's reason: a 401, a 429, an invalid model), the cause beneath it
+    /// when that says more, and a plain note when the work was cancelled (an API restart mid-run does this).
+    /// </summary>
+    internal static string DescribeFailure(Exception ex)
+    {
+        if (ex is OperationCanceledException)
+            return "interrupted — the request was cancelled, typically because the API restarted while the stage was running";
+        var text = $"{ex.GetType().Name}: {ex.Message}";
+        if (ex.InnerException is { } inner && !text.Contains(inner.Message, StringComparison.Ordinal))
+            text += $" ({inner.GetType().Name}: {inner.Message})";
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+        return text.Length <= 500 ? text : text[..500] + "…";
     }
 
     private int PersistProseEntries(

@@ -236,8 +236,13 @@ export function DocsPage() {
   // Clear run and collapse log when generation finishes
   useEffect(() => {
     const s = runStatus.data?.state;
-    if (s === 'SUCCEEDED' || s === 'FAILED') {
-      if (s === 'FAILED') setRunError(runStatus.data?.errorSummary ?? 'Generation failed.');
+    if (s === 'SUCCEEDED' || s === 'FAILED' || s === 'PARTIAL') {
+      // The reason first (the provider's own error, or "interrupted"), else the stage list, else the generic line.
+      if (s === 'FAILED' || s === 'PARTIAL') {
+        const reason = runStatus.data?.errorSummary;
+        const summary = runStatus.data?.summary;
+        setRunError(reason ? `${summary ? `${summary} — ` : ''}${reason}` : summary ?? 'Generation failed.');
+      }
       qc.invalidateQueries({ queryKey: ['docs-summary', id] });
       qc.invalidateQueries({ queryKey: ['doc-sections', id] });
       setActiveRunId(null);
