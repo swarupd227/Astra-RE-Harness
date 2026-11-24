@@ -178,6 +178,10 @@ builder.Services.AddScoped<Astra.Api.Copilot.CopilotOrchestrator>();
 builder.Services.AddSingleton<Astra.Api.Copilot.BackgroundRunService>();
 builder.Services.AddSingleton<Astra.Api.Copilot.Narrator>();
 builder.Services.AddSingleton<Astra.Api.Ingest.IngestRunService>();
+// Live previews of generated React + Python packages, each in its own short-lived container app (off unless Preview:Enabled).
+builder.Services.Configure<Astra.Api.Preview.PreviewOptions>(builder.Configuration.GetSection("Preview"));
+builder.Services.AddSingleton<Astra.Api.Preview.PreviewService>();
+builder.Services.AddHostedService<Astra.Api.Preview.PreviewSweeper>();
 // WS5 — the 10-minute Assessment (deterministic facts + one narrative call).
 builder.Services.AddSingleton<Astra.Api.Assessment.AssessmentService>();
 
@@ -1290,6 +1294,7 @@ app.MapSpecReviewEndpoints();
 app.MapAuditEndpoints();
 app.MapMyReviewsEndpoints();
 app.MapScaffoldEndpoints();
+app.MapPreviewEndpoints();
 app.MapValidationEndpoints();
 app.MapSchemaEndpoints();
 app.MapPromptEndpoints();

@@ -16,6 +16,7 @@ import { TargetSelector } from '@/components/TargetSelector';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { WorkflowRail } from '@/components/WorkflowRail';
 import { prettyStack } from '@/lib/targetStacks';
+import { PreviewButton, PreviewPanel, usePreview } from '@/components/PreviewPanel';
 
 export function ScaffoldArtifactPage() {
   const { id = '' } = useParams<{ id: string }>();    // scaffold id
@@ -49,6 +50,7 @@ export function ScaffoldArtifactPage() {
   const [committing, setCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
   const [regenTarget, setRegenTarget] = useState<string | null>(null);
+  const previewState = usePreview(id, scaffold.data?.targetPlatform ?? '');
 
   const files = scaffold.data?.files ?? [];
   const treeFiles = files.map((f) => ({ path: f.path, language: f.language, todoCount: f.todoCount }));
@@ -154,6 +156,7 @@ export function ScaffoldArtifactPage() {
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
               Regenerate · other stack
             </button>
+            <PreviewButton state={previewState} />
             {!isCommitted && (
               <Button variant="primary" size="md" onClick={onCommit} loading={committing}>
                 <GitCommit className="h-4 w-4" />
@@ -184,6 +187,8 @@ export function ScaffoldArtifactPage() {
           <WorkflowRail state={sc.state} />
         </div>
       </header>
+
+      <PreviewPanel state={previewState} />
 
       {commitError && (
         <div className="px-6 py-3"><ErrorBlock title="Commit failed" message={commitError} /></div>

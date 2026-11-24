@@ -26,6 +26,15 @@ export class ApiError extends Error {
   }
 }
 
+/** A running (or starting) live preview of a generated package. */
+export type PreviewInfo = {
+  name: string;
+  state: 'STARTING' | 'READY' | 'FAILED';
+  url: string | null;
+  expiresAt: string | null;
+  detail: string | null;
+};
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set('X-Dev-Persona', getPersona());
@@ -1574,6 +1583,21 @@ export const api = {
       `/api/v1/scaffolds/${id}/commit`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+
+  // Live preview of a generated React + Python package, run in its own short-lived container.
+  previewEnabled: () => apiFetch<{ enabled: boolean }>('/api/v1/previews/status'),
+  getPreview: async (scaffoldId: string): Promise<PreviewInfo | null> => {
+    try {
+      return await apiFetch<PreviewInfo>(`/api/v1/scaffolds/${scaffoldId}/preview`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
+  startPreview: (scaffoldId: string) =>
+    apiFetch<PreviewInfo>(`/api/v1/scaffolds/${scaffoldId}/preview`, { method: 'POST' }),
+  stopPreview: (scaffoldId: string) =>
+    apiFetch<{ stopped: boolean }>(`/api/v1/scaffolds/${scaffoldId}/preview`, { method: 'DELETE' }),
 
   // ─── Phase C.1: ingest ────────────────────────────────────────────
   // Every ingest route answers with the finished result when the run ends
