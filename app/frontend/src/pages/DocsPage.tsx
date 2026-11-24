@@ -8,6 +8,7 @@ import {
 import { api, getPersona, API_BASE } from '@/lib/api';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { MermaidBlock } from '@/components/MermaidBlock';
@@ -213,8 +214,12 @@ export function DocsPage() {
     onSuccess: invalidateDocs,
   });
 
+  // Generating over existing results replaces them (and any edits or approvals on them), so the page asks first
+  // and offers the safer alternative the server already supports: generate only the stages that have nothing yet.
+  const [pendingRun, setPendingRun] = useState<{ stages?: string[]; what: string; existing: string[] } | null>(null);
+
   const generateMutation = useMutation({
-    mutationFn: (stages?: string[]) => api.generateDocs(id, { force: true, stages }),
+    mutationFn: (run: { stages?: string[]; force: boolean }) => api.generateDocs(id, { force: run.force, stages: run.stages }),
     onSuccess: (result) => {
       setLogLines([]);
       setRunError(null);
@@ -285,6 +290,12 @@ export function DocsPage() {
   }, {});
 
   const kindsWithData = KIND_ORDER.filter(k => kindCounts[k]);
+
+  /** Nothing to lose: generate. Something there: ask (replace everything, or only fill what is missing). */
+  const requestRun = (stages: string[] | undefined, what: string, existing: string[]) => {
+    if (existing.length === 0) generateMutation.mutate({ stages, force: false });
+    else setPendingRun({ stages, what, existing });
+  };
 
   // Global counts across all kinds (for header badges)
   const globalCounts = (summary.data?.breakdown ?? []).reduce<Record<string, number>>((acc, r) => {
@@ -368,7 +379,7 @@ export function DocsPage() {
               <>
                 <Button
                   variant="secondary"
-                  onClick={() => generateMutation.mutate(undefined)}
+                  onClick={() => requestRun(undefined, 'the documentation', kindsWithData)}
                   disabled={isGenerating}
                   title={kindsWithData.length === 0 ? 'Generate documentation' : 'Regenerate documentation'}
                 >
@@ -380,7 +391,7 @@ export function DocsPage() {
 
                 <Button
                   variant="secondary"
-                  onClick={() => generateMutation.mutate(REQUIREMENTS_STAGES)}
+                  onClick={() => requestRun(REQUIREMENTS_STAGES, 'the requirements pack', REQUIREMENTS_STAGES.filter(k => kindCounts[k]))}
                   disabled={isGenerating}
                   data-testid="generate-requirements"
                   title="Generates the as-is requirements pack: capability map, process flows, numbered functional requirements with traceability, and non-functional characteristics. Synthesised from the docs already generated."
@@ -586,6 +597,40 @@ export function DocsPage() {
         )}
       </header>
 
+      {pendingRun && (() => {
+        const signed = pendingRun.existing.reduce((n, k) => n + (kindCounts[k]?.signed ?? 0), 0);
+        const total = pendingRun.existing.reduce((n, k) => n + (kindCounts[k]?.total ?? 0), 0);
+        const start = (force: boolean) => { generateMutation.mutate({ stages: pendingRun.stages, force }); setPendingRun(null); };
+        return (
+          <ConfirmModal
+            open
+            title={`Regenerate ${pendingRun.what}?`}
+            body={`${pendingRun.what[0].toUpperCase()}${pendingRun.what.slice(1)} already has content (${total} section${total === 1 ? '' : 's'} in ${pendingRun.existing.length} kind${pendingRun.existing.length === 1 ? '' : 's'}). Regenerating calls the model again and replaces it.`}
+            consequences={[
+              'Every edit and approval on the current sections is discarded; the new ones start as drafts.',
+              ...(signed > 0 ? [`${signed} of the current section${signed === 1 ? ' is' : 's are'} signed — that sign-off is lost.`] : []),
+              'The run is billed as new model calls and takes several minutes.',
+            ]}
+            confirmLabel="Replace and regenerate"
+            onConfirm={() => start(true)}
+            onClose={() => setPendingRun(null)}
+            testId="docs-regenerate-confirm"
+          >
+            <p className="mt-3 text-sm text-ink-secondary">
+              Or keep what is there and generate only what is missing:{' '}
+              <button
+                type="button"
+                className="text-ink-primary underline underline-offset-2 hover:text-volt focus-visible:outline-2 focus-visible:outline-volt"
+                data-testid="docs-generate-missing"
+                onClick={() => start(false)}
+              >
+                Only generate what&apos;s missing
+              </button>
+            </p>
+          </ConfirmModal>
+        );
+      })()}
+
       {/* ── Run error banner ────────────────────────────────────── */}
       {runError && (
         <div className="flex items-start gap-3 border-b border-status-fail/30 bg-status-fail/10 px-6 py-2">
@@ -677,7 +722,7 @@ export function DocsPage() {
               {persona === 'admin' && (
                 <Button
                   variant="primary"
-                  onClick={() => generateMutation.mutate(undefined)}
+                  onClick={() => generateMutation.mutate({ stages: undefined, force: false })}
                   disabled={generateMutation.isPending}
                 >
                   {generateMutation.isPending
