@@ -73,7 +73,7 @@ public sealed class DocExportService
         // The requirements pack closes with its own completeness check, so
         // the reader learns what is missing from the same document rather
         // than having to go looking for a separate report.
-        var coverage = fmt is "requirements-docx" or "requirements-pdf"
+        var coverage = fmt is "requirements-docx" or "requirements-pdf" or "pdf" or "docx"
             ? await _coverage.BuildAsync(corpusId, ct)
             : null;
 
@@ -81,17 +81,18 @@ public sealed class DocExportService
         {
             "mkdocs" => BuildMkDocsZip(corpus, sections),
             "pdf" => await RunPandocAsync(
-                CombineMarkdown(corpus, sections),
+                CombineMarkdown(corpus, sections, coverage, svgDiagrams: true),
                 outputExt: "pdf",
-                pandocArgs: "--pdf-engine=weasyprint --toc --toc-depth=2 --number-sections",
+                // One page of contents (chapters); the PDF's bookmarks carry the deeper levels.
+                pandocArgs: "--pdf-engine=weasyprint --toc --toc-depth=1 --number-sections",
                 cssContent: PdfStylesheet,
                 contentType: "application/pdf",
                 fileName: $"{Slug(corpus.Name)}-docs.pdf",
                 ct),
             "docx" => await RunPandocAsync(
-                CombineMarkdown(corpus, sections),
+                CombineMarkdown(corpus, sections, coverage, svgDiagrams: false),
                 outputExt: "docx",
-                pandocArgs: "--toc --toc-depth=2 --number-sections",
+                pandocArgs: "--toc --toc-depth=1 --number-sections",
                 cssContent: null,
                 contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 fileName: $"{Slug(corpus.Name)}-docs.docx",
@@ -353,8 +354,16 @@ markdown_extensions:
             "Sequence and dependency diagrams for the system's principal flows. The diagram definition is reproduced inline; an interactive, rendered version is available in the web UI and the MkDocs export."),
     ];
 
-    private static string CombineMarkdown(Corpus corpus, IReadOnlyList<DocSection> sections)
+    internal static string CombineMarkdown(
+        Corpus corpus,
+        IReadOnlyList<DocSection> sections,
+        RequirementsCoverageService.CoverageReport? coverage = null,
+        bool svgDiagrams = false)
     {
+        var hasRequirements = RequirementsChapters.Any(c => sections.Any(x => x.SectionKind == c.Kind));
+        var reviewable = sections.Where(x => x.SectionKind != "overview").ToList();
+        var signed = reviewable.Count(x => x.State == "SIGNED");
+        var stale = reviewable.Count(x => x.State == "STALE");
         var sb = new StringBuilder();
 
         // YAML front matter — pandoc converts this into a title page.
@@ -371,18 +380,33 @@ markdown_extensions:
         sb.AppendLine("# About This Document {.unnumbered}");
         sb.AppendLine();
         sb.AppendLine(
-            $"This is the system documentation for **{MdEscape(corpus.Name)}**. It opens with an " +
-            "executive summary of the system as a whole, then provides reference chapters covering " +
-            "every module and routine, followed by supporting catalogues — data dictionary, glossary, " +
-            "interfaces, and business rules — and the system's sequence and dependency diagrams.");
+            $"This is the system documentation for **{MdEscape(corpus.Name)}**: what the system does, how it is " +
+            "built, and — where the requirements pack has been generated — what a replacement has to reproduce.");
+        sb.AppendLine();
+        sb.AppendLine("## How it is organised {.unnumbered}");
+        sb.AppendLine();
+        sb.AppendLine("| Part | Chapters | Read it for |");
+        sb.AppendLine("|---|---|---|");
+        sb.AppendLine("| **Overview** | Executive Summary | The system in a page: purpose, subsystems, risks |");
+        sb.AppendLine("| **Reference** | Modules, Routines | What each module and routine does, with its inputs, outputs and edge cases |");
+        sb.AppendLine("| **Catalogues** | Data Dictionary, Glossary, Interfaces, Business Rules | Lookup material: terms, data items, external contracts, rules |");
+        sb.AppendLine("| **Diagrams** | Sequence & Dependency Diagrams | How control flows between routines |");
+        if (hasRequirements)
+            sb.AppendLine("| **Requirements** | Capabilities, Process Flows, Functional and Non-Functional Requirements, Completeness Check | What the system does today, stated so a replacement can be scoped and verified |");
+        sb.AppendLine();
+        sb.AppendLine("## How to read the references {.unnumbered}");
         sb.AppendLine();
         sb.AppendLine(
-            "Each section is generated from the source and independently reviewed and signed off. " +
-            "Sections that have not completed review are flagged inline:");
+            "A reference such as `TravelRaterApi.bas L39–89` points to a source file and the lines a statement is " +
+            "based on. Every statement in this document is written against such evidence.");
         sb.AppendLine();
-        sb.AppendLine("> ⚠ **Out of date** — signed against an earlier version of the source and awaiting re-confirmation.");
-        sb.AppendLine(">");
-        sb.AppendLine("> 📝 **Draft** — generated but not yet reviewed and signed off.");
+        sb.AppendLine("## Review status {.unnumbered}");
+        sb.AppendLine();
+        sb.AppendLine(
+            $"**{signed} of {reviewable.Count}** sections are reviewed and signed off; the rest are drafts generated from the " +
+            "source and awaiting review. " + (stale > 0
+                ? $"**{stale}** signed section(s) are flagged inline as *out of date* because the source changed after they were signed."
+                : "No signed section is out of date."));
         sb.AppendLine();
 
         // Chapter 1 — Executive Summary, sourced from the corpus-level overview
@@ -422,14 +446,13 @@ markdown_extensions:
 
             foreach (var s in kindSections)
             {
+                // Drafts are counted once in "About This Document"; only a signed-then-outdated section is flagged here.
                 if (s.State == "STALE")
                     sb.AppendLine("> ⚠ **Out of date** — signed against an older source version.\n");
-                else if (s.State == "DRAFT")
-                    sb.AppendLine("> 📝 **Draft** — not yet reviewed and signed off.\n");
 
                 var content = s.RenderedMarkdown ?? $"*(No content for {kind}.)*";
                 if (kind == "diagram")
-                    content = StripMermaid(content, s.Subroutine?.Name ?? s.ModuleName);
+                    content = RenderDiagrams(content, s.Subroutine?.Name ?? s.ModuleName, svgDiagrams);
 
                 // Renumber each section's headings so it nests cleanly under its
                 // chapter (top heading → H2, no skipped levels). This is what
@@ -447,7 +470,26 @@ markdown_extensions:
             }
         }
 
-        return sb.ToString();
+        // The requirements pack follows the reference chapters, so one document carries everything.
+        foreach (var (kind, chapterTitle, intro) in RequirementsChapters)
+        {
+            var kindSections = sections.Where(x => x.SectionKind == kind).OrderBy(x => x.CreatedAt).ToList();
+            if (kindSections.Count == 0) continue;
+            sb.AppendLine($"# {chapterTitle}");
+            sb.AppendLine();
+            sb.AppendLine(intro);
+            sb.AppendLine();
+            foreach (var sec in kindSections)
+            {
+                if (sec.State == "STALE")
+                    sb.AppendLine("> ⚠ **Out of date** — signed against an older source version.\n");
+                sb.AppendLine(NormalizeHeadings(sec.RenderedMarkdown ?? ""));
+                sb.AppendLine();
+            }
+        }
+        if (hasRequirements && coverage is not null) AppendCoverageChapter(sb, coverage);
+
+        return ShortenCitations(sb.ToString());
     }
 
     // ── Trivial-accessor collapsing ─────────────────────────────────────
@@ -657,7 +699,7 @@ markdown_extensions:
             AppendCoverageChapter(sb, coverage);
         }
 
-        return sb.ToString();
+        return ShortenCitations(sb.ToString());
     }
 
     // ── Heading-outline normalisation ────────────────────────────────────
@@ -732,6 +774,29 @@ markdown_extensions:
 
     private static string MdEscape(string s) =>
         s.Replace("*", "\\*").Replace("_", "\\_").Replace("[", "\\[").Replace("]", "\\]");
+
+    // A citation reads [Some_Long_Workbook.xlsm/Module.bas:L39–L89]: the workbook is already the document's title, so it is
+    // cut to a small "Module.bas L39–89" chip. Anything that is not file:lines is left alone.
+    private static readonly Regex CitationRegex = new(
+        @"\[\s*(?:[^\[\]\s/\\]+[/\\])*([^\[\]\s/\\:]+\.[A-Za-z0-9]{1,6})\s*:\s*L?(\d+)(?:\s*[–\-]\s*L?(\d+))?\s*\]",
+        RegexOptions.Compiled);
+
+    internal static string ShortenCitations(string markdown) =>
+        CitationRegex.Replace(markdown, m =>
+            $"[{m.Groups[1].Value} L{m.Groups[2].Value}{(m.Groups[3].Success ? "–" + m.Groups[3].Value : "")}]{{.cite}}");
+
+    /// <summary>
+    /// A diagram section holds Mermaid source. The PDF gets a drawn picture (SVG, made here, nothing leaves the platform);
+    /// anywhere it cannot be drawn, or for Word, the source is kept as a code block with a plain caption.
+    /// </summary>
+    internal static string RenderDiagrams(string markdown, string? name, bool svg) =>
+        MermaidBlockRegex.Replace(markdown, m =>
+        {
+            var code = m.Groups[1].Value.Trim();
+            if (svg && MermaidSvg.TryRender(code) is { } drawing)
+                return "```{=html}\n" + drawing + "\n```";
+            return "*Diagram source" + (name is null ? "" : $" — {MdEscape(name)}") + ":*\n\n```\n" + code + "\n```";
+        });
 
     private static readonly Regex MermaidBlockRegex = new(
         @"```mermaid[\r\n]+([\s\S]*?)```",
@@ -1090,16 +1155,36 @@ blockquote p {
     margin: 0;
 }
 
-/* ── Diagram placeholder (replaces Mermaid blocks in PDF) ── */
-div.diagram-placeholder {
-    border: 1.5px dashed #9ca3af;
-    background: #f9fafb;
-    padding: 0.45cm 0.7cm;
-    color: #6b7280;
-    font-size: 9.5pt;
+/* ── Drawn diagrams (SVG made at export time) ── */
+figure.diagram {
+    margin: 0.4cm 0 0.6cm;
+    padding: 0.35cm 0.3cm;
+    border: 1px solid #e2e8f0;
     border-radius: 5px;
-    margin: 0.35cm 0;
+    background: #ffffff;
     page-break-inside: avoid;
+}
+figure.diagram svg { display: block; width: 100%; height: auto; }
+figure.diagram + figure.diagram { page-break-before: always; }
+
+/* A wide diagram (many participants) gets a landscape page of its own, at a size the text stays readable. */
+@page wide {
+    size: A4 landscape;
+    margin: 1.5cm 1.8cm 1.6cm 1.8cm;
+    @bottom-left  { content: string(doctitle); font-size: 8pt; color: #9ca3af; }
+    @bottom-right { content: counter(page) " of " counter(pages); font-size: 8pt; color: #9ca3af; }
+}
+figure.diagram.wide { page: wide; page-break-before: always; page-break-after: always; border: none; padding: 0; }
+
+/* ── Source references: a small grey chip instead of a long bracketed path ── */
+span.cite {
+    font-family: 'JetBrains Mono', 'Courier New', 'Consolas', monospace;
+    font-size: 7.5pt;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 0 4px;
+    border-radius: 3px;
+    white-space: nowrap;
 }
 
 /* ── Strong / emphasis ── */

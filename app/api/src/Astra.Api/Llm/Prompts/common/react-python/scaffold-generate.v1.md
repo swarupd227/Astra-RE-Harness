@@ -170,6 +170,16 @@ Rules:
     Use `expect(screen.queryByText('x')).not.toBeNull()`,
     `expect((el as HTMLInputElement).value).toBe('1')`, `el.disabled`, and
     `el.textContent`.
+14. **One set of routes, written once.** Decide the router prefix and each
+    route path in `api.py` first, and use exactly those strings — character
+    for character — in `backend/tests/test_api.py` and in the front end's
+    `api.ts`. Before you finish, re-read the three files side by side; a test
+    or a fetch that calls a path `api.py` does not define fails with a 404.
+15. **Tests never reach the network.** A routine that calls an outside service
+    (an HTTP API, a COM object, a database) reaches it through a port that is
+    injected into the service. Tests of the service and of the routes use a
+    fake port with a fixed answer; the real implementation is never called from
+    a test, so a test cannot depend on the outside service being up.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
