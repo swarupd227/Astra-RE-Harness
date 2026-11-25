@@ -24,7 +24,7 @@ import { Button } from '@/components/Button';
 import { ProviderStrip } from '@/components/ProviderStrip';
 import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 import { TargetSelector } from '@/components/TargetSelector';
-import { prettySchema, prettyStack } from '@/lib/targetStacks';
+import { isOfficeDocumentPath, prettySchema, prettyStack } from '@/lib/targetStacks';
 import { useTargetStack } from '@/hooks/useTargetStack';
 import { WorkflowRail } from '@/components/WorkflowRail';
 import { SignatureHealthBadge } from '@/components/SignatureHealthBadge';
@@ -92,7 +92,15 @@ export function SpecReviewPage() {
     setTargetStack: onTargetChange,
     overriddenFrom,
     savedOverridesRecommended,
-  } = useTargetStack(schema);
+  } = useTargetStack(schema, isOfficeDocumentPath(sub.data?.file?.relativePath) ? 'react-python' : null);
+  // Workbook VBA goes to a web app, so the stack is a one-line summary and the claims get the room; for other sources
+  // the picker and the generation details stay open, as before.
+  const officeSource = isOfficeDocumentPath(sub.data?.file?.relativePath);
+  const [targetOpen, setTargetOpen] = useState(!officeSource);
+  const [detailsOpen, setDetailsOpen] = useState(!officeSource);
+  useEffect(() => {
+    if (sub.data?.id) { setTargetOpen(!officeSource); setDetailsOpen(!officeSource); }
+  }, [sub.data?.id, officeSource]);
 
   const sections: Section[] = useMemo(() => {
     const s = spec.data?.spec;
@@ -394,19 +402,47 @@ export function SpecReviewPage() {
         </div>
       </header>
 
-      <ProviderStrip
-        info={sp.llmCall ? { name: sp.llmCall.provider, model: sp.llmCall.model, configVersion: sp.llmCall.providerConfigVersion, promptTemplateId: sp.llmCall.promptTemplateId, promptTemplateVersion: sp.llmCall.promptTemplateVersion } : null}
-        latencyMs={sp.llmCall?.latencyMs}
-        tokens={sp.llmCall ? { in: sp.llmCall.inputTokens, out: sp.llmCall.outputTokens } : undefined}
-      />
-
-      <div className="border-b border-line-subtle bg-sunken/40 px-6 py-2">
-        <ProviderSettingsCard compact />
+      <div className="flex items-center justify-end border-b border-line-subtle bg-raised px-6 py-1">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          aria-expanded={detailsOpen}
+          className="rounded px-1.5 py-0.5 font-mono text-caption text-ink-tertiary hover:text-ink-primary"
+          data-testid="generation-details-toggle"
+        >
+          {detailsOpen ? 'Hide generation details' : 'Generation details'}
+        </button>
       </div>
+      {detailsOpen && (
+        <div data-testid="generation-details">
+          <ProviderStrip
+            info={sp.llmCall ? { name: sp.llmCall.provider, model: sp.llmCall.model, configVersion: sp.llmCall.providerConfigVersion, promptTemplateId: sp.llmCall.promptTemplateId, promptTemplateVersion: sp.llmCall.promptTemplateVersion } : null}
+            latencyMs={sp.llmCall?.latencyMs}
+            tokens={sp.llmCall ? { in: sp.llmCall.inputTokens, out: sp.llmCall.outputTokens } : undefined}
+          />
+          <div className="border-b border-line-subtle bg-sunken/40 px-6 py-2">
+            <ProviderSettingsCard compact />
+          </div>
+        </div>
+      )}
 
       {signed && whoami.data?.persona === 'engineer' && (
         <div className="space-y-2 border-b border-line-subtle bg-sunken/40 px-6 py-3">
-          <TargetSelector value={targetStack} onChange={onTargetChange} sourceLanguage={schema} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-caption text-ink-secondary">
+              Target stack: <strong className="font-mono text-ink-primary" data-testid="target-current">{prettyStack(targetStack)}</strong>
+            </p>
+            <button
+              type="button"
+              onClick={() => setTargetOpen((v) => !v)}
+              aria-expanded={targetOpen}
+              className="rounded-md border border-line-subtle bg-canvas px-2.5 py-1 font-mono text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              data-testid="target-change"
+            >
+              {targetOpen ? 'Hide options' : 'Change'}
+            </button>
+          </div>
+          {targetOpen && <TargetSelector value={targetStack} onChange={onTargetChange} sourceLanguage={schema} />}
           {overriddenFrom && (
             <p
               className="flex flex-wrap items-center gap-x-2 rounded-md border border-status-warn/40 bg-status-warn/10 px-3 py-2 text-caption text-ink-primary"
