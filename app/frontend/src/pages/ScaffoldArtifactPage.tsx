@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCheck, Cog, GitCommit, GitBranch, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ClipboardCheck, Cog, GitCommit, GitBranch, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { api, type ScaffoldFile } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
@@ -51,6 +51,7 @@ export function ScaffoldArtifactPage() {
   const [commitError, setCommitError] = useState<string | null>(null);
   const [regenTarget, setRegenTarget] = useState<string | null>(null);
   const previewState = usePreview(id, scaffold.data?.targetPlatform ?? '');
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const files = scaffold.data?.files ?? [];
   const treeFiles = files.map((f) => ({ path: f.path, language: f.language, todoCount: f.todoCount }));
@@ -83,10 +84,10 @@ export function ScaffoldArtifactPage() {
   }, [active]);
 
   if (scaffold.isPending) {
-    return <div className="mx-auto max-w-[1600px] space-y-4 p-6 lg:p-10"><Skeleton className="h-12 w-96" /><Skeleton className="h-[600px] w-full" /></div>;
+    return <div className="mx-auto max-w-[1600px] space-y-4 p-4 lg:p-6"><Skeleton className="h-12 w-96" /><Skeleton className="h-[600px] w-full" /></div>;
   }
   if (scaffold.isError) {
-    return <div className="mx-auto max-w-[1400px] p-6 lg:p-10"><ErrorBlock title="Could not load scaffold" message={scaffold.error.message} onRetry={() => scaffold.refetch()} /></div>;
+    return <div className="mx-auto max-w-[1700px] p-4 lg:p-6"><ErrorBlock title="Could not load scaffold" message={scaffold.error.message} onRetry={() => scaffold.refetch()} /></div>;
   }
 
   const sc = scaffold.data;
@@ -109,7 +110,7 @@ export function ScaffoldArtifactPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="border-b border-line-subtle bg-raised px-6 py-3">
+      <header className="border-b border-line-subtle bg-raised px-6 py-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link to={`/`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back">
@@ -183,7 +184,7 @@ export function ScaffoldArtifactPage() {
             )}
           </div>
         </div>
-        <div className="mt-2">
+        <div className="mt-1">
           <WorkflowRail state={sc.state} />
         </div>
       </header>
@@ -194,33 +195,45 @@ export function ScaffoldArtifactPage() {
         <div className="px-6 py-3"><ErrorBlock title="Commit failed" message={commitError} /></div>
       )}
 
-      <ProviderStrip
-        info={sc.llmCall ? {
-          name: sc.llmCall.provider,
-          model: sc.llmCall.model,
-          configVersion: sc.llmCall.providerConfigVersion,
-          promptTemplateId: sc.llmCall.promptTemplateId,
-          promptTemplateVersion: sc.llmCall.promptTemplateVersion,
-        } as any : null}
-        latencyMs={sc.llmCall?.latencyMs}
-        tokens={sc.llmCall ? { in: sc.llmCall.inputTokens, out: sc.llmCall.outputTokens } : undefined}
-      />
-
-      <div className="border-b border-line-subtle bg-canvas/40 px-6 py-2">
-        <ProviderSettingsCard compact />
-      </div>
-
-      {/* Signed-spec banner reminding the engineer this is a contract derivative */}
-      {spec.data?.signature && (
-        <div className="border-b border-status-signed/30 bg-status-info/10 px-6 py-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-caption text-ink-secondary">
+      {/* One thin row: what this package derives from, and a toggle for how it was generated. The code gets the room. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line-subtle bg-raised px-6 py-1.5 font-mono text-caption text-ink-secondary">
+        {spec.data?.signature ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="inline-flex items-center gap-1.5 text-status-signed">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="font-semibold">Derived from a signed spec</span>
             </span>
             <span>signer <span className="text-ink-primary">{spec.data.signature.signerDisplay}</span></span>
-            <span>algorithm <span className="text-ink-primary">{spec.data.signature.algorithm}</span></span>
-            <span title={spec.data.signature.specCanonicalHash}>hash <span className="text-ink-primary">{spec.data.signature.specCanonicalHash.slice(0, 22)}…</span></span>
+            <span title={spec.data.signature.specCanonicalHash}>hash <span className="text-ink-primary">{spec.data.signature.specCanonicalHash.slice(0, 16)}…</span></span>
+          </div>
+        ) : <span />}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          aria-expanded={detailsOpen}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ink-tertiary hover:text-ink-primary"
+          data-testid="generation-details-toggle"
+        >
+          Generation details
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+      </div>
+
+      {detailsOpen && (
+        <div data-testid="generation-details">
+          <ProviderStrip
+            info={sc.llmCall ? {
+              name: sc.llmCall.provider,
+              model: sc.llmCall.model,
+              configVersion: sc.llmCall.providerConfigVersion,
+              promptTemplateId: sc.llmCall.promptTemplateId,
+              promptTemplateVersion: sc.llmCall.promptTemplateVersion,
+            } as any : null}
+            latencyMs={sc.llmCall?.latencyMs}
+            tokens={sc.llmCall ? { in: sc.llmCall.inputTokens, out: sc.llmCall.outputTokens } : undefined}
+          />
+          <div className="border-b border-line-subtle bg-canvas/40 px-6 py-2">
+            <ProviderSettingsCard compact />
           </div>
         </div>
       )}

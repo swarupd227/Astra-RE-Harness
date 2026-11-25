@@ -85,15 +85,22 @@ export function buildStackOptions(
 export function recommendedStack(
   archetypes: ArchetypeManifest[],
   schema: string | null | undefined,
+  preferred?: string | null,
 ): string | null {
   const viable = buildStackOptions(archetypes, schema).filter((o) => o.selectable);
   if (viable.length === 0) return null;
+  if (preferred && viable.some((o) => o.stack === preferred)) return preferred;
   return (
     viable.find((o) => o.stack === 'dotnet10')?.stack ??
     viable.find((o) => o.stack.startsWith('dotnet10-'))?.stack ??
     viable.find((o) => o.stack === 'dotnet8')?.stack ??
     viable[0].stack
   );
+}
+
+/** True for a file inside an Office document (Book.xlsm/Module1.bas): VBA in a workbook, whose usual destination is a web app. */
+export function isOfficeDocumentPath(path: string | null | undefined): boolean {
+  return !!path && /\.(xlsm|xlsx|xls|xlsb|xlam|docm|doc|dotm|pptm|ppt|accdb|mdb)\//i.test(path.replace(/\\/g, '/'));
 }
 
 export function prettyStack(s: string): string {

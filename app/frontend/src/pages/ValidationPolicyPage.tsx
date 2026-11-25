@@ -78,7 +78,7 @@ export function ValidationPolicyPage() {
 
   if (q.isPending) {
     return (
-      <div className="mx-auto max-w-[1100px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1100px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -86,7 +86,7 @@ export function ValidationPolicyPage() {
   }
   if (q.isError || !q.data) {
     return (
-      <div className="mx-auto max-w-[1100px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1100px] p-4 lg:p-6">
         <ErrorBlock title="Could not load validation policy" message={String(q.error)} />
       </div>
     );
@@ -107,7 +107,7 @@ export function ValidationPolicyPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10 fadeup" data-testid="validation-policy-page">
+    <div className="mx-auto max-w-[1100px] space-y-6 p-4 lg:p-6 fadeup" data-testid="validation-policy-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="label">

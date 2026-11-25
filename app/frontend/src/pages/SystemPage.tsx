@@ -19,7 +19,7 @@ export function SystemPage() {
 
   return (
     <div
-      className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10"
+      className="mx-auto max-w-[1100px] space-y-6 p-4 lg:p-6"
       role="region"
       aria-label="System status"
       tabIndex={0}

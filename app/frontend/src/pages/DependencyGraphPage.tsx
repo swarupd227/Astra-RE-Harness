@@ -279,7 +279,7 @@ export function DependencyGraphPage() {
 
   if (graph.isPending || corpus.isPending) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-3 p-6">
+      <div className="mx-auto max-w-[1700px] space-y-3 p-6">
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-[600px]" />
       </div>
@@ -287,7 +287,7 @@ export function DependencyGraphPage() {
   }
   if (graph.isError || !graph.data) {
     return (
-      <div className="mx-auto max-w-[1400px] p-6">
+      <div className="mx-auto max-w-[1700px] p-6">
         <ErrorBlock title="Could not load dependency graph" message={String(graph.error)} />
       </div>
     );
@@ -297,7 +297,7 @@ export function DependencyGraphPage() {
 
   if (g.nodes.length === 0) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10 fadeup">
+      <div className="mx-auto max-w-[1700px] space-y-4 p-4 lg:p-6 fadeup">
         <PageHero
           tone="violet"
           eyebrow={corpus.data?.name ?? corpusId}
@@ -319,7 +319,7 @@ export function DependencyGraphPage() {
 
   return (
     <div
-      className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10 fadeup"
+      className="mx-auto max-w-[1700px] space-y-4 p-4 lg:p-6 fadeup"
       data-testid="dependency-graph-page"
     >
       <PageHero

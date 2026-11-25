@@ -75,7 +75,7 @@ export function ProjectSettingsPage() {
 
   if (settings.isPending || corpus.isPending || !form) {
     return (
-      <div className="mx-auto max-w-[820px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[820px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -83,7 +83,7 @@ export function ProjectSettingsPage() {
   }
   if (settings.isError) {
     return (
-      <div className="mx-auto max-w-[820px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[820px] p-4 lg:p-6">
         <ErrorBlock title="Could not load project settings" message={settings.error.message} onRetry={() => settings.refetch()} />
       </div>
     );
@@ -93,7 +93,7 @@ export function ProjectSettingsPage() {
   const disabled = !canEdit || save.isPending;
 
   return (
-    <div className="mx-auto max-w-[820px] space-y-6 p-6 lg:p-10 fadeup" data-testid="project-settings-page">
+    <div className="mx-auto max-w-[820px] space-y-6 p-4 lg:p-6 fadeup" data-testid="project-settings-page">
       <PageHero
         eyebrow={corpus.data?.name ?? id}
         title="Project settings"

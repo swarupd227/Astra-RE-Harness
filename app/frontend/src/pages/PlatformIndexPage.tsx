@@ -109,7 +109,7 @@ export function PlatformIndexPage() {
   if (whoami.isPending) return null;
   if (whoami.data?.persona !== 'admin') {
     return (
-      <div className="mx-auto max-w-[1000px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1000px] p-4 lg:p-6">
         <ErrorBlock
           title="Admin only"
           message="The Platform configuration surfaces are only visible to the Admin persona. Switch persona from the top-right menu to continue."
@@ -119,7 +119,7 @@ export function PlatformIndexPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="platform-index-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="platform-index-page">
       <header>
         <p className="label">
           Platform configuration

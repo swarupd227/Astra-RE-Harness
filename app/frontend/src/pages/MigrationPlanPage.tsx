@@ -115,7 +115,7 @@ export function MigrationPlanPage() {
   const noPlanYet = plan.isError && plan.error instanceof ApiError && plan.error.status === 404;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="migration-plan-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="migration-plan-page">
       <PageHero
         tone="indigo"
         eyebrow={corpus.data?.name ?? corpusId}

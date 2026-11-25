@@ -55,7 +55,7 @@ export function LlmSettingsPage() {
 
   if (settings.isPending) {
     return (
-      <div className="mx-auto max-w-[900px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[900px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -63,7 +63,7 @@ export function LlmSettingsPage() {
   }
   if (settings.isError || !settings.data) {
     return (
-      <div className="mx-auto max-w-[900px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[900px] p-4 lg:p-6">
         <ErrorBlock title="Could not load LLM settings" message={String(settings.error)} />
       </div>
     );
@@ -76,7 +76,7 @@ export function LlmSettingsPage() {
     (test.error as ApiError | null);
 
   return (
-    <div className="mx-auto max-w-[900px] space-y-6 p-6 lg:p-10 fadeup" data-testid="llm-settings-page">
+    <div className="mx-auto max-w-[900px] space-y-6 p-4 lg:p-6 fadeup" data-testid="llm-settings-page">
       <header>
         <p className="label">
           Task #178 · Provider configuration

@@ -208,10 +208,10 @@ export function SpecReviewPage() {
     );
   }
   if (sub.isError || source.isError) {
-    return <div data-theme={theme} className="mx-auto max-w-[1400px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
+    return <div data-theme={theme} className="mx-auto max-w-[1700px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
   }
   if (spec.isError) {
-    return <div data-theme={theme} className="mx-auto max-w-[1400px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
+    return <div data-theme={theme} className="mx-auto max-w-[1700px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
   }
 
   const s = sub.data;

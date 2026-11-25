@@ -50,7 +50,7 @@ export function CorpusDetailPage() {
 
   if (corpus.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -58,7 +58,7 @@ export function CorpusDetailPage() {
   }
   if (corpus.isError) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock
           title="Could not load project"
           message={corpus.error.message}
@@ -72,7 +72,7 @@ export function CorpusDetailPage() {
   const files = (c.latestVersion?.files ?? []).filter((f) => (f.kind ?? 'code') === 'code');
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow="Project"
         title={c.name}
@@ -171,12 +171,10 @@ export function CorpusDetailPage() {
         defaultSourceRoot={null}
       />
 
-      <ArtefactSources corpusId={c.id} canWrite={persona !== 'observer'} />
-
       <Card>
         <CardHeader
           title="Files in this version"
-          description="Select a routine to open its details."
+          description={`${files.reduce((n, f) => n + f.subroutines.length, 0)} routines in ${files.length} file${files.length === 1 ? '' : 's'}. Select one to open its spec, code and generated package.`}
         />
         <CardBody className="p-0">
           <ul className="divide-y divide-line-subtle">
@@ -188,6 +186,9 @@ export function CorpusDetailPage() {
           </ul>
         </CardBody>
       </Card>
+
+      {/* The routines are what people come here for, so they come first; evidence is the supporting material. */}
+      <ArtefactSources corpusId={c.id} canWrite={persona !== 'observer'} />
     </div>
   );
 }

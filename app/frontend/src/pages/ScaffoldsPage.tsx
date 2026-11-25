@@ -48,7 +48,7 @@ export function ScaffoldsPage() {
   }, [list.data, stackFilter, queryText]);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup">
       <PageHero
         tone="amber"
         eyebrow="Platform"

@@ -44,7 +44,7 @@ export function RolesPage() {
 
   if (personas.isPending || matrix.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -52,14 +52,14 @@ export function RolesPage() {
   }
   if (personas.isError || matrix.isError || !personas.data || !matrix.data) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock title="Could not load roles" message={String(personas.error ?? matrix.error)} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="roles-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="roles-page">
       <header>
         <p className="label">
           Roles &amp; permissions

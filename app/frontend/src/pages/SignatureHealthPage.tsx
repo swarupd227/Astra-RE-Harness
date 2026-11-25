@@ -64,7 +64,7 @@ export function SignatureHealthPage() {
 
   if (q.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -72,14 +72,14 @@ export function SignatureHealthPage() {
   }
   if (q.isError || !q.data) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock title="Could not load signature health" message={String(q.error)} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="signature-health-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="signature-health-page">
       <PageHero
         tone="emerald"
         eyebrow="Governance"

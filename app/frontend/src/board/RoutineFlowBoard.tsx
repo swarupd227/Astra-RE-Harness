@@ -49,7 +49,7 @@ export function RoutineFlowBoard() {
 
   if (board.isPending) {
     return (
-      <div className="mx-auto max-w-[1600px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1600px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-12 w-96" />
         <Skeleton className="h-[600px] w-full" />
       </div>
@@ -57,7 +57,7 @@ export function RoutineFlowBoard() {
   }
   if (board.isError) {
     return (
-      <div className="mx-auto max-w-[1600px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1600px] p-4 lg:p-6">
         <ErrorBlock title="Could not load the flow board" message={String(board.error)} onRetry={() => board.refetch()} />
       </div>
     );
@@ -65,7 +65,7 @@ export function RoutineFlowBoard() {
 
   const b = board.data;
   return (
-    <div className="mx-auto max-w-[1900px] space-y-6 p-6 lg:p-10 fadeup" data-testid="flow-board-page">
+    <div className="mx-auto max-w-[1900px] space-y-6 p-4 lg:p-6 fadeup" data-testid="flow-board-page">
       <PageHero
         eyebrow={b.corpusName}
         title="Routine flow board"

@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Tooltip } from '@/components/Tooltip';
 import { Skeleton } from '@/components/Skeleton';
@@ -31,6 +32,10 @@ export function RailProgrammes({
   const programmes = (threads.data?.data ?? []).filter(
     (c): c is Conversation & { corpusId: string } => c.kind === 'programme' && !!c.corpusId,
   );
+  // A long estate of projects used to push everything else off the rail: show the first few, the rest on request.
+  const [showAll, setShowAll] = useState(false);
+  const LIMIT = 8;
+  const visible = showAll || collapsed ? programmes : programmes.slice(0, LIMIT);
 
   const newLink = (
     <Link
@@ -69,9 +74,20 @@ export function RailProgrammes({
       ) : programmes.length === 0 ? (
         !collapsed && <p className="px-2.5 py-1 text-micro text-ink-tertiary">No programmes yet</p>
       ) : (
-        programmes.map((c) => (
+        visible.map((c) => (
           <ProgrammeLink key={c.id} conversation={c} collapsed={collapsed} onNavigate={onNavigate} />
         ))
+      )}
+      {!collapsed && programmes.length > LIMIT && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1 text-micro text-ink-tertiary hover:bg-raised/60 hover:text-ink-primary"
+          data-testid="rail-programmes-toggle"
+        >
+          <ChevronDown size={12} className={clsx('transition-transform', showAll && 'rotate-180')} aria-hidden="true" />
+          {showAll ? 'Show fewer' : `Show all ${programmes.length}`}
+        </button>
       )}
       {newLink}
     </div>
@@ -118,9 +134,8 @@ function ProgrammeLink({
         {initials || '·'}
       </span>
       {!collapsed && (
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1" title={`${title} — ${preview}`}>
           <span className="block truncate text-caption font-medium leading-tight">{title}</span>
-          <span className="block truncate text-micro leading-tight text-ink-tertiary">{preview}</span>
         </span>
       )}
     </NavLink>

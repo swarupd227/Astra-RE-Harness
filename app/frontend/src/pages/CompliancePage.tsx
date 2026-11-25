@@ -90,7 +90,7 @@ export function CompliancePage() {
 
   if (formats.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -98,14 +98,14 @@ export function CompliancePage() {
   }
   if (formats.isError || !formats.data) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock title="Could not load compliance formats" message={String(formats.error)} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="compliance-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="compliance-page">
       <PageHero
         tone="amber"
         eyebrow="Governance"

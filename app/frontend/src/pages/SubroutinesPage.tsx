@@ -79,7 +79,7 @@ export function SubroutinesPage() {
   const hasMore = search.data?.hasMore ?? false;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow="Cross-project search"
         title="Routines"

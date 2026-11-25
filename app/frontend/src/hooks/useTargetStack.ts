@@ -30,7 +30,7 @@ export type TargetStackState = {
  * `savedOverridesRecommended` so the UI can say what happened instead of
  * quietly doing the wrong thing.
  */
-export function useTargetStack(sourceLanguage: string | null | undefined): TargetStackState {
+export function useTargetStack(sourceLanguage: string | null | undefined, preferred?: string | null): TargetStackState {
   const archetypes = useQuery({
     queryKey: ['archetypes'],
     queryFn: api.listArchetypes,
@@ -53,8 +53,8 @@ export function useTargetStack(sourceLanguage: string | null | undefined): Targe
     [archetypes.data, sourceLanguage],
   );
   const recommended = useMemo(
-    () => recommendedStack(archetypes.data?.data ?? [], sourceLanguage),
-    [archetypes.data, sourceLanguage],
+    () => recommendedStack(archetypes.data?.data ?? [], sourceLanguage, preferred),
+    [archetypes.data, sourceLanguage, preferred],
   );
 
   const savedIsUsable = options.some((o) => o.stack === savedStack && o.selectable);

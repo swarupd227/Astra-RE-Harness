@@ -80,7 +80,7 @@ export function LanguagesPage() {
 
   if (list.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Skeleton className="h-48" /><Skeleton className="h-48" />
@@ -90,14 +90,14 @@ export function LanguagesPage() {
   }
   if (list.isError || !list.data) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock title="Could not load schemas" message={String(list.error)} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup" data-testid="languages-page">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="languages-page">
       <header>
         <p className="label">
           Spec schemas

@@ -86,10 +86,10 @@ export function AuditTrailPage() {
   const grouped = useMemo(() => groupByDate(filtered), [filtered]);
 
   if (audit.isPending) {
-    return <div className="mx-auto max-w-[1100px] space-y-4 p-6 lg:p-10"><Skeleton className="h-12 w-64" /><Skeleton className="h-[600px] w-full" /></div>;
+    return <div className="mx-auto max-w-[1100px] space-y-4 p-4 lg:p-6"><Skeleton className="h-12 w-64" /><Skeleton className="h-[600px] w-full" /></div>;
   }
   if (audit.isError) {
-    return <div className="mx-auto max-w-[1100px] p-6 lg:p-10"><ErrorBlock title="Could not load audit trail" message={audit.error.message} onRetry={() => audit.refetch()} /></div>;
+    return <div className="mx-auto max-w-[1100px] p-4 lg:p-6"><ErrorBlock title="Could not load audit trail" message={audit.error.message} onRetry={() => audit.refetch()} /></div>;
   }
 
   const setFilter = (key: 'type' | 'actor', value: string) => {
@@ -99,7 +99,7 @@ export function AuditTrailPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[1100px] space-y-6 p-4 lg:p-6">
       <header>
         <p className="label">Provenance</p>
         <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Audit trail</h1>

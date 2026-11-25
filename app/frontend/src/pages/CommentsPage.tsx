@@ -36,7 +36,7 @@ export function CommentsPage() {
   const unread = inbox.data?.unread ?? 0;
 
   return (
-    <div className="mx-auto max-w-[900px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[900px] space-y-6 p-4 lg:p-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="label">

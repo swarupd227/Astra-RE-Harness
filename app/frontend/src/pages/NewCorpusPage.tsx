@@ -130,7 +130,7 @@ export function NewCorpusPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[820px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[820px] space-y-6 p-4 lg:p-6">
       <header>
         <p className="label">
           Ingest

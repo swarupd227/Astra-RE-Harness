@@ -14,7 +14,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { WorkflowRail, nextStepFor } from '@/components/WorkflowRail';
 import { PageHero } from '@/components/PageHero';
 import { useTargetStack } from '@/hooks/useTargetStack';
-import { prettySchema, prettyStack } from '@/lib/targetStacks';
+import { isOfficeDocumentPath, prettySchema, prettyStack } from '@/lib/targetStacks';
 import { formatState } from '@/lib/labels';
 
 export function SubroutineDetailPage() {
@@ -43,7 +43,7 @@ export function SubroutineDetailPage() {
     // below keep their original shape and TS can still narrow sub.data.
     if (sub.fetchStatus === 'paused' || source.fetchStatus === 'paused') {
       return (
-        <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
+        <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
           <ErrorBlock
             title="Could not load routine"
             message="Couldn't reach the server — check your connection and retry."
@@ -53,7 +53,7 @@ export function SubroutineDetailPage() {
       );
     }
     return (
-      <div className="mx-auto max-w-[1400px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1700px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-96" />
         <Skeleton className="h-[520px] w-full" />
       </div>
@@ -61,7 +61,7 @@ export function SubroutineDetailPage() {
   }
   if (sub.isError || source.isError) {
     return (
-      <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
         <ErrorBlock
           title="Could not load routine"
           message={(sub.error ?? source.error)!.message}
@@ -76,14 +76,15 @@ export function SubroutineDetailPage() {
   // straight off the subroutine row (Phase 9.2.c originally inferred
   // it from the corpus name regex; SubroutineEndpoints has projected
   // `sourceLanguage` since ingest, the frontend type just omitted it).
-  const help = helpForSchemaId(s.sourceLanguage);
+  const officeVba = isOfficeDocumentPath(s.file.relativePath);
+  const help = officeVba ? null : helpForSchemaId(s.sourceLanguage);
   const next = nextStepFor(s.state);
   // Any state past PARSED means a spec exists whose reviews re-extraction
   // would discard.
   const hasExistingSpec = ['DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDED'].includes(s.state);
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1700px] space-y-4 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow={
           <span className="font-mono normal-case tracking-normal">
@@ -98,10 +99,10 @@ export function SubroutineDetailPage() {
         lead={<span className="font-mono text-caption text-ink-tertiary">{s.signature}</span>}
         actions={<>
           <Badge tone={badgeToneForState(s.state)}>{formatState(s.state)}</Badge>
-          {(s.state === 'DRAFT' || s.state === 'IN_REVIEW' || s.state === 'SIGNED') && (
-            <Link to={s.state === 'DRAFT' ? `/subroutines/${s.id}/spec` : `/subroutines/${s.id}/review`}>
+          {hasExistingSpec && (
+            <Link to={s.state === 'DRAFT' ? `/subroutines/${s.id}/spec` : `/subroutines/${s.id}/review`} data-testid="view-spec">
               <Button variant="secondary" size="md">
-                {s.state === 'DRAFT' ? 'View draft spec' : s.state === 'SIGNED' ? 'View signed spec' : 'Open review'}
+                {s.state === 'DRAFT' ? 'View draft spec' : s.state === 'IN_REVIEW' ? 'Open review' : 'View signed spec'}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -148,7 +149,7 @@ export function SubroutineDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <CardHeader
             title={
@@ -168,7 +169,7 @@ export function SubroutineDetailPage() {
           <CardBody className="p-0">
             <MonacoSource
               value={source.data!.content}
-              height={560}
+              height={Math.max(480, (typeof window === 'undefined' ? 860 : window.innerHeight) - 260)}
               highlightLine={s.lineStart}
               theme="astra-dark"
             />
@@ -177,7 +178,7 @@ export function SubroutineDetailPage() {
 
         <aside className="space-y-4">
           <NextStepCard subroutineId={s.id} state={s.state} />
-          <TargetStackCard sourceLanguage={s.sourceLanguage} />
+          <TargetStackCard sourceLanguage={s.sourceLanguage} preferred={officeVba ? 'react-python' : null} />
           <StructurePanel sub={s} />
           <MigrationContextPanel subroutineId={s.id} />
         </aside>
@@ -211,9 +212,9 @@ export function SubroutineDetailPage() {
  * "which stack will this become?" had no answer while you were still deciding
  * whether to migrate the routine at all.
  */
-function TargetStackCard({ sourceLanguage }: { sourceLanguage: string | null }) {
+function TargetStackCard({ sourceLanguage, preferred }: { sourceLanguage: string | null; preferred?: string | null }) {
   const { targetStack, setTargetStack, overriddenFrom, savedOverridesRecommended } =
-    useTargetStack(sourceLanguage);
+    useTargetStack(sourceLanguage, preferred);
   return (
     <Card>
       <CardHeader

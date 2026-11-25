@@ -52,7 +52,7 @@ export function PortfolioDashboardPage() {
   }
   if (whoami.data?.persona !== 'admin') {
     return (
-      <div className="mx-auto max-w-[1300px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1300px] p-4 lg:p-6">
         <ErrorBlock
           title="Admin only"
           message="The portfolio dashboard surfaces cross-corpus aggregates including LLM cost. Switch persona from the top-right menu to continue."
@@ -62,7 +62,7 @@ export function PortfolioDashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1300px] space-y-6 p-6 lg:p-10 fadeup" data-testid="portfolio-dashboard-page">
+    <div className="mx-auto max-w-[1300px] space-y-6 p-4 lg:p-6 fadeup" data-testid="portfolio-dashboard-page">
       <PageHero
         tone="teal"
         title="Portfolio dashboard"

@@ -51,7 +51,7 @@ export function HomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[1280px] space-y-6 p-4 lg:p-6">
       <Hero persona={persona} loading={whoami.isPending} provider={whoami.data?.llmProvider} model={whoami.data?.llmModel} />
 
       <KPIStrip stats={stats.data} loading={stats.isPending} />

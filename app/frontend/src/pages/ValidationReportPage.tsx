@@ -149,7 +149,7 @@ export function ValidationReportPage() {
 
   if (scaffold.isPending || runs.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Skeleton className="h-48" />
@@ -162,7 +162,7 @@ export function ValidationReportPage() {
   }
   if (scaffold.isError) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock
           title="Could not load scaffold"
           message={scaffold.error.message}
@@ -185,7 +185,7 @@ export function ValidationReportPage() {
   const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun]);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow={
           <span className="inline-flex items-center gap-3">

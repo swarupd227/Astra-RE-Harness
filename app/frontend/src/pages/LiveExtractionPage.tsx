@@ -182,7 +182,7 @@ export function LiveExtractionPage() {
 
   if (sub.isPending || source.isPending) {
     return (
-      <div className="mx-auto max-w-[1600px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1600px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-12 w-96" />
         <Skeleton className="h-[600px] w-full" />
       </div>
@@ -190,7 +190,7 @@ export function LiveExtractionPage() {
   }
   if (sub.isError || source.isError) {
     return (
-      <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
         <ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} />
       </div>
     );

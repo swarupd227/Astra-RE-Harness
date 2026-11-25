@@ -323,7 +323,7 @@ export function PatternAnalysisPage() {
 
   if (corpus.isPending) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -331,7 +331,7 @@ export function PatternAnalysisPage() {
   }
   if (corpus.isError) {
     return (
-      <div className="mx-auto max-w-[1200px] p-6 lg:p-10">
+      <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
         <ErrorBlock title="Could not load project" message={corpus.error.message} />
       </div>
     );
@@ -358,7 +358,7 @@ export function PatternAnalysisPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-10 fadeup">
+    <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow={
           <span className="inline-flex items-center gap-2">

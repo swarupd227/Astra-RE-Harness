@@ -17,7 +17,7 @@ export function MyReviewsPage() {
 
   if (reviews.isPending) {
     return (
-      <div className="mx-auto max-w-[1100px] space-y-4 p-6 lg:p-10">
+      <div className="mx-auto max-w-[1100px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-12 w-64" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
@@ -25,12 +25,12 @@ export function MyReviewsPage() {
     );
   }
   if (reviews.isError) {
-    return <div className="mx-auto max-w-[1100px] p-6 lg:p-10"><ErrorBlock title="Could not load reviews" message={reviews.error.message} onRetry={() => reviews.refetch()} /></div>;
+    return <div className="mx-auto max-w-[1100px] p-4 lg:p-6"><ErrorBlock title="Could not load reviews" message={reviews.error.message} onRetry={() => reviews.refetch()} /></div>;
   }
   const r = reviews.data;
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-6 lg:p-10">
+    <div className="mx-auto max-w-[1100px] space-y-6 p-4 lg:p-6">
       <header>
         <p className="label">Review queue</p>
         <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">My reviews</h1>

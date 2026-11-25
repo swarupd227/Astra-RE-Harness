@@ -199,6 +199,11 @@ export function DocsPage() {
     enabled: !!selectedSectionId,
   });
 
+  // Open on content: the first section of the kind on screen is shown at once, so the largest pane is never empty.
+  useEffect(() => {
+    if (!selectedSectionId && sections.data?.data?.length) setSelectedSectionId(sections.data.data[0].id);
+  }, [selectedSectionId, sections.data]);
+
   const invalidateDocs = () => {
     qc.invalidateQueries({ queryKey: ['docs-summary', id] });
     qc.invalidateQueries({ queryKey: ['doc-sections', id, selectedKind] });
@@ -316,7 +321,7 @@ export function DocsPage() {
 
   if (corpus.isPending || summary.isPending) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-4 p-6">
+      <div className="mx-auto max-w-[1700px] space-y-4 p-4 lg:p-6">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-[600px] w-full" />
       </div>
@@ -324,7 +329,7 @@ export function DocsPage() {
   }
   if (corpus.isError) {
     return (
-      <div className="mx-auto max-w-[1400px] p-6">
+      <div className="mx-auto max-w-[1700px] p-6">
         <ErrorBlock title="Could not load project" message={corpus.error.message} />
       </div>
     );
@@ -712,7 +717,7 @@ export function DocsPage() {
 
       {/* ── Three-pane body ─────────────────────────────────────── */}
       {/* Below lg the three panes stack and the body scrolls as one. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-line-subtle overflow-y-auto lg:grid-cols-[220px_280px_minmax(0,1fr)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
+      <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-line-subtle overflow-y-auto lg:grid-cols-[190px_250px_minmax(0,1fr)] lg:divide-x lg:divide-y-0 lg:overflow-visible">
 
         {/* Pane 1 — Kind selector */}
         <nav className="max-h-56 overflow-y-auto bg-raised py-2 lg:max-h-none">
