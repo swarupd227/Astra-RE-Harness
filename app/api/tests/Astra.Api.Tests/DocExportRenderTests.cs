@@ -88,6 +88,15 @@ public class DocExportRenderTests
     }
 
     [Fact]
+    public void Criteria_on_dash_lines_right_under_the_label_become_a_list()
+    {
+        var md = "**Acceptance criteria**\n- One thing holds.\n- Another thing holds.\n\nTraceability: X";
+        var shaped = DocExportService.ShapeRequirement(md);
+        Assert.Contains("**Acceptance criteria**\n\n- One thing holds.\n- Another thing holds.", shaped);
+        Assert.Contains("Traceability: X", shaped);
+    }
+
+    [Fact]
     public void Something_that_is_not_a_requirement_or_has_a_single_criterion_is_left_alone()
     {
         var md = "## Trip Detail Capture\n\nText.\n\n**Acceptance criteria** - Only one thing holds.";

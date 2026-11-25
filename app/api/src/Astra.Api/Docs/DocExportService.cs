@@ -787,6 +787,7 @@ markdown_extensions:
     // "**Acceptance criteria** - A. - B. - C." arrives as one run-on paragraph; the items are split on " - " + capital.
     private static readonly Regex AcceptanceCriteriaRegex = new(
         @"^\*\*Acceptance criteria\*\*[ \t]*[-:–][ \t]*(?<items>[^\r\n]+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex CriteriaListStartRegex = new(@"^(\*\*Acceptance criteria\*\*:?)[ \t]*\r?\n(?=[ \t]*[-*] )", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex CriteriaSplitRegex = new(@"\s+-\s+(?=[A-Z0-9""“(])", RegexOptions.Compiled);
 
     /// <summary>
@@ -796,6 +797,9 @@ markdown_extensions:
     internal static string ShapeRequirement(string markdown)
     {
         var shaped = RequirementHeadingRegex.Replace(markdown, m => $"{m.Groups[1].Value} {m.Groups[2].Value}\n\n**{m.Groups[3].Value.Trim()}**");
+        // The criteria usually arrive as dash lines right under the label, with no blank line, which a Markdown reader folds into
+        // the paragraph; a blank line makes them the list they are.
+        shaped = CriteriaListStartRegex.Replace(shaped, "$1\n\n");
         return AcceptanceCriteriaRegex.Replace(shaped, m =>
         {
             var items = CriteriaSplitRegex.Split(m.Groups["items"].Value.Trim()).Select(i => i.Trim()).Where(i => i.Length > 0).ToList();
