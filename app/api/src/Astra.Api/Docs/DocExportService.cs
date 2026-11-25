@@ -483,7 +483,7 @@ markdown_extensions:
             {
                 if (sec.State == "STALE")
                     sb.AppendLine("> ⚠ **Out of date** — signed against an older source version.\n");
-                sb.AppendLine(NormalizeHeadings(sec.RenderedMarkdown ?? ""));
+                sb.AppendLine(ShapeRequirement(NormalizeHeadings(sec.RenderedMarkdown ?? "")));
                 sb.AppendLine();
             }
         }
@@ -681,7 +681,7 @@ markdown_extensions:
             sb.AppendLine();
             foreach (var sec in kindSections)
             {
-                sb.AppendLine(NormalizeHeadings(sec.RenderedMarkdown ?? ""));
+                sb.AppendLine(ShapeRequirement(NormalizeHeadings(sec.RenderedMarkdown ?? "")));
                 sb.AppendLine();
             }
         }
@@ -780,6 +780,28 @@ markdown_extensions:
     private static readonly Regex CitationRegex = new(
         @"\[\s*(?:[^\[\]\s/\\]+[/\\])*([^\[\]\s/\\:]+\.[A-Za-z0-9]{1,6})\s*:\s*L?(\d+)(?:\s*[–\-]\s*L?(\d+))?\s*\]",
         RegexOptions.Compiled);
+
+    private static readonly Regex RequirementHeadingRegex = new(
+        @"^(#{2,4}) ((?:FR|NFR)-\d{3}) [—–-] (.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+
+    // "**Acceptance criteria** - A. - B. - C." arrives as one run-on paragraph; the items are split on " - " + capital.
+    private static readonly Regex AcceptanceCriteriaRegex = new(
+        @"^\*\*Acceptance criteria\*\*[ \t]*[-:–][ \t]*(?<items>[^\r\n]+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex CriteriaSplitRegex = new(@"\s+-\s+(?=[A-Z0-9""“(])", RegexOptions.Compiled);
+
+    /// <summary>
+    /// A requirement reads as a short heading (<c>FR-007</c>) over its statement in bold, not as a four-line heading, and its
+    /// acceptance criteria as a list, not one paragraph of dashes.
+    /// </summary>
+    internal static string ShapeRequirement(string markdown)
+    {
+        var shaped = RequirementHeadingRegex.Replace(markdown, m => $"{m.Groups[1].Value} {m.Groups[2].Value}\n\n**{m.Groups[3].Value.Trim()}**");
+        return AcceptanceCriteriaRegex.Replace(shaped, m =>
+        {
+            var items = CriteriaSplitRegex.Split(m.Groups["items"].Value.Trim()).Select(i => i.Trim()).Where(i => i.Length > 0).ToList();
+            return items.Count < 2 ? m.Value : "**Acceptance criteria**\n\n" + string.Join("\n", items.Select(i => "- " + i)) + "\n";
+        });
+    }
 
     internal static string ShortenCitations(string markdown) =>
         CitationRegex.Replace(markdown, m =>

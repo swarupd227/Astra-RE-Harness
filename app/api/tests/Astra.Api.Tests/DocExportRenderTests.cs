@@ -75,6 +75,34 @@ public class DocExportRenderTests
     }
 
     [Fact]
+    public void A_requirement_is_a_short_heading_over_its_statement_and_the_criteria_are_a_list()
+    {
+        var md = "## FR-007 — The system shall submit the quote to the pricing API, and write premium figures only on 200.\n\n" +
+                 "Body text.\n\n" +
+                 "**Acceptance criteria** - A 200 response writes figures. - Any other status writes none. - Estimate only - not a bindable quote is shown.\n\n" +
+                 "Traceability: PostJson";
+        var shaped = DocExportService.ShapeRequirement(md);
+        Assert.Contains("## FR-007\n\n**The system shall submit the quote to the pricing API, and write premium figures only on 200.**", shaped);
+        Assert.Contains("**Acceptance criteria**\n\n- A 200 response writes figures.\n- Any other status writes none.\n- Estimate only - not a bindable quote is shown.", shaped);
+        Assert.Contains("Traceability: PostJson", shaped);
+    }
+
+    [Fact]
+    public void Something_that_is_not_a_requirement_or_has_a_single_criterion_is_left_alone()
+    {
+        var md = "## Trip Detail Capture\n\nText.\n\n**Acceptance criteria** - Only one thing holds.";
+        Assert.Equal(md, DocExportService.ShapeRequirement(md));
+    }
+
+    [Fact]
+    public void A_small_graph_is_not_scaled_up_and_connected_nodes_sit_in_the_row_nearest_their_target()
+    {
+        var svg = MermaidSvg.TryRender("graph TD\n  A[\"Alpha\"]\n  B[\"Beta\"]\n  C[\"Gamma\"]\n  A --> C");
+        Assert.NotNull(svg);
+        Assert.Contains("max-width:", svg);
+    }
+
+    [Fact]
     public void Text_is_escaped_and_something_that_is_not_a_known_diagram_is_not_drawn()
     {
         var svg = MermaidSvg.TryRender("sequenceDiagram\n  A->>B: <b>1 & 2</b>");

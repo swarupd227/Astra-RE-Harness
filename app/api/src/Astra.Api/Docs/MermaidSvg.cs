@@ -281,6 +281,7 @@ public static class MermaidSvg
             if (!changed) break;
         }
         const int perRow = 6;
+        var connected = new HashSet<string>(edges.Where(e => e.From != e.To).SelectMany(e => new[] { e.From, e.To }));
         var nw = order.ToDictionary(i => i, i => Math.Max(96, (int)(nodes[i].Label.Length * 6.3 + 24)));
         var pos = new Dictionary<string, (double X, double Y, int W)>();
         double yy = 24; double maxW = 0;
@@ -297,7 +298,7 @@ public static class MermaidSvg
         var width = Math.Max(240, maxW + 48);
         foreach (var r in rank.Values.Distinct().OrderBy(v => v))
         {
-            var ids = order.Where(i => rank[i] == r).ToList();
+            var ids = order.Where(i => rank[i] == r).OrderBy(i => connected.Contains(i) ? 1 : 0).ToList();
             for (var s = 0; s < ids.Count; s += perRow)
             {
                 var rowIds = ids.Skip(s).Take(perRow).ToList();
@@ -311,7 +312,7 @@ public static class MermaidSvg
         var height = yy + 6;
 
         var sb = new StringBuilder();
-        sb.Append($"<figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {F(width)} {F(height)}\" width=\"100%\" {Font} role=\"img\">");
+        sb.Append($"<figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {F(width)} {F(height)}\" width=\"100%\" style=\"max-width:{F(width * 1.4)}px;margin:0 auto\" {Font} role=\"img\">");
         sb.Append(Defs());
         foreach (var e in edges)
         {
