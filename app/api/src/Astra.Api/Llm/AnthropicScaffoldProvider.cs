@@ -185,10 +185,14 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         var generatedFiles = ParseFiles(rawJson, archetype, ExtractValidClaimIds(request.SignedSpecJson));
         if (generatedFiles.Count == 0)
         {
+            // Output that ran into the limit is unfinished JSON: say that, not just "not parseable".
+            var cutOff = outputTokens >= ArchetypeMaxTokens - 16;
             yield return new("error", new
             {
-                code = "provider.no_files_generated",
-                message = "The model's response did not contain a parseable files array.",
+                code = cutOff ? "provider.output_truncated" : "provider.no_files_generated",
+                message = cutOff
+                    ? $"The model ran out of output ({ArchetypeMaxTokens:N0} tokens) before finishing the package. Try again, or raise Llm:Anthropic:MaxOutputTokens."
+                    : "The model's response did not contain a parseable files array.",
                 retryable = true,
             });
             yield break;
@@ -433,13 +437,17 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         return result;
     }
 
+    /// <summary>A package for a large routine (20 inputs, 19 rules) needs about 16k output tokens, right at the default limit;
+    /// one that is cut off is unfinished JSON. This path gets headroom, whatever the global default is.</summary>
+    private int ArchetypeMaxTokens => Math.Max(_opts.MaxOutputTokens, 24576);
+
     private async Task<(string RawJson, int InputTokens, int OutputTokens)> CallAnthropicAsync(
         string systemPrompt, string userPrompt, CancellationToken ct)
     {
         var requestBody = new Dictionary<string, object?>
         {
             ["model"] = _opts.Model,
-            ["max_tokens"] = _opts.MaxOutputTokens,
+            ["max_tokens"] = ArchetypeMaxTokens,
             ["system"] = new[]
             {
                 new Dictionary<string, object?>
