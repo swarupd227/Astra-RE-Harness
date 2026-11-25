@@ -176,8 +176,21 @@ public sealed class AssessmentService
                 remaining.Remove(pick);
             }
 
+            // VBA that lives inside Office workbooks is a spreadsheet application: its usual destination is a web
+            // application (FastAPI + React), not a VB6-to-.NET port, so that becomes the default for such estates.
+            var workbookEstate = await db.SourceFiles.AsNoTracking()
+                .AnyAsync(f => f.SourceVersionId == versionId && f.Kind == "workbook", ct);
+            if (workbookEstate && candidateTargets.Remove("react-python"))
+            {
+                candidateTargets.Insert(0, "react-python");
+                model = model with { Recommendation = model.Recommendation with { TargetStack = "react-python" } };
+            }
+
             var facts = new
             {
+                sourceNote = workbookEstate
+                    ? "The code lives inside Office workbooks (VBA, forms, sheets, named cells). Treat it as a spreadsheet application: the usual target is a web application, react-python (FastAPI back end + React form); the first candidate target is the default for that reason."
+                    : null,
                 programme = corpus.Name,
                 sourceLanguage = language,
                 languageLabel = ConversationService.LanguageLabel(language),

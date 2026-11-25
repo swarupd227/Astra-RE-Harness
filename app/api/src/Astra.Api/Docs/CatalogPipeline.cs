@@ -475,6 +475,25 @@ public sealed class CatalogPipeline
             _logger.LogInformation(
                 "Catalog stage {Kind}: model returned {Len} chars (stop_reason={Stop})",
                 sectionKind, result.ToolInputJson.Length, result.StopReason);
+
+            // An answer cut off at the output limit is unfinished JSON: it used to persist as zero entries and the
+            // stage still reported success (a requirements pack for a 9-routine project came back with no functional
+            // requirements). Ask once more for a tighter answer, under its own replay key so the cut-off one is not replayed.
+            var truncated = string.Equals(result.StopReason, "max_tokens", StringComparison.OrdinalIgnoreCase);
+            if (truncated)
+            {
+                _logger.LogWarning("Catalog stage {Kind} hit the output limit ({Max} tokens); asking again for a tighter answer", sectionKind, request.MaxTokens);
+                request = request with
+                {
+                    UserMessage = request.UserMessage +
+                        "\n\nYour previous answer was cut off at the length limit, so none of it could be used. Answer again with " +
+                        "fewer, tighter entries: merge near-duplicates, one short paragraph each, no restating of the inputs.",
+                    CacheKey = request.CacheKey + ":tight",
+                    ReplayKey = request.ReplayKey is null ? null : request.ReplayKey + ":tight",
+                };
+                result = await _writer.WriteAsync(request, ct);
+                truncated = string.Equals(result.StopReason, "max_tokens", StringComparison.OrdinalIgnoreCase);
+            }
             var call = DocLlmCalls.Record(db, _writer, request, result);
 
             int count;
@@ -490,6 +509,11 @@ public sealed class CatalogPipeline
                 count = PersistStructuredEntries(db, sectionKind, result.ToolInputJson, runId, corpusId, sourceVersionId, call.Id);
             }
             await db.SaveChangesAsync(ct);
+            // Still cut off with nothing usable: say so, with the setting that governs it, instead of reporting success.
+            if (truncated && count == 0)
+                return new StageOutcome(0, 1,
+                    $"The model's {sectionKind} answer was cut off at the output limit ({request.MaxTokens:N0} tokens) twice, so nothing could be kept. " +
+                    "Raise Docs:Generator:CatalogMaxOutputTokens or generate this stage on a smaller scope.");
             return new StageOutcome(count, 0);
         }
         catch (Exception ex)
