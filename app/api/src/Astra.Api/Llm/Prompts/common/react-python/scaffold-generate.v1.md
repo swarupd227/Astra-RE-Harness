@@ -180,6 +180,14 @@ Rules:
     injected into the service. Tests of the service and of the routes use a
     fake port with a fixed answer; the real implementation is never called from
     a test, so a test cannot depend on the outside service being up.
+16. **A test of a missing lookup uses a valid input.** Input models reject
+    values outside their own constraints (a negative amount, a zero count)
+    before any lookup runs, so a test that expects a "not in table" error must
+    not build its input with such a value — the validation error comes first and
+    the test fails. Use a value the model accepts (for example far above the
+    largest table row) or an empty fake port, and assert the lookup error. A test
+    that checks the validation itself builds the input with `pytest.raises` around
+    the model, not around the service.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
