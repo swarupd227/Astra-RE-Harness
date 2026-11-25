@@ -104,10 +104,11 @@ public sealed class RequirementsDeliveryService
         var scaffoldIds = scaffolds.Select(sc => sc.Id).ToList();
         var runs = await _db.ValidationRuns.AsNoTracking()
             .Where(r => scaffoldIds.Contains(r.ScaffoldId))
-            .Select(r => new { r.ScaffoldId, r.Status })
+            .Select(r => new { r.ScaffoldId, r.Stage, r.Status, r.StartedAt })
             .ToListAsync(ct);
+        // Only the latest run of each gate counts: a gate that failed once and was fixed and re-run green is green.
         var runsByScaffold = runs.GroupBy(r => r.ScaffoldId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Status).ToList());
+            .ToDictionary(g => g.Key, g => LatestStatusPerGate(g.Select(x => (x.Stage, x.Status, x.StartedAt))));
 
         // ── Wave membership from the current plan ──
         var plan = await _db.MigrationPlans.AsNoTracking()
@@ -220,6 +221,12 @@ public sealed class RequirementsDeliveryService
         return new DeliveryReport(
             corpusId, corpus.Name, results.Count, counts, noTrace, unresolvedNames, results);
     }
+
+    /// <summary>The status of the most recent run of each validation stage (COMPILE, TEST_PACK …).</summary>
+    internal static List<string> LatestStatusPerGate(IEnumerable<(string Stage, string Status, DateTimeOffset StartedAt)> runs) =>
+        runs.GroupBy(r => r.Stage)
+            .Select(g => g.OrderByDescending(r => r.StartedAt).First().Status)
+            .ToList();
 
     /// <summary>"a/b/AccountStrategyService.java" → "AccountStrategyService".</summary>
     private static string FileType(string? path)
