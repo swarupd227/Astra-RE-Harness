@@ -156,6 +156,20 @@ Rules:
     (status 404) whose detail says which input had no match. An unhandled
     `KeyError` must never reach the client as a 500.
 
+12. **Only what exists.** Never open, read or import anything that is not
+    in the package or on `requirements.txt`. No data file unless the user
+    message lists one — a routine with no lookup tables has no `backend/data`
+    at all, and its rates and factors come from the signed spec or are inputs.
+    Prefer the Python standard library (`datetime`, `decimal`, `statistics`,
+    `math`); any third-party import must be added to `backend/requirements.txt`
+    with a pinned version in the same output (never assume `dateutil`,
+    `numpy`, `pandas` or `scipy` are installed).
+13. **Front-end tests use plain Jest only.** The jest-dom matchers are not
+    installed: never use `toBeInTheDocument`, `toHaveValue`, `toBeDisabled`,
+    `toHaveTextContent` or any other `toHave…` / `toBe…InTheDocument` matcher.
+    Use `expect(screen.queryByText('x')).not.toBeNull()`,
+    `expect((el as HTMLInputElement).value).toBe('1')`, `el.disabled`, and
+    `el.textContent`.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
