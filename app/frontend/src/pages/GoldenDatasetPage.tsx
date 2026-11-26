@@ -138,19 +138,23 @@ export function GoldenDatasetPage() {
 
       <Card data-testid="golden-aggregate-banner">
         <CardBody className="flex flex-wrap items-center justify-between gap-6">
+          {/* Coverage first: "100%" from 1 of 160 entries is not a quality signal, it is one data point. */}
           <div>
-            <p className="label">
-              Aggregate score
-            </p>
+            <p className="label">Scored so far</p>
             <p className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">
-              {aggregate.score === null
-                ? '—'
-                : `${Math.round(aggregate.score * 100)}%`}
+              {aggregate.scored} of {aggregate.eligible}
+              <span className="ml-1.5 text-body font-normal text-ink-secondary">entries</span>
             </p>
             <p className="text-caption text-ink-secondary">
-              {aggregate.scored}/{aggregate.eligible} entries scored ·{' '}
-              {aggregate.matched}/{aggregate.total} claims matched
+              {aggregate.score === null
+                ? 'Nothing scored yet — run an entry to get a score.'
+                : `${Math.round(aggregate.score * 100)}% of claims matched on the ${aggregate.scored} scored entr${aggregate.scored === 1 ? 'y' : 'ies'} (${aggregate.matched}/${aggregate.total} claims)`}
             </p>
+            {aggregate.eligible > 0 && aggregate.scored / aggregate.eligible < 0.25 && (
+              <p className="mt-1 text-caption text-status-warn" data-testid="golden-low-coverage">
+                Too few entries scored to judge prompt quality — re-run the set after a prompt change.
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Filter

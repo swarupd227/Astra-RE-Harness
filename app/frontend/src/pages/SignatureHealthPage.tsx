@@ -144,7 +144,10 @@ export function SignatureHealthPage() {
                 </tr>
               </thead>
               <tbody>
-                {q.data.rows.map((row) => (
+                {/* Drifted first: those are the ones that need someone; healthy ones follow, newest first. */}
+                {[...q.data.rows]
+                  .sort((x, y) => (x.state === 'drift' ? 0 : 1) - (y.state === 'drift' ? 0 : 1) || String(y.signedAt ?? '').localeCompare(String(x.signedAt ?? '')))
+                  .map((row) => (
                   <PortfolioRow
                     key={row.specId}
                     row={row}
