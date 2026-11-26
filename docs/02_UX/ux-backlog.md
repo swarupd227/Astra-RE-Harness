@@ -19,7 +19,7 @@ commit.
 | 10 | System health | `/system` | Live; recent-problems list open |
 | 11 | Platform group | `/platform/*` | Live (dead ends, Golden Dataset, Signature Health) |
 | 12 | Dashboard | `/home` | Live (counts, what's next, activity words) |
-| 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip); header actions open |
+| 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip); persona hint open |
 | 14 | Migration plan | `/corpora/:id/migration-plan` | Live; approve/regenerate actions open |
 | 15 | Routine board | `/corpora/:id/board` | Live |
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Live |
@@ -154,9 +154,9 @@ commit.
    render them as compact chips ("TravelRaterApi.bas · L39–89") that open the source.
 2. **"Quality 15/100 · 3/4 checks"** in a red pill on the Overview with no explanation of what scored low; make it a
    button that opens the failed check and its reason, and say what "revised" means.
-3. **No way forward on 102 drafts:** every section says "0/n signed" and there is no review/approve action in view,
-   no bulk "Review this section", and no export/PDF button on the page. Add a header action row: Review next draft ·
-   Export PDF · Regenerate (⋯).
+3. (Correction: Generate/Regenerate, Requirements pack, Export (Word, PDF, MkDocs, Confluence) and "Sign all" exist —
+   they are shown only to the personas allowed to use them, so an Engineer sees none.) Remaining: tell an Engineer
+   who can sign and export ("An SME signs sections; an Admin regenerates and exports").
 4. The middle column lists one document per section and wastes ~200 px at 1440 — collapse it into the left nav when a
    section has a single document.
 5. "102 Draft · 1 SUPERSEDED" pills: same casing, and make them filters.
