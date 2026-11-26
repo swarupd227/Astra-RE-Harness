@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Cog, GitBranch, Search, XCircle } from 'lucide-react';
@@ -180,6 +181,8 @@ export function ScaffoldsPage() {
             </div>
           </div>
 
+          <LivePreviews scaffolds={all.filter((x) => x.targetPlatform === 'react-python').slice(0, 30)} />
+
           {groups.length === 0 ? (
             <p className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-caption text-ink-secondary">
               No packages match.{' '}
@@ -319,5 +322,48 @@ function GateCell({ g }: { g: Gate }) {
     <span className="inline-flex items-center gap-1 text-ink-tertiary">
       <CircleDashed size={13} aria-hidden="true" /> Not run
     </span>
+  );
+}
+
+/**
+ * Running previews of generated web apps, one click away — the most convincing artefact on the platform was only
+ * reachable by opening each package. Asks each React + Python package (at most 30) whether a preview is up.
+ */
+function LivePreviews({ scaffolds }: { scaffolds: ScaffoldSummary[] }) {
+  const results = useQueries({
+    queries: scaffolds.map((s) => ({
+      queryKey: ['preview', s.id],
+      queryFn: () => api.getPreview(s.id),
+      staleTime: 60_000,
+      retry: 0,
+    })),
+  });
+  const live = scaffolds
+    .map((s, i) => ({ s, p: results[i]?.data }))
+    .filter((x) => x.p && x.p.state === 'READY' && x.p.url);
+  if (live.length === 0) return null;
+  return (
+    <section className="rounded-xl border border-status-ok/40 bg-status-ok/5 px-4 py-3" aria-label="Live previews" data-testid="scaffolds-live-previews">
+      <p className="text-caption font-semibold text-ink-primary">
+        Live previews <span className="font-normal text-ink-secondary">— generated apps running now</span>
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {live.map(({ s, p }) => (
+          <li key={s.id}>
+            <a
+              href={p!.url!}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-raised px-2.5 py-1 text-caption text-ink-primary hover:border-line-strong"
+              title={`${s.corpusName} · ${s.routineName}${p!.expiresAt ? ` · closes ${relativeTime(p!.expiresAt)}` : ''}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-status-ok" aria-hidden="true" />
+              <span className="font-mono">{s.routineName}</span>
+              <span className="text-ink-secondary">· {s.corpusName}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
