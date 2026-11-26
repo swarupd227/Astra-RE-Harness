@@ -141,7 +141,7 @@ public static class ValidationPolicyEndpoints
         {
             scope = "global",
             version = "v1.0",
-            ownedBy = "Nous · Validation engineering",
+            ownedBy = "Platform Admin",
             appliesTo = "Every scaffold artifact before commit.",
             commitGate = new
             {
@@ -185,7 +185,7 @@ public static class ValidationPolicyEndpoints
     private static readonly GateCanonical[] CanonicalGates =
     {
         new("compile", "Compile",
-            "Run `dotnet build` (or the target-stack equivalent) against the generated package. Zero warnings required at project-level error treatment.",
+            "Build the generated package with its own toolchain (dotnet build, Maven, npm build, or a Python import of every module). The build must succeed with no errors; warnings are reported.",
             true, null, "manual", "yes"),
         new("test_pack", "Test pack",
             "Run every claim-mapped fixture in the generated test project. Every signed claim must produce at least one fixture and that fixture must pass.",
@@ -198,9 +198,9 @@ public static class ValidationPolicyEndpoints
             "Zero blocker or critical findings; major, minor and info findings are reported, not blocking.",
             "regenerate-then-run", "yes"),
         new("equivalence", "Cross-runtime equivalence",
-            "Drive the original Fortran (via gfortran sidecar) and the generated C# with the same canonical inputs. Outputs must match field-for-field on every recorded input.",
+            "Run the original program and the generated code on the same inputs and compare their outputs field by field. Runs for the source languages that have a reference runtime wired in; other languages rely on the test pack.",
             true,
-            "Smoke at minimum (one canonical input per CONSUME_ROLL family); per-routine equivalence as that lands per Phase #5.",
+            "At least one recorded input per routine where a reference runtime is available.",
             "manual", "yes"),
     };
 
@@ -213,7 +213,7 @@ public static class ValidationPolicyEndpoints
     private static readonly RetryDefaultsRecord CanonicalRetryDefaults = new(
         "PT15M",
         0,
-        "Transient failures (compile-server crash, gfortran timeout) require a manual re-run by the engineer so flake doesn't mask a real regression.");
+        "Transient failures (a build server crash, a reference-runtime timeout) need a manual re-run by an engineer, so a flaky run never hides a real regression.");
 
     // ─── PUT request shape ───────────────────────────────────────────────
 
