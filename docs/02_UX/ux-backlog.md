@@ -12,11 +12,11 @@ commit.
 | 3 | Project detail | `/projects/:id` | Live (tabs → section nav; virtualisation open) |
 | 4 | Routines | `/subroutines` | Live, incl. search over spec summaries |
 | 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification open |
-| 6 | Generated code | `/scaffolds` | Live; live-preview strip open |
+| 6 | Generated code | `/scaffolds` | Live (gates per package, live previews) |
 | 7 | My reviews | `/my-reviews` | Live; real assignment = separate feature |
 | 8 | Comments | `/comments` | Live; per-user read state + following open (API) |
 | 9 | Compliance | `/compliance` | Live |
-| 10 | System health | `/system` | Live; recent-problems list open |
+| 10 | System health | `/system` | Live (deployed builds, services, model, recent problems) |
 | 11 | Platform group | `/platform/*` | Live (dead ends, Golden Dataset, Signature Health) |
 | 12 | Dashboard | `/home` | Live (counts, what's next, activity words) |
 | 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip, persona hint) |
@@ -28,7 +28,7 @@ commit.
 | 19 | Assessment | `/corpora/:id/assessment` | Live (UI + prompt v1.2) |
 | 20 | Evidence | `/corpora/:id/evidence` | Live (rows, file headings, workbook sub-filters) |
 | 21 | LLM Provider | `/platform/llm` | Live; per-pipeline model list open |
-| 22 | Project settings | `/corpora/:id/settings` | Live; rename / Git source open |
+| 22 | Project settings | `/corpora/:id/settings` | Live (sticky save, unsaved-changes guard, rename) |
 | 23 | Prompt Catalog | `/platform/prompts` | Live (grouped by purpose) |
 | 24 | Languages | `/platform/languages` | Live (targets from archetypes) |
 | 25 | Roles & Permissions | `/platform/roles` | Live (Can-do list from the matrix) |
