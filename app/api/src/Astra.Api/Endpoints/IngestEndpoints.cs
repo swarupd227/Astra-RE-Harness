@@ -69,6 +69,18 @@ public static class IngestEndpoints
         })
         .WithName("ingestRunStatus");
 
+        // Re-read the current version's call lists with today's parser, in place (admin). Specs, packages and
+        // gate results stay where they are; the dependency map, waves and assessment pick the calls up next read.
+        app.MapPost("/api/v1/corpora/{id:guid}/refresh-calls", async (Guid id, IngestPipeline pipeline, DevPersonaContext actor, CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
+            var r = await pipeline.RefreshCallsAsync(id, ct);
+            return r is null
+                ? Results.NotFound(new { error = new { code = "corpus.not_found" } })
+                : Results.Ok(new { corpusId = r.CorpusId, versionId = r.VersionId, files = r.Files, routines = r.Routines, updated = r.Updated, warnings = r.Warnings });
+        });
+
         grp.MapPost("upload", async (HttpRequest request, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
         {
             if (!request.HasFormContentType)

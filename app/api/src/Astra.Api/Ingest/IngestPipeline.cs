@@ -218,6 +218,52 @@ public sealed class IngestPipeline
         return results;
     }
 
+    public sealed record CallRefreshResult(Guid CorpusId, Guid VersionId, int Files, int Routines, int Updated, IReadOnlyList<string> Warnings);
+
+    /// <summary>
+    /// Re-reads the current version's files through the parser and updates each existing routine's list of
+    /// calls in place — nothing else. A parser that learned to see more calls (VBA's bracket-less sub calls)
+    /// should not need a re-sync: that clones every spec under a new id and leaves its packages and gate
+    /// results behind. Routines are matched by file and name; one the parse no longer finds is left as it is.
+    /// </summary>
+    public async Task<CallRefreshResult?> RefreshCallsAsync(Guid corpusId, CancellationToken ct = default)
+    {
+        var corpus = await _db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == corpusId, ct);
+        if (corpus is null) return null;
+        var versionId = corpus.LatestVersionId
+            ?? await _db.SourceVersions.Where(v => v.CorpusId == corpusId).OrderByDescending(v => v.IngestedAt)
+                .Select(v => (Guid?)v.Id).FirstOrDefaultAsync(ct);
+        if (versionId is null) return null;
+
+        var files = await _db.SourceFiles.Where(f => f.SourceVersionId == versionId)
+            .Include(f => f.Subroutines).ToListAsync(ct);
+        files = files.Where(f => f.Subroutines.Count > 0 && SourceLanguageDetector.FromFilename(f.RelativePath) is not null).ToList();
+        var warnings = new List<string>();
+        var incoming = new List<IncomingFile>(files.Count);
+        foreach (var f in files)
+            incoming.Add(new IncomingFile(f.RelativePath, await _blob.GetTextAsync(f.BlobUri, ct)));
+        var outcomes = await ParseFilesAsync(incoming, warnings, ct);
+
+        var updated = 0;
+        for (var i = 0; i < files.Count; i++)
+        {
+            var found = outcomes[i].Subroutines.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => g.First());
+            foreach (var sub in files[i].Subroutines)
+            {
+                if (!found.TryGetValue(sub.Name, out var parsed)) continue;
+                var next = JsonSerializer.Serialize(parsed.CalledSubroutines);
+                var now = sub.CalledSubroutines is null ? "[]" : sub.CalledSubroutines.RootElement.GetRawText();
+                if (JsonSerializer.Serialize(JsonSerializer.Deserialize<string[]>(now) ?? []) == next) continue;
+                sub.CalledSubroutines = JsonDocument.Parse(next);
+                updated++;
+            }
+        }
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync("corpus.calls_refreshed", "corpus", corpusId, actor: _persona,
+            payload: new { versionId, files = files.Count, updated }, ct: ct);
+        return new CallRefreshResult(corpusId, versionId.Value, files.Count, files.Sum(f => f.Subroutines.Count), updated, warnings);
+    }
+
     public async Task<IngestResult> IngestAsync(IngestRequest req, CancellationToken ct = default)
     {
         ct = WorkToken(ct);
