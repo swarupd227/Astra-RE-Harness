@@ -15,8 +15,8 @@ commit.
 | 6 | Generated code | `/scaffolds` | Built (ca6eea0) |
 | 7 | My reviews | `/my-reviews` | Built (57f3aa8) |
 | 8 | Comments | `/comments` | Built, testing |
-| 9 | Compliance | `/compliance` | Backlog |
-| 10 | System health | `/system` | Backlog |
+| 9 | Compliance | `/compliance` | Live (a127a74) |
+| 10 | System health | `/system` | Live (a127a74) |
 | 11 | Platform group | `/platform/*` | Backlog |
 | 12 | Dashboard | `/home` | Backlog |
 | 13 | Docs | `/corpora/:id/docs` | Backlog |
@@ -27,7 +27,8 @@ commit.
 | 18 | New project | `/projects/new` | Backlog |
 | 19 | Assessment | `/corpora/:id/assessment` | Backlog |
 | 20 | Evidence | `/corpora/:id/evidence` | Backlog |
-| 21+ | Project settings, LLM settings, Prompt catalog, Languages… | | To review |
+| 21 | LLM Provider | `/platform/llm` | Backlog |
+| 22+ | Project settings, Prompt catalog, Languages, Golden dataset, Signature health… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -237,3 +238,14 @@ commit.
 4. "Show together" is disabled until rows are ticked but nothing says so — show "Tick 2 or more to read them side by
    side" beside it.
 5. Eyebrow "Project" → the project name (the subtitle currently carries it after a "·").
+
+## 21 · LLM Provider (`/platform/llm`)
+1. Eyebrow "Task #178 · Provider configuration" — an internal ticket number on a customer page. → "Platform".
+2. The page does not show whether the key **works**: "set from UI" is shown even while Anthropic rejects it. Show
+   the same state as the top-bar status dot ("Working" / "Rejected by Anthropic 3 min ago — calls are failing"),
+   with "Test connection" beside it rather than in a separate card.
+3. Docs and code generation use their own models (Sonnet/Opus per pipeline, `Docs:Generator:*`) — list every model
+   in use and where, so "Model: claude-sonnet-4-5" is not mistaken for the whole story.
+4. Non-admins see "Only the Admin persona can change the API key" as body text — the Set key field should be shown
+   disabled with that line as its hint, so the page shape is the same for everyone.
+5. Title "LLM Provider" vs rail "LLM Provider" vs System health "Model" — call it "Model provider" everywhere.

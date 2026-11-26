@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 
 /**
- * Task #178 — LLM provider settings: set the Anthropic API key from the UI
+ * LLM provider settings: set the Anthropic API key from the UI
  * and prove it works with a live Test Connection call.
  *
  * The key is write-only: this page sends it once and the API only ever
@@ -79,7 +79,7 @@ export function LlmSettingsPage() {
     <div className="mx-auto max-w-[900px] space-y-6 p-4 lg:p-6 fadeup" data-testid="llm-settings-page">
       <header>
         <p className="label">
-          Task #178 · Provider configuration
+          Platform · Admin
         </p>
         <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">LLM Provider</h1>
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">
@@ -119,8 +119,14 @@ export function LlmSettingsPage() {
                   <>
                     <span>{s.keyHint || 'configured'}</span>
                     <Badge tone={s.keySource === 'database' ? 'info' : 'neutral'}>
-                      {s.keySource === 'database' ? 'set from UI' : 'from environment'}
+                      {s.keySource === 'database' ? 'set here' : 'from environment'}
                     </Badge>
+                    {/* Whether it works, not just whether it is set: the same signal as the top-bar status dot. */}
+                    {s.keyRejected ? (
+                      <Badge tone="failed" data-testid="llm-key-rejected">rejected by Anthropic — calls are failing</Badge>
+                    ) : (
+                      <Badge tone="success">working</Badge>
+                    )}
                   </>
                 ) : (
                   <Badge tone="failed">not configured</Badge>
