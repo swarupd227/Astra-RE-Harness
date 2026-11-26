@@ -147,10 +147,26 @@ export function PromptCatalogPage() {
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((p) => (
-          <PromptCard key={`${p.sourceSchema}/${p.targetStack}/${p.kind}/${p.version}`} prompt={p} onOpen={() => setOpen(p)} />
-        ))}
+      {/* Grouped by what the prompt is for, so 51 cards read as a handful of purposes. */}
+      <div className="space-y-6">
+        {[...new Set(filtered.map((p) => p.kind))].map((k) => {
+          const group = filtered.filter((p) => p.kind === k);
+          return (
+            <section key={k} aria-label={kindLabel(k)}>
+              <h2 className="mb-2 flex items-baseline gap-2 text-body font-semibold text-ink-primary">
+                {kindLabel(k)}
+                <span className="text-caption font-normal text-ink-secondary">
+                  {group.length} prompt{group.length === 1 ? '' : 's'}
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.map((p) => (
+                  <PromptCard key={`${p.sourceSchema}/${p.targetStack}/${p.kind}/${p.version}`} prompt={p} onOpen={() => setOpen(p)} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
 
       {open && (
