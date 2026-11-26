@@ -37,10 +37,13 @@ export function normaliseCounts(v: unknown): FunnelCounts {
 export function FunnelBar({
   counts,
   dense = false,
+  layout = 'row',
   className,
 }: {
   counts: FunnelCounts | unknown;
   dense?: boolean;
+  /** `list`: one stage per line in two columns, for narrow hosts (the artifact pane). */
+  layout?: 'row' | 'list';
   className?: string;
 }) {
   const c = normaliseCounts(counts);
@@ -65,11 +68,20 @@ export function FunnelBar({
           );
         })}
       </div>
-      <div className={clsx('grid gap-x-2', dense ? 'grid-cols-7 text-micro' : 'grid-cols-4 text-caption sm:grid-cols-7')}>
+      <div
+        className={clsx(
+          'grid gap-x-2',
+          layout === 'list'
+            ? 'grid-cols-2 gap-x-6 gap-y-1.5 text-caption'
+            : dense
+              ? 'grid-cols-7 text-micro'
+              : 'grid-cols-4 text-caption sm:grid-cols-7',
+        )}
+      >
         {FUNNEL_STAGES.map((s) => (
           <div key={s.key} className="flex min-w-0 items-baseline gap-1.5">
             <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', s.swatch)} aria-hidden="true" />
-            <span className="truncate text-ink-tertiary">{s.label}</span>
+            <span className={clsx('truncate', layout === 'list' ? 'text-ink-secondary' : 'text-ink-tertiary')}>{s.label}</span>
             <span className="ml-auto font-mono tabular-nums text-ink-primary">{formatInt(c[s.key])}</span>
           </div>
         ))}

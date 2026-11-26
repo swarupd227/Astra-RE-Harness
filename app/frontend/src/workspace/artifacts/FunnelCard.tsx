@@ -28,7 +28,7 @@ export function FunnelCard({ artifact, size }: ArtifactRenderProps) {
         </span>
       </div>
 
-      <FunnelBar counts={counts} dense={!pane} />
+      <FunnelBar counts={counts} dense={!pane} layout={pane ? 'list' : 'row'} />
 
       {(digests || clusters != null) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-ink-secondary">

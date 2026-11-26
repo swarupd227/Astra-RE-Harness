@@ -1,15 +1,13 @@
 import { Fragment, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleHelp, Menu, Moon, Sun } from 'lucide-react';
 import { Badge } from '@/components/Badge';
 import { CommandBarTrigger } from '@/components/CommandBarTrigger';
-import { ApiLatencyIndicator } from '@/components/ApiLatencyIndicator';
+import { PlatformStatus } from '@/components/PlatformStatus';
 import { LogoLockup } from '@/components/Logo';
 import { PersonaMenu } from '@/shell/PersonaMenu';
 import { Tooltip } from '@/components/Tooltip';
 import { getRouteMeta } from '@/shell/routeMeta';
-import { api } from '@/lib/api';
 import { useTheme } from '@/theme/ThemeProvider';
 import { AgentDockToggle } from '@/agentdock/AgentDock';
 
@@ -17,21 +15,14 @@ const iconButton =
   'flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-raised hover:text-ink-primary';
 
 /**
- * Glass top bar: lockup, breadcrumb, ⌘K, status pills, theme toggle, persona.
+ * Glass top bar: lockup, breadcrumb, search (⌘K), one platform-status dot, theme toggle, persona.
  * Lives in the dark shell for every route — the breadcrumb for a legacy
  * (light-wrapped) page is still drawn here.
  */
 export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOpenNav: () => void }) {
-  const provider = useQuery({
-    queryKey: ['provider-settings'],
-    queryFn: () => api.getProviderSettings(),
-  });
-
   const location = useLocation();
   const meta = getRouteMeta(location.pathname);
   const { theme, toggleTheme } = useTheme();
-  const providerName = provider.data?.provider?.name;
-  const providerModel = provider.data?.provider?.model;
 
   useEffect(() => {
     document.title = `${meta.title} · Astra`;
@@ -55,7 +46,7 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
         <Link
           to="/"
           className="shrink-0 rounded-md transition-opacity duration-fast hover:opacity-80"
-          aria-label="Astra by Artizent — Mission Control"
+          aria-label="Astra by Artizent — Home"
         >
           <LogoLockup size="sm" />
         </Link>
@@ -99,19 +90,7 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <CommandBarTrigger />
-          <div className="hidden lg:block">
-            <ApiLatencyIndicator />
-          </div>
-          {provider.data && (
-            <Tooltip content={`${providerName ?? '—'} · ${providerModel ?? '—'}`} side="bottom">
-              <span
-                className="pill hidden bg-volt/10 font-mono text-volt-ink ring-1 ring-volt/25 sm:inline-flex"
-                data-testid="topbar-provider-pill"
-              >
-                {labelForProvider(providerName, providerModel)}
-              </span>
-            </Tooltip>
-          )}
+          <PlatformStatus />
           {import.meta.env.DEV && <Badge tone="neutral" className="hidden font-mono md:inline-flex">DEV</Badge>}
           <AgentDockToggle className={iconButton} />
           <Tooltip content="Keyboard shortcuts (?)">
@@ -140,13 +119,4 @@ export function TopBar({ onOpenHelp, onOpenNav }: { onOpenHelp: () => void; onOp
       </div>
     </header>
   );
-}
-
-function labelForProvider(name?: string, model?: string): string {
-  if (!name) return '…';
-  if (name === 'anthropic') return 'Claude (Anthropic)';
-  if (name === 'mock') return 'mock · offline';
-  if (name === 'fail-mock') return 'mock · chaos';
-  if (name === 'openai_compatible' || name === 'openai-compatible') return 'OpenAI-compatible';
-  return model ? `${name} · ${model}` : name;
 }

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { PanelRightOpen } from 'lucide-react';
+import { History, PanelRightOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getPersona } from '@/lib/api';
 import { conversationsApi, type Artifact, type Conversation, type Suggestion } from '@/lib/conversations';
@@ -72,9 +72,29 @@ export function WorkspacePage() {
   const [paneOpen, setPaneOpen] = useState(true);
   const [overlayOpen, setOverlayOpen] = useState(false);
 
+  // ── Home: what was said before this visit folds away ──────────────
+  // The global thread is a long log; opening Home on it buried the estate summary under old chat. Messages that
+  // were already there when the thread loaded are folded behind "Show earlier conversation"; anything said
+  // during this visit shows as usual.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const priorIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    priorIds.current = null;
+    setHistoryOpen(false);
+  }, [conversationId]);
+  if (priorIds.current === null && conversationId && !conv.isLoading && conv.conversation) {
+    priorIds.current = new Set(conv.messages.map((m) => m.id));
+  }
+  const foldHistory = isGlobal && !historyOpen;
+  const messages = useMemo(
+    () => (foldHistory && priorIds.current ? conv.messages.filter((m) => !priorIds.current!.has(m.id)) : conv.messages),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conv.messages, foldHistory, priorIds.current],
+  );
+  const foldedCount = foldHistory ? conv.messages.length - messages.length : 0;
+
   // ── Artifact selection ────────────────────────────────────────────
   const [selection, setSelection] = useState<ArtifactSelection | null>(null);
-  const messages = conv.messages;
 
   const defaultSelection = useMemo<ArtifactSelection | null>(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -154,7 +174,7 @@ export function WorkspacePage() {
   // ── Derived header bits ───────────────────────────────────────────
   const persona = getPersona();
   const programme = conversation?.programme ?? null;
-  const title = isGlobal ? 'Mission Control' : conversation?.title || programme?.name || 'Programme';
+  const title = isGlobal ? 'Home' : conversation?.title || programme?.name || 'Programme';
   const firstProgramme = overviewQuery.data?.programmes?.[0]?.name ?? null;
   const starters = isGlobal ? GLOBAL_STARTERS(firstProgramme) : PROGRAMME_STARTERS;
   const loading = !conversationId ? globalQuery.isLoading : conv.isLoading;
@@ -176,7 +196,7 @@ export function WorkspacePage() {
           )}
           data-testid="workspace-kind"
         >
-          {isGlobal ? 'Global' : conversation?.kind ?? 'programme'}
+          {isGlobal ? 'All programmes' : conversation?.kind ?? 'programme'}
         </span>
         <div className="min-w-0 flex-1">
           {loading && !conversation ? (
@@ -192,17 +212,11 @@ export function WorkspacePage() {
                   {formatInt(programme.fileCount)} files
                 </span>
               )}
-              {isGlobal && overviewQuery.data && (
-                <span className="hidden truncate text-caption text-ink-tertiary sm:inline">
-                  {formatInt(overviewQuery.data.programmes.length)} programme
-                  {overviewQuery.data.programmes.length === 1 ? '' : 's'} ·{' '}
-                  {formatInt(overviewQuery.data.totals?.total)} routines
-                </span>
-              )}
+
             </div>
           )}
         </div>
-        {isXl && !paneOpen && (
+        {isXl && !paneOpen && selectedArtifact && (
           <button
             type="button"
             onClick={() => setPaneOpen(true)}
@@ -234,19 +248,38 @@ export function WorkspacePage() {
               onSuggestion={onSuggestion}
               onConfirm={onConfirm}
               onDecline={onDecline}
+              startAtTop={isGlobal}
               before={
                 isGlobal ? (
-                  <MissionControl
-                    overview={overviewQuery.data}
-                    isLoading={overviewQuery.isLoading}
-                    error={overviewQuery.error as Error | null}
-                  />
+                  <>
+                    <MissionControl
+                      overview={overviewQuery.data}
+                      isLoading={overviewQuery.isLoading}
+                      error={overviewQuery.error as Error | null}
+                    />
+                    {(foldedCount > 0 || historyOpen) && (
+                      <div className="mb-6 flex items-center gap-3">
+                        <span className="h-px flex-1 bg-line-subtle" aria-hidden="true" />
+                        <button
+                          type="button"
+                          onClick={() => setHistoryOpen((v) => !v)}
+                          aria-expanded={historyOpen}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-line-subtle px-3 py-1 text-caption text-ink-secondary transition-colors hover:border-line hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+                          data-testid="home-history-toggle"
+                        >
+                          <History size={13} aria-hidden="true" />
+                          {historyOpen ? 'Hide earlier conversation' : `Show earlier conversation (${formatInt(foldedCount)})`}
+                        </button>
+                        <span className="h-px flex-1 bg-line-subtle" aria-hidden="true" />
+                      </div>
+                    )}
+                  </>
                 ) : null
               }
               empty={
                 <EmptyThread
                   lead
-                  title={isGlobal ? 'Ask about any programme.' : `Ask about ${programme?.name ?? 'this programme'}.`}
+                  title={isGlobal ? 'What would you like to do?' : `Ask about ${programme?.name ?? 'this programme'}.`}
                   body="Astra routes what you ask to Discovery, Spec, Migration, Validation and the rest — and they answer here with cards you can open."
                   starters={starters}
                   onPick={onSuggestion}
@@ -256,6 +289,7 @@ export function WorkspacePage() {
             />
           )}
           <Composer
+            focusOnRequest
             onSend={(t) => void send(t)}
             onCancel={conv.cancel}
             streaming={conv.streaming}
@@ -269,7 +303,7 @@ export function WorkspacePage() {
           />
         </section>
 
-        {isXl && paneOpen && (
+        {isXl && paneOpen && (selectedArtifact || !isGlobal) && (
           <ArtifactPane
             mode="docked"
             artifact={selectedArtifact}

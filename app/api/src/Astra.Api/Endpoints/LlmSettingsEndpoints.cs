@@ -69,9 +69,10 @@ public static class LlmSettingsEndpoints
             IOptions<AnthropicOptions> opts,
             LlmKeyState state,
             ILlmProvider provider,
-            IConfiguration config) =>
+            IConfiguration config,
+            AnthropicRateLimiter limiter) =>
         {
-            return Results.Ok(BuildStatus(opts.Value, state, provider, config));
+            return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
 
         app.MapPut("/api/v1/settings/llm/key", async (
@@ -81,6 +82,7 @@ public static class LlmSettingsEndpoints
             LlmKeyState state,
             ILlmProvider provider,
             IConfiguration config,
+            AnthropicRateLimiter limiter,
             DevPersonaContext actor,
             CancellationToken ct) =>
         {
@@ -109,9 +111,10 @@ public static class LlmSettingsEndpoints
             // Apply live — every Anthropic consumer shares this instance.
             opts.Value.ApiKey = key;
             state.OverrideActive = true;
+            limiter.ClearAuthFailure();
             Log.Information("LLM API key updated via settings UI by {Actor} (value not logged).", actor.DisplayName);
 
-            return Results.Ok(BuildStatus(opts.Value, state, provider, config));
+            return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
 
         app.MapDelete("/api/v1/settings/llm/key", async (
@@ -120,6 +123,7 @@ public static class LlmSettingsEndpoints
             LlmKeyState state,
             ILlmProvider provider,
             IConfiguration config,
+            AnthropicRateLimiter limiter,
             DevPersonaContext actor,
             CancellationToken ct) =>
         {
@@ -133,9 +137,10 @@ public static class LlmSettingsEndpoints
             }
             opts.Value.ApiKey = state.BootKey;
             state.OverrideActive = false;
-            Log.Information("LLM API key override cleared by {Actor}; reverted to environment key.", actor.DisplayName);
+            limiter.ClearAuthFailure();
+            Log.Warning("LLM API key override cleared by {Actor}; reverted to environment key.", actor.DisplayName);
 
-            return Results.Ok(BuildStatus(opts.Value, state, provider, config));
+            return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
 
         app.MapPost("/api/v1/settings/llm/test", async (
@@ -222,7 +227,7 @@ public static class LlmSettingsEndpoints
 
     // ── helpers ──────────────────────────────────────────────────────
     private static object BuildStatus(
-        AnthropicOptions opts, LlmKeyState state, ILlmProvider provider, IConfiguration config)
+        AnthropicOptions opts, LlmKeyState state, ILlmProvider provider, IConfiguration config, AnthropicRateLimiter limiter)
     {
         var configuredProvider = (config.GetValue("Llm:Provider", "mock") ?? "mock").ToLowerInvariant();
         var activeProvider = provider switch
@@ -248,6 +253,9 @@ public static class LlmSettingsEndpoints
             // Booted into mock fallback: singletons are bound to mock, so a
             // key set now only takes effect after an API restart.
             requiresRestart = keyConfigured && configuredProvider == "anthropic" && activeProvider != "anthropic",
+            // Anthropic refused the key on the latest call that reached it (cleared by a success or a new key).
+            keyRejected = limiter.LastAuthFailureAt is not null,
+            keyRejectedAt = limiter.LastAuthFailureAt,
         };
     }
 

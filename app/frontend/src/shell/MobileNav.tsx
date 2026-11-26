@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { LogoLockup } from '@/components/Logo';
-import { AskAstraLink, isExactNavRoute, navItemClass, navTestId, SECTIONS } from '@/shell/LeftNav';
+import { AskAstraLink, isExactNavRoute, itemTestId, navItemClass, SECTIONS } from '@/shell/LeftNav';
 import { RailProgrammes } from '@/shell/RailProgrammes';
 import { api, notificationsApi } from '@/lib/api';
 
@@ -124,7 +124,7 @@ export function MobileNav({ open, onClose }: { open: boolean; onClose: () => voi
                           end={isExactNavRoute(item.to)}
                           onClick={onClose}
                           className={navItemClass(false)}
-                          data-testid={`mobile-${navTestId(item.label)}`}
+                          data-testid={`mobile-${itemTestId(item)}`}
                         >
                           <Icon size={16} className="shrink-0" aria-hidden="true" />
                           <span className="flex-1 truncate">{item.label}</span>

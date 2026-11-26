@@ -18,6 +18,7 @@ export function Composer({
   autoFocus = false,
   compact = false,
   prefill = null,
+  focusOnRequest = false,
 }: {
   onSend: (text: string) => void;
   onCancel: () => void;
@@ -33,6 +34,8 @@ export function Composer({
    * e.g. "Accept all except …"). Bump `nonce` to apply the same text again.
    */
   prefill?: { text: string; nonce: number } | null;
+  /** Take focus when the rail's "Ask Astra" asks for it (the `astra:focus-composer` event). */
+  focusOnRequest?: boolean;
 }) {
   const [text, setText] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -49,6 +52,13 @@ export function Composer({
   useEffect(() => {
     grow();
   }, [text, grow]);
+
+  useEffect(() => {
+    if (!focusOnRequest) return;
+    const onFocus = () => window.requestAnimationFrame(() => ref.current?.focus());
+    window.addEventListener('astra:focus-composer', onFocus);
+    return () => window.removeEventListener('astra:focus-composer', onFocus);
+  }, [focusOnRequest]);
 
   useEffect(() => {
     if (!prefill) return;

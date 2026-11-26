@@ -31,6 +31,7 @@ export function ProgrammeThread({
   empty,
   expandInline = false,
   compact = false,
+  startAtTop = false,
 }: {
   messages: ConversationMessage[];
   messageKey?: (m: ConversationMessage) => string;
@@ -51,6 +52,8 @@ export function ProgrammeThread({
   expandInline?: boolean;
   /** Narrow host (a side panel): tighter gutters, no max-width. */
   compact?: boolean;
+  /** Open scrolled to the top (Home: the summary is what you came for), not at the newest message. */
+  startAtTop?: boolean;
 }) {
   const reduced = useReducedMotion();
   const now = useTick(60_000);
@@ -80,14 +83,21 @@ export function ProgrammeThread({
     if (atBottom) setUnread(false);
   }, []);
 
-  // First paint of a thread: jump straight to the newest message.
+  // First paint of a thread: jump straight to the newest message (or stay at the top when asked to).
   useLayoutEffect(() => {
     if (loading) return;
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    stickRef.current = true;
+    if (el && !startAtTop) el.scrollTop = el.scrollHeight;
+    stickRef.current = !startAtTop;
     setUnread(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
+
+  // Chips are next steps for the conversation as it stands — only the newest reply offers them.
+  const lastAgentId = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'agent') return messages[i].id;
+    return null;
+  })();
 
   // New message: follow if stuck (or if it's ours), else raise the pill.
   useEffect(() => {
@@ -142,6 +152,7 @@ export function ProgrammeThread({
                       confirming={confirmingId === m.id}
                       disabled={streaming}
                       expandInline={expandInline}
+                      showSuggestions={m.id === lastAgentId}
                     />
                   </motion.div>
                 ))}

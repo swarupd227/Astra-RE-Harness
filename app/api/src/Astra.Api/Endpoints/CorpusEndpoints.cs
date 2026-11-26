@@ -30,6 +30,7 @@ public static class CorpusEndpoints
                     c.FileCount,
                     c.TotalLoc,
                     c.UpdatedAt,
+                    c.SettingsJson,
                     LatestVersionId = c.Versions
                         .OrderByDescending(v => v.IngestedAt)
                         .Select(v => (Guid?)v.Id)
@@ -92,7 +93,8 @@ public static class CorpusEndpoints
                     c.TotalLoc,
                     lang,
                     c.UpdatedAt,
-                    c.LatestVersionId.HasValue && officeVersionIds.Contains(c.LatestVersionId.Value));
+                    c.LatestVersionId.HasValue && officeVersionIds.Contains(c.LatestVersionId.Value),
+                    ProjectSettings.Parse(c.SettingsJson).Test);
             }).ToList();
 
             return Results.Ok(new { data = rows });
@@ -170,7 +172,8 @@ public static class CorpusEndpoints
         int TotalLoc,
         string? SourceLanguage,
         DateTimeOffset UpdatedAt,
-        bool OfficeVba);
+        bool OfficeVba,
+        bool IsTest);
 
     private sealed record LangCount(Guid VersionId, string SourceLanguage, int Count);
 }

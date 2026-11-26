@@ -25,6 +25,7 @@ export const MessageBubble = memo(function MessageBubble({
   confirming = false,
   disabled = false,
   expandInline = false,
+  showSuggestions = true,
 }: {
   message: ConversationMessage;
   now: number;
@@ -37,6 +38,8 @@ export const MessageBubble = memo(function MessageBubble({
   disabled?: boolean;
   /** No artifact pane in this host: the selected card expands in place. */
   expandInline?: boolean;
+  /** Next-step chips; the thread shows them under its newest reply only. */
+  showSuggestions?: boolean;
 }) {
   const when = relativeTime(message.createdAt, now);
   const whenTitle = absoluteTime(message.createdAt);
@@ -59,7 +62,7 @@ export const MessageBubble = memo(function MessageBubble({
           <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line-subtle bg-sunken px-4 py-3 text-body text-ink-primary [overflow-wrap:anywhere]">
             {message.markdown}
           </div>
-          <div className="mt-1 flex justify-end gap-1.5 text-micro text-ink-tertiary">
+          <div className="mt-1 flex justify-end gap-1.5 text-micro text-ink-secondary">
             <span>{who}</span>
             {when && (
               <>
@@ -92,7 +95,7 @@ export const MessageBubble = memo(function MessageBubble({
         <div className="flex items-baseline gap-2 text-caption">
           <span className="font-medium text-ink-primary">{meta.name}</span>
           {when && (
-            <span className="text-ink-tertiary" title={whenTitle}>
+            <span className="text-ink-secondary" title={whenTitle}>
               {when}
             </span>
           )}
@@ -133,7 +136,7 @@ export const MessageBubble = memo(function MessageBubble({
             <ResolvedActionLine action={pending} />
           ))}
 
-        {suggestions.length > 0 && (
+        {showSuggestions && suggestions.length > 0 && (
           <SuggestionChips suggestions={suggestions} onPick={onSuggestion} disabled={disabled} />
         )}
       </div>

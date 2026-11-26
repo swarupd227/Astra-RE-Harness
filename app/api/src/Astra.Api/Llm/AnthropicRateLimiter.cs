@@ -130,10 +130,22 @@ public sealed class AnthropicRateLimiter
         }
     }
 
+    /// <summary>
+    /// When Anthropic last refused the API key (401/403), or null once a call succeeds again. Every provider feeds
+    /// its responses through <see cref="Observe"/>, so this is the one place that knows the key stopped working —
+    /// the settings status reports it and the UI shows a banner instead of letting runs fail one by one.
+    /// </summary>
+    public DateTimeOffset? LastAuthFailureAt { get; private set; }
+
+    /// <summary>A new key was saved: forget the old key's refusal until a call says otherwise.</summary>
+    public void ClearAuthFailure() => LastAuthFailureAt = null;
+
     /// <summary>Feed a response's status + rate-limit headers back into the gate.</summary>
     public void Observe(HttpResponseMessage resp)
     {
         var status = (int)resp.StatusCode;
+        if (status is 401 or 403) LastAuthFailureAt = DateTimeOffset.UtcNow;
+        else if (status is >= 200 and < 300) LastAuthFailureAt = null;
         var retryAfter = AnthropicHttp.RetryAfterSeconds(resp);
         var lowWindow = TryDetectLowRemaining(resp, out var resetAt);
 

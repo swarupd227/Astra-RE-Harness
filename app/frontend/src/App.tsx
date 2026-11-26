@@ -1,3 +1,4 @@
+import { LlmKeyBanner } from '@/components/PlatformStatus';
 import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TopBar } from '@/shell/TopBar';
@@ -111,6 +112,7 @@ export function App() {
         Skip to content
       </a>
       <TopBar onOpenHelp={openHelp} onOpenNav={openMobileNav} />
+      <LlmKeyBanner />
       <MobileNav open={mobileNavOpen} onClose={closeMobileNav} />
       <ProjectBanner />
       <div className="flex min-h-0 flex-1">

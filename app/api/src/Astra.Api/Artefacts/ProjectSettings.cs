@@ -33,6 +33,8 @@ public sealed record ProjectSettings
     public ProjectMetadata Metadata { get; init; } = new();
     public IReadOnlyDictionary<string, int> ExpectedCounts { get; init; } = new Dictionary<string, int>();
     public bool Demo { get; init; }
+    /// <summary>A QA or scratch project: the Projects list hides it unless "Show test projects" is on.</summary>
+    public bool Test { get; init; }
 
     public static ProjectSettings Default { get; } = new();
 
@@ -42,7 +44,7 @@ public sealed record ProjectSettings
 
     private static readonly HashSet<string> TopLevel = new(StringComparer.Ordinal)
     {
-        "artefactKinds", "pack", "banner", "metadata", "expectedCounts", "demo",
+        "artefactKinds", "pack", "banner", "metadata", "expectedCounts", "demo", "test",
     };
 
     public const int MaxBanner = 200;
@@ -98,6 +100,12 @@ public sealed record ProjectSettings
             if (d.ValueKind is JsonValueKind.True or JsonValueKind.False) demo = d.GetBoolean();
             else if (d.ValueKind != JsonValueKind.Null) errors.Add("demo must be true or false");
         }
+        var test = false;
+        if (root.TryGetProperty("test", out var t))
+        {
+            if (t.ValueKind is JsonValueKind.True or JsonValueKind.False) test = t.GetBoolean();
+            else if (t.ValueKind != JsonValueKind.Null) errors.Add("test must be true or false");
+        }
 
         if (errors.Count > 0) return (null, errors);
         return (new ProjectSettings
@@ -108,6 +116,7 @@ public sealed record ProjectSettings
             Metadata = metadata,
             ExpectedCounts = counts,
             Demo = demo,
+            Test = test,
         }, Array.Empty<string>());
     }
 

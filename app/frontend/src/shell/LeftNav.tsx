@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   BookOpen,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   Cog,
-  Cpu,
   Database,
   FileSearch,
   FileText,
@@ -35,12 +35,16 @@ type Item = {
   to: string;
   label: string;
   icon: typeof Home;
+  /** Kept when a label changes, so the e2e suite's `nav-<label>` id stays stable. */
+  testId?: string;
 };
 
 type Section = {
   title: string;
   items: Item[];
   adminOnly?: boolean;
+  /** Open on first visit; the user's choice is remembered after that. */
+  defaultOpen?: boolean;
 };
 
 // The artifact views, sectioned by activity area. Exported so the mobile
@@ -49,40 +53,38 @@ type Section = {
 // are load-bearing for the e2e suite — don't rename casually.
 export const SECTIONS: Section[] = [
   {
-    title: 'Views',
+    // Everyday work, top to bottom in the order a migration moves.
+    title: 'Work',
+    defaultOpen: true,
     items: [
-      { to: '/home',        label: 'Home',           icon: Home },
+      { to: '/home',        label: 'Dashboard',      icon: Home, testId: 'nav-home' },
       { to: '/projects',    label: 'Projects',       icon: Layers },
       { to: '/subroutines', label: 'Routines',       icon: FileSearch },
       { to: '/scaffolds',   label: 'Generated code', icon: Cog },
+      { to: '/my-reviews',  label: 'My reviews',     icon: ClipboardList },
+      { to: '/comments',    label: 'Comments',       icon: MessageSquare },
     ],
   },
   {
-    title: 'My queue',
+    // Is the output trustworthy: signatures, compliance, the golden set.
+    title: 'Quality',
+    defaultOpen: true,
     items: [
-      { to: '/my-reviews',  label: 'My reviews',   icon: ClipboardList },
-      { to: '/comments',    label: 'Comments',     icon: MessageSquare },
+      { to: '/compliance',              label: 'Compliance',       icon: ShieldCheck },
+      { to: '/platform/signatures',     label: 'Signature Health', icon: BookOpen },
+      { to: '/platform/golden-dataset', label: 'Golden Dataset',   icon: Database },
+      { to: '/platform/harmonisation',  label: 'Harmonisation',    icon: GitBranch },
     ],
   },
   {
-    title: 'Governance',
-    items: [
-      { to: '/compliance',  label: 'Compliance',    icon: ShieldCheck },
-      { to: '/system',      label: 'System health', icon: Activity },
-    ],
-  },
-  {
-    // Read-only analytics + catalogs — visible to every persona so the
-    // platform surfaces are discoverable, not just to admins.
+    // How the platform itself is set up and running — visible to every persona.
     title: 'Platform',
     items: [
-      { to: '/platform',                label: 'Overview',         icon: Sparkles },
-      { to: '/platform/portfolio',      label: 'Portfolio',        icon: Network },
-      { to: '/platform/golden-dataset', label: 'Golden Dataset',   icon: Database },
-      { to: '/platform/prompts',        label: 'Prompt Catalog',   icon: FileText },
-      { to: '/platform/signatures',     label: 'Signature Health', icon: BookOpen },
-      { to: '/platform/harmonisation',  label: 'Harmonisation',    icon: GitBranch },
-      { to: '/platform/languages',      label: 'Languages',        icon: Languages },
+      { to: '/platform',           label: 'Overview',       icon: Sparkles },
+      { to: '/platform/portfolio', label: 'Portfolio',      icon: Network },
+      { to: '/platform/prompts',   label: 'Prompt Catalog', icon: FileText },
+      { to: '/platform/languages', label: 'Languages',      icon: Languages },
+      { to: '/system',             label: 'System health',  icon: Activity },
     ],
   },
   {
@@ -102,9 +104,20 @@ export function navTestId(label: string): string {
   return `nav-${label.toLowerCase().replace(/\s+/g, '-')}`;
 }
 
+/** An item's test id: its pinned id if a label was renamed, else derived from the label. */
+export function itemTestId(item: Item): string {
+  return item.testId ?? navTestId(item.label);
+}
+
 /** Routes that must only be "active" on an exact match (they have sub-routes). */
 const EXACT = new Set(['/', '/home', '/platform']);
 export const isExactNavRoute = (to: string) => EXACT.has(to);
+
+/** Is `pathname` inside this item's route? */
+function routeMatches(to: string, pathname: string): boolean {
+  if (EXACT.has(to)) return pathname === to;
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
 
 export const navItemClass = (collapsed: boolean) =>
   ({ isActive }: { isActive: boolean }) =>
@@ -148,14 +161,14 @@ export function LeftNav() {
     refetchInterval: 60_000,
   });
   const live = health.isPending ? null : health.data?.status === 'ok';
-  const liveColor = live === null ? 'text-ink-tertiary' : live ? 'text-status-ok' : 'text-status-fail';
-  const liveLabel = live === null ? 'Checking…' : live ? 'Audit-logged · evidence-ready' : 'API offline';
+  const liveLabel = live === null ? 'Checking…' : live ? 'Online' : 'API offline';
+  const location = useLocation();
 
   return (
     <aside
       className={clsx(
         'hidden shrink-0 flex-col border-r border-line-subtle bg-sunken transition-[width] duration-medium md:flex',
-        collapsed ? 'w-14' : 'w-64',
+        collapsed ? 'w-14' : 'w-[272px]',
       )}
       data-testid="left-nav"
     >
@@ -173,16 +186,16 @@ export function LeftNav() {
           <RailProgrammes collapsed={collapsed} />
         </RailSection>
 
-        {/* (c) Agents — live: a volt ring pulses on whoever is running something */}
-        {!collapsed && (
-          <RailSection title="Agents" collapsed={false}>
-            <AgentsRow />
-          </RailSection>
-        )}
-
-        {/* (d) Views — the artifact views */}
+        {/* (c) Views — grouped by what you are doing; Work open, the rest fold away */}
         {SECTIONS.filter((s) => !s.adminOnly || isAdmin).map((section) => (
-          <RailSection key={section.title} title={section.title} collapsed={collapsed}>
+          <CollapsibleSection
+            key={section.title}
+            id={section.title}
+            title={section.title}
+            collapsed={collapsed}
+            defaultOpen={!!section.defaultOpen}
+            forceOpen={section.items.some((i) => routeMatches(i.to, location.pathname))}
+          >
             <div className="space-y-0.5">
               {section.items.map((item) => (
                 <ActiveItem
@@ -193,27 +206,28 @@ export function LeftNav() {
                 />
               ))}
             </div>
-          </RailSection>
+          </CollapsibleSection>
         ))}
+
+        {/* (d) Agents — named, folded by default; the header says who is working right now */}
+        {!collapsed && <AgentsSection />}
       </nav>
 
       {/* Footer — health, identity, version, collapse toggle */}
       <div className={clsx('border-t border-line-subtle py-3', collapsed ? 'px-1.5' : 'px-3')}>
         {!collapsed && (
-          <div className="mb-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-caption text-ink-secondary">
-              <ShieldCheck size={13} className={clsx('shrink-0', liveColor)} aria-hidden="true" />
-              {liveLabel}
-            </div>
-            <div className="flex items-center gap-2 text-caption text-ink-secondary">
-              <Cpu size={13} className={clsx('shrink-0', liveColor)} aria-hidden="true" />
-              <span className="truncate font-mono">
-                {whoami.data?.displayName ? `signed in as ${whoami.data.displayName}` : '…'}
-              </span>
-            </div>
-            <div className="text-[9px] text-ink-tertiary">
-              v{buildInfo.version} · {buildInfo.builtAt}
-            </div>
+          <div
+            className="mb-2 flex items-center gap-2 px-1 text-caption text-ink-secondary"
+            title={`${liveLabel} · v${buildInfo.version} · ${buildInfo.builtAt}`}
+            data-testid="rail-footer-identity"
+          >
+            <span
+              className={clsx('h-2 w-2 shrink-0 rounded-full', live === null ? 'bg-ink-tertiary' : live ? 'bg-status-ok' : 'bg-status-fail')}
+              aria-hidden="true"
+            />
+            <span className="sr-only">{liveLabel}. </span>
+            <span className="truncate">{whoami.data?.displayName ?? '…'}</span>
+            {live === false && <span className="shrink-0 text-status-failed">offline</span>}
           </div>
         )}
         <button
@@ -249,13 +263,63 @@ function RailSection({ title, collapsed, children }: { title: string; collapsed:
   );
 }
 
+/** A titled group the user can fold. Folded state is remembered; the group holding the current page always opens. */
+function CollapsibleSection({
+  id,
+  title,
+  collapsed,
+  defaultOpen,
+  forceOpen,
+  children,
+}: {
+  id: string;
+  title: string;
+  collapsed: boolean;
+  defaultOpen: boolean;
+  forceOpen: boolean;
+  children: ReactNode;
+}) {
+  const key = `astra.rail-open.${id}`;
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return defaultOpen;
+    const v = localStorage.getItem(key);
+    return v === null ? defaultOpen : v === 'true';
+  });
+  const toggle = () =>
+    setOpen((o) => {
+      localStorage.setItem(key, String(!o));
+      return !o;
+    });
+  if (collapsed) return <RailSection title={title} collapsed>{children}</RailSection>;
+  const shown = open || forceOpen;
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={shown}
+        className="label mb-1 flex w-full items-center gap-1 rounded px-2.5 py-0.5 text-left hover:text-ink-primary"
+        data-testid={`rail-section-${id.toLowerCase()}`}
+      >
+        <ChevronDown size={11} className={clsx('shrink-0 transition-transform', !shown && '-rotate-90')} aria-hidden="true" />
+        <span className="flex-1">{title}</span>
+      </button>
+      {shown && children}
+    </div>
+  );
+}
+
 /** The one volt-accented item: the conversation. */
 export function AskAstraLink({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const link = (
     <NavLink
       to="/"
       end
-      onClick={onNavigate}
+      onClick={() => {
+        onNavigate?.();
+        // Home's composer is where you ask; take the user straight into it (after the route has rendered).
+        window.setTimeout(() => window.dispatchEvent(new Event('astra:focus-composer')), 60);
+      }}
       className={({ isActive }) =>
         clsx(
           'flex items-center rounded-md py-2 text-body font-semibold transition-colors duration-fast',
@@ -283,61 +347,79 @@ export function AskAstraLink({ collapsed, onNavigate }: { collapsed: boolean; on
 }
 
 /**
- * Compact row of the ten agent avatars, driven by `GET /api/v1/copilot/agents`
- * (polled by `useAgentActivity`). An agent with `activeRuns > 0` gets the
- * volt pulsing ring — volt is reserved for "an agent is working" — and
- * `data-active="true"`; the tooltip carries the run count and last activity.
+ * The ten agents, driven by `GET /api/v1/copilot/agents` (polled by `useAgentActivity`). Folded by default to one
+ * line that says how many are working; open, each agent is a named row. An agent with `activeRuns > 0` gets the volt
+ * pulsing ring — volt is reserved for "an agent is working" — and `data-active="true"`.
  */
-function AgentsRow() {
+function AgentsSection() {
   const { agents } = useAgentActivity();
+  const working = agents.filter((a) => a.active).length;
+  const [open, setOpen] = useState<boolean>(
+    () => typeof window !== 'undefined' && localStorage.getItem('astra.rail-open.agents') === 'true',
+  );
+  const toggle = () =>
+    setOpen((o) => {
+      localStorage.setItem('astra.rail-open.agents', String(!o));
+      return !o;
+    });
   return (
-    <ul className="flex flex-wrap gap-1.5 px-2.5" aria-label="Agents">
-      {agents.map((a) => {
-        const m = a.meta;
-        const Icon = m.icon;
-        const runs = a.activeRuns;
-        const tooltip = `${m.name} · ${runs} ${runs === 1 ? 'run' : 'runs'} · last: ${describeLast(a.lastActivityAt, a.lastMessage)}`;
-        const link = a.lastConversationId ? `/w/${a.lastConversationId}` : null;
-        const disc = (
-          <span
-            className={clsx(
-              'relative grid h-7 w-7 place-items-center rounded-full transition-shadow duration-medium',
-              m.disc,
-              m.tone,
-              a.active && 'shadow-glow ring-2 ring-volt/70',
-            )}
-            role="img"
-            aria-label={`${m.name} agent${a.active ? `, ${runs} active ${runs === 1 ? 'run' : 'runs'}` : ''}`}
-          >
-            {a.active && (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="label mb-1 flex w-full items-center gap-1 rounded px-2.5 py-0.5 text-left hover:text-ink-primary"
+        data-testid="rail-section-agents"
+      >
+        <ChevronDown size={11} className={clsx('shrink-0 transition-transform', !open && '-rotate-90')} aria-hidden="true" />
+        <span className="flex-1">Agents ({agents.length})</span>
+        {working > 0 && <span className="normal-case tracking-normal text-volt-ink">{working} working</span>}
+      </button>
+      <ul className={clsx(open ? 'space-y-0.5' : 'sr-only')} aria-label="Agents">
+        {agents.map((a) => {
+          const m = a.meta;
+          const Icon = m.icon;
+          const runs = a.activeRuns;
+          const detail = a.active ? `${runs} ${runs === 1 ? 'run' : 'runs'}` : describeLast(a.lastActivityAt, null);
+          const tooltip = `${m.name} · ${runs} ${runs === 1 ? 'run' : 'runs'} · last: ${describeLast(a.lastActivityAt, a.lastMessage)}`;
+          const link = a.lastConversationId ? `/w/${a.lastConversationId}` : null;
+          const row = (
+            <>
               <span
-                className="absolute inset-0 rounded-full bg-volt/30 motion-safe:animate-ping"
-                aria-hidden="true"
-              />
-            )}
-            <Icon size={14} aria-hidden="true" className="relative" />
-          </span>
-        );
-        return (
-          <li
-            key={a.id}
-            className="flex"
-            data-testid={`rail-agent-${a.id}`}
-            data-active={a.active ? 'true' : 'false'}
-          >
-            <Tooltip content={tooltip} side="top">
+                className={clsx(
+                  'relative grid h-6 w-6 shrink-0 place-items-center rounded-full transition-shadow duration-medium',
+                  m.disc,
+                  m.tone,
+                  a.active && 'shadow-glow ring-2 ring-volt/70',
+                )}
+                role="img"
+                aria-label={`${m.name} agent${a.active ? `, ${runs} active ${runs === 1 ? 'run' : 'runs'}` : ''}`}
+              >
+                {a.active && (
+                  <span className="absolute inset-0 rounded-full bg-volt/30 motion-safe:animate-ping" aria-hidden="true" />
+                )}
+                <Icon size={12} aria-hidden="true" className="relative" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{m.name}</span>
+              <span className={clsx('shrink-0 text-micro', a.active ? 'text-volt-ink' : 'text-ink-tertiary')}>{detail}</span>
+            </>
+          );
+          const rowClass =
+            'flex items-center gap-2.5 rounded-md px-2.5 py-1 text-caption text-ink-secondary hover:bg-raised/60 hover:text-ink-primary';
+          return (
+            <li key={a.id} data-testid={`rail-agent-${a.id}`} data-active={a.active ? 'true' : 'false'} title={tooltip}>
               {link ? (
-                <NavLink to={link} className="rounded-full" aria-label={tooltip}>
-                  {disc}
+                <NavLink to={link} className={rowClass} aria-label={tooltip}>
+                  {row}
                 </NavLink>
               ) : (
-                disc
+                <div className={rowClass}>{row}</div>
               )}
-            </Tooltip>
-          </li>
-        );
-      })}
-    </ul>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -386,7 +468,7 @@ function ActiveItem({
       to={item.to}
       end={EXACT.has(item.to)}
       className={navItemClass(collapsed)}
-      data-testid={navTestId(item.label)}
+      data-testid={itemTestId(item)}
       aria-label={collapsed ? item.label : undefined}
     >
       {inner}

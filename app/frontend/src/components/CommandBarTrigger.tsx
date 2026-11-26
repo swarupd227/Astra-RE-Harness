@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useEffect } from 'react';
 import { clsx } from 'clsx';
 import { openCommandPalette } from '@/copilot/paletteStore';
@@ -37,8 +37,8 @@ export function CommandBarTrigger({ className }: { className?: string }) {
       aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
       data-testid="command-bar-trigger"
     >
-      <Sparkles className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
-      <span>Ask Astra or jump to…</span>
+      <Search className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
+      <span>Search or jump to…</span>
       <kbd className="ml-1 rounded border border-line bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary">
         {isMac ? '⌘' : 'Ctrl'}K
       </kbd>

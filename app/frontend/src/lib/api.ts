@@ -830,6 +830,8 @@ export type CorpusListItem = {
    */
   sourceLanguage: string | null;
   updatedAt: string;
+  /** Marked as a QA / scratch project in its settings; hidden from the list by default. */
+  isTest?: boolean;
 };
 // ─── Artefact kinds + project settings (WS7) ─────────────────────────
 export type ArtefactKindInfo = {
@@ -857,6 +859,8 @@ export type ProjectSettings = {
   };
   expectedCounts: Record<string, number>;
   demo: boolean;
+  /** A QA / scratch project, hidden from the Projects list by default. */
+  test?: boolean;
 };
 
 /** What happened to one file in an attach: added | replaced | unchanged | rejected. */
@@ -997,6 +1001,7 @@ export const EMPTY_PROJECT_SETTINGS: ProjectSettings = {
   metadata: { tier: null, knowledgeHolder: null, wave: null },
   expectedCounts: {},
   demo: false,
+  test: false,
 };
 
 export type CorpusDetail = {
@@ -1171,6 +1176,9 @@ export type LlmSettings = {
   keySource: 'database' | 'environment' | 'none';
   keyHint: string;
   requiresRestart: boolean;
+  /** Anthropic refused the key on the latest call that reached it. */
+  keyRejected?: boolean;
+  keyRejectedAt?: string | null;
 };
 export type LlmTestResult = {
   ok: boolean;

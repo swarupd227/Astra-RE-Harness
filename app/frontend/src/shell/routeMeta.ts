@@ -22,7 +22,7 @@ const SCAFFOLD = { label: 'Scaffold artifact', href: '/scaffolds/:id' };
 // Order matters only where patterns overlap; matchPath is exact (end: true)
 // so `/projects` never swallows `/projects/new`.
 export const ROUTE_META: RouteMeta[] = [
-  { pattern: '/', title: 'Mission Control', crumbs: [{ label: 'Mission Control' }] },
+  { pattern: '/', title: 'Home', crumbs: [{ label: 'Home' }] },
   { pattern: '/w/:conversationId', title: 'Programme', crumbs: [ASK, { label: 'Programme' }] },
   { pattern: '/home', title: 'Home', crumbs: [{ label: 'Home' }] },
   { pattern: '/system', title: 'System health', crumbs: [{ label: 'System health' }] },

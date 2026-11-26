@@ -19,6 +19,7 @@ type Form = {
   waveName: string;
   waveEnd: string;
   banner: string;
+  test: boolean;
 };
 
 function toForm(s: ProjectSettings): Form {
@@ -29,6 +30,7 @@ function toForm(s: ProjectSettings): Form {
     waveName: s.metadata.wave?.name ?? '',
     waveEnd: s.metadata.wave?.endDate ?? '',
     banner: s.banner ?? '',
+    test: !!s.test,
   };
 }
 
@@ -40,6 +42,7 @@ function toSettings(base: ProjectSettings, f: Form): ProjectSettings {
     ...base,
     artefactKinds: f.artefactKinds,
     banner: f.banner.trim() || null,
+    test: f.test,
     metadata: {
       tier: f.tier === '' ? null : Number(f.tier),
       knowledgeHolder: f.knowledgeHolder.trim() || null,
@@ -205,6 +208,22 @@ export function ProjectSettingsPage() {
             className={inputClass}
             data-testid="settings-banner"
           />
+          <label className="mt-4 flex items-start gap-2.5 text-body text-ink-primary">
+            <input
+              type="checkbox"
+              checked={form.test}
+              onChange={(e) => set({ test: e.target.checked })}
+              disabled={disabled}
+              className="mt-1 accent-volt"
+              data-testid="settings-test"
+            />
+            <span>
+              <span className="font-medium">Test project</span>
+              <span className="block text-caption text-ink-secondary">
+                A QA or scratch project. The Projects list hides it unless “Show test projects” is on. Nothing is deleted.
+              </span>
+            </span>
+          </label>
         </CardBody>
       </Card>
 

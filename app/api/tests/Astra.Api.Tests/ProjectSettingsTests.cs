@@ -174,7 +174,7 @@ public class ProjectSettingsTests
         var (s, errors) = Validate("""
             {"artefactKinds":["sql","ticket"],"pack":"knowledge-transfer","banner":"Synthetic",
              "metadata":{"tier":1,"knowledgeHolder":"A Holder","wave":{"name":"Wave 1","endDate":"2027-03-31"}},
-             "expectedCounts":{"interfaces":8},"demo":true}
+             "expectedCounts":{"interfaces":8},"demo":true,"test":true}
             """);
         Assert.Empty(errors);
 
@@ -187,6 +187,7 @@ public class ProjectSettingsTests
         Assert.Equal("2027-03-31", back.Metadata.Wave!.EndDate);
         Assert.Equal(8, back.ExpectedCounts["interfaces"]);
         Assert.True(back.Demo);
+        Assert.True(back.Test);
         Assert.True(back.Has("TICKET"));
         Assert.False(back.Has("audio"));
     }
