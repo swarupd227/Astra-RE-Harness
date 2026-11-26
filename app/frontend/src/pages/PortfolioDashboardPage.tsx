@@ -1,3 +1,4 @@
+import { AdminOnlyNote } from '@/components/AdminOnlyNote';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, BarChart3, Coins, Layers, Package } from 'lucide-react';
@@ -52,12 +53,10 @@ export function PortfolioDashboardPage() {
   }
   if (whoami.data?.persona !== 'admin') {
     return (
-      <div className="mx-auto max-w-[1300px] p-4 lg:p-6">
-        <ErrorBlock
-          title="Admin only"
-          message="The portfolio dashboard surfaces cross-corpus aggregates including LLM cost. Switch persona from the top-right menu to continue."
-        />
-      </div>
+      <AdminOnlyNote
+        what="The portfolio dashboard compares every project side by side, including what each has cost in model calls."
+        instead={{ to: '/projects', label: 'See all projects instead' }}
+      />
     );
   }
 

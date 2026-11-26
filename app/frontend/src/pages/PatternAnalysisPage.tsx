@@ -1,3 +1,4 @@
+import { relativeTime } from '@/workspace/format';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
@@ -373,7 +374,7 @@ export function PatternAnalysisPage() {
           </span>
         }
         title={c.name}
-        lead="How many distinct behavioural patterns does this corpus contain, and which routines share one — the question that determines how many archetypes a migration engagement needs to build."
+        lead="How many distinct things this project's code does, and which routines do the same thing — so one migration pattern can serve all of them."
         actions={persona === 'admin' && (
           <>
             <Button
@@ -548,33 +549,43 @@ export function PatternAnalysisPage() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardBody>
-                <p className="label">Routines analysed</p>
-                <p className="mt-1 text-h-lg font-semibold text-ink-primary">{totalRoutines}</p>
+                <p className="label">Routines → patterns</p>
+                <p className="mt-1 text-h-lg font-semibold text-ink-primary">
+                  {totalRoutines} → {coreClusters + singletons}
+                </p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="label">Core patterns (2+ routines)</p>
+                <p className="label">Shared by 2+ routines</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{coreClusters}</p>
               </CardBody>
             </Card>
             <Card>
               <CardBody>
-                <p className="label">Singletons (long tail)</p>
+                <p className="label">One-offs</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{singletons}</p>
               </CardBody>
             </Card>
           </div>
 
           <Card>
-            <CardHeader
-              title="Last run"
-              description={lastRun.summary}
-            />
-            <CardBody className="font-mono text-caption text-ink-tertiary">
-              {lastRun.completedAt && `Completed ${new Date(lastRun.completedAt).toLocaleString()}`}
-              {lastRun.triggeredBy && ` · triggered by ${lastRun.triggeredBy}`}
-              {lastRun.stagesRequested && ` · stages: ${lastRun.stagesRequested}`}
+            <CardBody className="text-caption text-ink-secondary">
+              <p>
+                Grouped {totalRoutines} routine{totalRoutines === 1 ? '' : 's'} into {coreClusters + singletons} pattern
+                {coreClusters + singletons === 1 ? '' : 's'}
+                {lastRun.completedAt && (
+                  <span title={new Date(lastRun.completedAt).toLocaleString()}> · {relativeTime(lastRun.completedAt)}</span>
+                )}
+                {lastRun.triggeredBy && ` · by ${lastRun.triggeredBy}`}
+              </p>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-ink-tertiary hover:text-ink-primary">Run details</summary>
+                <p className="mt-1 font-mono text-ink-tertiary">
+                  {lastRun.summary}
+                  {lastRun.stagesRequested && ` · stages: ${lastRun.stagesRequested}`}
+                </p>
+              </details>
             </CardBody>
           </Card>
 
@@ -588,9 +599,7 @@ export function PatternAnalysisPage() {
                       {cluster.label}
                     </span>
                   }
-                  description={cluster.suggestedArchetypeName && (
-                    <code className="text-xs">{cluster.suggestedArchetypeName}</code>
-                  )}
+                  description={undefined}
                   action={
                     <Badge tone={clusterTone(cluster.memberCount)}>
                       {cluster.memberCount} routine{cluster.memberCount === 1 ? '' : 's'}
@@ -599,9 +608,17 @@ export function PatternAnalysisPage() {
                 />
                 <CardBody className="space-y-3">
                   <p className="text-body text-ink-secondary">{cluster.rationale}</p>
-                  {cluster.claimKindSignature && (
-                    <p className="font-mono text-caption text-ink-tertiary">
-                      Claim-kind signature: {cluster.claimKindSignature}
+                  {(cluster.suggestedArchetypeName || cluster.claimKindSignature) && (
+                    <p
+                      className="text-caption text-ink-tertiary"
+                      title={[
+                        cluster.suggestedArchetypeName && `Suggested archetype: ${cluster.suggestedArchetypeName}`,
+                        cluster.claimKindSignature && `Claim kinds: ${cluster.claimKindSignature}`,
+                      ]
+                        .filter(Boolean)
+                        .join('\n')}
+                    >
+                      Pattern id: <span className="font-mono">{cluster.suggestedArchetypeName ?? '—'}</span>
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2">

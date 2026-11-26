@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, CircleSlash, Server } from 'lucide-react';
+import { CheckCircle2, CircleSlash } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { clsx } from 'clsx';
+import { conversationsApi } from '@/lib/conversations';
+import { formatInt, formatMoney, formatPercent } from '@/workspace/format';
 import { api, type ReadinessDep } from '@/lib/api';
 import { buildInfo } from '@/lib/version';
 import { Card, CardBody, CardHeader } from '@/components/Card';
@@ -8,94 +12,120 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { DependencyDot } from '@/components/DependencyDot';
 
+const REPO = 'https://github.com/swarupd227/Astra-RE-Harness/commit/';
+
+/** What each readiness dependency is, in words a user knows. */
+const DEP_LABEL: Record<string, { label: string; what: string }> = {
+  postgres: { label: 'Database', what: 'Projects, specs, reviews and the audit log' },
+  minio: { label: 'File storage', what: 'Uploaded source, generated packages and logs' },
+  blob: { label: 'File storage', what: 'Uploaded source, generated packages and logs' },
+  parser: { label: 'Code parser', what: 'Reads source into routines and call graphs' },
+};
+
+/**
+ * System health: what is deployed (frontend and API commits), whether every service the app needs answers, which
+ * model is answering and whether its key works, and today's model usage.
+ */
 export function SystemPage() {
   const whoami = useQuery({ queryKey: ['whoami'], queryFn: api.whoami });
   const readiness = useQuery({
     queryKey: ['readiness'],
     queryFn: api.readiness,
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
     retry: 0,
   });
+  const llm = useQuery({ queryKey: ['llm-settings'], queryFn: api.getLlmSettings, refetchInterval: 60_000 });
+  const provider = useQuery({ queryKey: ['provider-settings'], queryFn: () => api.getProviderSettings() });
+  const overview = useQuery({ queryKey: ['copilot', 'overview'], queryFn: () => conversationsApi.overview(), staleTime: 15_000 });
+
+  const apiBuild = readiness.data?.build;
+  const feBuild = buildInfo.commit;
+  const keyRejected = !!llm.data?.keyRejected;
+  const providerName = provider.data?.provider?.name;
+  const model = provider.data?.provider?.model ?? llm.data?.model;
+  const t = overview.data?.telemetry;
+  const isAdmin = whoami.data?.persona === 'admin';
 
   return (
-    <div
-      className="mx-auto max-w-[1100px] space-y-6 p-4 lg:p-6"
-      role="region"
-      aria-label="System status"
-      tabIndex={0}
-    >
-      <header>
-        <p className="label">
-          System
-        </p>
-        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Status</h1>
-        <p className="mt-2 max-w-2xl text-body text-ink-secondary">
-          Live status of every service this application depends on.
+    <div className="mx-auto max-w-[1100px] space-y-5 p-4 lg:p-6 fadeup" role="region" aria-label="System status">
+      <header className="border-b border-line-subtle pb-4">
+        <p className="label">Platform</p>
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">System health</h1>
+        <p className="mt-1 text-body text-ink-secondary">
+          {readiness.data
+            ? readiness.data.status === 'ready' && !keyRejected
+              ? 'Everything Astra depends on is answering.'
+              : 'Something needs attention — see below.'
+            : 'Checking every service Astra depends on…'}
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <CardHeader title="Identity" />
+          <CardHeader title="What is deployed" />
           <CardBody>
-            {whoami.isPending ? (
-              <Skeleton className="h-6 w-48" />
-            ) : whoami.isError ? (
-              <ErrorBlock
-                title="Could not reach the API"
-                message={whoami.error.message}
-                onRetry={() => whoami.refetch()}
-              />
-            ) : (
-              <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-body">
-                <dt className="text-ink-tertiary">Persona</dt>
-                <dd className="font-mono capitalize">{whoami.data.persona}</dd>
-                <dt className="text-ink-tertiary">Display name</dt>
-                <dd className="font-mono">{whoami.data.displayName}</dd>
-                <dt className="text-ink-tertiary">Bypass</dt>
-                <dd className="font-mono">{String(whoami.data.bypassEnabled)}</dd>
-              </dl>
+            <dl className="grid grid-cols-[90px_1fr] gap-y-2 text-body">
+              <dt className="text-ink-secondary">Web app</dt>
+              <dd className="font-mono" data-testid="system-build-frontend">
+                <ShaLink sha={feBuild} />
+              </dd>
+              <dt className="text-ink-secondary">API</dt>
+              <dd className="font-mono" data-testid="system-build-api">
+                {apiBuild ? <ShaLink sha={apiBuild} /> : readiness.isPending ? '…' : 'unknown'}
+              </dd>
+            </dl>
+            {apiBuild && feBuild !== 'dev' && apiBuild !== feBuild && (
+              <p className="mt-2 text-caption text-ink-tertiary">The two can differ: each is deployed when it changes.</p>
             )}
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Build" />
+          <CardHeader title="Model" />
           <CardBody>
-            <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-body">
-              <dt className="text-ink-tertiary">Version</dt>
-              <dd className="font-mono">{buildInfo.version}</dd>
-              <dt className="text-ink-tertiary">Phase</dt>
-              <dd className="font-mono">
-                {buildInfo.phase} · {buildInfo.phaseLabel}
+            <dl className="grid grid-cols-[90px_1fr] gap-y-2 text-body">
+              <dt className="text-ink-secondary">Provider</dt>
+              <dd className="truncate font-mono">{providerName === 'anthropic' ? 'Claude (Anthropic)' : providerName ?? '…'}</dd>
+              <dt className="text-ink-secondary">Model</dt>
+              <dd className="truncate font-mono">{model ?? '…'}</dd>
+              <dt className="text-ink-secondary">API key</dt>
+              <dd className={clsx('font-mono', keyRejected ? 'text-status-failed' : 'text-ink-primary')} data-testid="system-key-state">
+                {keyRejected ? 'rejected by the provider' : llm.data?.keyConfigured ? 'working' : llm.data ? 'not set' : '…'}
               </dd>
-              <dt className="text-ink-tertiary">Commit</dt>
-              <dd className="font-mono truncate">{buildInfo.commit}</dd>
-              <dt className="text-ink-tertiary">Built</dt>
-              <dd className="font-mono">{buildInfo.builtAt}</dd>
             </dl>
+            {(keyRejected || (llm.data && !llm.data.keyConfigured)) && (
+              <Link to="/platform/llm" className="mt-2 inline-block text-caption text-ink-link hover:underline">
+                Open model settings
+              </Link>
+            )}
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Auth" />
+          <CardHeader title="Model usage today" />
           <CardBody>
-            <p className="text-body text-ink-secondary">
-              <span className="font-mono text-ink-primary">X-Dev-Persona</span> header sets the
-              active role. Single sign-on will replace this.
-            </p>
+            <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-body">
+              <dt className="text-ink-secondary">Calls</dt>
+              <dd className="font-mono">{t ? formatInt(t.callsToday) : '…'}</dd>
+              <dt className="text-ink-secondary">Spent</dt>
+              <dd className="font-mono">{t ? formatMoney(t.costTodayUsd) : '…'}</dd>
+              <dt className="text-ink-secondary">Median latency</dt>
+              <dd className="font-mono">{t?.p50LatencyMs != null ? `${formatInt(Math.round(t.p50LatencyMs))} ms` : '—'}</dd>
+              <dt className="text-ink-secondary">Cache hits</dt>
+              <dd className="font-mono">{t ? formatPercent(t.cacheHitRate) : '…'}</dd>
+            </dl>
           </CardBody>
         </Card>
       </div>
 
       <Card>
         <CardHeader
-          title="Service readiness"
-          description="Refreshed every 5 seconds."
+          title="Services"
+          description="Checked every 10 seconds."
           action={
             readiness.data ? (
               readiness.data.status === 'ready' ? (
-                <Badge tone="success">All ready</Badge>
+                <Badge tone="success">All answering</Badge>
               ) : (
                 <Badge tone="failed">Degraded</Badge>
               )
@@ -112,8 +142,8 @@ export function SystemPage() {
           ) : readiness.isError ? (
             <div className="p-6">
               <ErrorBlock
-                title="Readiness probe failed"
-                message="The readiness check is not responding. The service may be starting up or unavailable."
+                title="The API is not answering"
+                message="The readiness check did not respond. The API may be restarting or unavailable."
                 onRetry={() => readiness.refetch()}
               />
             </div>
@@ -126,31 +156,69 @@ export function SystemPage() {
           )}
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader title="You" />
+        <CardBody>
+          {whoami.isPending ? (
+            <Skeleton className="h-6 w-48" />
+          ) : whoami.isError ? (
+            <ErrorBlock title="Could not reach the API" message={whoami.error.message} onRetry={() => whoami.refetch()} />
+          ) : (
+            <>
+              <p className="text-body text-ink-primary">
+                Signed in as <strong>{whoami.data.displayName}</strong> · <span className="capitalize">{whoami.data.persona}</span>
+              </p>
+              {isAdmin && (
+                <p className="mt-2 text-caption text-ink-secondary" data-testid="system-dev-auth">
+                  Authentication is in development mode: the <span className="font-mono">X-Dev-Persona</span> header sets
+                  the role (bypass {String(whoami.data.bypassEnabled)}). Single sign-on replaces this in production.
+                </p>
+              )}
+            </>
+          )}
+        </CardBody>
+      </Card>
     </div>
+  );
+}
+
+function ShaLink({ sha }: { sha: string }) {
+  if (!sha || sha === 'dev') return <span className="text-ink-secondary">local build</span>;
+  return (
+    <a href={`${REPO}${sha}`} target="_blank" rel="noreferrer" className="text-ink-link hover:underline">
+      {sha}
+    </a>
   );
 }
 
 function DependencyRow({ dep, pulsing }: { dep: ReadinessDep; pulsing: boolean }) {
   const ok = dep.status === 'ok';
+  const meta = DEP_LABEL[dep.name.toLowerCase()] ?? { label: dep.name, what: '' };
   return (
-    <li className="flex items-center justify-between px-6 py-4">
-      <div className="flex items-center gap-3">
+    <li className="flex items-center justify-between gap-4 px-6 py-3.5" data-testid={`system-dep-${dep.name}`}>
+      <div className="flex min-w-0 items-center gap-3">
         {ok ? (
-          <CheckCircle2 className="h-5 w-5 text-status-review" aria-hidden="true" />
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-status-review" aria-hidden="true" />
         ) : (
-          <CircleSlash className="h-5 w-5 text-status-failed" aria-hidden="true" />
+          <CircleSlash className="h-5 w-5 shrink-0 text-status-failed" aria-hidden="true" />
         )}
-        <Server className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
-        <span className="font-mono text-body capitalize">{dep.name}</span>
+        <div className="min-w-0">
+          <p className="text-body font-medium text-ink-primary">
+            {meta.label}
+            {dep.version && <span className="ml-2 font-mono text-caption text-ink-secondary">{dep.version}</span>}
+          </p>
+          {meta.what && <p className="text-caption text-ink-secondary">{meta.what}</p>}
+        </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         {dep.error && (
-          <span className="font-mono text-caption text-ink-tertiary" title={dep.error}>
-            {dep.error.slice(0, 80)}
+          <span className="max-w-[320px] truncate font-mono text-caption text-status-failed" title={dep.error}>
+            {dep.error}
           </span>
         )}
         <DependencyDot status={ok ? 'ok' : 'down'} pulse={pulsing} />
-        <span className="font-mono text-caption uppercase text-ink-tertiary">{dep.status}</span>
+        <span className={clsx('text-caption', ok ? 'text-ink-secondary' : 'font-medium text-status-failed')}>{ok ? 'Answering' : 'Down'}</span>
       </div>
     </li>
   );

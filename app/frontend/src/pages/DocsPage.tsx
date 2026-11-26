@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { MermaidBlock } from '@/components/MermaidBlock';
 import { DocToc } from '@/components/DocToc';
 import { DocQualityChip } from '@/components/DocQualityChip';
-import { Markdown } from '@/workspace/Markdown';
+import { Markdown, citationsToChips } from '@/workspace/Markdown';
 
 const KIND_ORDER = [
   'overview', 'module', 'routine-summary',
@@ -969,7 +969,7 @@ export function DocsPage() {
                       </h2>
                     )}
                     {payload?.narrative && (
-                      <Markdown className="mb-4">{payload.narrative}</Markdown>
+                      <Markdown className="mb-4">{citationsToChips(payload.narrative)}</Markdown>
                     )}
                     {payload?.mermaidSource ? (
                       <MermaidBlock source={payload.mermaidSource} />
@@ -984,7 +984,7 @@ export function DocsPage() {
                   // typography, highlighted code, heading ids for the contents.
                   <div className="flex gap-8">
                     <div className="min-w-0 flex-1 max-w-[76ch]" data-testid="doc-body">
-                      <Markdown>{detail.renderedMarkdown ?? '*(no content)*'}</Markdown>
+                      <Markdown>{citationsToChips(detail.renderedMarkdown ?? '*(no content)*')}</Markdown>
                     </div>
                     <DocToc markdown={detail.renderedMarkdown ?? ''} className="sticky top-4 hidden w-56 shrink-0 self-start xl:block" />
                   </div>

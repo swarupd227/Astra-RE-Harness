@@ -114,7 +114,7 @@ export function MobileNav({ open, onClose }: { open: boolean; onClose: () => voi
                 <div key={section.title} className="mb-4">
                   <p className="label mb-1 px-2.5">{section.title}</p>
                   <div className="space-y-0.5">
-                    {section.items.map((item) => {
+                    {section.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
                       const Icon = item.icon;
                       const badge = item.to === '/comments' && unreadCount > 0 ? unreadCount : undefined;
                       return (

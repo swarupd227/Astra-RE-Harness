@@ -39,6 +39,19 @@ const components: Components = {
   ),
   a: (p) => {
     const { href, children, ...rest } = clean(p);
+    // A source citation rewritten by `citationsToChips`: compact, the full path on hover, never a navigation.
+    if (href && href.startsWith('#cite:')) {
+      const full = decodeURIComponent(href.slice(6));
+      return (
+        <span
+          title={full}
+          className="mx-0.5 inline-flex max-w-full items-center rounded-md border border-line bg-sunken px-1.5 py-px align-baseline font-mono text-micro text-ink-secondary"
+          data-testid="doc-citation"
+        >
+          {children}
+        </span>
+      );
+    }
     if (href && href.startsWith('/')) {
       return (
         <Link to={href} className="text-ink-link underline-offset-2 hover:underline" {...rest}>
@@ -92,6 +105,18 @@ const components: Components = {
     return <input type={type} {...rest} />;
   },
 };
+
+/**
+ * "[Book.xlsm/TravelRaterApi.bas:L39–L89]" in generated prose → a link the renderer draws as a compact chip
+ * ("TravelRaterApi.bas · L39–89", full path on hover). Real markdown links (followed by "(") are left alone.
+ */
+export function citationsToChips(md: string): string {
+  return md.replace(/\[([^\[\]\s]+?\.[A-Za-z0-9]+):L(\d+)(?:\s*[–-]\s*L?(\d+))?\](?!\()/g, (_m, path: string, a: string, b?: string) => {
+    const file = path.split('/').pop() ?? path;
+    const lines = b && b !== a ? `L${a}–${b}` : `L${a}`;
+    return `[${file} · ${lines}](#cite:${encodeURIComponent(`${path}:${lines}`)})`;
+  });
+}
 
 /**
  * Agent prose. GFM on (tables, task lists, strikethrough); routine names in

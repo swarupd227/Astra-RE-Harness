@@ -1,3 +1,4 @@
+import { AdminOnlyNote } from '@/components/AdminOnlyNote';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -14,7 +15,6 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
-import { ErrorBlock } from '@/components/ErrorBlock';
 
 /**
  * Platform index — value-add #2/3/4/5/6/8 entry point.
@@ -109,12 +109,10 @@ export function PlatformIndexPage() {
   if (whoami.isPending) return null;
   if (whoami.data?.persona !== 'admin') {
     return (
-      <div className="mx-auto max-w-[1000px] p-4 lg:p-6">
-        <ErrorBlock
-          title="Admin only"
-          message="The Platform configuration surfaces are only visible to the Admin persona. Switch persona from the top-right menu to continue."
-        />
-      </div>
+      <AdminOnlyNote
+        what="Platform overview is where an Admin configures prompts, languages, validation policy, roles and the model provider."
+        instead={{ to: '/system', label: 'See System health instead' }}
+      />
     );
   }
 

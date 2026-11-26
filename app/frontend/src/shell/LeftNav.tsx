@@ -37,6 +37,8 @@ type Item = {
   icon: typeof Home;
   /** Kept when a label changes, so the e2e suite's `nav-<label>` id stays stable. */
   testId?: string;
+  /** The page itself is Admin-only: don't send other personas to a locked door. */
+  adminOnly?: boolean;
 };
 
 type Section = {
@@ -80,8 +82,8 @@ export const SECTIONS: Section[] = [
     // How the platform itself is set up and running — visible to every persona.
     title: 'Platform',
     items: [
-      { to: '/platform',           label: 'Overview',       icon: Sparkles },
-      { to: '/platform/portfolio', label: 'Portfolio',      icon: Network },
+      { to: '/platform',           label: 'Overview',       icon: Sparkles, adminOnly: true },
+      { to: '/platform/portfolio', label: 'Portfolio',      icon: Network, adminOnly: true },
       { to: '/platform/prompts',   label: 'Prompt Catalog', icon: FileText },
       { to: '/platform/languages', label: 'Languages',      icon: Languages },
       { to: '/system',             label: 'System health',  icon: Activity },
@@ -197,7 +199,7 @@ export function LeftNav() {
             forceOpen={section.items.some((i) => routeMatches(i.to, location.pathname))}
           >
             <div className="space-y-0.5">
-              {section.items.map((item) => (
+              {section.items.filter((item) => !item.adminOnly || isAdmin).map((item) => (
                 <ActiveItem
                   key={item.to}
                   item={item}
@@ -218,7 +220,7 @@ export function LeftNav() {
         {!collapsed && (
           <div
             className="mb-2 flex items-center gap-2 px-1 text-caption text-ink-secondary"
-            title={`${liveLabel} · v${buildInfo.version} · ${buildInfo.builtAt}`}
+            title={`${liveLabel} · build ${buildInfo.commit}`}
             data-testid="rail-footer-identity"
           >
             <span

@@ -69,9 +69,17 @@ export function RoutineFlowBoard() {
       <PageHero
         eyebrow={b.corpusName}
         title="Routine flow board"
-        lead={`${b.totalRoutines.toLocaleString()} routines, from parsed source to committed code. A card moves when an agent or a review action changes its state — nothing here is dragged.`}
+        lead={`${b.totalRoutines.toLocaleString()} routines · ${b.columns
+          .filter((c) => c.total > 0)
+          .map((c) => `${c.total.toLocaleString()} ${columnLabel(c).toLowerCase()}`)
+          .join(' · ')}`}
       />
-      <div className="grid min-w-0 grid-flow-col auto-cols-[260px] gap-4 overflow-x-auto pb-2" data-testid="flow-board-columns">
+      {/* Empty stages shrink to a labelled strip so the stages that hold routines get the width. */}
+      <div
+        className="grid min-w-0 gap-3 overflow-x-auto pb-2"
+        style={{ gridTemplateColumns: b.columns.map((c) => (c.total > 0 ? 'minmax(240px, 1fr)' : '52px')).join(' ') }}
+        data-testid="flow-board-columns"
+      >
         {b.columns.map((col) => (
           <BoardColumn key={col.key} corpusId={id} column={col} />
         ))}
@@ -80,22 +88,41 @@ export function RoutineFlowBoard() {
   );
 }
 
+/** The board's stage names in the words the rest of the app uses. */
+function columnLabel(c: FlowBoardColumn): string {
+  const k = c.key.toLowerCase();
+  if (k === 'built' || k === 'scaffolded') return 'With code';
+  if (k === 'parsed') return 'Not started';
+  return c.label;
+}
+
 function BoardColumn({ corpusId, column }: { corpusId: string; column: FlowBoardColumn }) {
   const style = columnStyle(column.key);
   const Icon = style.icon;
   const reduced = useReducedMotion();
 
+  if (column.total === 0) {
+    return (
+      <div
+        className="flex min-h-[200px] flex-col items-center gap-2 rounded-lg border border-dashed border-line-subtle bg-raised/40 py-3"
+        data-testid={`flow-column-${column.key}`}
+        title={`${columnLabel(column)}: nothing here`}
+      >
+        <Icon className={clsx('h-4 w-4 shrink-0', style.text)} aria-hidden="true" />
+        <span className="font-mono text-micro text-ink-tertiary">0</span>
+        <span className="text-caption text-ink-secondary [writing-mode:vertical-rl]">{columnLabel(column)}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-col rounded-lg border border-line-subtle bg-raised" data-testid={`flow-column-${column.key}`}>
       <div className={clsx('flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-2.5', style.border)}>
         <Icon className={clsx('h-4 w-4 shrink-0', style.text, style.spin && column.total > 0 && 'animate-spin')} aria-hidden="true" />
-        <h2 className="min-w-0 flex-1 truncate text-caption font-semibold text-ink-primary">{column.label}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-caption font-semibold text-ink-primary">{columnLabel(column)}</h2>
         <Badge tone="neutral">{column.total.toLocaleString()}</Badge>
       </div>
       <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2" style={{ maxHeight: 640 }}>
-        {column.routines.length === 0 && (
-          <li className="px-2 py-6 text-center text-caption text-ink-tertiary">Nothing here yet.</li>
-        )}
         <AnimatePresence initial={false}>
           {column.routines.map((r) => (
             <motion.li
@@ -143,8 +170,8 @@ function RoutinePill({ routine }: { routine: FlowBoardRoutine }) {
         )}
         <span className="min-w-0 truncate font-mono text-caption font-medium text-ink-primary">{routine.name}</span>
       </span>
-      <span className="truncate font-mono text-micro text-ink-tertiary">
-        {routine.filePath}:{routine.lineStart}
+      <span className="truncate font-mono text-micro text-ink-tertiary" title={`${routine.filePath}:${routine.lineStart}`}>
+        {routine.filePath.split('/').pop()} · L{routine.lineStart}
       </span>
     </Link>
   );

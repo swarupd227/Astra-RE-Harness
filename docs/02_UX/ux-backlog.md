@@ -12,9 +12,9 @@ commit.
 | 3 | Project detail | `/projects/:id` | Live (fc5947d) |
 | 4 | Routines | `/subroutines` | Built |
 | 5 | Routine + spec review | `/subroutines/:id`, `/review` | Built (part 1) |
-| 6 | Generated code | `/scaffolds` | Backlog |
-| 7 | My reviews | `/my-reviews` | Backlog |
-| 8 | Comments | `/comments` | Backlog |
+| 6 | Generated code | `/scaffolds` | Built (ca6eea0) |
+| 7 | My reviews | `/my-reviews` | Built (57f3aa8) |
+| 8 | Comments | `/comments` | Built, testing |
 | 9 | Compliance | `/compliance` | Backlog |
 | 10 | System health | `/system` | Backlog |
 | 11 | Platform group | `/platform/*` | Backlog |
@@ -23,7 +23,8 @@ commit.
 | 14 | Migration plan | `/corpora/:id/migration-plan` | Backlog |
 | 15 | Routine board | `/corpora/:id/board` | Backlog |
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
-| 17+ | Dependency graph, project settings, New project… | | To review |
+| 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
+| 18+ | Project settings, New project, Assessment, Evidence… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -179,7 +180,17 @@ commit.
    show "15 routines → 11 patterns (3 shared by 2+ routines, 8 one-offs)".
 3. Machine ids under every title ("canonical-vba-json-value-serializer") and "Claim-kind signature:
    edgeCase,invariant,openQuestion" — move to a tooltip; the plain title and description are what people read.
-4. No interaction: the routine chips (Q, Num, JsonArrayText) are not links and there is no "open archetype" or
-   "generate for the whole pattern" action — make chips link to the routine and add the pattern's next step.
+4. (Correction: the routine chips already link to the routine.) Each pattern's next step — the archetype proposal
+   below it — could be summarised on the card header.
 5. Eyebrow "Pattern Analysis" + "corpus" + "archetypes a migration engagement needs" — plain words ("project",
    "how many distinct things the code does").
+
+## 17 · Dependency graph (`/corpora/:id/dependency-graph`)
+1. **The canvas is blank on open** (Travel, 15 nodes, 1440×900 after 9 s): the graph is not fitted into view — open
+   with "fit to view" applied, and say "15 routines · 11 calls" over the canvas until it lays out.
+2. The side panel is raw stats in mono lowercase ("SCCs (cycles): 0", "shared-storage edges: 78", "roots: 4") — turn
+   into plain sentences: "No call cycles. 13 routines call nothing else; 4 are entry points. 2 outside calls (MSXML2)."
+3. The wave legend lists waves 1–5 while this plan has 3 — show only the plan's waves, with their names.
+4. Header copy is parser jargon ("Parser-extracted call graph + shared-storage references", "drill in") — one plain
+   line plus the interaction hint once, at the bottom of the canvas (it is currently said twice).
+5. "← Back to corpus" → remove (breadcrumb does it); "Hide shared-storage edges" → "Hide shared worksheet/variable links".

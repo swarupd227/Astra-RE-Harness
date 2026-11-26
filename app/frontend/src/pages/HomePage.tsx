@@ -99,7 +99,7 @@ function Hero({
 
   return (
     <section>
-      <p className="label">Astra RE Harness</p>
+      <p className="label">Work · Dashboard</p>
       <h1 className="mt-2 max-w-4xl text-h-lg font-semibold tracking-tight leading-tight text-ink-primary">
         {copy.title}
       </h1>
@@ -144,8 +144,10 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
   }
   if (!stats) return null;
 
-  const signedCount = stats.specs.byState['SIGNED'] ?? 0;
-  const scaffoldedCount = stats.specs.byState['SCAFFOLDED'] ?? 0;
+  // Count routines by where they are now. `specs.byState` counts every spec row ever written (old versions,
+  // superseded drafts), which made this page claim 9 848 drafts against 1 631 routines in draft.
+  const signedCount = stats.subroutines.byState['SIGNED'] ?? 0;
+  const scaffoldedCount = (stats.subroutines.byState['SCAFFOLDED'] ?? 0) + (stats.subroutines.byState['COMMITTED'] ?? 0);
 
   const kpis = [
     {
@@ -167,7 +169,7 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
     {
       label: 'Signed specs',
       value: (signedCount + scaffoldedCount).toLocaleString(),
-      sub: scaffoldedCount > 0 ? `${scaffoldedCount} scaffolded` : 'awaiting scaffold',
+      sub: `${scaffoldedCount.toLocaleString()} with code · ${signedCount.toLocaleString()} waiting for code`,
       icon: ShieldCheck,
       tone: 'signed' as const,
     },
@@ -345,33 +347,45 @@ function buildNextSteps(stats?: SystemStats): { label: string; sub: string; href
   if (!stats) return [];
   const out: { label: string; sub: string; href: string; icon: typeof Sparkles }[] = [];
 
-  const parsedSubs = stats.subroutines.byState['PARSED'] ?? 0;
-  if (parsedSubs > 0) {
+  // Current routines, not spec rows (see KPIStrip). Most actionable first; the big "not started" backlog last.
+  const by = stats.subroutines.byState;
+  const review = by['IN_REVIEW'] ?? 0;
+  if (review > 0) {
     out.push({
-      label: `Extract a spec`,
-      sub: `${parsedSubs} subroutine${parsedSubs === 1 ? '' : 's'} parsed and ready for LLM extraction`,
-      href: '/subroutines?state=PARSED',
-      icon: Sparkles,
-    });
-  }
-
-  const drafts = stats.specs.byState['DRAFT'] ?? 0;
-  if (drafts > 0) {
-    out.push({
-      label: `Route ${drafts} draft spec${drafts === 1 ? '' : 's'} to an SME`,
-      sub: 'Specs ready to hand off for review',
-      href: '/subroutines?state=DRAFT',
+      label: `${review.toLocaleString()} spec${review === 1 ? '' : 's'} waiting for an SME`,
+      sub: 'Review and sign them',
+      href: '/my-reviews',
       icon: ClipboardCheck,
     });
   }
 
-  const signed = stats.specs.byState['SIGNED'] ?? 0;
+  const signed = by['SIGNED'] ?? 0;
   if (signed > 0) {
     out.push({
-      label: `Generate scaffold from ${signed} signed spec${signed === 1 ? '' : 's'}`,
-      sub: 'SIGNED specs without a scaffold yet',
-      href: '/subroutines?state=SIGNED',
+      label: `Generate code for ${signed.toLocaleString()} signed spec${signed === 1 ? '' : 's'}`,
+      sub: 'Signed, no generated code yet',
+      href: '/subroutines?view=signed',
       icon: GitBranch,
+    });
+  }
+
+  const drafts = by['DRAFT'] ?? 0;
+  if (drafts > 0) {
+    out.push({
+      label: `Send ${drafts.toLocaleString()} draft spec${drafts === 1 ? '' : 's'} for review`,
+      sub: 'Extracted, not yet sent to an SME',
+      href: '/subroutines?view=draft',
+      icon: ClipboardCheck,
+    });
+  }
+
+  const parsedSubs = by['PARSED'] ?? 0;
+  if (parsedSubs > 0) {
+    out.push({
+      label: `${parsedSubs.toLocaleString()} routine${parsedSubs === 1 ? '' : 's'} not started`,
+      sub: 'Extract specs, a project at a time',
+      href: '/subroutines?view=parsed',
+      icon: Sparkles,
     });
   }
 
