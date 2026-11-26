@@ -220,6 +220,13 @@ Rules:
     return the value exactly as the source computes it (`F17 - F15` stays
     unrounded), round only where the source itself calls `Round`/`ROUND`, and
     apply the format in the form when you display it.
+21. **An id the source computes is computed the same way.** When the source
+    turns a position into an id (`ids = ids & "," & (r - 1)` for row `r`, an
+    `Offset`, a loop counter plus a constant), the package uses that same
+    arithmetic: the item on row 6 of a sheet whose code sends `r - 1` has id
+    5, not 6. A sheet's row number is never an id unless the code sends `r`.
+    One test names an item by its label and asserts the id the source would
+    send for it, worked out from the source's own expression.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
