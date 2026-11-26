@@ -24,7 +24,7 @@ commit.
 | 15 | Routine board | `/corpora/:id/board` | Live |
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Live |
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Live |
-| 18 | New project | `/projects/new` | Live (name check); Git fields open |
+| 18 | New project | `/projects/new` | Live (name check; Git branch/folder fields already present) |
 | 19 | Assessment | `/corpora/:id/assessment` | Live (UI + prompt v1.2) |
 | 20 | Evidence | `/corpora/:id/evidence` | Live (rows, file headings, workbook sub-filters) |
 | 21 | LLM Provider | `/platform/llm` | Live; per-pipeline model list open |
