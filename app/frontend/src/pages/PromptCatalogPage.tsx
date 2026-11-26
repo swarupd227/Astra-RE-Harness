@@ -1,3 +1,4 @@
+import { prettySchema, prettyStack } from '@/lib/targetStacks';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, FileText, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
@@ -58,6 +59,8 @@ export function PromptCatalogPage() {
   const [source, setSource] = useState<string>('all');
   const [target, setTarget] = useState<string>('all');
   const [kind, setKind] = useState<string>('all');
+  const [status, setStatus] = useState<string>('all');
+  const [q, setQ] = useState('');
   const [open, setOpen] = useState<PromptSummary | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -67,9 +70,15 @@ export function PromptCatalogPage() {
       if (source !== 'all' && p.sourceSchema !== source) return false;
       if (target !== 'all' && p.targetStack !== target) return false;
       if (kind !== 'all' && p.kind !== kind) return false;
+      const st = (p.status ?? 'production').toLowerCase();
+      if (status !== 'all' && !st.includes(status)) return false;
+      if (q) {
+        const hay = `${p.kind} ${p.sourceSchema} ${p.targetStack} ${p.status ?? ''}`.toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
       return true;
     });
-  }, [list.data, source, target, kind]);
+  }, [list.data, source, target, kind, status, q]);
 
   const sources = useMemo(() => uniq(list.data?.data.map((p) => p.sourceSchema) ?? []), [list.data]);
   const targets = useMemo(() => uniq(list.data?.data.map((p) => p.targetStack) ?? []), [list.data]);
@@ -117,9 +126,21 @@ export function PromptCatalogPage() {
 
       <Card>
         <CardBody className="flex flex-wrap items-end gap-4">
-          <Filter label="Source schema" value={source} onChange={setSource} options={['all', ...sources]} />
-          <Filter label="Target stack" value={target} onChange={setTarget} options={['all', ...targets]} />
-          <Filter label="Kind" value={kind} onChange={setKind} options={['all', ...kinds]} />
+          <label className="flex min-w-[200px] flex-1 flex-col gap-1">
+            <span className="text-caption text-ink-secondary">Search</span>
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="e.g. extract, react-python"
+              className="rounded-md border border-line-subtle bg-raised px-3 py-1.5 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none"
+              data-testid="prompt-search"
+            />
+          </label>
+          <Filter label="Source language" value={source} onChange={setSource} options={['all', ...sources]} display={sourceLabel} />
+          <Filter label="Target stack" value={target} onChange={setTarget} options={['all', ...targets]} display={targetLabel} />
+          <Filter label="Purpose" value={kind} onChange={setKind} options={['all', ...kinds]} display={kindLabel} />
+          <Filter label="Status" value={status} onChange={setStatus} options={['all', 'production', 'preview']} display={(v) => (v === 'all' ? 'Any status' : v.charAt(0).toUpperCase() + v.slice(1))} />
           <span className="ml-auto font-mono text-caption text-ink-tertiary">
             {filtered.length} of {list.data.data.length} prompts
           </span>
@@ -186,9 +207,7 @@ function PromptCard({ prompt, onOpen }: { prompt: PromptSummary; onOpen: () => v
             <Badge tone="neutral">model: {prompt.modelPreference}</Badge>
           )}
         </div>
-        {prompt.owner && (
-          <div className="font-mono text-caption text-ink-tertiary">owner: {prompt.owner}</div>
-        )}
+        {/* No owner line on the card: owner names mixed product brands on one screen; it stays in the drawer. */}
         <div className="inline-flex items-center gap-1 text-caption text-volt-ink">
           View body <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </div>
@@ -487,20 +506,50 @@ function TemplateBlock({ label, body }: { label: string; body: string }) {
   );
 }
 
+/** Display names for the raw ids the API uses. */
+function sourceLabel(v: string): string {
+  if (v === 'all') return 'All languages';
+  if (v === 'common') return 'Any (shared)';
+  if (v === 'vb6') return 'VB6 / VBA';
+  return prettySchema(v);
+}
+function targetLabel(v: string): string {
+  return v === 'all' ? 'All targets' : prettyStack(v);
+}
+function kindLabel(v: string): string {
+  if (v === 'all') return 'Any purpose';
+  const m: Record<string, string> = {
+    extract: 'Extract specs',
+    'scaffold-generate': 'Generate code',
+    assessment: 'Assessment',
+    'cluster-patterns': 'Find patterns',
+    'reconcile-pattern-clusters': 'Reconcile patterns',
+    'survey-digest': 'Survey digest',
+    'propose-archetype': 'Propose archetype',
+    'copilot-orchestrator': 'Agent (orchestrator)',
+    harmonise: 'Harmonise specs',
+    'faithful-transform': 'Faithful 1:1 conversion',
+    'inplace-transform': 'In-place conversion',
+  };
+  return m[v] ?? v;
+}
+
 function Filter({
   label,
   value,
   onChange,
   options,
+  display = (v: string) => v,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  display?: (v: string) => string;
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-caption uppercase tracking-wide text-ink-tertiary">{label}</span>
+      <span className="text-caption text-ink-secondary">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -510,7 +559,7 @@ function Filter({
         )}
       >
         {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
+          <option key={o} value={o}>{display(o)}</option>
         ))}
       </select>
     </label>

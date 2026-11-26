@@ -29,7 +29,8 @@ commit.
 | 20 | Evidence | `/corpora/:id/evidence` | Backlog |
 | 21 | LLM Provider | `/platform/llm` | Backlog |
 | 22 | Project settings | `/corpora/:id/settings` | Backlog |
-| 23+ | Prompt catalog, Languages, Harmonisation, Roles, Validation policy… | | To review |
+| 23 | Prompt Catalog | `/platform/prompts` | Backlog |
+| 24+ | Languages, Harmonisation, Roles, Validation policy… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -260,3 +261,15 @@ commit.
 4. The project's language, source (upload / Git URL, branch) and name are not editable or even shown here; a rename
    and the Git source belong on this page (Re-sync opens from the project page today).
 5. "Test project" sits under "Display" — move it to its own "Visibility" line (it changes lists, not the banner).
+
+## 23 · Prompt Catalog (`/platform/prompts`)
+1. **Mixed ownership branding in a customer UI**: cards say "owner: Nous · COBOL migration accelerator" next to
+   "owner: Artizent · pre-sales assessment". One product owner name (or hide the owner field outside Admin).
+2. 51 cards (6 400 px) with raw ids — "cobol → dotnet10 · extract @ v0.1", stack ids like "dotnet10-minapi" and
+   "dotnet10-minimalapi" both listed. A compact table (Purpose · Source · Target · Version · Status · Model), grouped by
+   purpose (Extract specs · Generate code · Assess · Patterns · Agent), with the shared target names.
+3. Filters are three unlabelled native selects showing raw ids ("fortran-f77", "office-vba") — label them and use
+   display names; add a search box.
+4. "preview" vs "production" status is the most important fact for a reviewer — make it a filter and colour it.
+5. Intro copy: "spec provenance carries forward into every audit pull" → plain: "Every model call records which
+   prompt and version it used."
