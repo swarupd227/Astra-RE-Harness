@@ -389,6 +389,26 @@ _RESERVED = frozenset({
     "createobject", "getobject", "callbyname",
 })
 
+# A sub call written without brackets: `Name` or `Name arg, arg` as a whole statement. Not an assignment
+# (`x = 1`, `Name = result` inside a function), a member access (`ws.Range`), a label (`Done:`) or `Name(…)`
+# (the bracketed form is handled above).
+_BARE_SUB_CALL_RE = re.compile(r"^\s*([A-Za-z_]\w*)(?:\s*$|\s+(?![=\s])(?!(?:As|To|Then)\b)[^=]*$)")
+# Statements and runtime procedures that look like a bare call but are not a routine of the project.
+_STATEMENT_WORDS = frozenset({
+    "exit", "goto", "gosub", "on", "resume", "return", "stop", "else", "elseif", "option", "attribute",
+    "call", "static", "global", "implements", "event", "raiseevent", "declare", "deftype", "erase", "beep",
+    "randomize", "msgbox", "debug", "load", "unload", "doevents", "line", "get", "put", "seek", "lock",
+    "unlock", "reset", "chdir", "chdrive", "mkdir", "name", "filecopy", "date", "time", "sendkeys", "appactivate",
+    "savesetting", "deletesetting", "mid", "lset", "rset", "width", "not", "and", "or", "new", "each", "in",
+    "error", "private", "optional", "byval", "byref", "paramarray",
+})
+_WORD_RE = re.compile(r"[A-Za-z_]\w*")
+
+
+def _strip_strings(line: str) -> str:
+    """Blank out `"..."` string literals so a name inside a message is not read as a call."""
+    return re.sub(r'"(?:[^"]|"")*"', '""', line)
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Main entry — parse_source
@@ -424,6 +444,7 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
     code_lines = _apply_conditional_compilation(lines, warnings)
     logical = _logical_lines(code_lines, code_block_start)
     subroutines: List[SubroutineSummary] = []
+    pending: List[Tuple[str, str, int, int, List[str], List[str]]] = []
     declare_routines: List[str] = []      # P/Invoke declarations — flagged as warnings
     j = 0
     while j < len(logical):
@@ -485,17 +506,40 @@ def parse_source(filename: str, content: str) -> ParseOutcome:
                     )
                     break
 
-            subroutines.append(SubroutineSummary(
-                name=name,
-                signature=signature,
-                line_start=line_start,
-                line_end=line_end,
-                common_block_refs=(module_name,) if module_name else tuple(),
-                called_subroutines=tuple(sorted(calls)),
-            ))
+            pending.append((name, signature, line_start, line_end, calls, body))
             j = next_j
             continue
         j += 1
+
+    # VBA calls a routine without brackets (`ValidateInputs ws`) and uses a function inside an expression
+    # (`s = BuildRequestJson(ws)`, `If Not IsYes(v) Then`); the start-of-statement patterns above see neither.
+    # A routine declared in this module that another routine's code names (outside strings and comments) is a
+    # call — the name is known to be a routine, so no builtin or worksheet member is ever mistaken for one.
+    local_names = {p[0] for p in pending if " (" not in p[0]}
+    for name, signature, line_start, line_end, calls, body in pending:
+        found = set(calls)
+        for raw in body:
+            code = _strip_strings(_strip_comments(raw))
+            if not code:
+                continue
+            for word in _WORD_RE.findall(code):
+                if word in local_names and word != name:
+                    found.add(word)
+            bare = _BARE_SUB_CALL_RE.match(code)
+            # A lone word may be a line label (`Done:` is split off its colon), so it counts only when it
+            # names a routine of this module; a word followed by arguments cannot be a label.
+            if (bare and bare.group(1).lower() not in _RESERVED and bare.group(1).lower() not in _STATEMENT_WORDS
+                    and (code.strip() != bare.group(1) or bare.group(1) in local_names)):
+                found.add(bare.group(1))
+        found = {c for c in found if c.lower() != name.lower()}
+        subroutines.append(SubroutineSummary(
+            name=name,
+            signature=signature,
+            line_start=line_start,
+            line_end=line_end,
+            common_block_refs=(module_name,) if module_name else tuple(),
+            called_subroutines=tuple(sorted(found)),
+        ))
 
     if declare_routines:
         warnings.append(

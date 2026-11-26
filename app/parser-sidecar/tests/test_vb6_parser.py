@@ -417,6 +417,35 @@ def test_named_argument_colon_equals_is_not_a_statement_separator():
     assert out.subroutines[0].called_subroutines == ("Persist",)
 
 
+def test_vba_calls_without_brackets_and_inside_expressions_are_found():
+    src = (
+        'Attribute VB_Name = "Rater"\n'
+        "Public Sub Calculate()\n"
+        "    Dim ws As Worksheet, s As String\n"
+        "    If Not ValidateInputs(ws) Then Exit Sub\n"
+        "    PrepareOutput ws, 3\n"
+        "    s = BuildJson(ws)\n"
+        '    MsgBox "BuildJson failed"\n'
+        "    ws.Range(\"A1\").Value = s\n"
+        "Done:\n"
+        "End Sub\n"
+        "Private Function ValidateInputs(ws As Worksheet) As Boolean\n"
+        "    ValidateInputs = True\n"
+        "End Function\n"
+        "Private Sub PrepareOutput(ws As Worksheet, n As Long)\n"
+        "End Sub\n"
+        "Private Function BuildJson(ws As Worksheet) As String\n"
+        '    BuildJson = "{}"\n'
+        "End Function\n"
+    )
+    out = parse_source("Rater.bas", src)
+    calc = out.subroutines[0]
+    assert calc.called_subroutines == ("BuildJson", "PrepareOutput", "ValidateInputs")
+    # a function assigning its own return value is not a call, and a label or message text is never one
+    assert out.subroutines[1].called_subroutines == ()
+    assert "Done" not in calc.called_subroutines and "MsgBox" not in calc.called_subroutines
+
+
 def test_dispatcher_falls_back_quietly_while_the_antlr_grammar_is_absent():
     # The ANTLR grammar is not vendored yet: every file goes to v0, and
     # that expected state is not reported as a "panic" on every file.
