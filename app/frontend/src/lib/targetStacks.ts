@@ -65,7 +65,7 @@ export function buildStackOptions(
     const blockedReason = usable.length > 0
       ? null
       : compatible.length > 0
-        ? `${prettyStatus(headline.status)} — ships with a Nous pair engagement`
+        ? `${prettyStatus(headline.status)} — available on request`
         : `No ${lang} archetype for this stack yet`;
     return { stack, headline, variants, usable, selectable: usable.length > 0, blockedReason };
   });

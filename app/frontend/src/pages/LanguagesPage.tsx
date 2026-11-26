@@ -1,3 +1,4 @@
+import { buildStackOptions, prettyStack } from '@/lib/targetStacks';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Languages as LanguagesIcon, Pencil, RotateCcw, Save, X } from 'lucide-react';
@@ -154,6 +155,10 @@ function SchemaCard({
   onToggleEnabled: (enabled: boolean) => void;
   togglePending: boolean;
 }) {
+  const archetypes = useQuery({ queryKey: ['archetypes'], queryFn: api.listArchetypes, staleTime: 5 * 60_000 });
+  const usableTargets = archetypes.data
+    ? buildStackOptions(archetypes.data.data, schema.id).filter((o) => o.selectable).map((o) => o.stack)
+    : null;
   // status may be null in schema.json (Fortran/COBOL ship without an
   // explicit status string today); treat null as "production" — the
   // schema is loaded so it's shippable.
@@ -222,12 +227,14 @@ function SchemaCard({
             </span>
           ))}
           <span className="text-ink-tertiary">→</span>
-          {schema.compatibleTargetStacks.map((t) => (
+          {/* The targets that can actually be generated for this language — the same list the routine page's target
+              picker offers — instead of the schema's own (stale) list. */}
+          {(usableTargets ?? schema.compatibleTargetStacks).map((t) => (
             <span
               key={t}
-              className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary"
+              className="rounded-sm border border-line-subtle bg-sunken px-1.5 py-0.5 text-[11px] text-ink-secondary"
             >
-              {t}
+              {prettyStack(t)}
             </span>
           ))}
         </div>
