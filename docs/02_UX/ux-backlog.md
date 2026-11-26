@@ -25,14 +25,14 @@ commit.
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
 | 18 | New project | `/projects/new` | Backlog |
-| 19 | Assessment | `/corpora/:id/assessment` | Backlog |
+| 19 | Assessment | `/corpora/:id/assessment` | Frontend live; prompt v1.2 committed, not deployed |
 | 20 | Evidence | `/corpora/:id/evidence` | Backlog |
 | 21 | LLM Provider | `/platform/llm` | Backlog |
 | 22 | Project settings | `/corpora/:id/settings` | Backlog |
 | 23 | Prompt Catalog | `/platform/prompts` | Backlog |
 | 24 | Languages | `/platform/languages` | Backlog |
 | 25 | Roles & Permissions | `/platform/roles` | Backlog |
-| 26 | Validation policy | `/platform/validation` | Backlog |
+| 26 | Validation policy | `/platform/validation` | Frontend live; API text committed (5aa981e), not deployed |
 | 27 | Harmonisation | `/platform/harmonisation` | Backlog |
 | 28 | Generated package | `/scaffolds/:id` | Backlog |
 | 29+ | Routine extract & live scaffold screens, validation report (Q2 owner: UX Refresh session)… | | To review |
