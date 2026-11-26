@@ -45,7 +45,8 @@ test.describe('Phase #2d · Validation report card', () => {
       const card = page.getByTestId(cardTestId);
       const postResp = page.waitForResponse(
         (r) => r.url().includes(postPath) && r.request().method() === 'POST',
-        { timeout: 120_000 },
+        // A gate is a real build or test run; the first one also restores packages.
+        { timeout: 300_000 },
       );
       await card.getByRole('button', { name: buttonRegex }).click();
       await postResp;

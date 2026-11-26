@@ -23,7 +23,7 @@ const ENG = { 'X-Dev-Persona': 'engineer' };
 
 test.describe('UX polish #2 · Evidence Trail', () => {
   test.beforeEach(async ({ page }) => {
-    await page.request.post(`${API_BASE}/api/v1/dev/reset`, { headers: ENG, timeout: 30_000 });
+    await page.request.post(`${API_BASE}/api/v1/dev/reset`, { headers: ENG, timeout: 120_000 });
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
   });
@@ -69,6 +69,11 @@ test.describe('UX polish #2 · Evidence Trail', () => {
       await card.getByRole('textbox').fill('Resolved by E2E.');
       await card.getByRole('button', { name: /^Save$/ }).click();
     }
+    // Each decision is saved one at a time; Sign stays disabled until the last has landed.
+    const total = acceptIds.length + resolveIds.length;
+    await expect(
+      page.getByRole('heading', { name: new RegExp(`^${total} \\/ ${total} claims processed$`) }),
+    ).toBeVisible({ timeout: 60_000 });
     await page.getByRole('button', { name: /^Sign spec$/ }).first().click();
     await page.getByRole('checkbox').check();
     await page.getByRole('dialog').getByRole('button', { name: /^Sign spec$/ }).click();

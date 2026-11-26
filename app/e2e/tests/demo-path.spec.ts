@@ -31,7 +31,7 @@ test.describe('Appendix A · 4-minute demo path', () => {
     // spec at IN_REVIEW, and the extract step rejects with state-guard.
     await page.request.post(`${API_BASE}/api/v1/dev/reset`, {
       headers: { 'X-Dev-Persona': 'engineer' },
-      timeout: 30_000,
+      timeout: 120_000,
     });
     // Seed the persona on the first page load only — using addInitScript
     // would re-run on every navigation including the reload triggered by
@@ -130,7 +130,7 @@ test.describe('Appendix A · 4-minute demo path', () => {
       const total = acceptIds.length + resolveIds.length;
       await expect(
         page.getByRole('heading', { name: new RegExp(`^${total} \\/ ${total} claims processed$`) }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 60_000 });
 
       // Sign should now be enabled.
       await page.getByRole('button', { name: /^Sign spec$/ }).first().click();

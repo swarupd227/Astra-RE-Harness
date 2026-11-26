@@ -28,7 +28,7 @@ test.describe('Phase C.3 · Re-sync → SUPERSEDED', () => {
   test.beforeEach(async ({ page }) => {
     await page.request.post(`${API_BASE}/api/v1/dev/reset`, {
       headers: ENG_HEADERS,
-      timeout: 30_000,
+      timeout: 120_000,
     });
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
@@ -96,7 +96,7 @@ test.describe('Phase C.3 · Re-sync → SUPERSEDED', () => {
       const total = acceptIds.length + resolveIds.length;
       await expect(
         page.getByRole('heading', { name: new RegExp(`^${total} \\/ ${total} claims processed$`) }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 60_000 });
       await page.getByRole('button', { name: /^Sign spec$/ }).first().click();
       await page.getByRole('checkbox').check();
       await page.getByRole('dialog').getByRole('button', { name: /^Sign spec$/ }).click();

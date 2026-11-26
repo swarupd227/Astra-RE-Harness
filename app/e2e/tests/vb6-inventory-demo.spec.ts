@@ -180,7 +180,7 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
       const total = acceptIds.length + resolveIds.length;
       await expect(
         page.getByRole('heading', { name: new RegExp(`^${total} \\/ ${total} claims processed$`) }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 60_000 });
 
       await page.getByRole('button', { name: /^Sign spec$/ }).first().click();
       await page.getByRole('checkbox').check();

@@ -43,7 +43,9 @@ export default defineConfig({
     video: recordDemo
       ? { mode: 'on', size: { width: 1600, height: 1000 } }
       : 'retain-on-failure',
-    actionTimeout: recordDemo ? 30_000 : 8_000,
+    // Also the limit for page.request calls. 8 s was tripped by a click and a re-sync dialog on a busy
+    // machine running the whole stack.
+    actionTimeout: recordDemo ? 30_000 : 20_000,
     // The deployed Azure environment has occasionally shown elevated
     // latency (observed >5s just for the base HTML response) — 15s wasn't
     // enough margin once the full SPA bundle load is added on top.

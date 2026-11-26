@@ -45,7 +45,7 @@ test.describe('Phase C.1 · Ingest', () => {
     // schema (avoids the frontend racing the DB recreate on first request).
     await page.request.post(`${API_BASE}/api/v1/dev/reset`, {
       headers: { 'X-Dev-Persona': 'engineer' },
-      timeout: 30_000,
+      timeout: 120_000,
     });
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));

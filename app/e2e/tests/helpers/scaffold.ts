@@ -7,7 +7,7 @@ export const SEED_CORPUS = 'Roll-stock inventory demo (Fortran F77)';
 
 const ENG = { 'X-Dev-Persona': 'engineer' };
 const SME = { 'X-Dev-Persona': 'sme' };
-const T = 180_000; // the config's 8 s action timeout also applies to page.request
+const T = 180_000; // the config's action timeout also applies to page.request
 
 async function getJson(request: APIRequestContext, url: string) {
   const res = await request.get(url, { headers: ENG, timeout: T });
