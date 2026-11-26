@@ -179,7 +179,14 @@ Rules:
     (an HTTP API, a COM object, a database) reaches it through a port that is
     injected into the service. Tests of the service and of the routes use a
     fake port with a fixed answer; the real implementation is never called from
-    a test, so a test cannot depend on the outside service being up.
+    a test, so a test cannot depend on the outside service being up. Wire it so
+    the route tests can swap it: `api.py` gets the port from a provider function
+    (`def get_port() -> Port: return RealPort()`) through
+    `Depends(get_port)`, never from a module-level instance, and
+    `backend/tests/test_api.py` sets
+    `app.dependency_overrides[get_port] = lambda: FakePort(...)` before it
+    builds the `TestClient` (and clears it afterwards). A route test that runs
+    without that override is calling the real service.
 16. **A test of a missing lookup uses a valid input.** Input models reject
     values outside their own constraints (a negative amount, a zero count)
     before any lookup runs, so a test that expects a "not in table" error must
@@ -204,6 +211,10 @@ Rules:
     form, and the form starts from a request the outside service accepts:
     the workbook's current values when the user message lists them, otherwise
     at least one item in any list the service requires to be non-empty.
+19. **Tests are plain functions.** No pytest plugin beyond pytest itself is
+    installed, so an `async def test_…` is skipped, not run. Write every test
+    as `def test_…`; call async code with `asyncio.run(…)`, and test routes
+    through FastAPI's synchronous `TestClient`.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
