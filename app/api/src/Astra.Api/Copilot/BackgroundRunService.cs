@@ -65,6 +65,7 @@ public sealed class BackgroundRunService
         "compile" => "compile",
         "test-pack" => "test-pack",
         "quality" => "quality",
+        "equivalence" => "equivalence",
         _ => gate,
     };
 
@@ -286,6 +287,7 @@ public sealed class BackgroundRunService
                 "compile" => await scope.ServiceProvider.GetRequiredService<CompileValidator>().RunAsync(scaffoldId, actor, ct),
                 "test-pack" => await scope.ServiceProvider.GetRequiredService<TestPackValidator>().RunAsync(scaffoldId, actor, ct),
                 "quality" => await scope.ServiceProvider.GetRequiredService<QualityValidator>().RunAsync(scaffoldId, actor, ct),
+                "equivalence" => await scope.ServiceProvider.GetRequiredService<CrossRuntimeValidator>().RunAsync(scaffoldId, actor, ct),
                 _ => throw new InvalidOperationException($"Unknown gate '{gate}'."),
             };
             _bus.Publish(runId, "validation", "", "item", new

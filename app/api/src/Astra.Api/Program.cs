@@ -357,6 +357,9 @@ builder.Services.AddScoped<Astra.Api.Validation.GoldenDatasetScorer>();
 builder.Services.AddHttpClient("gfortran");
 builder.Services.AddScoped<Astra.Api.Validation.GfortranClient>();
 builder.Services.AddScoped<Astra.Api.Validation.CrossRuntimeValidator>();
+// PHP sidecar (PHP track P7): runs a PHP routine per input vector for the EQUIVALENCE gate.
+builder.Services.AddHttpClient("php");
+builder.Services.AddScoped<Astra.Api.Validation.PhpClient>();
 
 // ─── Maven sidecar HTTP client (Phase 5.5) ────────────────────────────
 // Mirrors the gfortran wiring above so the validator path can dispatch

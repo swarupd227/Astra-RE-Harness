@@ -131,6 +131,10 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   --revision-suffix v<sha>` (find rg/name with `az containerapp list`). Bump `parser_sidecar/__init__.py`
   `__version__` with every sidecar change; `GET /health/ready` on the API reports `astra-parser <version>` and is
   the only external proof the deploy landed (direct gRPC to the sidecar from outside times out).
+  **The PHP sidecar** (`app/php-sidecar`, PHP → Java EQUIVALENCE, `docs/05_Runtime/php-equivalence.md`) is a Container
+  App `php-sidecar` in the same environment, deployed the same way (image `php-sidecar:<sha>`, port 51060, HTTPS
+  ingress); it runs code, so it requires `PHP_SIDECAR_TOKEN` and the API sends `Validation__PhpToken` with
+  `Validation__PhpEndpoint`. `GET /health` on it reports its version and PHP's.
 - **Production caution**: Compile / Test-pack validation runs execute in-process on the live API container;
   weigh before triggering them for testing. Never perform permanent deletions.
 - **Persona model**: Engineer extracts/routes/generates/runs gates; SME reviews and signs; Admin surveys,

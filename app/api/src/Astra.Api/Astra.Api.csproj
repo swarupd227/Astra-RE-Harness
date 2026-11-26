@@ -110,6 +110,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The JUnit harness a PHP EQUIVALENCE run adds to a generated Java package (PhpEquivalenceRunner). -->
+    <None Remove="Validation/PhpEquivalence/*.java" />
+    <EmbeddedResource Include="Validation/PhpEquivalence/*.java" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Externalized scaffold archetypes (Phase #3c). Each archetype is a
          directory of template files (.cs, .java, .xml, etc.) plus an
          archetype.json. These are *template* content shipped with the

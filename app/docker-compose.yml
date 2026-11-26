@@ -114,6 +114,27 @@ services:
       retries: 5
     networks: [astra]
 
+  # ─── php sidecar (PHP track P7 — PHP → Java equivalence) ───────────────
+  # PHP 8.4 (CLI + CGI) behind FastAPI. Runs one PHP routine per input vector
+  # in its own php-cgi process — declarations only, no network, no other
+  # programs, open_basedir on the run directory, time and memory limits — so
+  # the EQUIVALENCE gate can compare it with the generated Java method.
+  php-sidecar:
+    build:
+      context: ./php-sidecar
+      target: runtime
+    ports:
+      - "${PHP_SIDECAR_PORT:-51060}:51060"
+    environment:
+      PHP_PORT: 51060
+      PHP_WORKDIR: /var/tmp/php-runs
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51060/health', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [astra]
+
   # ─── gnucobol sidecar (Phase 5.6 — COBOL cross-runtime equivalence) ───
   # Compiles COBOL source on demand and runs the resulting binary against
   # a stdin-encoded input vector. Mirrors the gfortran sidecar so the
@@ -263,6 +284,8 @@ services:
         condition: service_started
       maven-sidecar:
         condition: service_started
+      php-sidecar:
+        condition: service_started
       gnucobol-sidecar:
         condition: service_started
       fpc-sidecar:
@@ -284,6 +307,7 @@ services:
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-astra_dev_pw}
       Validation__GfortranEndpoint: "http://gfortran-sidecar:51052"
       Validation__MavenEndpoint: "http://maven-sidecar:51053"
+      Validation__PhpEndpoint: "http://php-sidecar:51060"
       Validation__GnucobolEndpoint: "http://gnucobol-sidecar:51054"
       Validation__FpcEndpoint: "http://fpc-sidecar:51055"
       Validation__GppEndpoint: "http://gpp-sidecar:51057"

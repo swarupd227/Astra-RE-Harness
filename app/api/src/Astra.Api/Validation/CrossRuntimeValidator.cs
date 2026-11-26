@@ -37,6 +37,8 @@ public sealed class CrossRuntimeValidator
     private readonly GnuCobolClient _gnucobol;
     private readonly FpcClient _fpc;
     private readonly GppClient _gpp;
+    private readonly PhpClient _php;
+    private readonly MavenClient _maven;
     private readonly ILogger<CrossRuntimeValidator> _log;
 
     public CrossRuntimeValidator(
@@ -50,8 +52,12 @@ public sealed class CrossRuntimeValidator
         GnuCobolClient gnucobol,
         FpcClient fpc,
         GppClient gpp,
+        PhpClient php,
+        MavenClient maven,
         ILogger<CrossRuntimeValidator> log)
     {
+        _php = php;
+        _maven = maven;
         _db = db;
         _blob = blob;
         _storage = storage;
@@ -68,7 +74,8 @@ public sealed class CrossRuntimeValidator
     public async Task<ValidationRun> RunAsync(
         Guid scaffoldId,
         DevPersonaContext? actor,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<System.Text.Json.Nodes.JsonObject>? engineerVectors = null)
     {
         var scaffold = await _db.Scaffolds
             .Include(s => s.Spec).ThenInclude(s => s!.Subroutine)
@@ -202,9 +209,16 @@ public sealed class CrossRuntimeValidator
                 return await RunCppSmokeAsync(scaffold, run, actor, ct);
             }
 
-            // ─── Phase 15.1.d — php / openedge: no sidecar exists at all ───
-            if (string.Equals(sourceLanguage, "php", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(sourceLanguage, "openedge", StringComparison.OrdinalIgnoreCase))
+            // ─── PHP track P7 — php source: per-vector equivalence against the Java package ───
+            // Vectors from the signed spec; the PHP routine runs in the php sidecar, the Java method in the
+            // maven sidecar; each vector PASSED/FAILED/SKIPPED with its reason (PhpEquivalenceRunner).
+            if (string.Equals(sourceLanguage, "php", StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunPhpEquivalenceAsync(scaffold, run, actor, engineerVectors, ct);
+            }
+
+            // ─── Phase 15.1.d — openedge: no sidecar exists at all ───
+            if (string.Equals(sourceLanguage, "openedge", StringComparison.OrdinalIgnoreCase))
             {
                 run.Status = "SKIPPED";
                 run.ErrorCode = "equivalence.not_wired_for_language";
@@ -629,6 +643,33 @@ public sealed class CrossRuntimeValidator
         _log.LogInformation(
             "Per-routine equivalence for scaffold {Scaffold} (DEPTPAY.AVERAGE-SALARY): {Status} ({Summary})",
             scaffold.Id, run.Status, run.Summary);
+        return run;
+    }
+
+    /// <summary>PHP track P7 — see <see cref="PhpEquivalence.PhpEquivalenceRunner"/>.</summary>
+    private async Task<ValidationRun> RunPhpEquivalenceAsync(
+        Scaffold scaffold,
+        ValidationRun run,
+        DevPersonaContext? actor,
+        IReadOnlyList<System.Text.Json.Nodes.JsonObject>? engineerVectors,
+        CancellationToken ct)
+    {
+        var runner = new PhpEquivalence.PhpEquivalenceRunner(_db, _blob, _php, _maven, _log);
+        var outcome = await runner.RunAsync(scaffold, engineerVectors, ct);
+
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        run.LogBlobUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, logKey, outcome.Transcript, "text/plain", ct);
+        run.MetricsJson = JsonSerializer.Serialize(outcome.Metrics);
+        run.Status = outcome.Status;
+        run.ErrorCode = outcome.ErrorCode;
+        run.Summary = outcome.Summary;
+        run.CompletedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new { runId = run.Id, stage = run.Stage, status = run.Status, summary = run.Summary, routine = scaffold.Spec?.Subroutine?.Name },
+            ct: ct);
+        _log.LogInformation("PHP equivalence for scaffold {Scaffold}: {Status} ({Summary})", scaffold.Id, run.Status, run.Summary);
         return run;
     }
 

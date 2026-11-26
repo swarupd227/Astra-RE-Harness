@@ -161,15 +161,32 @@ public static class ValidationEndpoints
         // ─── Trigger a cross-runtime equivalence pass (sync) ────────────────
         app.MapPost("/api/v1/scaffolds/{id:guid}/validate/equivalence", async (
             Guid id,
+            HttpRequest http,
             CrossRuntimeValidator validator,
             DevPersonaContext persona,
             CancellationToken ct) =>
         {
             if (persona.Persona != Persona.Engineer)
                 return Forbid("auth.engineer_required", "Only engineers can trigger validation.");
+            // Optional body {vectors: [{named: {...}, superglobals?: {...}, label?}]}: cases an engineer adds to the
+            // ones drawn from the signed spec (PHP routines). No body keeps the call it always was.
+            List<System.Text.Json.Nodes.JsonObject>? extra = null;
+            if (http.ContentLength is > 0 || http.ContentLength is null && http.Headers.ContentType.ToString().Contains("json"))
+            {
+                try
+                {
+                    var body = await System.Text.Json.Nodes.JsonNode.ParseAsync(http.Body, cancellationToken: ct);
+                    extra = (body?["vectors"] as System.Text.Json.Nodes.JsonArray)?.OfType<System.Text.Json.Nodes.JsonObject>()
+                        .Select(v => (System.Text.Json.Nodes.JsonObject)v.DeepClone()).Take(16).ToList();
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    return Results.BadRequest(new { error = "body.invalid_json", message = "The body must be JSON: {\"vectors\": [...]}" });
+                }
+            }
             try
             {
-                var run = await validator.RunAsync(id, persona, ct);
+                var run = await validator.RunAsync(id, persona, ct, extra);
                 return Results.Ok(ToResponse(run));
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))

@@ -412,6 +412,8 @@ function StageCard({
         {expanded && run?.metrics && (
           run.stage === 'FALSIFYING'
             ? <FalsifyingDetail metrics={run.metrics as unknown as FalsifyingMetrics} />
+            : (run.metrics as { mode?: string }).mode === 'per-vector' && Array.isArray((run.metrics as { vectors?: unknown }).vectors)
+            ? <EquivalenceVectorsDetail metrics={run.metrics as unknown as EquivalenceVectorMetrics} />
             : (
               <pre className="overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-caption text-ink-secondary">
                 {JSON.stringify(run.metrics, null, 2)}
@@ -443,6 +445,74 @@ function StageCard({
         )}
       </CardBody>
     </Card>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// PHP track P7 — per-vector EQUIVALENCE drilldown
+// ────────────────────────────────────────────────────────────────────────
+
+type EquivalenceVector = {
+  id: string;
+  source: string;
+  label: string;
+  inputs: unknown;
+  request?: unknown;
+  status: string;
+  reason: string;
+  diff?: string | null;
+  notes?: string[];
+};
+
+type EquivalenceVectorMetrics = {
+  routine: string;
+  javaTarget?: { className: string; method: string; why?: string };
+  php?: { version?: string };
+  vectorCount: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  errored: number;
+  vectors: EquivalenceVector[];
+};
+
+/** Each input vector the source routine and the generated code were run on, with its verdict and reason. */
+function EquivalenceVectorsDetail({ metrics }: { metrics: EquivalenceVectorMetrics }) {
+  const tone = (s: string) =>
+    s === 'PASSED' ? 'text-status-passed' : s === 'FAILED' || s === 'ERRORED' ? 'text-status-failed' : 'text-ink-tertiary';
+  return (
+    <div className="space-y-3 rounded-sm bg-sunken px-3 py-3" data-testid="equivalence-vectors">
+      <p className="text-caption text-ink-secondary">
+        PHP <span className="font-mono">{metrics.routine}</span>
+        {metrics.php?.version ? ` (php ${metrics.php.version})` : ''} against Java{' '}
+        <span className="font-mono">
+          {metrics.javaTarget ? `${metrics.javaTarget.className.split('.').pop()}.${metrics.javaTarget.method}` : '—'}
+        </span>
+        {' · '}
+        {metrics.passed} passed · {metrics.failed} failed · {metrics.skipped} skipped
+        {metrics.errored > 0 ? ` · ${metrics.errored} errored` : ''}
+      </p>
+      <ul className="space-y-2">
+        {metrics.vectors.map((v) => (
+          <li key={v.id} className="rounded-sm border border-line px-2 py-1.5" data-testid={`equivalence-vector-${v.id}`}>
+            <div className="flex flex-wrap items-baseline gap-2 text-caption">
+              <span className={`font-mono font-semibold ${tone(v.status)}`}>{v.status}</span>
+              <span className="font-mono text-ink-secondary">{v.id}</span>
+              <span className="text-ink-tertiary">{v.source} · {v.label}</span>
+            </div>
+            <p className="mt-1 break-all font-mono text-caption text-ink-secondary">
+              {JSON.stringify(v.inputs)}
+              {v.request ? ` · request ${JSON.stringify(v.request)}` : ''}
+            </p>
+            <p className="mt-1 text-caption text-ink-secondary">{v.reason}</p>
+            {v.diff && <p className="mt-0.5 font-mono text-caption text-status-failed">{v.diff}</p>}
+            {(v.notes ?? []).map((n, i) => (
+              <p key={i} className="mt-0.5 text-caption text-ink-tertiary">{n}</p>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

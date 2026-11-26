@@ -19,15 +19,15 @@
   "owner": "Nous · Java/Spring + .NET migration accelerator",
   "status": "preview",
   "verification": {
-    "sourceExecutionEquivalence": "not-wired",
-    "sourceExecutionEquivalenceReason": "PHP has a free/OSS runtime, so source-execution equivalence is FEASIBLE via a php-sidecar (run the source, compare outputs) — unlike ABL. That sidecar is not built yet, so equivalence is NOT claimed here.",
+    "sourceExecutionEquivalence": "per-vector",
+    "sourceExecutionEquivalenceReason": "The EQUIVALENCE gate runs the PHP routine in the php-sidecar and the matching Java method in the maven-sidecar on vectors from the signed spec, and reports each vector PASSED/FAILED/SKIPPED (docs/05_Runtime/php-equivalence.md). Routines that need a database, uploads or the network are skipped with the reason.",
     "gatesActive": [
       "golden-dataset extraction score (php, target-neutral claims)",
       "maven-sidecar offline compile (mvn -o test-compile)",
-      "JUnit 5 suite offline (example tests over the real domain logic)"
+      "JUnit 5 suite offline (example tests over the real domain logic)",
+      "php-sidecar source-execution equivalence, per vector"
     ],
     "gatesAvailableNotYetWired": [
-      "php-sidecar source-execution equivalence (feasible; not built)",
       "property-test-sidecar (Hypothesis) — needs per-claim generatorHints on php.schema.json"
     ]
   },
