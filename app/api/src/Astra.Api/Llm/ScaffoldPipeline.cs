@@ -165,6 +165,9 @@ public sealed class ScaffoldPipeline
         var callTreeNote = unit is null && string.Equals(targetStack, "react-python", StringComparison.OrdinalIgnoreCase)
             ? await LoadCallTreeSourceAsync(spec.Subroutine, ct)
             : null;
+        var workbookInputsNote = unit is null && string.Equals(targetStack, "react-python", StringComparison.OrdinalIgnoreCase)
+            ? await LoadWorkbookInputsAsync(spec.Subroutine, ct)
+            : null;
 
         var req = new ScaffoldRequest(
             spec.Id,
@@ -180,7 +183,8 @@ public sealed class ScaffoldPipeline
             unit,
             previousFiles,
             dataTables.Count == 0 ? null : WorkbookTables.DescribeForPrompt(dataTables),
-            callTreeNote);
+            callTreeNote,
+            workbookInputsNote);
 
         object? finalPayload = null;
         var providerReportedError = false;
@@ -404,6 +408,34 @@ public sealed class ScaffoldPipeline
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Could not read the call tree of {Routine}; generating without it", sub.Name);
+            return null;
+        }
+    }
+
+    /// <summary>The host workbook's view of a routine plus the current and allowed values of the sheets its module reads; null for ordinary source or on any read problem.</summary>
+    private async Task<string?> LoadWorkbookInputsAsync(Subroutine? sub, CancellationToken ct)
+    {
+        var path = sub?.SourceFile?.RelativePath;
+        if (sub is null || path is null || OfficeHostContext.SplitPath(path) is not { } split) return null;
+        try
+        {
+            var doc = await _db.SourceFiles.AsNoTracking()
+                .Where(f => f.SourceVersionId == sub.SourceFile!.SourceVersionId && f.RelativePath == split.Document)
+                .Select(f => new { f.BlobUri, f.Kind })
+                .FirstOrDefaultAsync(ct);
+            if (doc is null || doc.Kind != Artefacts.ArtefactKinds.Workbook) return null;
+            var bytes = await _blob.GetBytesAsync(doc.BlobUri, ct);
+            var surface = WorkbookSurface.Read(bytes, Path.GetFileName(split.Document));
+            if (surface.Sheets.Count == 0) return null;
+            var module = Path.GetFileNameWithoutExtension(split.ModuleFile);
+            var sheets = WorkbookInputs.SheetsOf(surface, module);
+            var host = OfficeHostContext.Build(surface, split.ModuleFile, sub.Name);
+            var inputs = WorkbookInputs.Describe(bytes, surface, sheets);
+            return inputs is null ? host : host + "\n\n" + inputs;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the inputs of {Document}; generating without them", split.Document);
             return null;
         }
     }

@@ -44,7 +44,10 @@ public sealed record ScaffoldRequest(
     string? DataTablesNote = null,
     // The source of the routine and of the routines it calls (CallTreeSource), so a request it sends to an outside
     // service is reproduced from code rather than guessed from the spec. Null when it calls nothing of the project.
-    string? CallTreeSourceNote = null);
+    string? CallTreeSourceNote = null,
+    // For a workbook routine: its host workbook's view (labels, controls) and the current values and allowed values of
+    // the sheets its module reads (WorkbookInputs), so the form starts where the workbook was and offers real choices.
+    string? WorkbookInputsNote = null);
 
 public sealed record ScaffoldFile(
     string Path,

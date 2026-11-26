@@ -234,7 +234,7 @@ def cell(name: str, row: int, col: int) -> object | None:
         _ => "\"" + v + "\"",
     };
 
-    private static XDocument? Load(ZipArchive zip, string path)
+    internal static XDocument? Load(ZipArchive zip, string path)
     {
         var e = zip.GetEntry(path);
         if (e is null || e.Length > MaxPartBytes) return null;
@@ -243,7 +243,7 @@ def cell(name: str, row: int, col: int) -> object | None:
         return XDocument.Load(r);
     }
 
-    private static List<string> SharedStrings(ZipArchive zip)
+    internal static List<string> SharedStrings(ZipArchive zip)
     {
         var list = new List<string>();
         var doc = Load(zip, "xl/sharedStrings.xml");
@@ -253,10 +253,10 @@ def cell(name: str, row: int, col: int) -> object | None:
         return list;
     }
 
-    private static string Resolve(string target) =>
+    internal static string Resolve(string target) =>
         target.StartsWith('/') ? target.TrimStart('/') : "xl/" + target.Replace("../", "");
 
-    private static bool TryRef(string r, out int row, out int col)
+    internal static bool TryRef(string r, out int row, out int col)
     {
         row = 0; col = 0;
         var i = 0;
