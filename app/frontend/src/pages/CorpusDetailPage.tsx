@@ -108,8 +108,8 @@ export function CorpusDetailPage() {
             <Badge tone={c.state === 'FAILED' ? 'failed' : 'signed'}>{formatState(c.state)}</Badge>
           </span>
         }
-        actions={<>
-          {/* Views: what this project can show you. Quiet, one row. */}
+        children={<div className="flex flex-wrap items-center gap-2">
+          {/* Views: what this project can show you. Quiet, one row under the title so the title line keeps its width. */}
           <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Views">
             <ViewLink onClick={() => navigate(`/corpora/${id}/docs`)} testid="open-docs" icon={BookOpen} label="Docs" />
             <ViewLink onClick={() => navigate(`/corpora/${id}/migration-plan`)} testid="open-migration-plan" icon={Layers} label="Migration plan" />
@@ -158,7 +158,7 @@ export function CorpusDetailPage() {
             </div>
           )}
           </div>
-        </>}
+        </div>}
       />
 
       {/* Where this project stands, and the one thing to do next */}

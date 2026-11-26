@@ -24,7 +24,7 @@ const SCAFFOLD = { label: 'Scaffold artifact', href: '/scaffolds/:id' };
 export const ROUTE_META: RouteMeta[] = [
   { pattern: '/', title: 'Home', crumbs: [{ label: 'Home' }] },
   { pattern: '/w/:conversationId', title: 'Programme', crumbs: [ASK, { label: 'Programme' }] },
-  { pattern: '/home', title: 'Home', crumbs: [{ label: 'Home' }] },
+  { pattern: '/home', title: 'Dashboard', crumbs: [{ label: 'Dashboard' }] },
   { pattern: '/system', title: 'System health', crumbs: [{ label: 'System health' }] },
 
   // "Projects" is the user-facing word; /corpora is a legacy alias so old

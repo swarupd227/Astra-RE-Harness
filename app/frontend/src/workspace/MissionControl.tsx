@@ -7,6 +7,12 @@ import { FunnelBar } from './FunnelBar';
 import { StatePill } from './StatePill';
 import { formatInt, formatLanguage, formatMoney, formatPercent, formatState, relativeTime } from './format';
 
+/** "<1%" rather than a misleading "0%" when a few of many are done. */
+function pct(n: number, total: number): string {
+  const v = (n / total) * 100;
+  return n > 0 && v < 1 ? '<1%' : `${Math.round(v)}%`;
+}
+
 const ACTIVE_RUN = new Set(['RUNNING', 'QUEUED', 'PENDING', 'IN_PROGRESS']);
 
 /** The one sentence that tells a lead what to do next on a programme, read off its funnel. */
@@ -94,7 +100,7 @@ export function MissionControl({
           icon={Code2}
           label="Routines with code"
           value={formatInt(verified)}
-          sub={t?.total ? `${Math.round((verified / t.total) * 100)}% of all routines` : '—'}
+          sub={t?.total ? `${pct(verified, t.total)} of all routines` : '—'}
           to="/scaffolds"
           testid="home-kpi-code"
         />

@@ -7,17 +7,20 @@ commit.
 
 | # | Page | Route | Status |
 |---|---|---|---|
-| 1 | Home | `/` | Built — shipping with page 2 |
-| 2 | Projects list | `/projects` | Built — shipping with page 1 |
-| 3 | Project detail | `/projects/:id` | Backlog |
-| 4 | Routines | `/subroutines` | Backlog |
-| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Backlog |
+| 1 | Home | `/` | Live (fc5947d) |
+| 2 | Projects list | `/projects` | Live (fc5947d) |
+| 3 | Project detail | `/projects/:id` | Live (fc5947d) |
+| 4 | Routines | `/subroutines` | Built |
+| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Built (part 1) |
 | 6 | Generated code | `/scaffolds` | Backlog |
 | 7 | My reviews | `/my-reviews` | Backlog |
 | 8 | Comments | `/comments` | Backlog |
 | 9 | Compliance | `/compliance` | Backlog |
 | 10 | System health | `/system` | Backlog |
-| 11+ | Platform pages, Dashboard, settings… | | To review |
+| 11 | Platform group | `/platform/*` | Backlog |
+| 12 | Dashboard | `/home` | Backlog |
+| 13 | Docs | `/corpora/:id/docs` | Backlog |
+| 14+ | Migration plan, Routine board, Pattern analysis, Dependency graph, settings… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -98,3 +101,47 @@ commit.
 4. Recent problems: last failed runs / validation runs stuck in RUNNING, with links.
 5. Identity card: "Signed in as Dev User · Engineer"; the "Bypass true" and X-Dev-Persona text move into an
    Admin-only "Authentication (dev mode)" note.
+
+## 11 · Platform group (`/platform`, portfolio, golden dataset, prompts, signatures, harmonisation, languages)
+1. **Dead ends for non-admins:** the rail shows Platform → Overview and Portfolio to every persona, but both answer
+   with a red "Admin only" box. Hide admin-only items from non-admins in the rail, and turn the page itself into a calm
+   "Ask an Admin" note naming what the page shows (not an error block).
+2. **Golden Dataset** says "Aggregate score 100%" from **1 of 160** entries scored — show "1 of 160 scored" as the
+   headline and the score only with its coverage ("100% on 1 entry"); page is 16 800 px: page the entry list
+   (50 at a time) and fold each entry's sample code.
+3. **Signature Health:** "5 drifted" is the actionable number — lead with it, list the drifted specs first with a
+   "Re-verify" action per spec (and per project), healthy ones folded.
+4. **Prompt Catalog** (4 800 px) and **Languages** (4 000 px): search plus filter chips already exist — add
+   collapsed-by-default rows and a count line ("62 prompts · 9 languages"); open one at a time.
+5. **Harmonisation:** empty-state explaining what triggers findings (signed specs in one project) and linking to the
+   project with the most signed specs.
+6. Consistent eyebrows: these pages say "Quality", "Governance", "Spec schemas", "Prompt asset library" — use the
+   rail group name ("Quality" / "Platform").
+
+## 12 · Dashboard (`/home`)
+1. **It duplicates Home and contradicts it.** Same estate numbers in a different shape, and the numbers disagree:
+   "Route **9 848** draft specs" while its own Routines card says **1 631** draft; "37 signed specs awaiting scaffold"
+   while most of them already have code (Home: 33 with code). Fix the counts at the source (one overview query feeds
+   both pages) — wrong numbers on a dashboard are worse than none.
+2. Give it a distinct job: **Activity** — Claude spend (today / 7 d / 30 d, per project), pipeline activity as
+   readable sentences ("Validation passed for CalculateApiPremium · React + Python", not `validation.completed ·
+   scaffold`), and recent sign-offs. Estate progress and "what's next" live on Home only.
+3. Title and crumb say "Dashboard" (the tab and breadcrumb still say "Home" — two Homes). Eyebrow "Work", not
+   "Astra RE Harness".
+4. "What's next" items link to the filtered list they describe (Routines → Not started / Draft / Signed) instead of
+   generic copy; remove "Extract a spec · 9 703 parsed" as a to-do (it is the whole backlog, not a next step).
+5. The project list duplicates Projects: replace with "Projects changed this week" (≤ 5) and a link.
+6. "Add project" button text wraps onto two lines — give the card header room.
+
+## 13 · Docs (`/corpora/:id/docs`)
+1. **Citations render as raw text** — "[Ultimate_Comprehensive_Travel_Insurance_Raterv1.xlsm/TravelRaterApi.bas:L39–L89]"
+   in the middle of sentences, often wrapping over two lines. CLAUDE.md: anything that cites uses `CitationChip` —
+   render them as compact chips ("TravelRaterApi.bas · L39–89") that open the source.
+2. **"Quality 15/100 · 3/4 checks"** in a red pill on the Overview with no explanation of what scored low; make it a
+   button that opens the failed check and its reason, and say what "revised" means.
+3. **No way forward on 102 drafts:** every section says "0/n signed" and there is no review/approve action in view,
+   no bulk "Review this section", and no export/PDF button on the page. Add a header action row: Review next draft ·
+   Export PDF · Regenerate (⋯).
+4. The middle column lists one document per section and wastes ~200 px at 1440 — collapse it into the left nav when a
+   section has a single document.
+5. "102 Draft · 1 SUPERSEDED" pills: same casing, and make them filters.

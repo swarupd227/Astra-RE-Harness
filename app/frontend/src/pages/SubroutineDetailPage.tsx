@@ -110,7 +110,8 @@ export function SubroutineDetailPage() {
           <Button
             // Re-extraction replaces the draft and drops every claim review
             // taken against it — it used to fire straight off this button.
-            variant={hasExistingSpec ? 'secondary' : 'primary'}
+            // With a spec in place this is the rare, costly action: quiet, beside the spec link rather than its equal.
+            variant={hasExistingSpec ? 'ghost' : 'primary'}
             size="md"
             onClick={() =>
               hasExistingSpec
@@ -187,7 +188,11 @@ export function SubroutineDetailPage() {
       <ConfirmModal
         open={confirmReextract}
         title="Re-extract this spec?"
-        body={`${s.name} already has a spec. Re-extracting calls the model again and replaces it.`}
+        body={
+          s.state === 'DRAFT' || s.state === 'EXTRACTING'
+            ? `${s.name} already has a draft spec. Re-extracting calls the model again and replaces it.`
+            : `${s.name} has a ${s.state === 'IN_REVIEW' ? 'spec in review' : 'signed spec'}. Re-extracting calls the model again and replaces it with a new draft — every claim decision${s.state === 'IN_REVIEW' ? '' : ' and the sign-off'} has to be made again. The current version stays in the audit trail.`
+        }
         consequences={[
           'Every claim decision taken on the current draft is discarded.',
           s.state === 'SIGNED' || s.state === 'SCAFFOLDED'

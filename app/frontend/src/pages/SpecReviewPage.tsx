@@ -98,6 +98,9 @@ export function SpecReviewPage() {
   const officeSource = isOfficeDocumentPath(sub.data?.file?.relativePath);
   const [targetOpen, setTargetOpen] = useState(!officeSource);
   const [detailsOpen, setDetailsOpen] = useState(!officeSource);
+  // The evidence trail (hashes, provider, signature) is for whoever audits the spec; reviewers come for the claims.
+  // Folded by default, opened right after a sign-off so the signer sees what they just produced.
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   useEffect(() => {
     if (sub.data?.id) { setTargetOpen(!officeSource); setDetailsOpen(!officeSource); }
   }, [sub.data?.id, officeSource]);
@@ -250,6 +253,7 @@ export function SpecReviewPage() {
     await queryClient.invalidateQueries({ queryKey: ['spec', id] });
     await queryClient.invalidateQueries({ queryKey: ['subroutine', id] });
     setSignOpen(false);
+    setEvidenceOpen(true);
   };
 
   const sourcePane = (
@@ -402,7 +406,19 @@ export function SpecReviewPage() {
         </div>
       </header>
 
-      <div className="flex items-center justify-end border-b border-line-subtle bg-raised px-6 py-1">
+      <div className="flex items-center justify-end gap-3 border-b border-line-subtle bg-raised px-6 py-1">
+        {signed && sp.signature && (
+          <button
+            type="button"
+            onClick={() => setEvidenceOpen((v) => !v)}
+            aria-expanded={evidenceOpen}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-caption text-ink-tertiary hover:text-ink-primary"
+            data-testid="evidence-toggle"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            {evidenceOpen ? 'Hide evidence & signature' : 'Evidence & signature'}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setDetailsOpen((v) => !v)}
@@ -482,8 +498,8 @@ export function SpecReviewPage() {
         </div>
       )}
 
-      {signed && sp.signature && (
-        <div className="px-6 pt-4">
+      {signed && sp.signature && evidenceOpen && (
+        <div className="max-h-[45vh] overflow-y-auto border-b border-line-subtle px-6 pb-4 pt-4">
           <EvidenceTrail specId={sp.id} />
         </div>
       )}
@@ -657,12 +673,20 @@ function ScaffoldCta({ specId, targetStack }: { specId: string; targetStack: str
     retry: 0,
     staleTime: 0,
   });
+  if (probe.isPending) {
+    // Never offer "Generate" before we know whether code already exists — that showed a regenerate button for a
+    // second on every visit to a spec that already had its package.
+    return (
+      <Button variant="secondary" size="md" disabled data-testid="scaffold-cta-checking">
+        <Cog className="h-4 w-4" /> Checking for generated code…
+      </Button>
+    );
+  }
   if (probe.data?.id) {
-    // Name the stack the package was actually built for — "Open scaffold"
-    // alone gave no clue whether you were about to read Java or C#.
+    // The package exists: opening it is the next step, so it is the primary action. Name the stack it was built for.
     return (
       <Link to={`/scaffolds/${probe.data.id}`}>
-        <Button variant="secondary" size="md">
+        <Button variant="primary" size="md">
           <Cog className="h-4 w-4" /> Open scaffold · {prettyStack(probe.data.targetPlatform)}
         </Button>
       </Link>
