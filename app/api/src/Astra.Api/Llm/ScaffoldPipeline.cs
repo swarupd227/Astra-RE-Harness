@@ -160,6 +160,11 @@ public sealed class ScaffoldPipeline
         var dataTables = unit is null && string.Equals(targetStack, "react-python", StringComparison.OrdinalIgnoreCase)
             ? await LoadDataTablesAsync(spec.Subroutine, ct)
             : new List<DataTable>();
+        // The canonical path writes a package from the spec; the code of the routine and of what it calls travels with
+        // it so outside requests are reproduced key for key (faithful mode already converts the whole unit from source).
+        var callTreeNote = unit is null && string.Equals(targetStack, "react-python", StringComparison.OrdinalIgnoreCase)
+            ? await LoadCallTreeSourceAsync(spec.Subroutine, ct)
+            : null;
 
         var req = new ScaffoldRequest(
             spec.Id,
@@ -174,7 +179,8 @@ public sealed class ScaffoldPipeline
             repairHint,
             unit,
             previousFiles,
-            dataTables.Count == 0 ? null : WorkbookTables.DescribeForPrompt(dataTables));
+            dataTables.Count == 0 ? null : WorkbookTables.DescribeForPrompt(dataTables),
+            callTreeNote);
 
         object? finalPayload = null;
         var providerReportedError = false;
@@ -369,6 +375,37 @@ public sealed class ScaffoldPipeline
         _logger.LogInformation(
             "Scaffold complete: spec={Spec} scaffold={Scaffold} {Files} files {TodoCount} TODOs in {Ms}ms",
             spec.Id, scaffold.Id, fileCount, todoCount, latencyMs);
+    }
+
+    /// <summary>The routine's code and that of the project routines it calls (see <see cref="CallTreeSource"/>); null on none or on any read problem.</summary>
+    private async Task<string?> LoadCallTreeSourceAsync(Subroutine? sub, CancellationToken ct)
+    {
+        if (sub?.SourceFile is null) return null;
+        try
+        {
+            var versionId = sub.SourceFile.SourceVersionId;
+            var rows = await _db.Subroutines.AsNoTracking()
+                .Where(s => s.SourceFile!.SourceVersionId == versionId)
+                .Select(s => new { s.Name, Path = s.SourceFile!.RelativePath, s.SourceFile.BlobUri, s.LineStart, s.LineEnd, s.CalledSubroutines })
+                .ToListAsync(ct);
+            static IReadOnlyList<string> Calls(JsonDocument? doc) =>
+                doc is { RootElement.ValueKind: JsonValueKind.Array }
+                    ? doc.RootElement.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).ToList()
+                    : Array.Empty<string>();
+            var project = rows.Select(r => new CallTreeSource.Routine(r.Name, r.Path, r.LineStart, r.LineEnd, Calls(r.CalledSubroutines))).ToList();
+            var root = project.FirstOrDefault(r => r.Name == sub.Name && r.Path == sub.SourceFile.RelativePath);
+            if (root is null) return null;
+            var blobs = rows.GroupBy(r => r.Path).ToDictionary(g => g.Key, g => g.First().BlobUri);
+            var texts = new Dictionary<string, string?>();
+            foreach (var (path, uri) in blobs)
+                texts[path] = string.IsNullOrEmpty(uri) ? null : await _blob.GetTextAsync(uri, ct);
+            return CallTreeSource.Describe(root, project, p => texts.GetValueOrDefault(p));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the call tree of {Routine}; generating without it", sub.Name);
+            return null;
+        }
     }
 
     /// <summary>The lookup sheets of the Office document a routine lives in; empty for ordinary source or on any read problem.</summary>

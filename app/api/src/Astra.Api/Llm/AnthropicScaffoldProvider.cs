@@ -155,6 +155,8 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         // Real values from the workbook's lookup sheets: described here, supplied as files by the pipeline.
         if (!string.IsNullOrWhiteSpace(request.DataTablesNote))
             userPrompt += "\n\n## Data from the workbook\n\n" + request.DataTablesNote.Trim();
+        if (!string.IsNullOrWhiteSpace(request.CallTreeSourceNote))
+            userPrompt += "\n\n## Source of this routine and the routines it calls\n\n" + request.CallTreeSourceNote.Trim();
 
         string? rawJson = null;
         int inputTokens = 0, outputTokens = 0;

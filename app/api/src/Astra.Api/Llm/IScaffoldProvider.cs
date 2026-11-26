@@ -41,7 +41,10 @@ public sealed record ScaffoldRequest(
     string? PreviousPackageFilesJson = null,
     // The workbook's lookup sheets, described (where each data file will be, its shape, a few real rows). The files
     // themselves are added to the package by the pipeline, not written by the model. Null when there are none.
-    string? DataTablesNote = null);
+    string? DataTablesNote = null,
+    // The source of the routine and of the routines it calls (CallTreeSource), so a request it sends to an outside
+    // service is reproduced from code rather than guessed from the spec. Null when it calls nothing of the project.
+    string? CallTreeSourceNote = null);
 
 public sealed record ScaffoldFile(
     string Path,
