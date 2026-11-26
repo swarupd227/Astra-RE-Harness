@@ -1912,6 +1912,10 @@ export type QualityMetrics = {
   blockOn: QualitySeverity[];
   truncated: boolean;
   findings: QualityFinding[];
+  /** Each analysis tool's run: SpotBugs, PMD, Checkstyle (Java), ruff, bandit (Python), dependencies (OSV.dev). */
+  tools?: Record<string, { ok: boolean; count: number; durationMs: number; error: string | null }>;
+  /** The CycloneDX bill of materials kept with the run, when the package declares libraries. */
+  sbom?: { components: number; ecosystems: string[] } | null;
   aiReview?: {
     status: 'reviewed' | 'skipped' | 'failed' | 'timed_out';
     kept: number;

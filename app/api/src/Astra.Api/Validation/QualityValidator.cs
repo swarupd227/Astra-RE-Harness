@@ -31,6 +31,7 @@ public sealed class QualityValidator
     private readonly ILogger<QualityValidator> _log;
     private readonly QualityReviewer? _reviewer;
     private readonly MavenClient? _maven;
+    private readonly IHttpClientFactory? _httpFactory;
 
     /// <summary>The Java tools (SpotBugs, PMD, Checkstyle) run in the maven sidecar beside the AI review.</summary>
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(180);
@@ -39,10 +40,11 @@ public sealed class QualityValidator
     private static readonly TimeSpan ReviewTimeout = TimeSpan.FromSeconds(150);
 
     public QualityValidator(AppDbContext db, IBlobClient blob, StorageOptions storage, IAuditLogger audit, ILogger<QualityValidator> log,
-        QualityReviewer? reviewer = null, MavenClient? maven = null)
+        QualityReviewer? reviewer = null, MavenClient? maven = null, IHttpClientFactory? httpFactory = null)
     {
         _reviewer = reviewer;
         _maven = maven;
+        _httpFactory = httpFactory;
         _db = db;
         _blob = blob;
         _storage = storage;
@@ -83,8 +85,12 @@ public sealed class QualityValidator
 
             var findings = QualityRules.Scan(files).ToList();
 
-            // The Java tools and the AI review run side by side, each within its own time limit.
+            // The Java tools, the Python tools, the dependency check and the AI review run side by side, each within
+            // its own time limit.
             var toolsTask = RunJavaToolsAsync(scaffold.TargetPlatform, files, ct);
+            var pythonTask = PythonTools.RunAsync(files, ct);
+            var deps = Dependencies.Read(files);
+            var depsTask = CheckDependenciesAsync(deps, ct);
             Task<QualityReviewResult>? reviewTask = null;
             CancellationTokenSource? reviewTimeout = null;
             if (aiReview && _reviewer is not null)
@@ -96,6 +102,23 @@ public sealed class QualityValidator
             }
             var tools = await toolsTask;
             findings.AddRange(tools.Findings);
+            var runs = new Dictionary<string, MavenClient.ToolRun>(tools.Runs);
+            var (pyFindings, pyRuns) = await pythonTask;
+            findings.AddRange(pyFindings);
+            foreach (var (k, v) in pyRuns) runs[k] = v;
+            var (depFindings, depRan, depError) = await depsTask;
+            findings.AddRange(depFindings);
+            if (deps.Count > 0)
+                runs["dependencies"] = new(depRan, depFindings.Count, 0,
+                    depRan ? null : $"the OSV.dev lookup did not complete ({depError})");
+
+            // The bill of materials (CycloneDX) for what the package declares, kept with the run.
+            string? sbomUri = null;
+            if (deps.Count > 0)
+            {
+                var sbom = Dependencies.BuildSbom(scaffold.Spec?.Subroutine?.Name ?? scaffold.Id.ToString(), scaffold.GeneratedAt.ToString("yyyyMMddHHmmss"), deps, DateTimeOffset.UtcNow);
+                sbomUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, $"validation/{run.Id:N}/sbom.cdx.json", sbom, "application/json", ct);
+            }
             QualityReviewResult? review = null;
             if (reviewTask is not null)
             {
@@ -116,7 +139,7 @@ public sealed class QualityValidator
             report.AppendLine($"=== quality === {scaffold.TargetPlatform} · {files.Count} files · {findings.Count} findings · {summary.Blocking} blocking");
             foreach (var s in QualityRules.Severities) report.AppendLine($"  {s}: {summary.BySeverity[s]}");
             report.AppendLine();
-            foreach (var (name, t) in tools.Runs)
+            foreach (var (name, t) in runs)
                 report.AppendLine($"  {name}: {(t.Ok ? $"{t.Count} findings in {t.DurationMs} ms" : $"did not run ({t.Error})")}");
             if (review is not null)
                 report.AppendLine($"  AI review: {review.Status} · {review.Findings.Count} kept of {review.Proposed} proposed{(review.Note is null ? "" : $" · {review.Note}")}");
@@ -144,7 +167,9 @@ public sealed class QualityValidator
                     rule = f.Rule, category = f.Category, severity = f.Severity, file = f.File, line = f.Line,
                     message = f.Message, why = f.Why, fix = f.Fix, source = f.Source, specClaimId = f.SpecClaimId,
                 }),
-                tools = tools.Runs.ToDictionary(kv => kv.Key, kv => new { ok = kv.Value.Ok, count = kv.Value.Count, durationMs = kv.Value.DurationMs, error = kv.Value.Error }),
+                sbom = sbomUri is null ? null : new { components = deps.Count, ecosystems = deps.Select(d => d.Ecosystem).Distinct().ToArray() },
+                sbomUri,
+                tools = runs.ToDictionary(kv => kv.Key, kv => new { ok = kv.Value.Ok, count = kv.Value.Count, durationMs = kv.Value.DurationMs, error = kv.Value.Error }),
                 aiReview = review is null ? null : new
                 {
                     status = review.Status, kept = review.Findings.Count, proposed = review.Proposed, dropped = review.Dropped,
@@ -172,6 +197,14 @@ public sealed class QualityValidator
         await _audit.LogAsync("validation.completed", "scaffold", scaffold.Id, actor,
             payload: new { runId = run.Id, stage = run.Stage, status = run.Status, summary = run.Summary }, ct: CancellationToken.None);
         return run;
+    }
+
+    private async Task<(IReadOnlyList<QualityFinding>, bool, string?)> CheckDependenciesAsync(IReadOnlyList<Dependency> deps, CancellationToken ct)
+    {
+        if (deps.Count == 0 || _httpFactory is null) return ([], true, null);
+        var http = _httpFactory.CreateClient("osv");
+        http.Timeout = TimeSpan.FromSeconds(60);
+        return await Dependencies.CheckAsync(http, deps, ct);
     }
 
     /// <summary>What the Java tools found, as quality findings (paths back in the package's own layout).</summary>

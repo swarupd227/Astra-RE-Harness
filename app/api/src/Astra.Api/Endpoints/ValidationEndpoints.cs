@@ -117,6 +117,21 @@ public static class ValidationEndpoints
             }
         });
 
+        // ─── The package's bill of materials (CycloneDX), from its latest quality run ─
+        app.MapGet("/api/v1/scaffolds/{id:guid}/sbom", async (Guid id, AppDbContext db, IBlobClient blob, CancellationToken ct) =>
+        {
+            var runs = await db.ValidationRuns.AsNoTracking()
+                .Where(r => r.ScaffoldId == id && r.Stage == QualityValidator.Stage && r.MetricsJson != null)
+                .OrderByDescending(r => r.StartedAt).Select(r => r.MetricsJson).Take(10).ToListAsync(ct);
+            foreach (var m in runs)
+            {
+                using var doc = JsonDocument.Parse(m!);
+                if (doc.RootElement.TryGetProperty("sbomUri", out var u) && u.ValueKind == JsonValueKind.String)
+                    return Results.Text(await blob.GetTextAsync(u.GetString()!, ct), "application/vnd.cyclonedx+json");
+            }
+            return NotFound("sbom.not_found");
+        });
+
         // ─── Fix until green: the bounded regenerate-and-re-gate loop (background) ─
         app.MapPost("/api/v1/scaffolds/{id:guid}/autofix", async (
             Guid id,

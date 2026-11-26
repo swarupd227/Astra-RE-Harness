@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import type { QualityCategory, QualityFinding, QualityMetrics, QualitySeverity, ValidationRun } from '@/lib/api';
+import { API_BASE, type QualityCategory, type QualityFinding, type QualityMetrics, type QualitySeverity, type ValidationRun } from '@/lib/api';
 import { Card, CardBody } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -13,6 +13,17 @@ const CATEGORIES: { id: QualityCategory | 'all'; label: string }[] = [
   { id: 'maintainability', label: 'Maintainability' },
   { id: 'review', label: 'Spec & correctness' },
 ];
+
+const TOOL_LABELS: Record<string, string> = {
+  spotbugs: 'SpotBugs + FindSecBugs',
+  pmd: 'PMD',
+  checkstyle: 'Checkstyle',
+  ruff: 'ruff',
+  bandit: 'bandit',
+  dependencies: 'Known vulnerabilities (OSV.dev)',
+  'java-tools': 'Java tools',
+  'python-tools': 'Python tools',
+};
 
 const SEVERITY_TEXT: Record<QualitySeverity, string> = {
   blocker: 'text-status-fail',
@@ -106,6 +117,25 @@ export function QualityFindingsCard({
         ) : (
           <>
             <p className="text-body text-ink-secondary" data-testid="quality-summary">{run.summary}</p>
+            {metrics?.tools && Object.keys(metrics.tools).length > 0 && (
+              <p className="font-mono text-caption text-ink-tertiary" data-testid="quality-tools">
+                {Object.entries(metrics.tools)
+                  .filter(([name]) => name !== 'compile')
+                  .map(([name, t]) => (t.ok ? `${TOOL_LABELS[name] ?? name} ${t.count}` : `${TOOL_LABELS[name] ?? name} did not run`))
+                  .join(' · ')}
+              </p>
+            )}
+            {metrics?.sbom && run && (
+              <a
+                href={`${API_BASE}/api/v1/scaffolds/${run.scaffoldId}/sbom`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-caption text-ink-secondary underline decoration-line-subtle underline-offset-2 hover:text-ink-primary"
+                data-testid="quality-sbom"
+              >
+                Bill of materials (CycloneDX) · {metrics.sbom.components} libraries
+              </a>
+            )}
             {metrics?.aiReview && (
               <p className="text-caption text-ink-tertiary" data-testid="quality-ai-review">
                 {metrics.aiReview.status === 'reviewed'
