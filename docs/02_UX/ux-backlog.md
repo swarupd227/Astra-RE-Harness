@@ -28,7 +28,8 @@ commit.
 | 19 | Assessment | `/corpora/:id/assessment` | Backlog |
 | 20 | Evidence | `/corpora/:id/evidence` | Backlog |
 | 21 | LLM Provider | `/platform/llm` | Backlog |
-| 22+ | Project settings, Prompt catalog, Languages, Golden dataset, Signature health… | | To review |
+| 22 | Project settings | `/corpora/:id/settings` | Backlog |
+| 23+ | Prompt catalog, Languages, Harmonisation, Roles, Validation policy… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -249,3 +250,13 @@ commit.
 4. Non-admins see "Only the Admin persona can change the API key" as body text — the Set key field should be shown
    disabled with that line as its hint, so the page shape is the same for everyone.
 5. Title "LLM Provider" vs rail "LLM Provider" vs System health "Model" — call it "Model provider" everywhere.
+
+## 22 · Project settings (`/corpora/:id/settings`)
+1. **"Save settings" is 1 900 px down**, under ten artefact-kind paragraphs — same issue as New project: make the
+   save bar sticky, and show the kind picker as a compact two-column checklist (description on hover).
+2. "Programme details · Used by the portfolio and dependency views" — say what each field changes ("Tier sets the
+   order on the Portfolio page"); "Knowledge holder" needs an example ("the person or vendor who knows this system").
+3. No unsaved-changes guard: leaving with edits loses them silently — warn, and disable Save until something changed.
+4. The project's language, source (upload / Git URL, branch) and name are not editable or even shown here; a rename
+   and the Git source belong on this page (Re-sync opens from the project page today).
+5. "Test project" sits under "Display" — move it to its own "Visibility" line (it changes lists, not the banner).

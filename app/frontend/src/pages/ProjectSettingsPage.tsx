@@ -68,6 +68,16 @@ export function ProjectSettingsPage() {
     if (settings.data) setForm(toForm(settings.data));
   }, [settings.data]);
 
+  // Leaving the page with unsaved edits loses them — let the browser ask first.
+  useEffect(() => {
+    if (!form || !settings.data) return;
+    const changed = JSON.stringify(form) !== JSON.stringify(toForm(settings.data));
+    if (!changed) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [form, settings.data]);
+
   const save = useMutation<ProjectSettings, ApiError>({
     mutationFn: () => api.putCorpusSettings(id, toSettings(settings.data!, form!)),
     onSuccess: (saved) => {
@@ -93,6 +103,7 @@ export function ProjectSettingsPage() {
   }
 
   const set = (patch: Partial<Form>) => setForm({ ...form, ...patch });
+  const dirty = JSON.stringify(form) !== JSON.stringify(toForm(settings.data));
   const disabled = !canEdit || save.isPending;
 
   return (
@@ -236,8 +247,12 @@ export function ProjectSettingsPage() {
         </p>
       )}
 
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => save.mutate()} disabled={disabled} loading={save.isPending} data-testid="settings-save">
+      {/* Always in reach (the kind list above is long); enabled only when something changed. */}
+      <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t border-line-subtle bg-canvas/95 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
+        <span className="mr-auto text-caption text-ink-secondary" data-testid="settings-dirty">
+          {dirty ? 'Unsaved changes' : save.isSuccess ? '' : 'No changes'}
+        </span>
+        <Button variant="primary" onClick={() => save.mutate()} disabled={disabled || !dirty} loading={save.isPending} data-testid="settings-save">
           Save settings
         </Button>
       </div>
