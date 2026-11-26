@@ -36,6 +36,8 @@ export function EvidencePage() {
 
   const kind = params.get('kind') ?? '';
   const path = params.get('path') ?? '';
+  // Inside spreadsheets: sheets, named inputs, formulas, controls and forms are different things to read.
+  const part = params.get('part') ?? '';
   const [text, setText] = useState(params.get('q') ?? '');
   const q = useDebounced(text.trim(), 250);
   const [limit, setLimit] = useState(PAGE);
@@ -118,6 +120,20 @@ export function EvidencePage() {
               {k.label} <span className="tabular-nums text-ink-tertiary">{k.count.toLocaleString()}</span>
             </KindPill>
           ))}
+          {kind === 'workbook' && (
+            <span className="ml-2 flex flex-wrap items-center gap-1.5 border-l border-line-subtle pl-3" role="group" aria-label="Part of the workbook">
+              {WORKBOOK_PARTS.map((wp) => (
+                <KindPill
+                  key={wp.id || 'all'}
+                  active={part === wp.id}
+                  onClick={() => setParam('part', part === wp.id ? '' : wp.id)}
+                  testid={`evidence-part-${wp.id || 'all'}`}
+                >
+                  {wp.label}
+                </KindPill>
+              ))}
+            </span>
+          )}
         </div>
         <label className="relative ml-auto w-full sm:w-72">
           <span className="sr-only">Search evidence</span>
@@ -187,7 +203,9 @@ export function EvidencePage() {
       ) : (
         <Card className={clsx('overflow-hidden transition-opacity', evidence.isPlaceholderData && 'opacity-60')}>
           <ul className="divide-y divide-line-subtle" data-testid="evidence-list">
-            {data!.data.map((e, i, all) => (
+            {data!.data
+              .filter((e) => !part || kind !== 'workbook' || locatorPart(e.locator, e.path).startsWith(`${part}:`) || (part === 'sheet' && locatorPart(e.locator, e.path).startsWith('sheet:')))
+              .map((e, i, all) => (
               <Fragment key={e.shortId}>
               {/* A heading wherever the file changes: 33 flat rows for one workbook read as one file's parts. */}
               {(i === 0 || all[i - 1].path !== e.path) && (
@@ -283,3 +301,11 @@ function locatorPart(locator: string, path: string): string {
   }
   return l.trim();
 }
+
+const WORKBOOK_PARTS: Array<{ id: string; label: string }> = [
+  { id: 'sheet', label: 'Sheets' },
+  { id: 'input', label: 'Inputs' },
+  { id: 'formulas', label: 'Formulas' },
+  { id: 'control', label: 'Controls' },
+  { id: 'form', label: 'Forms' },
+];
