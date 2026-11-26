@@ -444,6 +444,12 @@ export function DocsPage() {
                 )}
               </>
             )}
+            {/* Generate, export and "Sign all" are Admin actions; say so instead of showing an Engineer or SME an empty bar. */}
+            {persona !== 'admin' && (
+              <span className="text-caption text-ink-secondary" data-testid="docs-persona-hint">
+                An Admin generates, signs and exports these documents.
+              </span>
+            )}
           </div>
         </div>
 
