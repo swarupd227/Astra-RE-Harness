@@ -195,6 +195,8 @@ export function ScaffoldArtifactPage() {
         </div>
         <div className="mt-1">
           <WorkflowRail state={sc.state} />
+          {/* Whether the package builds, passes its tests and its quality checks — on the page, not only in the report. */}
+          <GateStrip scaffoldId={sc.id} />
         </div>
       </header>
 
@@ -314,6 +316,45 @@ export function ScaffoldArtifactPage() {
           <TargetSelector value={regenTarget} onChange={setRegenTarget} sourceLanguage={sourceLanguage} compact />
         )}
       </ConfirmModal>
+    </div>
+  );
+}
+
+const GATE_STAGES: Array<{ stage: string; label: string }> = [
+  { stage: 'COMPILE', label: 'Build' },
+  { stage: 'TEST_PACK', label: 'Tests' },
+  { stage: 'QUALITY', label: 'Quality' },
+];
+
+function GateStrip({ scaffoldId }: { scaffoldId: string }) {
+  const runs = useQuery({
+    queryKey: ['validation-runs', scaffoldId],
+    queryFn: () => api.listValidationRuns(scaffoldId),
+    refetchInterval: 20_000,
+  });
+  if (!runs.data) return null;
+  const latest = (stage: string) =>
+    [...runs.data.runs]
+      .filter((r) => r.stage === stage)
+      .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0];
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption" data-testid="scaffold-gate-strip">
+      {GATE_STAGES.map(({ stage, label }) => {
+        const r = latest(stage);
+        const st = r?.status ?? 'NOT_RUN';
+        const tone =
+          st === 'PASSED' ? 'text-status-ok' : st === 'FAILED' || st === 'ERRORED' ? 'text-status-failed' : 'text-ink-secondary';
+        const word =
+          st === 'PASSED' ? 'passed' : st === 'FAILED' ? 'failed' : st === 'ERRORED' ? 'errored' : st === 'RUNNING' ? 'running…' : 'not run';
+        return (
+          <span key={stage} className={tone} title={r?.summary || undefined}>
+            {label} <strong>{word}</strong>
+          </span>
+        );
+      })}
+      <Link to={`/scaffolds/${scaffoldId}/validation`} className="text-ink-link hover:underline">
+        Details
+      </Link>
     </div>
   );
 }

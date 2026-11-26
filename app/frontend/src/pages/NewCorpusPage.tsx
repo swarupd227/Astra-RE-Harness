@@ -97,10 +97,16 @@ export function NewCorpusPage() {
     },
   });
 
+  // "Must be unique" used to be learned only from a failed submit: check as you type against the project list.
+  const existing = useQuery({ queryKey: ['corpora'], queryFn: api.listCorpora, staleTime: 30_000 });
+  const nameTaken =
+    name.trim().length > 0 &&
+    (existing.data?.data ?? []).some((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase());
   const canSubmit =
     !ingest.isPending &&
     !ingest.isSuccess &&
     name.trim().length > 0 &&
+    !nameTaken &&
     (mode === 'upload' ? files.length > 0 : gitUrl.trim().length > 0);
 
   function handleFiles(picked: FileList | null) {
@@ -170,7 +176,12 @@ export function NewCorpusPage() {
             </button>
           </div>
 
-          <FieldRow label="Project name" htmlFor="corpus-name" hint="Displayed in the projects list. Must be unique." required>
+          <FieldRow
+            label="Project name"
+            htmlFor="corpus-name"
+            hint={nameTaken ? 'A project with this name already exists — choose another name.' : 'Displayed in the projects list. Must be unique.'}
+            required
+          >
             <input
               id="corpus-name"
               type="text"
@@ -182,6 +193,7 @@ export function NewCorpusPage() {
               disabled={ingest.isPending || ingest.isSuccess}
               required
               aria-describedby="corpus-name-hint"
+              aria-invalid={nameTaken || undefined}
             />
           </FieldRow>
 
