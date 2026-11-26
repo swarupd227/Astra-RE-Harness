@@ -20,7 +20,10 @@ commit.
 | 11 | Platform group | `/platform/*` | Backlog |
 | 12 | Dashboard | `/home` | Backlog |
 | 13 | Docs | `/corpora/:id/docs` | Backlog |
-| 14+ | Migration plan, Routine board, Pattern analysis, Dependency graph, settings… | | To review |
+| 14 | Migration plan | `/corpora/:id/migration-plan` | Backlog |
+| 15 | Routine board | `/corpora/:id/board` | Backlog |
+| 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
+| 17+ | Dependency graph, project settings, New project… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -145,3 +148,38 @@ commit.
 4. The middle column lists one document per section and wastes ~200 px at 1440 — collapse it into the left nav when a
    section has a single document.
 5. "102 Draft · 1 SUPERSEDED" pills: same casing, and make them filters.
+
+## 14 · Migration plan (`/corpora/:id/migration-plan`)
+1. Jargon up front: "topological-leaves-first", "corpus", "no in-corpus callees", "draft" pill. Say it plainly: "3
+   waves. Each wave only depends on routines in earlier waves, so they can be migrated in this order." Strategy name
+   in a tooltip.
+2. The plan says what is done per wave: a progress bar per wave ("15 of 15 have code") and the wave a person should
+   work on now highlighted; finished waves fold.
+3. "Wave 2 · 1 routines" — plural bug; "signed: 0 · scaffolded: 13 · committed: 0" reads as raw counters — use the
+   shared stage words and hide zeros.
+4. Routine chips show their state in shouty "SCAFFOLDED" pills — use the shared labels ("With code"), and show why a
+   routine sits in its wave (what it calls) on hover.
+5. The plan is "draft" with no visible way to approve or regenerate it — add Approve plan (Admin) / Regenerate (⋯).
+6. "← Back to corpus" → "Back to project" (breadcrumb already does this; the link can go).
+
+## 15 · Routine board (`/corpora/:id/board`)
+1. **The only column with cards is off-screen.** At 1440 px the first view is five empty columns ("Nothing here
+   yet." × 4 visible); all 15 Travel routines sit in "Built", scrolled out of view to the right. Collapse empty
+   columns to a thin labelled strip ("Draft · 0") so the occupied ones get the width.
+2. "Built" here vs "Scaffolded" / "With code" elsewhere — use the shared stage words and the same order as the funnel.
+3. Cards repeat the full workbook path ("Ultimate_Comprehensive_Travel_Insurance_Raterv1.xlsm/TravelRaterApi.bas:39"):
+   file name + line, folder on hover; add the gate result (build/tests) on cards in the last column.
+4. Header copy explains what the board is not ("nothing here is dragged") — replace with counts per stage.
+
+## 16 · Pattern analysis (`/corpora/:id/pattern-analysis`)
+1. "Last run" is a debug line: "0 digested (0 surveyed, 0 propagated, 0 trivial) in 1s for $0.00 → 11 cluster(s)
+   across 15 routine(s) [15 from specs, 0 from digests]". Say "Grouped 15 routines into 11 patterns · 2 d ago ·
+   Re-run (⋯)"; the counters go into a "Details" disclosure.
+2. The three numbers don't add up for a reader: 3 core patterns + 8 singletons = 11, but "Routines analysed 15" —
+   show "15 routines → 11 patterns (3 shared by 2+ routines, 8 one-offs)".
+3. Machine ids under every title ("canonical-vba-json-value-serializer") and "Claim-kind signature:
+   edgeCase,invariant,openQuestion" — move to a tooltip; the plain title and description are what people read.
+4. No interaction: the routine chips (Q, Num, JsonArrayText) are not links and there is no "open archetype" or
+   "generate for the whole pattern" action — make chips link to the routine and add the pattern's next step.
+5. Eyebrow "Pattern Analysis" + "corpus" + "archetypes a migration engagement needs" — plain words ("project",
+   "how many distinct things the code does").

@@ -255,7 +255,29 @@ public static class ScaffoldEndpoints
                 })
                 .ToListAsync(ct);
 
-            return Results.Ok(new { data = rows });
+            // Latest result per gate for each package, so the list can say "builds / tests pass" without a call per row.
+            var ids = rows.Select(r => r.id).ToList();
+            var runs = ids.Count == 0
+                ? []
+                : await db.ValidationRuns.AsNoTracking()
+                    .Where(v => ids.Contains(v.ScaffoldId) && (v.Stage == "COMPILE" || v.Stage == "TEST_PACK"))
+                    .Select(v => new { v.ScaffoldId, v.Stage, v.Status, v.StartedAt })
+                    .ToListAsync(ct);
+            var latest = runs
+                .GroupBy(v => (v.ScaffoldId, v.Stage))
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(v => v.StartedAt).First().Status);
+            string? Gate(Guid id, string stage) => latest.TryGetValue((id, stage), out var st) ? st : null;
+
+            return Results.Ok(new
+            {
+                data = rows.Select(r => new
+                {
+                    r.id, r.specId, r.subroutineId, r.routineName, r.sourceLanguage, r.sourcePath, r.corpusId,
+                    r.corpusName, r.targetPlatform, r.state, r.fileCount, r.totalLines, r.todoCount, r.generatedAt,
+                    r.gitBranch, r.gitCommitHash,
+                    gates = new { compile = Gate(r.id, "COMPILE"), tests = Gate(r.id, "TEST_PACK") },
+                }),
+            });
         });
 
         // ─── Read scaffold by spec id (the demo entry point) ─────────────

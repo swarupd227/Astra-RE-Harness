@@ -2180,6 +2180,8 @@ export type ScaffoldSummary = {
   generatedAt: string;
   gitBranch: string | null;
   gitCommitHash: string | null;
+  /** Latest validation result per gate: "PASSED" | "FAILED" | "ERRORED" | "RUNNING", or null when never run. */
+  gates?: { compile: string | null; tests: string | null };
 };
 
 /** Build the canonical claim path used by the API. */
