@@ -33,9 +33,13 @@ export function HarmonisationPage() {
   const corpora = useQuery({ queryKey: ['corpora'], queryFn: api.listCorpora });
   const [selectedCorpusId, setSelectedCorpusId] = useState<string | null>(null);
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  // QA / scratch projects (and e2e leftovers) stay out of the picker, so it never opens on one by default.
+  const realProjects = (corpora.data?.data ?? []).filter(
+    (c) => !c.isTest && !/^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test|-e2e-\d/i.test(c.name),
+  );
 
   const corpusId =
-    selectedCorpusId ?? corpora.data?.data[0]?.id ?? null;
+    selectedCorpusId ?? realProjects[0]?.id ?? null;
 
   const runs = useQuery({
     queryKey: ['harmonisation-runs', corpusId],
@@ -60,7 +64,7 @@ export function HarmonisationPage() {
   if (corpora.isError || !corpora.data) {
     return (
       <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
-        <ErrorBlock title="Could not load corpora" message={String(corpora.error)} />
+        <ErrorBlock title="Could not load projects" message={String(corpora.error)} />
       </div>
     );
   }
@@ -81,7 +85,7 @@ export function HarmonisationPage() {
         <CardBody className="flex flex-wrap items-end justify-between gap-4">
           <label className="block">
             <span className="label">
-              Corpus
+              Project
             </span>
             <select
               className="mt-1 rounded border border-line-subtle bg-raised px-2 py-1 text-caption"
@@ -89,7 +93,7 @@ export function HarmonisationPage() {
               onChange={(e) => setSelectedCorpusId(e.target.value)}
               data-testid="harmonisation-corpus-select"
             >
-              {corpora.data.data.map((c: { id: string; name: string }) => (
+              {realProjects.map((c: { id: string; name: string }) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
@@ -124,7 +128,12 @@ export function HarmonisationPage() {
         {!runs.isPending && (runs.data?.data.length ?? 0) === 0 && (
           <Card>
             <CardBody className="text-center text-ink-secondary">
-              No harmonisation passes yet for this corpus. Click <strong>Run harmonisation pass</strong>.
+              No harmonisation passes yet for this project.{' '}
+              {isAdmin ? (
+                <>Click <strong>Run harmonisation pass</strong>.</>
+              ) : (
+                <>An Admin runs a pass; it compares the project&rsquo;s signed specs once there are at least two.</>
+              )}
             </CardBody>
           </Card>
         )}

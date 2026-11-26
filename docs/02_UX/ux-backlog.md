@@ -33,7 +33,8 @@ commit.
 | 24 | Languages | `/platform/languages` | Backlog |
 | 25 | Roles & Permissions | `/platform/roles` | Backlog |
 | 26 | Validation policy | `/platform/validation` | Backlog |
-| 27+ | Harmonisation, routine extract & live scaffold screens, scaffold detail, validation report… | | To review |
+| 27 | Harmonisation | `/platform/harmonisation` | Backlog |
+| 28+ | Routine extract & live scaffold screens, scaffold detail, validation report… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -312,3 +313,12 @@ commit.
 4. "Zero warnings required at project-level error treatment" — unclear; say "The build must succeed with no errors;
    warnings are reported."
 5. Read-only for everyone today with no hint who changes it — say "Set by an Admin" and, for Admins, show an Edit.
+
+## 27 · Harmonisation (`/platform/harmonisation`)
+1. **Defaults to an e2e test project** ("php-facts-e2e-1795692229075-7738") — the first corpus in the list; the picker
+   lists every QA/test project too. Default to the project with the most signed specs, hide test projects (same rule
+   as Projects), label it "Project", not "Corpus".
+2. **The empty state names a button that isn't there**: "Click Run harmonisation pass" — there is no such button for
+   an Engineer (Admin-only?). Show the button disabled with who can run it, or say "An Admin runs a pass".
+3. Explain when it is worth running: "Needs at least two signed specs in the project — Travel has 31" and show that
+   count per project in the picker.
