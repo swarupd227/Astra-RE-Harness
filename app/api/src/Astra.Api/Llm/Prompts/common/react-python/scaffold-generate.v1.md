@@ -215,6 +215,11 @@ Rules:
     installed, so an `async def test_…` is skipped, not run. Write every test
     as `def test_…`; call async code with `asyncio.run(…)`, and test routes
     through FastAPI's synchronous `TestClient`.
+20. **A display format is not a rounding rule.** A cell's number format
+    (`$#,##0.00`, `0.0%`) only changes how a value is shown. Compute and
+    return the value exactly as the source computes it (`F17 - F15` stays
+    unrounded), round only where the source itself calls `Round`/`ROUND`, and
+    apply the format in the form when you display it.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
