@@ -7,35 +7,35 @@ commit.
 
 | # | Page | Route | Status |
 |---|---|---|---|
-| 1 | Home | `/` | Live (fc5947d) |
-| 2 | Projects list | `/projects` | Live (fc5947d) |
-| 3 | Project detail | `/projects/:id` | Live (fc5947d) |
-| 4 | Routines | `/subroutines` | Built |
-| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Built (part 1) |
-| 6 | Generated code | `/scaffolds` | Built (ca6eea0) |
-| 7 | My reviews | `/my-reviews` | Built (57f3aa8) |
-| 8 | Comments | `/comments` | Built, testing |
-| 9 | Compliance | `/compliance` | Live (a127a74) |
-| 10 | System health | `/system` | Live (a127a74) |
-| 11 | Platform group | `/platform/*` | Backlog |
-| 12 | Dashboard | `/home` | Backlog |
-| 13 | Docs | `/corpora/:id/docs` | Backlog |
-| 14 | Migration plan | `/corpora/:id/migration-plan` | Backlog |
-| 15 | Routine board | `/corpora/:id/board` | Backlog |
-| 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
-| 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
-| 18 | New project | `/projects/new` | Backlog |
-| 19 | Assessment | `/corpora/:id/assessment` | Frontend live; prompt v1.2 committed, not deployed |
-| 20 | Evidence | `/corpora/:id/evidence` | Backlog |
-| 21 | LLM Provider | `/platform/llm` | Backlog |
-| 22 | Project settings | `/corpora/:id/settings` | Backlog |
-| 23 | Prompt Catalog | `/platform/prompts` | Backlog |
-| 24 | Languages | `/platform/languages` | Backlog |
-| 25 | Roles & Permissions | `/platform/roles` | Backlog |
-| 26 | Validation policy | `/platform/validation` | Frontend live; API text committed (5aa981e), not deployed |
-| 27 | Harmonisation | `/platform/harmonisation` | Backlog |
-| 28 | Generated package | `/scaffolds/:id` | Backlog |
-| 29+ | Routine extract & live scaffold screens, validation report (Q2 owner: UX Refresh session)… | | To review |
+| 1 | Home | `/` | Live |
+| 2 | Projects list | `/projects` | Live |
+| 3 | Project detail | `/projects/:id` | Live (tabs → section nav; virtualisation open) |
+| 4 | Routines | `/subroutines` | Live, incl. search over spec summaries |
+| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification open |
+| 6 | Generated code | `/scaffolds` | Live; live-preview strip open |
+| 7 | My reviews | `/my-reviews` | Live; real assignment = separate feature |
+| 8 | Comments | `/comments` | Live; per-user read state + following open (API) |
+| 9 | Compliance | `/compliance` | Live |
+| 10 | System health | `/system` | Live; recent-problems list open |
+| 11 | Platform group | `/platform/*` | Live (dead ends, Golden Dataset, Signature Health) |
+| 12 | Dashboard | `/home` | Live (counts, what's next, activity words) |
+| 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip); header actions open |
+| 14 | Migration plan | `/corpora/:id/migration-plan` | Live; approve/regenerate actions open |
+| 15 | Routine board | `/corpora/:id/board` | Live |
+| 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Live |
+| 17 | Dependency graph | `/corpora/:id/dependency-graph` | Live |
+| 18 | New project | `/projects/new` | Live; inline name check + Git fields open |
+| 19 | Assessment | `/corpora/:id/assessment` | Live (UI + prompt v1.2) |
+| 20 | Evidence | `/corpora/:id/evidence` | Live (rows + file headings); sub-filters open |
+| 21 | LLM Provider | `/platform/llm` | Live; per-pipeline model list open |
+| 22 | Project settings | `/corpora/:id/settings` | Live; rename / Git source open |
+| 23 | Prompt Catalog | `/platform/prompts` | Live; table view open |
+| 24 | Languages | `/platform/languages` | Live; target list from archetypes open |
+| 25 | Roles & Permissions | `/platform/roles` | Live; owns-list from matrix open |
+| 26 | Validation policy | `/platform/validation` | Live (UI + API text) |
+| 27 | Harmonisation | `/platform/harmonisation` | Live |
+| 28 | Generated package | `/scaffolds/:id` | Live; gate strip on page open |
+| 29+ | Extract & live-generation screens | | Not reviewed live — opening them starts a paid model run |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
