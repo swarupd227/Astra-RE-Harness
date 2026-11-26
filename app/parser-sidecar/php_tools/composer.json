@@ -1,0 +1,13 @@
+{
+  "name": "astra/parser-sidecar-php-tools",
+  "description": "PHP-side helpers for the Astra parser sidecar: parse only, never execute the code under analysis.",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "nikic/php-parser": "^5.4"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

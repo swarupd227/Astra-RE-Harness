@@ -40,6 +40,7 @@ from parser_sidecar.vbnet_parser import parse_source as _vbnet_parse_v0
 from parser_sidecar.abl_parser import parse_source as _abl_parse_v0
 from parser_sidecar.java_parser import parse_source as _java_parse_v0
 from parser_sidecar.php_parser import parse_source as _php_parse_v0
+from parser_sidecar import php_native as _php_native
 from parser_sidecar.unibasic_parser import parse_source as _unibasic_parse_v0
 
 # Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
@@ -250,6 +251,11 @@ def _php_parse(filename: str, content: str):
     documentation pipeline. On any unexpected error it degrades to a single
     whole-file routine so an unparseable file is still catalogued."""
     try:
+        # The real PHP grammar (nikic/PHP-Parser) when the sidecar has it; the pattern scanner otherwise.
+        return _php_native.parse_one(filename=filename, content=content)
+    except Exception as e:  # noqa: BLE001 — never lose a file to a scanner bug
+        log.warning("php native parse failed on %s (%s); using the pattern scanner", filename, e)
+    try:
         return _php_parse_v0(filename=filename, content=content)
     except Exception as e:  # noqa: BLE001 — tokenizer surface is broad
         log.warning("php parser error on %s (%s); emitting whole-file routine", filename, e)
@@ -397,6 +403,21 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
             reply.warnings.extend(corpus_warnings)
             for (i, fn, _), outcome in zip(cpp_items, outcomes):
                 results[i] = _to_result(fn, outcome.line_count, outcome.subroutines, outcome.warnings)
+        # PHP files are scanned in batches by one PHP process each, not one process per file.
+        php_items = [
+            (i, fn, c) for i, (fn, c) in enumerate(files)
+            if results[i] is None and _routes_to_php(fn)
+        ]
+        if php_items:
+            try:
+                outcomes, _scans, php_warnings = _php_native.parse_many([(fn, c) for _, fn, c in php_items])
+                reply.warnings.extend(php_warnings)
+                for (i, fn, _), outcome in zip(php_items, outcomes):
+                    results[i] = _to_result(fn, outcome.line_count, outcome.subroutines, outcome.warnings)
+            except Exception as e:  # noqa: BLE001 — fall through to the per-file path below
+                log.warning("php batch parse failed (%s); parsing file by file", e)
+            if on_progress is not None:
+                on_progress(sum(1 for r in results if r is not None), len(files), "")
         for i, (fn, c) in enumerate(files):
             if results[i] is None:
                 results[i] = self._parse_one(filename=fn, content=c, form=form)
@@ -648,6 +669,14 @@ def _looks_like_java(filename: str) -> bool:
     if not filename:
         return False
     return filename.lower().endswith(".java")
+
+
+def _routes_to_php(filename: str) -> bool:
+    """True when `_parse_one` would send the file to the PHP parser (same precedence as there)."""
+    return (_looks_like_php(filename)
+            and not _looks_like_cobol(filename) and not _looks_like_delphi(filename) and not _looks_like_cpp(filename)
+            and not _looks_like_vb6(filename) and not _looks_like_csharp(filename) and not _looks_like_vbnet(filename)
+            and not _looks_like_abl(filename) and not _looks_like_java(filename))
 
 
 def _looks_like_php(filename: str) -> bool:

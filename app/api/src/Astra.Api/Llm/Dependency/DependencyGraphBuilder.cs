@@ -90,6 +90,14 @@ public sealed class DependencyGraphBuilder
             .GroupBy(s => BareName(s.Name), StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() == 1)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        // Object-oriented parsers (PHP, Java …) keep routine names bare and put the enclosing type in
+        // CommonBlockRefs, and state a call they could resolve as "Type.method". That call names exactly one
+        // routine — the method of that type — even when several classes have a method of that name.
+        var byTypeAndName = subs
+            .SelectMany(s => ReadNameList(s.CommonBlockRefs).Select(t => (Key: $"{t}.{s.Name}", Sub: s)))
+            .GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First().Sub, StringComparer.OrdinalIgnoreCase);
 
         // 5. Build call edges + collect external callees.
         var callEdges = new List<GraphEdge>();
@@ -105,7 +113,8 @@ public sealed class DependencyGraphBuilder
             var resolvedTargets = new HashSet<Guid>();
             foreach (var rawCall in calls.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!byName.TryGetValue(rawCall.ToUpperInvariant(), out var target))
+                if (!byName.TryGetValue(rawCall.ToUpperInvariant(), out var target)
+                    && !byTypeAndName.TryGetValue(rawCall, out target))
                 {
                     // Fall back through the name-format mismatches: a
                     // qualified call against bare routine names, then a bare

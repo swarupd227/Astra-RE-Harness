@@ -1,3 +1,10 @@
+# PHP-Parser (nikic/php-parser) for the PHP scanner, installed by Composer in its own stage so the
+# final image carries only the library, not Composer.
+FROM composer:2 AS phpvendor
+WORKDIR /opt/php-parser
+COPY php_tools/composer.json php_tools/composer.lock ./
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+
 FROM python:3.12-slim AS base
 
 WORKDIR /app
@@ -85,6 +92,15 @@ RUN curl -fsSL https://codeload.github.com/Isopod/tree-sitter-pascal/tar.gz/refs
 # for v1 robust parsing.
 RUN apt-get purge -y curl \
  && rm -rf /var/lib/apt/lists/*
+
+# PHP CLI for the PHP scanner (php_tools/php_scan.php). It only PARSES the code under analysis with
+# nikic/PHP-Parser; nothing from a corpus is ever executed. Without it the sidecar falls back to the
+# pattern scanner and says so in a warning.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends php-cli \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=phpvendor /opt/php-parser/vendor /opt/php-parser/vendor
+COPY php_tools/php_scan.php /opt/php-parser/php_scan.php
 
 # Copy proto + source
 COPY proto/ proto/
