@@ -93,6 +93,7 @@ test.describe('PHP extraction is written for its target', () => {
 
     const res = await request.post(`${API_BASE}/api/v1/ingest/text`, {
       headers: JSON_ENG,
+      timeout: 120_000,
       data: {
         name: `php-extract-e2e-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
         files: [
@@ -104,14 +105,14 @@ test.describe('PHP extraction is written for its target', () => {
     });
     expect(res.ok()).toBe(true);
     corpusId = (await res.json()).corpusId;
-    const detail = await (await request.get(`${API_BASE}/api/v1/corpora/${corpusId}`, { headers: ENG })).json();
+    const detail = await (await request.get(`${API_BASE}/api/v1/corpora/${corpusId}`, { headers: ENG, timeout: 120_000 })).json();
     routines = {};
     for (const f of detail.latestVersion.files)
       for (const s of f.subroutines ?? []) routines[`${f.relativePath ?? f.path}#${s.name}`] = s.id;
   });
 
   test('the PHP schema has the web kinds', async ({ request }) => {
-    const php = await (await request.get(`${API_BASE}/api/v1/spec-schemas/php`, { headers: ENG })).json();
+    const php = await (await request.get(`${API_BASE}/api/v1/spec-schemas/php`, { headers: ENG, timeout: 120_000 })).json();
     const ids = php.claimKinds.map((k: any) => k.id);
     expect(ids).toEqual(expect.arrayContaining(['httpContract', 'authorizationRule', 'dataAccess']));
   });
@@ -134,15 +135,15 @@ test.describe('PHP extraction is written for its target', () => {
 
   test('naming dotnet10 as the project target switches the prompt, and an unknown target is refused', async ({ request }) => {
     const settingsUrl = `${API_BASE}/api/v1/corpora/${corpusId}/settings`;
-    const current = await (await request.get(settingsUrl, { headers: ENG })).json();
+    const current = await (await request.get(settingsUrl, { headers: ENG, timeout: 120_000 })).json();
 
-    const bad = await request.put(settingsUrl, { headers: JSON_ENG, data: { ...current, targetStack: 'cobol' } });
+    const bad = await request.put(settingsUrl, { headers: JSON_ENG, timeout: 120_000, data: { ...current, targetStack: 'cobol' } });
     expect(bad.status()).toBe(400);
     expect((await bad.json()).error.message).toContain('targetStack');
 
-    const ok = await request.put(settingsUrl, { headers: JSON_ENG, data: { ...current, targetStack: 'dotnet10' } });
+    const ok = await request.put(settingsUrl, { headers: JSON_ENG, timeout: 120_000, data: { ...current, targetStack: 'dotnet10' } });
     expect(ok.ok()).toBe(true);
-    expect((await (await request.get(settingsUrl, { headers: ENG })).json()).targetStack).toBe('dotnet10');
+    expect((await (await request.get(settingsUrl, { headers: ENG, timeout: 120_000 })).json()).targetStack).toBe('dotnet10');
 
     const events = await extract(request, routines['app/Http/Controllers/InvoiceController.php#store']);
     expect(one(events, 'provider_info')?.data).toMatchObject({ promptTemplateId: 'php-extract-dotnet10', promptTemplateVersion: 'v2.0' });

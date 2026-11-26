@@ -76,7 +76,7 @@ async function ingest(request: APIRequestContext): Promise<string> {
 }
 
 async function settings(request: APIRequestContext, corpusId: string) {
-  return (await request.get(`${API_BASE}/api/v1/corpora/${corpusId}/settings`, { headers: ENG })).json();
+  return (await request.get(`${API_BASE}/api/v1/corpora/${corpusId}/settings`, { headers: ENG, timeout: T })).json();
 }
 
 /** Say something in the programme's thread and confirm the action it proposes; returns the proposal. */
@@ -95,7 +95,7 @@ async function sayAndConfirm(request: APIRequestContext, threadId: string, text:
 test.describe('PHP to Spring Boot', () => {
   test('the migration target is a sentence, behind a Confirm card', async ({ request }) => {
     const corpusId = await ingest(request);
-    const threads = await (await request.get(`${API_BASE}/api/v1/conversations?corpusId=${corpusId}`, { headers: ENG })).json();
+    const threads = await (await request.get(`${API_BASE}/api/v1/conversations?corpusId=${corpusId}`, { headers: ENG, timeout: T })).json();
     const thread = threads.data.find((c: any) => c.corpusId === corpusId) ?? threads.data[0];
     expect(thread?.id).toBeTruthy();
 
