@@ -19,22 +19,22 @@ commit.
 | 10 | System health | `/system` | Live; recent-problems list open |
 | 11 | Platform group | `/platform/*` | Live (dead ends, Golden Dataset, Signature Health) |
 | 12 | Dashboard | `/home` | Live (counts, what's next, activity words) |
-| 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip); persona hint open |
-| 14 | Migration plan | `/corpora/:id/migration-plan` | Live; approve/regenerate actions open |
+| 13 | Docs | `/corpora/:id/docs` | Live (citation chips, quality chip, persona hint) |
+| 14 | Migration plan | `/corpora/:id/migration-plan` | Live (Approve / Recompute exist for Admin; others told who acts) |
 | 15 | Routine board | `/corpora/:id/board` | Live |
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Live |
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Live |
-| 18 | New project | `/projects/new` | Live; inline name check + Git fields open |
+| 18 | New project | `/projects/new` | Live (name check); Git fields open |
 | 19 | Assessment | `/corpora/:id/assessment` | Live (UI + prompt v1.2) |
-| 20 | Evidence | `/corpora/:id/evidence` | Live (rows + file headings); sub-filters open |
+| 20 | Evidence | `/corpora/:id/evidence` | Live (rows, file headings, workbook sub-filters) |
 | 21 | LLM Provider | `/platform/llm` | Live; per-pipeline model list open |
 | 22 | Project settings | `/corpora/:id/settings` | Live; rename / Git source open |
-| 23 | Prompt Catalog | `/platform/prompts` | Live; table view open |
-| 24 | Languages | `/platform/languages` | Live; target list from archetypes open |
-| 25 | Roles & Permissions | `/platform/roles` | Live; owns-list from matrix open |
+| 23 | Prompt Catalog | `/platform/prompts` | Live (grouped by purpose) |
+| 24 | Languages | `/platform/languages` | Live (targets from archetypes) |
+| 25 | Roles & Permissions | `/platform/roles` | Live (Can-do list from the matrix) |
 | 26 | Validation policy | `/platform/validation` | Live (UI + API text) |
 | 27 | Harmonisation | `/platform/harmonisation` | Live |
-| 28 | Generated package | `/scaffolds/:id` | Live; gate strip on page open |
+| 28 | Generated package | `/scaffolds/:id` | Live (gate strip) |
 | 29+ | Extract & live-generation screens | | Not reviewed live — opening them starts a paid model run |
 
 ## 1 · Home (`/`)

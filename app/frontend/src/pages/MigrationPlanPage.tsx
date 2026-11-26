@@ -274,6 +274,11 @@ export function MigrationPlanPage() {
                   )}
                 </p>
               </div>
+              {!isAdmin && (
+                <p className="text-caption text-ink-secondary" data-testid="migration-plan-admin-hint">
+                  {plan.data.plan.status === 'draft' ? 'Draft — an Admin approves or recomputes the plan.' : 'An Admin can recompute the plan.'}
+                </p>
+              )}
               {isAdmin && (
                 <div className="flex flex-wrap items-center gap-2">
                   {plan.data.plan.status === 'draft' && (
