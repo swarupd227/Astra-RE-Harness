@@ -24,7 +24,8 @@ commit.
 | 15 | Routine board | `/corpora/:id/board` | Backlog |
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
-| 18+ | Project settings, New project, Assessment, Evidence… | | To review |
+| 18 | New project | `/projects/new` | Backlog |
+| 19+ | Assessment, Evidence, project settings, LLM settings… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -194,3 +195,18 @@ commit.
 4. Header copy is parser jargon ("Parser-extracted call graph + shared-storage references", "drill in") — one plain
    line plus the interaction hint once, at the bottom of the canvas (it is currently said twice).
 5. "← Back to corpus" → remove (breadcrumb does it); "Hide shared-storage edges" → "Hide shared worksheet/variable links".
+
+## 18 · New project (`/projects/new`)
+1. **The language picker contradicts itself**: "C++ → .NET 8 + Java Spring + Angular" while the platform's default
+   target for C++ is .NET 10; "Delphi → .NET 8 …" likewise; "Transition documentation" sits in the language list
+   although it is not a language; Office VBA is not listed at all (it is detected from .xlsm). Show source
+   languages only ("COBOL", "C++", "VBA / VB6", …) — the target stack is chosen later, on the routine — and move
+   "Transition documentation" to the pack choice.
+2. **Ten artefact kinds, each with a paragraph, push "Ingest files" 1 800 px down** for a decision the copy says can
+   be changed later. Fold "Additional evidence (optional)" by default with a one-line summary of what is on.
+3. Name field: "Must be unique" — check as you type and say so inline, not after submit.
+4. Copy: "Ingest" / "Connect a new project" / "Ingest files" → "New project" / "Create project"; say what happens
+   next ("Astra reads every file and lists its routines — usually under a minute; large repositories continue in
+   the background").
+5. Git URL tab: show branch and folder fields up front with defaults ("main", "/"), and whether private repos need a
+   token.

@@ -135,7 +135,7 @@ export function NewCorpusPage() {
         <p className="label">
           Ingest
         </p>
-        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">Connect a new project</h1>
+        <h1 className="mt-2 text-h-lg font-semibold tracking-tight text-ink-primary">New project</h1>
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Upload source files (or a <span className="font-mono">.zip</span> archive) or
           point at a Git repository. Every file is parsed to build an inventory of
@@ -207,11 +207,15 @@ export function NewCorpusPage() {
               disabled={ingest.isPending || ingest.isSuccess || schemasQuery.isPending}
             >
               <option value="">Auto-detect from file extensions</option>
-              {schemas.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.displayName}
-                </option>
-              ))}
+              {/* Source languages only. The target stack is chosen per routine later, so "→ .NET 8 …" here only
+                  contradicted it; "doc" (transition documentation) is not a language. */}
+              {schemas
+                .filter((s) => s.id !== 'doc')
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.id === 'vb6' ? 'VB6 / Office VBA (.bas, .frm, .xlsm, .docm …)' : s.displayName.split('→')[0].trim()}
+                  </option>
+                ))}
             </select>
           </FieldRow>
 
@@ -345,12 +349,11 @@ export function NewCorpusPage() {
 
           <div role="group" aria-labelledby="artefact-kinds-label">
             <p id="artefact-kinds-label" className="text-body font-medium text-ink-primary">
-              Additional artefacts (optional)
+              Other evidence this project will take (optional)
             </p>
-            <p className="mt-0.5 text-caption text-ink-tertiary">
-              Besides source code, this project can also take these kinds of evidence. You add the
-              files on the project page after it is created, and can change this later in the
-              project settings.
+            <p className="mt-0.5 text-caption text-ink-secondary">
+              Tick what you plan to add besides source code — the files themselves go on the project page after it
+              is created, and this can be changed any time in project settings.
             </p>
             <div className="mt-2">
               <ArtefactKindPicker
@@ -361,7 +364,11 @@ export function NewCorpusPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3">
+          {/* Always reachable: the evidence list above is long, the action should not be 1 800 px down. */}
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-end gap-3 border-t border-line-subtle bg-raised/95 px-6 py-3 backdrop-blur">
+            <span className="mr-auto text-caption text-ink-secondary">
+              Astra reads every file and lists its routines — usually under a minute; large repositories carry on in the background.
+            </span>
             <Button
               variant="ghost"
               onClick={() => navigate('/projects')}
@@ -377,12 +384,12 @@ export function NewCorpusPage() {
               data-testid="ingest-submit"
             >
               {ingest.isPending
-                ? 'Ingesting…'
+                ? 'Creating…'
                 : ingest.isSuccess
                   ? 'Ingested'
                   : mode === 'upload'
-                    ? 'Ingest files'
-                    : 'Clone & ingest'}
+                    ? 'Create project'
+                    : 'Clone & create project'}
             </Button>
           </div>
         </CardBody>
