@@ -356,6 +356,7 @@ public sealed partial class CopilotToolRegistry
         });
 
         RegisterWorkTools();
+        RegisterTargetTools();
     }
 
     // ═══ Read tools ══════════════════════════════════════════════════════
@@ -1013,7 +1014,8 @@ public sealed partial class CopilotToolRegistry
 
         var target = Astra.Api.Work.ScaffoldTargetResolver.Resolve(
             ctx.Services.GetRequiredService<ArchetypeRegistry>(), spec.Subroutine?.SourceLanguage ?? "",
-            spec.Subroutine?.Name ?? "", Read(input, "targetStack"));
+            spec.Subroutine?.Name ?? "", Read(input, "targetStack"),
+            await Astra.Api.Endpoints.ScaffoldEndpoints.ProjectTargetAsync(ctx.Db, spec.SubroutineId, ctx.Ct));
         if (!target.Ok) return ToolResult.Failure(target.ErrorCode!, target.Error!);
         var chosen = target.TargetStack;
 

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "spring-rest-service",
+  "targetStack": "java-spring",
+  "displayName": "Web route handler → Spring Boot 3 REST service (controller · service · JdbcTemplate repository)",
+  "description": "The pattern for a routine that answers HTTP requests and reads or writes a database — a PHP controller method, a front-controller action, a script behind a URL. It becomes a real Spring Boot 3.2 service on Java 21: a @RestController that keeps every method, path, status code and body shape the signed spec's http_contracts state (errors through a @RestControllerAdvice that reproduces the legacy 404 / 422 / 400 bodies instead of Spring's ProblemDetail defaults), a @Service holding the business rules and the order of checks, and a @Repository on JdbcTemplate with every value bound as a parameter (never concatenated, even where the source concatenated it), one method per data_accesses claim, with @Transactional where statements must commit together. Bean validation carries the legacy rules and messages. The tests are the contract: @WebMvcTest MockMvc tests assert each response a caller can get, @JdbcTest tests run the repository against an embedded H2 database built from schema.sql, and plain unit tests pin the rules. Builds and tests OFFLINE through the maven-sidecar (spring-boot-starter web, jdbc, validation, test and H2 are baked into its cache). The reference resource is an invoice API; a routine is migrated by renaming the resource and substituting its own routes, rules, statements and tables.",
+  "compatibleSchemas": ["php"],
+  "matches": {
+    "anyOf": [],
+    "fallback": "Used for routines that serve HTTP routes and read or write a database (a spec with http_contracts and data_accesses). Other PHP routines with no web surface still use the narrower archetypes that match them by name."
+  },
+  "owner": "Nous · Java/Spring migration accelerator",
+  "status": "production",
+  "verification": {
+    "sourceExecutionEquivalence": "not-wired",
+    "sourceExecutionEquivalenceReason": "No PHP execution sidecar or HTTP parity replay exists yet (PHP track P7/P8); equivalence to the source is NOT claimed. The contract tests check the service against the signed spec, not against the running legacy application.",
+    "gatesActive": [
+      "maven-sidecar offline compile (mvn -o test-compile) with real Spring Boot on the classpath",
+      "JUnit 5 suite offline: MockMvc contract tests per response, @JdbcTest repository tests on H2, service unit tests"
+    ],
+    "gatesAvailableNotYetWired": [
+      "PHP execution sidecar (equivalence for pure routines)",
+      "HTTP parity replay against the running legacy application"
+    ]
+  },
+  "files": [
+    { "path": "pom.xml",                                                              "language": "xml",        "derivedFromClaimIds": [] },
+    { "path": "src/main/resources/application.properties",                           "language": "properties", "derivedFromClaimIds": [] },
+    { "path": "src/main/resources/schema.sql",                                       "language": "sql",        "derivedFromClaimIds": ["DA-1", "DA-2"] },
+    { "path": "src/main/java/com/example/invoices/SpecClaim.java",                   "language": "java",       "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/invoices/InvoiceApiApplication.java",       "language": "java",       "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/invoices/Invoice.java",                     "language": "java",       "derivedFromClaimIds": ["INV-1"] },
+    { "path": "src/main/java/com/example/invoices/CreatedInvoice.java",              "language": "java",       "derivedFromClaimIds": ["HTTP-2"] },
+    { "path": "src/main/java/com/example/invoices/NewInvoiceRequest.java",           "language": "java",       "derivedFromClaimIds": ["HTTP-2"] },
+    { "path": "src/main/java/com/example/invoices/NotFoundException.java",           "language": "java",       "derivedFromClaimIds": [] },
+    { "path": "src/main/java/com/example/invoices/InvoiceRepository.java",           "language": "java",       "derivedFromClaimIds": ["DA-1", "DA-2"] },
+    { "path": "src/main/java/com/example/invoices/InvoiceService.java",              "language": "java",       "derivedFromClaimIds": ["HTTP-1", "INV-1", "EC-1"] },
+    { "path": "src/main/java/com/example/invoices/InvoiceController.java",           "language": "java",       "derivedFromClaimIds": ["HTTP-1", "HTTP-2"] },
+    { "path": "src/main/java/com/example/invoices/ApiExceptionHandler.java",         "language": "java",       "derivedFromClaimIds": [] },
+    { "path": "src/test/java/com/example/invoices/InvoiceControllerTests.java",      "language": "java",       "derivedFromClaimIds": ["HTTP-1", "HTTP-2"] },
+    { "path": "src/test/java/com/example/invoices/InvoiceRepositoryTests.java",      "language": "java",       "derivedFromClaimIds": ["DA-1", "DA-2"] },
+    { "path": "src/test/java/com/example/invoices/InvoiceServiceTests.java",         "language": "java",       "derivedFromClaimIds": ["INV-1", "EC-1"] }
+  ]
+}

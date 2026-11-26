@@ -146,7 +146,8 @@ public sealed class WorkStepExecutor
             return StepOutcome.Fail($"The spec is {spec?.State ?? "missing"}; only a signed spec can be generated from.");
 
         var target = ScaffoldTargetResolver.Resolve(
-            services.GetRequiredService<ArchetypeRegistry>(), routine.SourceLanguage ?? "", routine.Name, run.TargetStack);
+            services.GetRequiredService<ArchetypeRegistry>(), routine.SourceLanguage ?? "", routine.Name, run.TargetStack,
+            await Endpoints.ScaffoldEndpoints.ProjectTargetAsync(db, routine.Id, ct));
         if (!target.Ok) return StepOutcome.Fail(target.Error!);
 
         // Already generated for this item (the process died after saving the package).

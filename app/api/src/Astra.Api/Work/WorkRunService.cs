@@ -172,8 +172,10 @@ public sealed class WorkRunService
             var scaffolding = plan.Items.Where(i => i.Kind == WorkStages.Scaffold).Select(i => i.SubjectId).ToArray();
             var languages = await _db.Subroutines.AsNoTracking().Where(s => scaffolding.Contains(s.Id))
                 .Select(s => new { s.Name, s.SourceLanguage }).ToListAsync(ct);
+            var projectTarget = Artefacts.ProjectSettings.Parse(await _db.Corpora.AsNoTracking()
+                .Where(c => c.Id == request.CorpusId).Select(c => c.SettingsJson).FirstOrDefaultAsync(ct)).TargetStack;
             var blocked = languages.GroupBy(l => l.SourceLanguage ?? "")
-                .Select(g => (Count: g.Count(), Target: ScaffoldTargetResolver.Resolve(_archetypes, g.Key, g.First().Name, request.TargetStack)))
+                .Select(g => (Count: g.Count(), Target: ScaffoldTargetResolver.Resolve(_archetypes, g.Key, g.First().Name, request.TargetStack, projectTarget)))
                 .Where(x => !x.Target.Ok).ToList();
             foreach (var (count, target) in blocked)
                 warnings.Add($"{count} routine(s) cannot be generated: {target.Error}");

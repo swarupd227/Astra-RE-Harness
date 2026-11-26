@@ -77,10 +77,29 @@ export function buildStackOptions(
 }
 
 /**
+ * Each source language's default target — the same table as the server's `Llm/TargetStacks.cs`, which extraction,
+ * the scaffold default and the assessment all read. Keep the two in step.
+ */
+export const LANGUAGE_DEFAULT_TARGET: Readonly<Record<string, string>> = {
+  'fortran-f77': 'dotnet10',
+  cpp: 'dotnet10',
+  delphi: 'dotnet10',
+  vb6: 'dotnet10-blazor',
+  vbnet: 'dotnet10-csharp',
+  csharp: 'dotnet10-webapi',
+  cobol: 'java-spring',
+  unibasic: 'java-spring',
+  openedge: 'java-spring',
+  abl: 'java-spring',
+  java: 'java-spring',
+  php: 'java-spring',
+};
+
+/**
  * The stack the platform would choose on its own for this source language.
- * Mirrors the server's default in ScaffoldEndpoints.cs: .NET 10 first (the
- * plain `dotnet10` stack, then a `dotnet10-*` variant), then dotnet8 for
- * estates standardised on the older LTS, else the first viable stack.
+ * Mirrors the server's default in ScaffoldEndpoints.cs: the preferred stack (the project's target) when viable, else
+ * the language's default target when viable, else .NET 10 first (the plain `dotnet10` stack, then a `dotnet10-*`
+ * variant), then dotnet8 for estates standardised on the older LTS, else the first viable stack.
  */
 export function recommendedStack(
   archetypes: ArchetypeManifest[],
@@ -90,6 +109,8 @@ export function recommendedStack(
   const viable = buildStackOptions(archetypes, schema).filter((o) => o.selectable);
   if (viable.length === 0) return null;
   if (preferred && viable.some((o) => o.stack === preferred)) return preferred;
+  const languageDefault = schema ? LANGUAGE_DEFAULT_TARGET[schema.toLowerCase()] : undefined;
+  if (languageDefault && viable.some((o) => o.stack === languageDefault)) return languageDefault;
   return (
     viable.find((o) => o.stack === 'dotnet10')?.stack ??
     viable.find((o) => o.stack.startsWith('dotnet10-'))?.stack ??

@@ -9,13 +9,14 @@ public sealed record ScaffoldTarget(string TargetStack, string? ArchetypeId, str
 
 /// <summary>
 /// Which target stack and archetype a routine is generated with: the requested
-/// one, else the platform's preferred stack for its language; refused when no
-/// production archetype covers the pair. One rule for the single-routine tool
-/// and for wave runs.
+/// one, else the project's own target, else its language's default target, else
+/// the platform's preferred stack; refused when no production archetype covers
+/// the pair. One rule for the single-routine tool and for wave runs.
 /// </summary>
 public static class ScaffoldTargetResolver
 {
-    public static ScaffoldTarget Resolve(ArchetypeRegistry archetypes, string sourceLanguage, string routineName, string? requested)
+    public static ScaffoldTarget Resolve(ArchetypeRegistry archetypes, string sourceLanguage, string routineName, string? requested,
+        string? projectTarget = null)
     {
         bool Speaks(IReadOnlyCollection<string> schemas) => string.IsNullOrEmpty(sourceLanguage)
             || schemas.Any(s => string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase));
@@ -34,7 +35,7 @@ public static class ScaffoldTargetResolver
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            chosen = Endpoints.ScaffoldEndpoints.PreferredStack(compatible);
+            chosen = Endpoints.ScaffoldEndpoints.PreferredStack(compatible, projectTarget, sourceLanguage);
         }
 
         var forTarget = all

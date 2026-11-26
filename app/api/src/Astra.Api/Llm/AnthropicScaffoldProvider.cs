@@ -159,6 +159,10 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             userPrompt += "\n\n## The workbook's inputs as the user left them\n\n" + request.WorkbookInputsNote.Trim();
         if (!string.IsNullOrWhiteSpace(request.CallTreeSourceNote))
             userPrompt += "\n\n## Source of this routine and the routines it calls\n\n" + request.CallTreeSourceNote.Trim();
+        // How the source language's constructs map onto this target (Prompts/<source>/scaffold-mapping.<family>.md):
+        // data beside the shared scaffold prompt, so each language adds its mapping without a prompt of its own.
+        if (ScaffoldMappingNote(_prompts, request.SourceSchema, family) is { } mapping)
+            userPrompt += $"\n\n## How {request.SourceSchema} maps onto {family}\n\n" + mapping.Trim();
 
         string? rawJson = null;
         int inputTokens = 0, outputTokens = 0;
@@ -869,15 +873,25 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
     /// reach the UI, regardless of how faithfully the model followed the
     /// prompt's instruction to cite only real ids.
     /// </summary>
-    private static HashSet<string> ExtractValidClaimIds(string signedSpecJson)
+    /// <summary>The file a source language's mapping onto a target family lives in, under that language's prompts.</summary>
+    public static string ScaffoldMappingAssetFileName(string family) => $"scaffold-mapping.{family}.md";
+
+    /// <summary>The source language's mapping note for this target family, or null when it has none.</summary>
+    public static string? ScaffoldMappingNote(PromptLibrary prompts, string? sourceSchema, string family) =>
+        string.IsNullOrWhiteSpace(sourceSchema) ? null : prompts.TryReadAsset(sourceSchema, ScaffoldMappingAssetFileName(family));
+
+    public static HashSet<string> ExtractValidClaimIds(string signedSpecJson)
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
         try
         {
             using var doc = JsonDocument.Parse(signedSpecJson);
-            foreach (var section in new[] { "invariants", "side_effects", "edge_cases", "open_questions", "inputs", "outputs" })
+            // Every claim section the spec has — the four every schema shares and a language's own (PHP's
+            // http_contracts and data_accesses, COBOL's section_contracts …): each is an array of objects with an id.
+            foreach (var property in doc.RootElement.EnumerateObject())
             {
-                if (!doc.RootElement.TryGetProperty(section, out var arr) || arr.ValueKind != JsonValueKind.Array)
+                var arr = property.Value;
+                if (arr.ValueKind != JsonValueKind.Array)
                     continue;
                 foreach (var item in arr.EnumerateArray())
                 {

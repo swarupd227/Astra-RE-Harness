@@ -8,6 +8,11 @@ import { Card, CardBody, CardHeader } from '@/components/Card';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { PageHero } from '@/components/PageHero';
 import { Skeleton } from '@/components/Skeleton';
+import { prettyStack } from '@/lib/targetStacks';
+
+// The stacks a project can migrate to. Empty = each routine goes to its language's default (PHP and COBOL to Java,
+// the .NET-bound languages to .NET 10); the server checks the value.
+const TARGET_STACKS = ['java-spring', 'dotnet10', 'dotnet8', 'react-python', 'angular-java', 'angular-dotnet8'];
 
 const inputClass =
   'mt-1 w-full rounded-md border border-line bg-raised px-3 py-2 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-volt focus:outline-none focus:ring-2 focus:ring-volt/20 disabled:cursor-not-allowed disabled:opacity-60';
@@ -20,6 +25,7 @@ type Form = {
   waveEnd: string;
   banner: string;
   test: boolean;
+  targetStack: string;
 };
 
 function toForm(s: ProjectSettings): Form {
@@ -31,6 +37,7 @@ function toForm(s: ProjectSettings): Form {
     waveEnd: s.metadata.wave?.endDate ?? '',
     banner: s.banner ?? '',
     test: !!s.test,
+    targetStack: s.targetStack ?? '',
   };
 }
 
@@ -43,6 +50,7 @@ function toSettings(base: ProjectSettings, f: Form): ProjectSettings {
     artefactKinds: f.artefactKinds,
     banner: f.banner.trim() || null,
     test: f.test,
+    targetStack: f.targetStack || null,
     metadata: {
       tier: f.tier === '' ? null : Number(f.tier),
       knowledgeHolder: f.knowledgeHolder.trim() || null,
@@ -135,6 +143,29 @@ export function ProjectSettingsPage() {
         />
         <CardBody>
           <ArtefactKindPicker value={form.artefactKinds} onChange={(artefactKinds) => set({ artefactKinds })} disabled={disabled} />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Migration target"
+          description="The stack this project's code is migrated to. Specs are extracted for it, and code is generated for it unless a routine asks for another."
+        />
+        <CardBody>
+          <label htmlFor="settings-target-stack" className="text-body font-medium text-ink-primary">Target stack</label>
+          <select
+            id="settings-target-stack"
+            value={form.targetStack}
+            onChange={(e) => set({ targetStack: e.target.value })}
+            disabled={disabled}
+            className={inputClass}
+            data-testid="settings-target-stack"
+          >
+            <option value="">Each language's default</option>
+            {[...TARGET_STACKS, ...(form.targetStack && !TARGET_STACKS.includes(form.targetStack) ? [form.targetStack] : [])].map((s) => (
+              <option key={s} value={s}>{prettyStack(s)}</option>
+            ))}
+          </select>
         </CardBody>
       </Card>
 

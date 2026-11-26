@@ -515,7 +515,10 @@ public static class EffortRiskModel
     private static readonly Dictionary<string, double> Throughput = new(StringComparer.OrdinalIgnoreCase)
     {
         ["fortran-f77"] = 60, ["java"] = 60, ["csharp"] = 60, ["vb6"] = 50, ["vbnet"] = 55,
-        ["delphi"] = 45, ["unibasic"] = 45, ["abl"] = 45, ["cobol"] = 40, ["cpp"] = 35,
+        ["delphi"] = 45, ["unibasic"] = 45, ["abl"] = 45, ["openedge"] = 45, ["cobol"] = 40, ["cpp"] = 35,
+        // PHP web code: routes, SQL and request state are read as facts and pinned by contract tests, but the
+        // dynamic typing and framework coupling keep it below the statically typed languages.
+        ["php"] = 45,
     };
 
     public static Result Compute(Inputs i)

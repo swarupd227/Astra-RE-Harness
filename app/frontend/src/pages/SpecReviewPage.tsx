@@ -89,12 +89,22 @@ export function SpecReviewPage() {
   // SubroutineEndpoints has projected `sourceLanguage` since ingest. Null
   // means "parsed before that column existed" and matches every archetype.
   const schema = sub.data?.sourceLanguage ?? null;
+  // The project's own target (its settings) leads the recommendation, as it does on the server.
+  const projectSettings = useQuery({
+    queryKey: ['corpus-settings', sub.data?.corpus?.id],
+    queryFn: () => api.getCorpusSettings(sub.data!.corpus.id),
+    enabled: !!sub.data?.corpus?.id,
+    staleTime: 60_000,
+  });
+  const preferredStack = isOfficeDocumentPath(sub.data?.file?.relativePath)
+    ? 'react-python'
+    : projectSettings.data?.targetStack ?? null;
   const {
     targetStack,
     setTargetStack: onTargetChange,
     overriddenFrom,
     savedOverridesRecommended,
-  } = useTargetStack(schema, isOfficeDocumentPath(sub.data?.file?.relativePath) ? 'react-python' : null);
+  } = useTargetStack(schema, preferredStack);
   // Workbook VBA goes to a web app, so the stack is a one-line summary and the claims get the room; for other sources
   // the picker and the generation details stay open, as before.
   const officeSource = isOfficeDocumentPath(sub.data?.file?.relativePath);

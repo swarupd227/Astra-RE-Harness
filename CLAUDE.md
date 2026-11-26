@@ -67,7 +67,14 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   `java-spring` is the default for COBOL/UniBasic/ABL/Java/PHP — one table, `Llm/TargetStacks`, which the
   assessment also reads. **Extraction is target-aware**: a spec is written with the extract prompt of the project's
   target (`targetStack` in project settings) or else the language's default, falling back to `dotnet10`; the
-  extract stream names the prompt in `provider_info`. Prompts live under
+  extract stream names the prompt in `provider_info`. Code generation defaults the same way
+  (`ScaffoldEndpoints.PreferredStack(candidates, projectTarget, language)`, shared by the copilot and wave runs), and
+  the target is set on Project settings or by a sentence ("migrate this project to Java Spring" → `set_target_stack`).
+  A language can add a scaffold mapping note, `Prompts/<source>/scaffold-mapping.<family>.md`, appended to the shared
+  scaffold prompt (PHP → java-spring has one). **`java-spring/spring-rest-service`** is the production archetype for
+  web routines (real Spring Boot 3.2: `@RestController` keeping each `http_contracts` status and body, `JdbcTemplate`
+  repository with bound values, MockMvc + `@JdbcTest`/H2 tests); its starters must be in the maven sidecar's
+  `warmup-spring/pom.xml`, which a unit test checks. Prompts live under
   `Llm/Prompts/<source>/<target>/`, scaffold prompts under `Llm/Prompts/common/<family>/` (every `dotnet10-*`
   variant shares `common/dotnet10`; see `AnthropicScaffoldProvider.ScaffoldPromptFamily`), archetypes under
   `Llm/Archetypes/<target>/<id>/` with `net10.0` csproj files. Adding a target = prompt + archetype + entry in

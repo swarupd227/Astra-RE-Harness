@@ -25,6 +25,28 @@ public static class ScaffoldEndpoints
             ?? Astra.Api.Llm.ScaffoldPipeline.TargetPlatform;
     }
 
+    /// <summary>
+    /// The default target for a routine: the project's own target when an archetype for it exists, else the source
+    /// language's default target (<see cref="Astra.Api.Llm.TargetStacks"/>, the same one its spec was extracted for)
+    /// when one exists, else <see cref="PreferredStack(IEnumerable{string})"/>.
+    /// </summary>
+    public static string PreferredStack(IEnumerable<string> candidates, string? projectTarget, string? sourceLanguage)
+    {
+        var list = candidates.ToList();
+        string? Have(string? s) => s is null ? null : list.FirstOrDefault(c => string.Equals(c, s, StringComparison.OrdinalIgnoreCase));
+        return Have(projectTarget) ?? Have(Astra.Api.Llm.TargetStacks.DefaultFor(sourceLanguage)) ?? PreferredStack(list);
+    }
+
+    /// <summary>The target stack a project names in its settings, or null.</summary>
+    public static async Task<string?> ProjectTargetAsync(AppDbContext db, Guid subroutineId, CancellationToken ct)
+    {
+        var json = await db.Subroutines.AsNoTracking()
+            .Where(s => s.Id == subroutineId)
+            .Select(s => db.Corpora.Where(c => c.Id == s.SourceFile!.SourceVersion!.CorpusId).Select(c => c.SettingsJson).FirstOrDefault())
+            .FirstOrDefaultAsync(ct);
+        return Astra.Api.Artefacts.ProjectSettings.Parse(json).TargetStack;
+    }
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -101,7 +123,8 @@ public static class ScaffoldEndpoints
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                chosenTarget = PreferredStack(compatibleStacks);
+                var projectTarget = spec?.Subroutine is { } routine ? await ProjectTargetAsync(db, routine.Id, ct) : null;
+                chosenTarget = PreferredStack(compatibleStacks, projectTarget, sourceLanguage);
                 log.LogInformation(
                     "Scaffold default targetStack for spec {SpecId} (schema={Schema}): {Stack} (from candidates {Candidates})",
                     id, sourceLanguage, chosenTarget, string.Join(",", compatibleStacks));

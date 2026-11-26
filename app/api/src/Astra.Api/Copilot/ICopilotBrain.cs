@@ -254,6 +254,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "get_work_run" => "reading the run's progress",
         "get_review_queue" => "reading the review queue",
         "control_work_run" => "updating the run",
+        "set_target_stack" => "setting the migration target",
         _ => "working on it",
     };
 
@@ -270,6 +271,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         string? name = quoted ?? (dottedMatch.Length > 0 ? dottedMatch : null);
 
         if (RouteBatch(t, text) is { } batch) return batch;
+        if (RouteTarget(t) is { } target) return target;
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
         if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
         if (Regex.IsMatch(t, @"\bmigration plan\b|\bwaves?\b"))
@@ -321,6 +323,23 @@ public sealed class MockCopilotBrain : ICopilotBrain
             return ("search_routines", new { query = string.IsNullOrWhiteSpace(query) ? "" : query, limit = 20 });
         }
         return null;
+    }
+
+    /// <summary>"Migrate this project to Java Spring", "target .NET 10", "use the default target": the project's target.</summary>
+    internal static (string Tool, object Input)? RouteTarget(string t)
+    {
+        var aboutProject = Regex.IsMatch(t, @"\b(migrate|move|switch)\s+(this|the)\s+(project|programme|program)\s+to\b")
+            || Regex.IsMatch(t, @"\b(target stack|migration target|default target)\b")
+            || Regex.IsMatch(t, @"^\s*(please\s+)?target\s+(java|spring|\.net|dotnet|net\s*\d|react|python|angular|the default)\b");
+        if (!aboutProject) return null;
+        string stack =
+            Regex.IsMatch(t, @"\bangular\b") ? (Regex.IsMatch(t, @"\.net|dotnet") ? "angular-dotnet8" : "angular-java")
+            : Regex.IsMatch(t, @"\breact\b|\bpython\b") ? "react-python"
+            : Regex.IsMatch(t, @"\bjava\b|\bspring\b") ? "java-spring"
+            : Regex.IsMatch(t, @"(\.net|dotnet|net)\s*8\b") ? "dotnet8"
+            : Regex.IsMatch(t, @"\.net|dotnet") ? "dotnet10"
+            : "default";
+        return ("set_target_stack", new { targetStack = stack });
     }
 
     /// <summary>Sentences about many routines at once: waves, batches, the review queue.</summary>

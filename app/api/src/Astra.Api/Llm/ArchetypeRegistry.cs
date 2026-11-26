@@ -150,8 +150,15 @@ public sealed class ArchetypeRegistry
         var match = candidates.FirstOrDefault(a =>
             a.Manifest.Matches?.AnyOf?.Any(m =>
                 string.Equals(m.SubroutineName, subroutineName, StringComparison.OrdinalIgnoreCase)) == true);
-        return match ?? candidates.FirstOrDefault();
+        // Otherwise a production archetype before a preview one: the scaffold path refuses a preview archetype, so
+        // falling back to one (alphabetically first) would block every routine its names do not match.
+        return match
+            ?? candidates.FirstOrDefault(IsProduction)
+            ?? candidates.FirstOrDefault();
     }
+
+    private static bool IsProduction(LoadedArchetype archetype) =>
+        (archetype.Manifest.Status ?? "").StartsWith("production", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCompatibleWithSchema(LoadedArchetype archetype, string sourceSchema) =>
         archetype.Manifest.CompatibleSchemas.Count == 0
