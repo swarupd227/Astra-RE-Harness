@@ -25,7 +25,8 @@ commit.
 | 16 | Pattern analysis | `/corpora/:id/pattern-analysis` | Backlog |
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
 | 18 | New project | `/projects/new` | Backlog |
-| 19+ | Assessment, Evidence, project settings, LLM settings… | | To review |
+| 19 | Assessment | `/corpora/:id/assessment` | Backlog |
+| 20+ | Evidence, project settings, LLM settings… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -210,3 +211,16 @@ commit.
    the background").
 5. Git URL tab: show branch and folder fields up front with defaults ("main", "/"), and whether private repos need a
    token.
+
+## 19 · Assessment (`/corpora/:id/assessment`)
+1. **Contradicts itself on the recommendation**: the card says "Faithful 1:1 on react-python", the prose says
+   "like-for-like conversion to React and FastAPI" and then "the heuristic recommends replatform … but the
+   modernization-flag count is not provided in the fact sheet" — internal reasoning leaking into a customer deliverable.
+   One recommendation, stated once, with the reason; the generator's caveats go to an "Assumptions" note.
+2. **Says VB6 for a VBA workbook** (header pill, prose "VB6/VBA", risk "vb6: scarce skills") — use the project's
+   language label (VBA) as Projects does.
+3. Effort reads as maths ("15 routines at ~50/person-week for vb6 → 0.3 base weeks · ×1.04 · ×1.17") — lead with
+   the band in words ("Small: under a week with the platform") and fold the calculation under "How this is estimated".
+4. "Dependency hotspots: 10" lists every routine with 1 caller — for a 15-routine workbook that is noise; show
+   hotspots only above a threshold (e.g. reach ≥ 20 %) and say "No hotspots" otherwise.
+5. Page is 6 000 px with no actions in view: add Export PDF · Share · Re-run (⋯) to the header, and a contents rail.

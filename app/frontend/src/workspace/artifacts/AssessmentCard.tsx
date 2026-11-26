@@ -61,7 +61,10 @@ export function AssessmentCard({ artifact, size }: ArtifactRenderProps) {
     const o = obj(l);
     return { language: str(o.language), routines: num(o.routines) };
   });
-  const spots = hotspots(p.hotspots);
+  // A hotspot is something a real share of the estate depends on. Every routine with one caller is not one — on a
+  // 15-routine workbook that listed 10 "hotspots". Keep those reached by ≥ 20 % of routines, or with 3+ direct callers.
+  const routineTotal = Math.max(1, num(inventory.routines));
+  const spots = hotspots(p.hotspots).filter((h) => h.transitiveCallers / routineTotal >= 0.2 || h.callers >= 3);
   const cycles = num(p.cycles);
   const patterns = obj(p.patterns);
   const topClusters = arr(patterns.topClusters).map((c) => {
@@ -92,7 +95,9 @@ export function AssessmentCard({ artifact, size }: ArtifactRenderProps) {
         <span className={clsx('font-medium text-ink-primary', pane ? 'text-h-sm' : 'text-body')}>
           {str(p.corpusName, 'Programme')}
         </span>
-        <span className="text-caption text-ink-tertiary">{formatLanguage(str(p.sourceLanguage) || null)}</span>
+        <span className="text-caption text-ink-tertiary">
+          {str(p.sourceLanguage) === 'vb6' ? 'VB6 / VBA' : formatLanguage(str(p.sourceLanguage) || null)}
+        </span>
         {generatedAt && (
           <span className="ml-auto text-micro text-ink-tertiary" title={generatedAt}>
             assessed {relativeTime(generatedAt)}
@@ -161,7 +166,7 @@ export function AssessmentCard({ artifact, size }: ArtifactRenderProps) {
               <span className="font-mono normal-case tracking-normal">{spots.length}</span>
             </h4>
             {spots.length === 0 ? (
-              <p className="text-caption text-ink-tertiary">No hotspots — nothing is called by a large share of the estate.</p>
+              <p className="text-caption text-ink-secondary">No hotspots — no routine is depended on by a fifth or more of the estate.</p>
             ) : (
               <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
                 {spots.map((h, i) => (
@@ -273,7 +278,10 @@ function Band({
   pane: boolean;
 }) {
   const tone = bandTone(band);
-  const shown = pane ? drivers : drivers.slice(0, 1);
+  // Effort drivers are the estimate's arithmetic ("15 routines at ~50/person-week → 0.3 base weeks · ×1.04"): in the
+  // pane they fold under "How this is estimated"; risk drivers are the reasons, so they stay open.
+  const isEffort = title.toLowerCase() === 'effort';
+  const shown = pane ? (isEffort ? [] : drivers) : drivers.slice(0, 1);
   return (
     <div className={clsx('rounded-lg border px-3 py-2.5', TONE_BORDER[tone], TONE_BG[tone])} data-testid={`assessment-${title.toLowerCase()}`}>
       <div className="flex items-center gap-2">
@@ -298,6 +306,16 @@ function Band({
             <li className="text-micro text-ink-tertiary">+{drivers.length - 1} more driver{drivers.length - 1 === 1 ? '' : 's'}</li>
           )}
         </ul>
+      )}
+      {pane && isEffort && drivers.length > 0 && (
+        <details className="mt-1.5 text-micro text-ink-secondary">
+          <summary className="cursor-pointer text-ink-tertiary hover:text-ink-primary">How this is estimated</summary>
+          <ul className="mt-1 space-y-0.5">
+            {drivers.map((d, i) => (
+              <li key={i} className="leading-[1.5]">{d}</li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );
