@@ -431,8 +431,10 @@ test.describe('Artefact adapters · UI', () => {
     await view.getByTestId('transcript-play-moment').click();
     const time = () => audio.evaluate((a: HTMLAudioElement) => a.currentTime);
     await expect.poll(time, { timeout: 8000 }).toBeGreaterThanOrEqual(6);
-    // It stops by itself at the end of the turn (8.5 s), not at the end of the recording.
-    await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.paused && a.currentTime > 8), { timeout: 10_000 }).toBe(true);
+    // It stops by itself at the end of the turn (8.5 s), not at the end of the recording. The wait is
+    // generous because a busy machine can take several seconds to start the clock; where it stops is
+    // what is checked below.
+    await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.paused && a.currentTime > 8), { timeout: 30_000 }).toBe(true);
     const stoppedAt = await time();
     expect(stoppedAt).toBeGreaterThanOrEqual(8.4);
     expect(stoppedAt).toBeLessThan(10);

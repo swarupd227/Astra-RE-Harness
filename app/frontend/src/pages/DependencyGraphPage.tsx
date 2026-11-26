@@ -31,7 +31,9 @@ export function DependencyGraphPage() {
   const params = useParams<{ id: string }>();
   const corpusId = params.id!;
   const navigate = useNavigate();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // State, not a ref: the container appears only once the loading skeleton is gone, which can be after
+  // the graph itself has arrived, and the drawing effect has to run again when it does.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const lastTapRef = useRef<{ id: string; t: number } | null>(null);
 
@@ -87,7 +89,7 @@ export function DependencyGraphPage() {
   // wave-plan, hideSharedStorage) change. We tear down the previous
   // Cytoscape instance on cleanup so React doesn't double-mount.
   useEffect(() => {
-    if (!graph.data || !containerRef.current) return;
+    if (!graph.data || !container) return;
     const visibleEdges = graph.data.edges.filter(
       (e) => !(hideSharedStorage && e.type === 'shared-storage'),
     );
@@ -120,7 +122,7 @@ export function DependencyGraphPage() {
     const ink = themeHex('ink-primary', theme);
     const edge = themeHex('line-strong', theme);
     const cy = cytoscape({
-      container: containerRef.current,
+      container,
       elements,
       style: [
         {
@@ -242,15 +244,14 @@ export function DependencyGraphPage() {
       cy.resize();
       cy.fit(undefined, 32);
     });
-    const container = containerRef.current;
     const ro =
-      typeof ResizeObserver !== 'undefined' && container
+      typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(() => {
             cy.resize();
             if (!cy.elements('.faded').length) cy.fit(undefined, 32);
           })
         : null;
-    if (ro && container) ro.observe(container);
+    ro?.observe(container);
 
     // Single-tap on node: focus its neighbourhood.
     // Double-tap on the same node: drill into the routine page.
@@ -290,7 +291,7 @@ export function DependencyGraphPage() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [graph.data, waveByRoutine, hideSharedStorage, navigate, theme, ct, stateDot]);
+  }, [container, graph.data, waveByRoutine, hideSharedStorage, navigate, theme, ct, stateDot]);
 
   const focused = selected ? nodeById.get(selected) : null;
 
@@ -350,7 +351,7 @@ export function DependencyGraphPage() {
         <Card className="overflow-hidden">
           <CardBody className="p-0">
             <div className="relative bg-sunken" style={{ height: 640 }}>
-              <div ref={containerRef} className="absolute inset-0" data-testid="dep-graph-canvas" />
+              <div ref={setContainer} className="absolute inset-0" data-testid="dep-graph-canvas" />
               {/* Floating control cluster — top-right. */}
               <div className="absolute right-3 top-3 flex flex-col gap-1 rounded-lg border border-line-subtle bg-raised/95 p-1 shadow-card">
                 <button
