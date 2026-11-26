@@ -30,7 +30,8 @@ commit.
 | 21 | LLM Provider | `/platform/llm` | Backlog |
 | 22 | Project settings | `/corpora/:id/settings` | Backlog |
 | 23 | Prompt Catalog | `/platform/prompts` | Backlog |
-| 24+ | Languages, Harmonisation, Roles, Validation policy… | | To review |
+| 24 | Languages | `/platform/languages` | Backlog |
+| 25+ | Harmonisation, Roles, Validation policy, routine extract & live scaffold screens… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -273,3 +274,16 @@ commit.
 4. "preview" vs "production" status is the most important fact for a reviewer — make it a filter and colour it.
 5. Intro copy: "spec provenance carries forward into every audit pull" → plain: "Every model call records which
    prompt and version it used."
+
+## 24 · Languages (`/platform/languages`)
+1. **Internal engineering notes in customer copy**: "Per ADR-026 …", "Per ADR-028, the parser sidecar receives a
+   compile_commands.json bootstrapped by CMake", "Calibrated against the Tier-1 portfolio (Phase 1 …". Keep one
+   plain sentence per language (what source it reads, what it is good at); ADR notes go to an Admin-only "Details".
+2. **Stale target lists contradict the platform**: C++ "→ dotnet8, java-spring, angular-java" and the title "C++ → .NET
+   8 + Java Spring + Angular", though .NET 10 is the default .NET target; VB6 card doesn't mention Office VBA or
+   React + Python. Derive the targets shown from the archetypes actually available per language (the same list the
+   routine page's target picker uses), with display names.
+3. 12 large cards, 5 900 px — a table (Language · Reads · Targets · Status · Claim kinds) with the description on
+   expand; "preview" vs "Production" casing differs.
+4. Eyebrow "Spec schemas" + jargon ("typed claim schema", "taxonomy", "mechanically derivable") → "Languages Astra
+   reads, and what it can turn each into."

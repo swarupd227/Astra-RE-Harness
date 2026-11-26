@@ -99,15 +99,11 @@ export function LanguagesPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="languages-page">
       <header>
-        <p className="label">
-          Spec schemas
-        </p>
+        <p className="label">Platform</p>
         <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Languages</h1>
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">
-          One typed claim schema per legacy language. Every Claude
-          extraction produces invariants, side effects, edge cases, and open
-          questions against this taxonomy — which is what makes the
-          generated test pack mechanically derivable from the spec.
+          The legacy languages Astra reads. For each, a spec lists the same kinds of claims — invariants, side
+          effects, edge cases, open questions — which is what lets tests be generated from the spec.
         </p>
       </header>
 
@@ -175,7 +171,9 @@ function SchemaCard({
         title={
           <span className="inline-flex items-center gap-2">
             <LanguagesIcon className="h-4 w-4 text-ink-secondary" aria-hidden="true" />
-            {schema.displayName}
+            {/* The language, not a target: targets are chosen per routine and this list had gone stale
+                ("C++ → .NET 8 …" while .NET 10 is the default). */}
+            {schema.id === 'vb6' ? 'Visual Basic 6 / Office VBA' : schema.displayName.split('→')[0].trim()}
           </span>
         }
         description={
@@ -213,7 +211,7 @@ function SchemaCard({
         }
       />
       <CardBody className="space-y-3">
-        <p className="text-body text-ink-secondary">{schema.description}</p>
+        <p className="text-body text-ink-secondary">{publicDescription(schema.description)}</p>
         <div className="flex flex-wrap items-center gap-2">
           {schema.supportedSourceExtensions.map((ext) => (
             <span
@@ -482,4 +480,15 @@ function ClaimKindTable({ kinds }: { kinds: ClaimKindSummary[] }) {
 function prettyStatus(s: string): string {
   const idx = s.indexOf(' · ');
   return idx > 0 ? s.slice(0, idx) : s;
+}
+
+/**
+ * The description without the engineering notes that leaked into it ("Per ADR-026 …", "Calibrated against the
+ * Tier-1 portfolio (Phase 1 …", "the parser sidecar receives a compile_commands.json …"): keep the sentences a
+ * customer reads, drop the ones that cite ADRs, phases or internals.
+ */
+function publicDescription(text: string): string {
+  const sentences = text.split(/(?<=\.)\s+/);
+  const kept = sentences.filter((x) => !/\bADR-\d+|\bPhase \d|sidecar|compile_commands|Tier-1 portfolio|Calibrated against/i.test(x));
+  return (kept.length ? kept : sentences.slice(0, 1)).join(' ');
 }
