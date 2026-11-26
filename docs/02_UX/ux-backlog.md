@@ -26,7 +26,8 @@ commit.
 | 17 | Dependency graph | `/corpora/:id/dependency-graph` | Backlog |
 | 18 | New project | `/projects/new` | Backlog |
 | 19 | Assessment | `/corpora/:id/assessment` | Backlog |
-| 20+ | Evidence, project settings, LLM settings… | | To review |
+| 20 | Evidence | `/corpora/:id/evidence` | Backlog |
+| 21+ | Project settings, LLM settings, Prompt catalog, Languages… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -224,3 +225,15 @@ commit.
 4. "Dependency hotspots: 10" lists every routine with 1 caller — for a 15-routine workbook that is noise; show
    hotspots only above a threshold (e.g. reach ≥ 20 %) and say "No hotspots" otherwise.
 5. Page is 6 000 px with no actions in view: add Export PDF · Share · Re-run (⋯) to the header, and a contents rail.
+
+## 20 · Evidence (`/corpora/:id/evidence`)
+1. **Each row says the long workbook name three times** — id line, label line ("Ultimate_Comprehensive_…xlsm · 1.
+   Rating Dashboard!C7") and locator line ("Ultimate_Comprehensive_…xlsm · input:1. Rating Dashboard!C7"), plus two
+   tags ("Spreadsheets", "Structured") that repeat the active filter. Row = what it is ("Input C7 · 1. Rating
+   Dashboard"), kind icon, file name once on hover; the short id as a small copyable chip.
+2. Group by file, then by sheet/routine, collapsible — 33 flat rows for one workbook becomes 3 groups.
+3. Inputs / formulas / controls are different things a reader wants — sub-filter chips under "Spreadsheets"
+   (Sheets · Inputs · Formulas · Controls · Forms).
+4. "Show together" is disabled until rows are ticked but nothing says so — show "Tick 2 or more to read them side by
+   side" beside it.
+5. Eyebrow "Project" → the project name (the subtitle currently carries it after a "·").

@@ -99,6 +99,11 @@ export function EvidencePage() {
               <Layers className="h-4 w-4" aria-hidden="true" />
               Show together{picked.length > 1 ? ` (${picked.length})` : ''}
             </Button>
+            {picked.length < 2 && (
+              <span className="text-caption text-ink-secondary" data-testid="evidence-together-hint">
+                Tick two or more to read them side by side
+              </span>
+            )}
           </>
         }
       />
@@ -193,16 +198,16 @@ export function EvidencePage() {
                   data-testid="evidence-pick"
                 />
                 <CitationChip corpusId={id} id={e.shortId} siblings={picked.length > 1 && picked.includes(e.shortId) ? picked : undefined} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-body text-ink-primary" title={e.label}>{e.label}</span>
-                  <span className="block truncate font-mono text-micro text-ink-tertiary" title={`${e.path} ${e.locator}`}>
-                    {e.path} · {e.locator}
+                {/* Say the file once: the label without its file prefix, then file name · what inside it. The full
+                    path and locator are on hover; the kind tag only when every kind is listed. */}
+                <span className="min-w-0 flex-1" title={`${e.path} ${e.locator} · ${e.trustTier === 'structured' ? 'structured' : 'narrative'}`}>
+                  <span className="block truncate text-body text-ink-primary">{withoutFile(e.label, e.path)}</span>
+                  <span className="block truncate font-mono text-micro text-ink-tertiary">
+                    {e.path.split('/').pop()}
+                    {locatorPart(e.locator, e.path) && ` · ${locatorPart(e.locator, e.path)}`}
                   </span>
                 </span>
-                <Badge tone="neutral" className="hidden sm:inline-flex">{e.kindLabel}</Badge>
-                <Badge tone={e.trustTier === 'structured' ? 'info' : 'neutral'} className="hidden md:inline-flex">
-                  {e.trustTier === 'structured' ? 'Structured' : 'Narrative'}
-                </Badge>
+                {!kind && <Badge tone="neutral" className="hidden sm:inline-flex">{e.kindLabel}</Badge>}
               </li>
             ))}
           </ul>
@@ -247,4 +252,23 @@ function KindPill({
       {children}
     </button>
   );
+}
+
+/** "Book.xlsm · 1. Rating Dashboard!C7" → "1. Rating Dashboard!C7" when the row already says which file it is in. */
+function withoutFile(label: string, path: string): string {
+  const file = path.split('/').pop() ?? path;
+  for (const prefix of [`${path} · `, `${file} · `]) {
+    if (label.startsWith(prefix) && label.length > prefix.length) return label.slice(prefix.length);
+  }
+  return label;
+}
+
+/** The locator minus a repeated file prefix; empty when it says nothing beyond the file. */
+function locatorPart(locator: string, path: string): string {
+  const file = path.split('/').pop() ?? path;
+  let l = locator;
+  for (const prefix of [`${path} · `, `${file} · `, path, file]) {
+    if (l.startsWith(prefix)) l = l.slice(prefix.length).replace(/^\s*·\s*/, '');
+  }
+  return l.trim();
 }
