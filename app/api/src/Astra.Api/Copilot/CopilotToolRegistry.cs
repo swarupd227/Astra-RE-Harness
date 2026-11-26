@@ -22,7 +22,7 @@ namespace Astra.Api.Copilot;
 /// thread. State-changing tools are <see cref="CopilotTool.Mutating"/> and
 /// pause for an explicit confirmation turn.
 /// </summary>
-public sealed class CopilotToolRegistry
+public sealed partial class CopilotToolRegistry
 {
     private readonly List<CopilotTool> _tools = new();
 
@@ -354,6 +354,8 @@ public sealed class CopilotToolRegistry
             Describe = async (input, ctx) => $"draft a {Read(input, "strategy") ?? MigrationPlanner.DefaultStrategy} migration plan for {(await ResolveCorpusAsync(input, ctx))?.Name ?? "this programme"}",
             Execute = GenerateMigrationPlanAsync,
         });
+
+        RegisterWorkTools();
     }
 
     // ═══ Read tools ══════════════════════════════════════════════════════
@@ -1008,42 +1010,11 @@ public sealed class CopilotToolRegistry
         if (spec.State != "SIGNED")
             return ToolResult.Failure("spec.not_signed", $"The spec for `{spec.Subroutine?.Name}` is {spec.State}; only SIGNED specs can be built.");
 
-        var archetypes = ctx.Services.GetRequiredService<ArchetypeRegistry>();
-        var sourceLanguage = spec.Subroutine?.SourceLanguage ?? "";
-        var requested = Read(input, "targetStack")?.Trim();
-        string chosen;
-        if (!string.IsNullOrWhiteSpace(requested))
-        {
-            chosen = requested;
-        }
-        else
-        {
-            var compatible = archetypes.All()
-                .Where(a => string.IsNullOrEmpty(sourceLanguage)
-                            || a.Manifest.CompatibleSchemas.Any(s => string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase)))
-                .Select(a => a.Manifest.TargetStack)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            chosen = Endpoints.ScaffoldEndpoints.PreferredStack(compatible);
-        }
-
-        var forTarget = archetypes.All()
-            .Where(a => string.Equals(a.Manifest.TargetStack, chosen, StringComparison.OrdinalIgnoreCase))
-            .Where(a => a.Manifest.CompatibleSchemas.Count == 0 || string.IsNullOrEmpty(sourceLanguage)
-                        || a.Manifest.CompatibleSchemas.Any(s => string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-        if (forTarget.Length == 0)
-        {
-            var available = archetypes.All()
-                .Where(a => a.Manifest.CompatibleSchemas.Any(s => string.Equals(s, sourceLanguage, StringComparison.OrdinalIgnoreCase)))
-                .Select(a => a.Manifest.TargetStack).Distinct().ToArray();
-            return ToolResult.Failure("scaffold.no_compatible_archetype",
-                $"No archetype for {sourceLanguage} → {chosen}. Available targets for this language: {string.Join(", ", available)}.");
-        }
-        var match = archetypes.PickForSubroutine(chosen, spec.Subroutine?.Name ?? "", sourceLanguage) ?? forTarget[0];
-        if (!(match.Manifest.Status ?? "").StartsWith("production", StringComparison.OrdinalIgnoreCase))
-            return ToolResult.Failure("scaffold.target_gated", $"Archetype '{match.Manifest.Id}' for {chosen} is {match.Manifest.Status} — not self-service yet.");
+        var target = Astra.Api.Work.ScaffoldTargetResolver.Resolve(
+            ctx.Services.GetRequiredService<ArchetypeRegistry>(), spec.Subroutine?.SourceLanguage ?? "",
+            spec.Subroutine?.Name ?? "", Read(input, "targetStack"));
+        if (!target.Ok) return ToolResult.Failure(target.ErrorCode!, target.Error!);
+        var chosen = target.TargetStack;
 
         var runs = ctx.Services.GetRequiredService<BackgroundRunService>();
         var narrator = ctx.Services.GetRequiredService<Narrator>();
@@ -1078,7 +1049,7 @@ public sealed class CopilotToolRegistry
             links = new[] { new { label = "Watch live", href = $"/specs/{spec.Id}/scaffold?target={Uri.EscapeDataString(chosen)}" } },
         };
         return new ToolResult(true,
-            new { runId, specId = spec.Id, name, targetStack = chosen, archetype = match.Manifest.Id, status = "started" },
+            new { runId, specId = spec.Id, name, targetStack = chosen, archetype = target.ArchetypeId, status = "started" },
             $"generating {chosen} for {name}",
             new[] { ToolResult.Artifact("runProgress", runId.ToString(), props) },
             runId);

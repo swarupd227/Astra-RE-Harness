@@ -103,6 +103,13 @@ public sealed class CompileValidator
 
         try
         {
+            // P5 — bounded executor pool: at most Validation:MaxConcurrentGates run at once; the rest queue here.
+            using var gateSlot = await GateExecutorPool.Shared.AcquireForAsync(_db, run, "build", ct);
+            if (run.Summary.StartsWith("Waiting for", StringComparison.Ordinal))
+            {
+                run.Summary = "Running";
+                await _db.SaveChangesAsync(ct);
+            }
             // Phase 5.5: dispatch by target platform. The dotnet8 path
             // materialises the scaffold and shells out locally; the
             // java-spring path POSTs the sources to the maven sidecar so

@@ -12,7 +12,7 @@ import { absoluteTime, formatDuration, personaLabel, pretty, relativeTime, TONE_
 export type ArtifactSelection = { messageId: string; index: number };
 
 /** Kinds that need the full column width when rendered as a card. */
-const WIDE_KINDS = new Set(['routineList', 'clusterGrid', 'routine', 'specSummary', 'assessment', 'planWaves', 'flowBoard', 'docSection']);
+const WIDE_KINDS = new Set(['routineList', 'clusterGrid', 'routine', 'specSummary', 'assessment', 'planWaves', 'flowBoard', 'docSection', 'workRun', 'reviewQueue']);
 
 export const MessageBubble = memo(function MessageBubble({
   message,

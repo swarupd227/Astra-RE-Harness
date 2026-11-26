@@ -106,6 +106,13 @@ public sealed class RunEventBus : IDisposable
         foreach (var ch in subscribers) ch.Writer.TryComplete();
     }
 
+    /// <summary>Forget a finished stream so the same run id can be published to again
+    /// (a work run whose failed steps are retried).</summary>
+    public void Reopen(Guid runId)
+    {
+        lock (_lock) RemoveLocked(runId);
+    }
+
     public bool IsCompleted(Guid runId)
     {
         lock (_lock)

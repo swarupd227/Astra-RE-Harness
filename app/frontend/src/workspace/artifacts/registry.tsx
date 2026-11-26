@@ -15,6 +15,8 @@ import { AssessmentCard } from './AssessmentCard';
 import { PlanWavesCard } from './PlanWavesCard';
 import { FlowBoardCard } from './FlowBoardCard';
 import { DocSectionCard } from './DocSectionCard';
+import { WorkRunCard } from './WorkRunCard';
+import { ReviewQueueCard } from './ReviewQueueCard';
 
 export type ArtifactSize = 'card' | 'pane';
 
@@ -67,6 +69,10 @@ export function renderArtifact(artifact: Artifact, opts: RenderOptions): ReactNo
       return <PlanWavesCard artifact={a} size={size} onIntent={onIntent} />;
     case 'flowBoard':
       return <FlowBoardCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'workRun':
+      return <WorkRunCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'reviewQueue':
+      return <ReviewQueueCard artifact={a} size={size} onIntent={onIntent} />;
     case 'docSection':
       return <DocSectionCard artifact={a} size={size} onIntent={onIntent} />;
     default: {

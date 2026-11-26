@@ -44,6 +44,8 @@ public sealed class Narrator
         _ = Task.Run(() => FollowAsync(t));
     }
 
+    public bool IsTracking(Guid runId) => _tracked.ContainsKey(runId);
+
     /// <summary>Runs currently being followed, grouped by agent — the rail's
     /// "who is busy" signal.</summary>
     public IReadOnlyDictionary<string, List<Tracked>> ActiveByAgent() =>
@@ -55,6 +57,7 @@ public sealed class Narrator
         string? lastStage = null;
         var progressMilestone = 0;
         var started = DateTimeOffset.UtcNow;
+        var work = new Astra.Api.Work.WorkNarration();
         try
         {
             await foreach (var evt in _bus.SubscribeAsync(t.RunId, 0, ct))
@@ -93,6 +96,12 @@ public sealed class Narrator
                             }
                             break;
                         }
+                        // A multi-routine run: aggregated figures, posted when something a
+                        // person cares about happens (halfway, waiting on sign-off, paused).
+                        case "progress" when t.Kind == "work-run":
+                            if (evt.Data is Astra.Api.Work.WorkRunSnapshot snapshot && work.Next(snapshot) is { } note)
+                                await PostWorkNoteAsync(t, snapshot, note, ct);
+                            break;
                         case "stage" when t.Kind == "pattern-analysis":
                             if (evt.Stage is { Length: > 0 } && evt.Stage != lastStage)
                             {
@@ -324,6 +333,16 @@ public sealed class Narrator
                 }
                 break;
             }
+            case "work-run":
+            {
+                var queue = scope.ServiceProvider.GetRequiredService<Astra.Api.Work.WorkQueue>();
+                var snapshot = await queue.SnapshotAsync(t.RunId, ct);
+                if (snapshot is null) { markdown = summary ?? "Run finished."; break; }
+                markdown = Astra.Api.Work.WorkNarration.Final(snapshot);
+                artifacts.Add(CopilotToolRegistry.WorkRunArtifact(snapshot));
+                suggestions.AddRange(Astra.Api.Work.WorkNarration.FinalChips(snapshot));
+                break;
+            }
             case "docs":
                 markdown = $"Documentation run {StateWord(state)}: {summary}";
                 suggestions.Add(new("Open the docs", "Show me the generated documentation"));
@@ -363,6 +382,20 @@ public sealed class Narrator
         await PostAsync(t, markdown, artifacts, suggestions, ct, conversations);
         if (alsoTo is { } other)
             await PostAsync(t with { ConversationId = other }, markdown, artifacts, suggestions, ct, conversations);
+    }
+
+    private async Task PostWorkNoteAsync(Tracked t, Astra.Api.Work.WorkRunSnapshot snapshot, Astra.Api.Work.WorkNote note, CancellationToken ct)
+    {
+        var artifacts = new List<ArtifactDto>();
+        if (note.ShowReviewQueue)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var items = await scope.ServiceProvider.GetRequiredService<Astra.Api.Work.WorkRunService>()
+                .ReviewQueueAsync(snapshot.CorpusId, 25, ct);
+            artifacts.Add(ArtifactBuilders.ReviewQueue(snapshot.CorpusId, items));
+        }
+        if (note.ShowRun) artifacts.Add(CopilotToolRegistry.WorkRunArtifact(snapshot));
+        await PostAsync(t, note.Markdown, artifacts, note.Chips.ToList(), ct);
     }
 
     private static string StageLabel(string stage) => stage switch

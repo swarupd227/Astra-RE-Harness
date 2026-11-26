@@ -247,6 +247,13 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "explain_claim" => "pulling up the claim and its source",
         "search_docs" => "searching the documentation",
         "list_modules" => "listing the modules",
+        "run_wave" => "queueing the wave",
+        "extract_many" => "queueing the spec drafts",
+        "generate_many" => "queueing the code generation",
+        "run_gates_many" => "queueing the gates",
+        "get_work_run" => "reading the run's progress",
+        "get_review_queue" => "reading the review queue",
+        "control_work_run" => "updating the run",
         _ => "working on it",
     };
 
@@ -262,6 +269,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         var dottedMatch = Regex.Match(text, @"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\b").Groups[1].Value;
         string? name = quoted ?? (dottedMatch.Length > 0 ? dottedMatch : null);
 
+        if (RouteBatch(t, text) is { } batch) return batch;
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
         if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
         if (Regex.IsMatch(t, @"\bmigration plan\b|\bwaves?\b"))
@@ -312,6 +320,74 @@ public sealed class MockCopilotBrain : ICopilotBrain
             var query = quoted ?? Regex.Match(text, @"(?:named|called|for|matching)\s+([A-Za-z0-9_.]+)").Groups[1].Value;
             return ("search_routines", new { query = string.IsNullOrWhiteSpace(query) ? "" : query, limit = 20 });
         }
+        return null;
+    }
+
+    /// <summary>Sentences about many routines at once: waves, batches, the review queue.</summary>
+    private static (string Tool, object Input)? RouteBatch(string t, string text)
+    {
+        var budget = Regex.Match(t, @"(?:budget|ceiling)\D{0,12}?(\d+(?:\.\d+)?)").Groups[1].Value;
+        var money = budget.Length > 0 ? budget : null;
+        var parallel = Regex.Match(t, @"\b(\d+)\s+(?:at a time|at once|in parallel|agents)\b").Groups[1].Value;
+        int? maxParallel = parallel.Length > 0 ? int.Parse(parallel) : null;
+        var countMatch = Regex.Match(t, @"\b(\d+)\s+(?:routines|specs|packages)\b").Groups[1].Value;
+        int? limit = countMatch.Length > 0 ? int.Parse(countMatch) : null;
+        var path = Regex.Match(text, @"\b(?:in|under|from)\s+[`""']([^`""']+)[`""']").Groups[1].Value;
+        var names = Regex.Matches(text, "`([^`]+)`").Select(m => m.Groups[1].Value).Where(n => n != path).ToArray();
+
+        // "Cancel the wave run 39571149": a card's button names the run it belongs to.
+        var runRef = Regex.Match(t, @"\brun\s+([0-9a-f]{8})\b").Groups[1].Value;
+        var runId = runRef.Length > 0 ? runRef : null;
+
+        if (Regex.IsMatch(t, @"\breview queue\b|\bwaiting for (a )?sign[- ]?off\b|\bwhat should i sign\b"))
+            return ("get_review_queue", new { });
+
+        if (Regex.IsMatch(t, @"\bretry\b.*\bfailed\b"))
+            return ("control_work_run", new { action = "retry-failed", runId });
+        var control = Regex.Match(t, @"\b(pause|resume|cancel|stop)\b.*\b(wave|batch|run)\b");
+        if (control.Success && !t.Contains("pattern"))
+        {
+            var action = control.Groups[1].Value == "stop" ? "cancel" : control.Groups[1].Value;
+            return ("control_work_run", new { action, budgetUsd = money, runId });
+        }
+        if (Regex.IsMatch(t, @"\b(wave|batch) run\b|\bhow is (the )?(wave|batch)\b|\brun progress\b"))
+            return ("get_work_run", new { runId });
+
+        var many = Regex.IsMatch(t, @"\b(all|every|many)\b|\b\d+\s+(routines|specs|packages)\b|\bthese routines\b") || names.Length > 1;
+
+        if (Regex.IsMatch(t, @"\b(run|execute|start|kick off)\b.*\bwaves?\b") && !t.Contains("plan the"))
+        {
+            var n = Regex.Match(t, @"\bwave\s+(\d+)\b").Groups[1].Value;
+            return ("run_wave", new
+            {
+                wave = n.Length > 0 ? int.Parse(n) : (int?)null,
+                allWaves = Regex.IsMatch(t, @"\b(all|every)\s+(the\s+)?waves\b"),
+                budgetUsd = money,
+                maxParallel,
+            });
+        }
+        if (!many) return null;
+        // The fix-until-green loop repairs one routine at a time; a batch of gates is not that loop.
+        if (Regex.IsMatch(t, @"\buntil (it'?s |they'?re |all )?green\b|\bfix loop\b|\bauto[- ]?fix\b|\bmake (it|them) green\b"))
+            return null;
+        // Batches queue compile and test-pack only: "the quality gate" must not become those two.
+        var qualityOnly = Regex.IsMatch(t, @"\bquality\b|\bsecurity (review|check|checks|scan)\b|\bcoding standards?\b|\bstatic analysis\b")
+            && !Regex.IsMatch(t, @"\bcompile\b|\btest[- ]packs?\b");
+        if (!qualityOnly && Regex.IsMatch(t, @"\bgates?\b|\bcompile\b|\btest[- ]packs?\b") && Regex.IsMatch(t, @"\b(run|compile|test)\b") && !Regex.IsMatch(t, @"\bgenerate\b"))
+        {
+            var gates = new List<string>();
+            if (t.Contains("compile")) gates.Add("compile");
+            if (t.Contains("test")) gates.Add("test-pack");
+            return ("run_gates_many", new { gates, routines = names, limit });
+        }
+        if (Regex.IsMatch(t, @"\b(extract|draft)\b"))
+            return ("extract_many", new { routines = names, path, limit, budgetUsd = money, maxParallel });
+        if (Regex.IsMatch(t, @"\b(re)?generate\b|\bscaffold\b|\bconvert\b"))
+            return ("generate_many", new
+            {
+                routines = names, path, limit, budgetUsd = money, maxParallel,
+                thenGates = Regex.IsMatch(t, @"\bgates?\b|\bcompile\b|\btest\b"),
+            });
         return null;
     }
 

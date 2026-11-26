@@ -182,6 +182,14 @@ builder.Services.AddSingleton<Astra.Api.Ingest.IngestRunService>();
 builder.Services.Configure<Astra.Api.Preview.PreviewOptions>(builder.Configuration.GetSection("Preview"));
 builder.Services.AddSingleton<Astra.Api.Preview.PreviewService>();
 builder.Services.AddHostedService<Astra.Api.Preview.PreviewSweeper>();
+// P5/P6 — durable per-routine work queue, its hosted scheduler and wave runs. The scheduler
+// resumes whatever is unfinished after a restart (Work:Enabled / Work:LeaseSeconds / Work:Caps).
+builder.Services.Configure<Astra.Api.Work.WorkSchedulerOptions>(builder.Configuration.GetSection("Work"));
+builder.Services.AddScoped<Astra.Api.Work.WorkQueue>();
+builder.Services.AddScoped<Astra.Api.Work.WorkRunService>();
+builder.Services.AddSingleton<Astra.Api.Work.WorkStepExecutor>();
+builder.Services.AddSingleton<Astra.Api.Work.WorkScheduler>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<Astra.Api.Work.WorkScheduler>());
 // WS5 — the 10-minute Assessment (deterministic facts + one narrative call).
 builder.Services.AddSingleton<Astra.Api.Assessment.AssessmentService>();
 
@@ -338,6 +346,7 @@ builder.Services.AddSingleton<Astra.Api.Llm.Archetypes.ArchetypeRegistry>();
 builder.Services.AddScoped<Astra.Api.Compliance.ComplianceFeedExporter>();
 
 // ─── Post-migration validation (Phase #2a/2b/2c) ──────────────────────
+Astra.Api.Validation.GateExecutorPool.Configure(builder.Configuration.GetValue("Validation:MaxConcurrentGates", 3));
 builder.Services.AddScoped<Astra.Api.Validation.CompileValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackGenerator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackValidator>();
@@ -955,6 +964,63 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_routine_digests_version_hash ON routine_digests (source_version_id, structural_hash);
             """);
 
+        // P5 — durable work queue (work_runs + work_items): leased with FOR UPDATE SKIP LOCKED,
+        // heartbeat + lease expiry, resumable after a restart (see Work/WorkScheduler).
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS work_runs (
+                id                 uuid          PRIMARY KEY,
+                kind               varchar(32)   NOT NULL,
+                corpus_id          uuid          NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+                conversation_id    uuid          NULL,
+                migration_wave_id  uuid          NULL,
+                label              varchar(256)  NOT NULL,
+                state              varchar(16)   NOT NULL,
+                persona            varchar(16)   NOT NULL,
+                display_name       varchar(160)  NOT NULL,
+                target_stack       varchar(64)   NULL,
+                stages_json        jsonb         NOT NULL DEFAULT '[]',
+                caps_json          jsonb         NOT NULL DEFAULT '{{}}',
+                budget_usd         numeric(12,4) NULL,
+                cost_usd           numeric(12,4) NOT NULL DEFAULT 0,
+                calls              integer       NOT NULL DEFAULT 0,
+                input_tokens       bigint        NOT NULL DEFAULT 0,
+                output_tokens      bigint        NOT NULL DEFAULT 0,
+                metrics_json       jsonb         NULL,
+                summary            varchar(1024) NOT NULL DEFAULT '',
+                created_at         timestamptz   NOT NULL,
+                completed_at       timestamptz   NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_work_runs_corpus_created ON work_runs (corpus_id, created_at);
+            CREATE TABLE IF NOT EXISTS work_items (
+                id                 uuid          PRIMARY KEY,
+                run_id             uuid          NOT NULL REFERENCES work_runs(id) ON DELETE CASCADE,
+                kind               varchar(24)   NOT NULL,
+                subject_id         uuid          NOT NULL,
+                subject_name       varchar(256)  NOT NULL,
+                depends_on         uuid[]        NOT NULL DEFAULT '{{}}',
+                state              varchar(16)   NOT NULL,
+                lane               varchar(16)   NOT NULL DEFAULT 'batch',
+                priority           integer       NOT NULL DEFAULT 0,
+                lease_owner        varchar(128)  NULL,
+                lease_expires_at   timestamptz   NULL,
+                heartbeat_at       timestamptz   NULL,
+                attempts           integer       NOT NULL DEFAULT 0,
+                max_attempts       integer       NOT NULL DEFAULT 2,
+                not_before         timestamptz   NULL,
+                error              varchar(4000) NULL,
+                result_json        jsonb         NULL,
+                cost_usd           numeric(12,4) NOT NULL DEFAULT 0,
+                calls              integer       NOT NULL DEFAULT 0,
+                input_tokens       bigint        NOT NULL DEFAULT 0,
+                output_tokens      bigint        NOT NULL DEFAULT 0,
+                created_at         timestamptz   NOT NULL,
+                started_at         timestamptz   NULL,
+                completed_at       timestamptz   NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_work_items_run_state ON work_items (run_id, state);
+            CREATE INDEX IF NOT EXISTS ix_work_items_state_kind_priority ON work_items (state, kind, priority);
+            """);
+
         // Phase 15.2 — durable pattern-analysis runs: heartbeat, cancel flag,
         // per-stage checkpoint (see PatternAnalysisOrchestrator).
         await db.Database.ExecuteSqlRawAsync("""
@@ -1297,6 +1363,7 @@ app.MapSpecReviewEndpoints();
 app.MapAuditEndpoints();
 app.MapMyReviewsEndpoints();
 app.MapScaffoldEndpoints();
+app.MapWorkEndpoints();
 app.MapPreviewEndpoints();
 app.MapValidationEndpoints();
 app.MapSchemaEndpoints();

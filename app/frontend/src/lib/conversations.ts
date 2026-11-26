@@ -59,7 +59,9 @@ export type ArtifactKind =
   | 'assessment'
   | 'planWaves'
   | 'flowBoard'
-  | 'docSection';
+  | 'docSection'
+  | 'workRun'
+  | 'reviewQueue';
 
 export type Artifact = {
   kind: ArtifactKind;

@@ -113,6 +113,13 @@ public sealed class TestPackValidator
 
         try
         {
+            // P5 — bounded executor pool: at most Validation:MaxConcurrentGates run at once; the rest queue here.
+            using var gateSlot = await GateExecutorPool.Shared.AcquireForAsync(_db, run, "test", ct);
+            if (run.Summary.StartsWith("Waiting for", StringComparison.Ordinal))
+            {
+                run.Summary = "Running";
+                await _db.SaveChangesAsync(ct);
+            }
             // Phase 5.5: dispatch by target platform. java-spring scaffolds
             // round-trip through the maven sidecar (mvn test); dotnet8
             // scaffolds keep the original in-process `dotnet test` path.

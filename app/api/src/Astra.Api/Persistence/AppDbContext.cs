@@ -34,6 +34,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<HarmonisationFinding> HarmonisationFindings => Set<HarmonisationFinding>();
     public DbSet<MigrationPlan> MigrationPlans => Set<MigrationPlan>();
     public DbSet<MigrationWave> MigrationWaves => Set<MigrationWave>();
+    public DbSet<WorkRun> WorkRuns => Set<WorkRun>();
+    public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<DocSection> DocSections => Set<DocSection>();
     public DbSet<DocGenerationRun> DocGenerationRuns => Set<DocGenerationRun>();
     public DbSet<PatternAnalysisRun> PatternAnalysisRuns => Set<PatternAnalysisRun>();
@@ -42,6 +44,26 @@ public sealed class AppDbContext : DbContext
     public DbSet<RoutineDigest> RoutineDigests => Set<RoutineDigest>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
+
+    // Every saved LlmCall is reported to the ambient work scope (per-item usage, per-run
+    // cost ceiling) and the limiters' token window, wherever in the code base it is written.
+    private void ReportLlmCalls()
+    {
+        foreach (var e in ChangeTracker.Entries<LlmCall>())
+            if (e.State == EntityState.Added) Astra.Api.Llm.LlmUsage.Publish(e.Entity);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ReportLlmCalls();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        ReportLlmCalls();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -694,6 +716,68 @@ public sealed class AppDbContext : DbContext
             b.HasOne<MigrationPlan>().WithMany()
              .HasForeignKey(x => x.MigrationPlanId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.MigrationPlanId, x.WaveNumber });
+        });
+
+        modelBuilder.Entity<WorkRun>(b =>
+        {
+            b.ToTable("work_runs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id").IsRequired();
+            b.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            b.Property(x => x.MigrationWaveId).HasColumnName("migration_wave_id");
+            b.Property(x => x.Label).HasColumnName("label").HasMaxLength(256).IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Persona).HasColumnName("persona").HasMaxLength(16).IsRequired();
+            b.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(160).IsRequired();
+            b.Property(x => x.TargetStack).HasColumnName("target_stack").HasMaxLength(64);
+            b.Property(x => x.StagesJson).HasColumnName("stages_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.CapsJson).HasColumnName("caps_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.BudgetUsd).HasColumnName("budget_usd").HasColumnType("numeric(12,4)");
+            b.Property(x => x.CostUsd).HasColumnName("cost_usd").HasColumnType("numeric(12,4)");
+            b.Property(x => x.Calls).HasColumnName("calls");
+            b.Property(x => x.InputTokens).HasColumnName("input_tokens");
+            b.Property(x => x.OutputTokens).HasColumnName("output_tokens");
+            b.Property(x => x.MetricsJson).HasColumnName("metrics_json").HasColumnType("jsonb");
+            b.Property(x => x.Summary).HasColumnName("summary").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            b.HasOne<Corpus>().WithMany().HasForeignKey(x => x.CorpusId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.CorpusId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<WorkItem>(b =>
+        {
+            b.ToTable("work_items");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.RunId).HasColumnName("run_id").IsRequired();
+            b.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(24).IsRequired();
+            b.Property(x => x.SubjectId).HasColumnName("subject_id").IsRequired();
+            b.Property(x => x.SubjectName).HasColumnName("subject_name").HasMaxLength(256).IsRequired();
+            b.Property(x => x.DependsOn).HasColumnName("depends_on").HasColumnType("uuid[]").IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Lane).HasColumnName("lane").HasMaxLength(16).IsRequired();
+            b.Property(x => x.Priority).HasColumnName("priority");
+            b.Property(x => x.LeaseOwner).HasColumnName("lease_owner").HasMaxLength(128);
+            b.Property(x => x.LeaseExpiresAt).HasColumnName("lease_expires_at");
+            b.Property(x => x.HeartbeatAt).HasColumnName("heartbeat_at");
+            b.Property(x => x.Attempts).HasColumnName("attempts");
+            b.Property(x => x.MaxAttempts).HasColumnName("max_attempts");
+            b.Property(x => x.NotBefore).HasColumnName("not_before");
+            b.Property(x => x.Error).HasColumnName("error").HasMaxLength(4000);
+            b.Property(x => x.ResultJson).HasColumnName("result_json").HasColumnType("jsonb");
+            b.Property(x => x.CostUsd).HasColumnName("cost_usd").HasColumnType("numeric(12,4)");
+            b.Property(x => x.Calls).HasColumnName("calls");
+            b.Property(x => x.InputTokens).HasColumnName("input_tokens");
+            b.Property(x => x.OutputTokens).HasColumnName("output_tokens");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.StartedAt).HasColumnName("started_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            b.HasOne<WorkRun>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.RunId, x.State });
+            b.HasIndex(x => new { x.State, x.Kind, x.Priority });
         });
 
         modelBuilder.Entity<DocSection>(b =>

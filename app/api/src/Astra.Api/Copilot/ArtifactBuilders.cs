@@ -468,6 +468,10 @@ public static class ArtifactBuilders
 
     // ── planWaves / docSection ───────────────────────────────────────────
 
+    /// <summary>Specs waiting for an SME (the card refreshes itself from GET /api/v1/review-queue).</summary>
+    public static ArtifactDto ReviewQueue(Guid? corpusId, IReadOnlyList<Astra.Api.Work.ReviewQueueItem> items) =>
+        ToolResult.Artifact("reviewQueue", corpusId?.ToString(), new { corpusId, items = items.Take(25).ToList(), total = items.Count });
+
     public static async Task<(ArtifactDto Artifact, object Payload)> PlanWavesAsync(
         AppDbContext db, MigrationPlan plan, CancellationToken ct)
     {

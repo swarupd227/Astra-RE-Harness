@@ -22,6 +22,16 @@ public sealed class AnthropicRateLimiterOptions
 
     /// <summary>Pause applied on a 429 that carries no Retry-After.</summary>
     public int DefaultPauseSeconds { get; set; } = 10;
+
+    /// <summary>In-flight slots kept free for the Interactive lane: batch work
+    /// (a wave's queued per-routine calls) never takes the last N, so a person
+    /// typing into the copilot is not stuck behind a hundred queued extractions.</summary>
+    public int InteractiveReserve { get; set; } = 4;
+
+    /// <summary>Soft budget on model tokens (input + output) per rolling minute
+    /// for the Batch lane; 0 = unlimited. Batch callers wait while the last
+    /// 60 s are over it. Interactive calls are never held back by it.</summary>
+    public int BatchTokensPerMinute { get; set; } = 0;
 }
 
 /// <summary>
@@ -48,6 +58,10 @@ public sealed class AnthropicRateLimiter
 
     private int _limit;
     private int _inflight;
+    private int _inflightBatch;
+    private int _interactiveWaiting;
+    private readonly Queue<(DateTimeOffset At, int Tokens)> _tokenWindow = new();
+    private long _tokensInWindow;
     private int _consecutiveSuccesses;
     private DateTimeOffset _pauseUntil = DateTimeOffset.MinValue;
 
@@ -58,13 +72,62 @@ public sealed class AnthropicRateLimiter
         _opts = opts.Value;
         _logger = logger;
         _limit = Math.Max(_opts.MinInFlight, _opts.MaxInFlight);
+        LlmUsage.Recorded += OnUsage;
     }
 
-    public sealed record Snapshot(int Limit, int InFlight, DateTimeOffset PauseUntil);
+    public sealed record Snapshot(int Limit, int InFlight, DateTimeOffset PauseUntil, int InFlightBatch = 0, int InteractiveWaiting = 0, long TokensLastMinute = 0);
 
     public Snapshot Current
     {
-        get { lock (_lock) return new Snapshot(_limit, _inflight, _pauseUntil); }
+        get
+        {
+            lock (_lock)
+            {
+                TrimWindow(DateTimeOffset.UtcNow);
+                return new Snapshot(_limit, _inflight, _pauseUntil, _inflightBatch, _interactiveWaiting, _tokensInWindow);
+            }
+        }
+    }
+
+    // ── token-per-minute window (fed by every saved LlmCall) ─────────────
+
+    private void OnUsage(Persistence.Entities.LlmCall call) =>
+        RecordTokens(call.InputTokens + call.CacheCreationTokens + call.OutputTokens);
+
+    /// <summary>Count tokens against the rolling minute (public for tests).</summary>
+    public void RecordTokens(int tokens)
+    {
+        if (tokens <= 0) return;
+        lock (_lock)
+        {
+            var now = DateTimeOffset.UtcNow;
+            _tokenWindow.Enqueue((now, tokens));
+            _tokensInWindow += tokens;
+            TrimWindow(now);
+        }
+    }
+
+    private void TrimWindow(DateTimeOffset now)
+    {
+        while (_tokenWindow.Count > 0 && now - _tokenWindow.Peek().At > TimeSpan.FromMinutes(1))
+            _tokensInWindow -= _tokenWindow.Dequeue().Tokens;
+    }
+
+    /// <summary>May a call in this lane take a slot right now? Caller holds <c>_lock</c>.</summary>
+    private bool LaneAllows(LlmLane lane, DateTimeOffset now)
+    {
+        if (lane == LlmLane.Interactive) return true;
+        // Batch yields to anyone interactive that is waiting, never takes the
+        // slots reserved for them, and respects the token-per-minute budget.
+        if (_interactiveWaiting > 0) return false;
+        var cap = _limit <= _opts.InteractiveReserve ? 1 : _limit - _opts.InteractiveReserve;
+        if (_inflightBatch >= cap) return false;
+        if (_opts.BatchTokensPerMinute > 0)
+        {
+            TrimWindow(now);
+            if (_tokensInWindow >= _opts.BatchTokensPerMinute) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -75,12 +138,27 @@ public sealed class AnthropicRateLimiter
     /// </summary>
     public async Task<Lease> AcquireAsync(string? cacheKey, CancellationToken ct)
     {
+        var scope = LlmWorkScope.Current;
+        var lane = scope?.Lane ?? LlmLane.Interactive;
+        if (lane == LlmLane.Interactive)
+        {
+            lock (_lock) _interactiveWaiting++;
+            try { return await AcquireCoreAsync(cacheKey, lane, scope, ct); }
+            finally { lock (_lock) _interactiveWaiting--; }
+        }
+        return await AcquireCoreAsync(cacheKey, lane, scope, ct);
+    }
+
+    private async Task<Lease> AcquireCoreAsync(string? cacheKey, LlmLane lane, LlmWorkScope? scope, CancellationToken ct)
+    {
         WarmupState? warmup = cacheKey is null ? null : _warmups.GetOrAdd(cacheKey, _ => new WarmupState());
         var isWarmupLeader = false;
 
         while (true)
         {
             ct.ThrowIfCancellationRequested();
+            if (scope?.Budget is { Exhausted: true, CeilingUsd: { } ceiling } budget)
+                throw new LlmBudgetExceededException(budget.RunId, ceiling, budget.SpentUsd);
             TimeSpan wait;
             lock (_lock)
             {
@@ -108,10 +186,11 @@ public sealed class AnthropicRateLimiter
                     }
                 }
 
-                if (!paused && !warmupBlocks && _inflight < _limit)
+                if (!paused && !warmupBlocks && _inflight < _limit && LaneAllows(lane, now))
                 {
                     _inflight++;
-                    return new Lease(this, warmup, isWarmupLeader);
+                    if (lane == LlmLane.Batch) _inflightBatch++;
+                    return new Lease(this, warmup, isWarmupLeader, lane);
                 }
 
                 if (isWarmupLeader)
@@ -223,11 +302,12 @@ public sealed class AnthropicRateLimiter
     private static string? HeaderString(HttpResponseMessage resp, string name) =>
         resp.Headers.TryGetValues(name, out var vals) ? vals.FirstOrDefault() : null;
 
-    private void Release(WarmupState? warmup, bool wasLeader)
+    private void Release(WarmupState? warmup, bool wasLeader, LlmLane lane)
     {
         lock (_lock)
         {
             _inflight = Math.Max(0, _inflight - 1);
+            if (lane == LlmLane.Batch) _inflightBatch = Math.Max(0, _inflightBatch - 1);
         }
         if (warmup is not null && wasLeader)
         {
@@ -256,19 +336,21 @@ public sealed class AnthropicRateLimiter
         private readonly AnthropicRateLimiter _owner;
         private readonly WarmupState? _warmup;
         private readonly bool _leader;
+        private readonly LlmLane _lane;
         private int _released;
 
-        internal Lease(AnthropicRateLimiter owner, WarmupState? warmup, bool leader)
+        internal Lease(AnthropicRateLimiter owner, WarmupState? warmup, bool leader, LlmLane lane)
         {
             _owner = owner;
             _warmup = warmup;
             _leader = leader;
+            _lane = lane;
         }
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _released, 1) == 0)
-                _owner.Release(_warmup, _leader);
+                _owner.Release(_warmup, _leader, _lane);
         }
     }
 }

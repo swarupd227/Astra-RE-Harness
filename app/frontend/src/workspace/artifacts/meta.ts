@@ -14,9 +14,11 @@ import {
   Gauge,
   Kanban,
   LayoutGrid,
+  ListChecks,
   ListTree,
   ShieldCheck,
   Waves,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import type { Artifact } from '@/lib/conversations';
@@ -39,6 +41,8 @@ const KINDS: Record<string, KindMeta> = {
   planWaves: { label: 'Migration plan', icon: Waves },
   flowBoard: { label: 'Flow board', icon: Kanban },
   docSection: { label: 'Documentation', icon: BookOpen },
+  workRun: { label: 'Agent run', icon: Workflow },
+  reviewQueue: { label: 'Review queue', icon: ListChecks },
 };
 
 export function artifactKindLabel(kind: string): string {
@@ -83,6 +87,10 @@ export function artifactTitle(artifact: Artifact): string {
       return str(p.corpusName) ? `Flow board · ${str(p.corpusName)}` : 'Flow board';
     case 'docSection':
       return str(p.title, 'Documentation');
+    case 'workRun':
+      return str(p.label, 'Agent run');
+    case 'reviewQueue':
+      return 'Review queue';
     default:
       return artifact.kind;
   }
