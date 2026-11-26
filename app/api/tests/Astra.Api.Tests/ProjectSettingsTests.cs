@@ -192,6 +192,17 @@ public class ProjectSettingsTests
         Assert.False(back.Has("audio"));
     }
 
+    [Theory]
+    [InlineData("ZZZ-QA-TEST-zipslip-DELETE-ME", null, true)]
+    [InlineData("maria-SSRF-proof", null, true)]
+    [InlineData("qa-test sample", null, true)]
+    [InlineData("Travel insurance demo - rater workbook", null, false)]
+    [InlineData("Proofing engine", null, false)]
+    [InlineData("Travel insurance demo", "{\"test\":true}", true)]
+    [InlineData("Travel insurance demo", "not json", false)]
+    public void IsTestProject_ByNameOrSetting(string name, string? settings, bool expected) =>
+        Assert.Equal(expected, ProjectSettings.IsTestProject(name, settings));
+
     [Fact]
     public void ToJson_UsesCamelCase_SoTheFrontendTypeMatches()
     {

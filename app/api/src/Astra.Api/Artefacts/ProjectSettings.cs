@@ -38,6 +38,16 @@ public sealed record ProjectSettings
 
     public static ProjectSettings Default { get; } = new();
 
+    private static readonly Regex TestName = new(
+        @"^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// A QA / scratch project: flagged in its settings, or named like one ("ZZZ-…", "…-DELETE-ME"). Lists hide these
+    /// unless asked; the frontend uses the same pattern (`CorporaPage.TEST_NAME`).
+    /// </summary>
+    public static bool IsTestProject(string name, string? settingsJson) =>
+        TestName.IsMatch(name) || Parse(settingsJson).Test;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex PackId = new("^[a-z0-9][a-z0-9-]{0,63}$", RegexOptions.Compiled);
     private static readonly Regex CountKey = new("^[a-z0-9][a-z0-9-]{0,39}$", RegexOptions.Compiled);

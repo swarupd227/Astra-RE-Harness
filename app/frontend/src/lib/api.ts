@@ -1534,6 +1534,12 @@ export const api = {
     q?: string;
     corpus?: string;
     state?: string;
+    /** Several states, comma-separated ("IN_REVIEW,DRAFT"). */
+    states?: string;
+    lang?: string;
+    sort?: 'project' | 'name' | 'lines' | 'state';
+    dir?: 'asc' | 'desc';
+    excludeTest?: boolean;
     limit?: number;
     offset?: number;
   } = {}) => {
@@ -1541,6 +1547,11 @@ export const api = {
     if (params.q) qs.set('q', params.q);
     if (params.corpus) qs.set('corpus', params.corpus);
     if (params.state) qs.set('state', params.state);
+    if (params.states) qs.set('states', params.states);
+    if (params.lang) qs.set('lang', params.lang);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.excludeTest) qs.set('excludeTest', 'true');
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
@@ -2078,6 +2089,7 @@ export type SubroutineSearchHit = {
   lineStart: number;
   lineEnd: number;
   state: string;
+  sourceLanguage?: string | null;
   file: { id: string; relativePath: string; lineCount: number };
   corpus: { id: string; name: string };
 };

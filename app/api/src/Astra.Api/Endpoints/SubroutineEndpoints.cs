@@ -1,3 +1,4 @@
+using Astra.Api.Artefacts;
 using Astra.Api.Persistence;
 using Astra.Api.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,11 @@ public static class SubroutineEndpoints
             string? q,
             Guid? corpus,
             string? state,
+            string? states,
+            string? lang,
+            string? sort,
+            string? dir,
+            bool? excludeTest,
             int? limit,
             int? offset,
             AppDbContext db,
@@ -47,6 +53,33 @@ public static class SubroutineEndpoints
                 baseQuery = baseQuery.Where(x => x.s.State.ToUpper() == stateUpper);
             }
 
+            // Several states at once ("IN_REVIEW,DRAFT" — the Routines page's "Needs action" view).
+            var stateSet = (states ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(x => x.ToUpperInvariant())
+                .ToList();
+            if (stateSet.Count > 0)
+                baseQuery = baseQuery.Where(x => stateSet.Contains(x.s.State.ToUpper()));
+
+            if (!string.IsNullOrWhiteSpace(lang))
+            {
+                var langLower = lang.Trim().ToLowerInvariant();
+                baseQuery = baseQuery.Where(x => x.s.SourceLanguage != null && x.s.SourceLanguage.ToLower() == langLower);
+            }
+
+            if (excludeTest == true)
+            {
+                // Settings are jsonb, so decide in memory over the (small) corpus list, then filter by id.
+                var testIds = (await db.Corpora.AsNoTracking()
+                        .Select(c => new { c.Id, c.Name, c.SettingsJson })
+                        .ToListAsync(ct))
+                    .Where(c => ProjectSettings.IsTestProject(c.Name, c.SettingsJson))
+                    .Select(c => c.Id)
+                    .ToList();
+                if (testIds.Count > 0)
+                    baseQuery = baseQuery.Where(x => !testIds.Contains(x.c.Id));
+            }
+
             if (qUpper is not null)
             {
                 // Postgres ILIKE: case-insensitive substring. Fast enough
@@ -54,15 +87,30 @@ public static class SubroutineEndpoints
                 // Phase D when the corpus list grows past ~1000 routines.
                 baseQuery = baseQuery.Where(x =>
                     EF.Functions.ILike(x.s.Name, $"%{qTrim}%") ||
-                    EF.Functions.ILike(x.s.Signature, $"%{qTrim}%"));
+                    EF.Functions.ILike(x.s.Signature, $"%{qTrim}%") ||
+                    EF.Functions.ILike(x.f.RelativePath, $"%{qTrim}%"));
             }
 
             var total = await baseQuery.CountAsync(ct);
 
-            var rows = await baseQuery
-                .OrderBy(x => x.c.Name)
-                .ThenBy(x => x.f.RelativePath)
-                .ThenBy(x => x.s.LineStart)
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var ordered = (sort ?? "").ToLowerInvariant() switch
+            {
+                "name" => desc
+                    ? baseQuery.OrderByDescending(x => x.s.Name).ThenBy(x => x.c.Name)
+                    : baseQuery.OrderBy(x => x.s.Name).ThenBy(x => x.c.Name),
+                "lines" => desc
+                    ? baseQuery.OrderByDescending(x => x.s.LineEnd - x.s.LineStart).ThenBy(x => x.s.Name)
+                    : baseQuery.OrderBy(x => x.s.LineEnd - x.s.LineStart).ThenBy(x => x.s.Name),
+                "state" => desc
+                    ? baseQuery.OrderByDescending(x => x.s.State).ThenBy(x => x.s.Name)
+                    : baseQuery.OrderBy(x => x.s.State).ThenBy(x => x.s.Name),
+                _ => desc
+                    ? baseQuery.OrderByDescending(x => x.c.Name).ThenBy(x => x.f.RelativePath).ThenBy(x => x.s.LineStart)
+                    : baseQuery.OrderBy(x => x.c.Name).ThenBy(x => x.f.RelativePath).ThenBy(x => x.s.LineStart),
+            };
+
+            var rows = await ordered
                 .Skip(skip)
                 .Take(take)
                 .Select(x => new
@@ -73,6 +121,7 @@ public static class SubroutineEndpoints
                     lineStart = x.s.LineStart,
                     lineEnd = x.s.LineEnd,
                     state = x.s.State,
+                    sourceLanguage = x.s.SourceLanguage,
                     file = new
                     {
                         id = x.f.Id,
