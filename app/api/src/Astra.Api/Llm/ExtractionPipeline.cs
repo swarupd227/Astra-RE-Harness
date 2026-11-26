@@ -32,6 +32,8 @@ public sealed class ExtractionPipeline
     private readonly PromptLibrary _prompts;
     private readonly NeighbourhoodBuilder _neighbourhood;
     private readonly ILogger<ExtractionPipeline> _logger;
+    private readonly Evidence.EvidenceService? _evidence;
+    private readonly Evidence.GraphService? _graph;
 
     public ExtractionPipeline(
         ILlmProvider provider,
@@ -41,7 +43,9 @@ public sealed class ExtractionPipeline
         DevPersonaContext persona,
         PromptLibrary prompts,
         NeighbourhoodBuilder neighbourhood,
-        ILogger<ExtractionPipeline> logger)
+        ILogger<ExtractionPipeline> logger,
+        Evidence.EvidenceService? evidence = null,
+        Evidence.GraphService? graph = null)
     {
         _provider = provider;
         _db = db;
@@ -51,6 +55,39 @@ public sealed class ExtractionPipeline
         _prompts = prompts;
         _neighbourhood = neighbourhood;
         _logger = logger;
+        _evidence = evidence;
+        _graph = graph;
+    }
+
+    /// <summary>The target stack the project names in its settings, or null.</summary>
+    private async Task<string?> ProjectTargetAsync(Guid corpusId, CancellationToken ct)
+    {
+        var json = await _db.Corpora.AsNoTracking().Where(c => c.Id == corpusId).Select(c => c.SettingsJson).FirstOrDefaultAsync(ct);
+        return Artefacts.ProjectSettings.Parse(json).TargetStack;
+    }
+
+    /// <summary>
+    /// The routes the routine serves, read from the version's entity graph (built on first use, as every graph
+    /// reader does). Best effort: extraction never fails or waits on a graph that cannot be read.
+    /// </summary>
+    private async Task<IReadOnlyList<ServedRoute>> ServedRoutesAsync(Subroutine sub, CancellationToken ct)
+    {
+        if (_evidence is null || _graph is null) return Array.Empty<ServedRoute>();
+        try
+        {
+            var versionId = sub.SourceFile!.SourceVersionId;
+            await _evidence.EnsureIndexedAsync(versionId, ct);
+            await _graph.EnsureBuiltAsync(versionId, ct);
+            var triggers = await _graph.RouteTriggersAsync(versionId, ct);
+            if (triggers.Count == 0) return Array.Empty<ServedRoute>();
+            var types = Dependency.DependencyGraphBuilder.ReadNameList(sub.CommonBlockRefs);
+            return ServedRoutes.For(sub.Name, sub.SourceFile.RelativePath, types, triggers);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the routes served by {Subroutine}; extracting without them", sub.Id);
+            return Array.Empty<ServedRoute>();
+        }
     }
 
     /// <summary>Resolve the active prompt's id+version for the audit trail.</summary>
@@ -147,10 +184,12 @@ public sealed class ExtractionPipeline
 
         // 2. Provider context (visible to the user).
         // Phase 5.2 — pick the prompt by the subroutine's parsed language.
-        // The extract prompt is picked for the default .NET target (.NET 10);
-        // the engineer-chosen target stack applies on the scaffold path.
+        // The spec is written for the stack the routine is going to: the project's target when it names one,
+        // else the language's default (TargetStacks), else .NET 10 — the first of those with an extract prompt.
         var sourceLanguage = string.IsNullOrEmpty(sub.SourceLanguage) ? "fortran-f77" : sub.SourceLanguage;
-        const string defaultTargetStack = "dotnet10";
+        var projectTarget = await ProjectTargetAsync(sub.SourceFile.SourceVersion.CorpusId, ct);
+        var defaultTargetStack = TargetStacks.Resolve(projectTarget, sourceLanguage,
+            t => _prompts.GetLatest(sourceLanguage, t, "extract") is not null);
         // VBA taken from an Office document is extracted with its own prompt and the host workbook's
         // view of the routine: named cells, sheets, what starts it, its form.
         var hostContext = await BuildHostContextAsync(sub, ct);
@@ -180,6 +219,15 @@ public sealed class ExtractionPipeline
             _logger.LogWarning(
                 ex, "Could not build neighbourhood for {Subroutine}; proceeding without",
                 sub.Id);
+        }
+        // The routes this routine serves, from the project's route table (a Laravel routes file, a #[Route]
+        // attribute, a front controller's switch). The method and path of an HTTP contract are stated there, not
+        // in the handler's own source.
+        var served = await ServedRoutesAsync(sub, ct);
+        if (served.Count > 0)
+        {
+            neighbourhood = (neighbourhood ?? Neighbourhood.Empty) with { Routes = served };
+            yield return new("routes_attached", new { routes = served.Select(r => r.Name).ToArray() });
         }
         if (hostContext is not null)
             yield return new("host_context_attached", new { document = OfficeHostContext.SplitPath(sub.SourceFile.RelativePath)?.Document, chars = hostContext.Length });

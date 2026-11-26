@@ -1,11 +1,11 @@
 {
   "$schema": "https://astra.nous.ai/spec-schema/v1",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "id": "php",
-  "displayName": "PHP / Magento → Java 21 · Spring Boot 3  OR  .NET 8",
+  "displayName": "PHP / Magento → Java 21 · Spring Boot 3  OR  .NET 10 / .NET 8",
   "description": "PHP (Tier-4, incl. Magento-style storefronts) migrating to a strongly-typed managed target — the SME picks Java 21 / Spring Boot 3 OR .NET 8 per routine (compatibleTargetStacks lists both). The claim taxonomy is target-agnostic; each extract prompt (php/java-spring, php/dotnet8) supplies the language-specific mapping. PHP's idiom gap to a static language is dominated by its dynamic type system: loose equality / type juggling (== vs ===, \"0\" == false, numeric-string coercion), the array-as-ordered-map (a single type doing duty as both list and dictionary), null/absence semantics (isset / empty / ?? / the @ error-suppression operator, undefined-variable-is-null), superglobal request state ($_GET / $_POST / $_SESSION / $_SERVER) that couples code like hidden globals, and Throwable/@-suppression error handling. Unlike ABL, PHP has a free/OSS runtime, so source-execution equivalence is technically FEASIBLE via a php-sidecar (run the source, compare outputs) — but that sidecar is not built yet, so it is NOT claimed here; verification currently rests on golden-dataset extraction scoring plus compile + invariant-execution of the generated target.",
   "supportedSourceExtensions": [".php"],
-  "compatibleTargetStacks": ["dotnet8", "java-spring"],
+  "compatibleTargetStacks": ["java-spring", "dotnet10", "dotnet8"],
   "claimKinds": [
     {
       "id": "invariant",
@@ -122,6 +122,60 @@
       ]
     },
     {
+      "id": "httpContract",
+      "label": "HTTP contract",
+      "idPrefix": "HTTP",
+      "specJsonField": "http_contracts",
+      "textField": "description",
+      "displayTone": "signed",
+      "description": "The contract callers of a route depend on, which the migrated service must keep byte-for-byte compatible: the method and path (from the project's route table when the routine is a handler, or the front controller's request parameter), every request parameter with where it comes from and whether it is required, each response with its status code, content type and body shape, and the condition that produces it (a validation failure is a 422 or a 400, a missing record a 404, an echo of HTML a 200 text/html). Status codes and shapes that the source sets implicitly (PHP's default 200, a die() mid-response, a redirect via header('Location: …')) are stated explicitly — the target framework will not reproduce them by accident.",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "method", "kind": "string", "required": true, "doc": "GET, POST …, ANY for a front-controller action that accepts any method." },
+        { "name": "path", "kind": "string", "required": true, "doc": "e.g. '/invoices/{id}', or '/api.php?action=getCustomer' for a front-controller action." },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "request", "kind": "object[]", "required": true, "doc": "Each parameter: {name, source: path|query|form|body|header|cookie|session|file, type, required: yes|no, validation}." },
+        { "name": "responses", "kind": "object[]", "required": true, "doc": "Each response: {status, content_type, body, when}. body names the shape (fields and types) or 'html view <name>' / 'empty'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "authorizationRule",
+      "label": "Authorization rule",
+      "idPrefix": "AUTH",
+      "specJsonField": "authorization_rules",
+      "textField": "rule",
+      "displayTone": "signed",
+      "description": "Who may do what, as the code enforces it: a logged-in check ($_SESSION['user_id'], Auth::check()), a role or permission test, an ownership check (the record belongs to the caller), a CSRF token, a framework middleware or guard named on the route. Also an ABSENT check where one is clearly expected (a write route with no session test) — the migration must not silently add or drop a gate. State what happens on failure (redirect to login, 403, an empty result).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "rule", "kind": "string", "required": true },
+        { "name": "mechanism", "kind": "enum:session|token|role|permission|ownership|csrf|middleware|none|unknown", "required": true },
+        { "name": "on_failure", "kind": "string", "required": true, "doc": "e.g. '302 to /login', '403 JSON error', 'returns an empty list'." },
+        { "name": "target_pattern", "kind": "string", "required": true, "doc": "e.g. 'Spring Security @PreAuthorize(\"hasRole(ADMIN)\")' / 'an ownership check in the service before the update'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
+      "id": "dataAccess",
+      "label": "Data access",
+      "idPrefix": "DA",
+      "specJsonField": "data_accesses",
+      "textField": "description",
+      "displayTone": "review",
+      "description": "Every database statement the routine runs: the operation, the tables, the columns or filter that matter, and how values reach it. String-concatenated SQL with request values is flagged as injectable (parameterised: no) — the target must bind parameters, never reproduce the concatenation. Note statements that must run together (a transaction, or a read-then-write that relies on no other writer), what an empty result means to the routine, and whether a failure is checked (mysqli_query returning false).",
+      "fields": [
+        { "name": "id", "kind": "string", "required": true },
+        { "name": "operation", "kind": "enum:read|insert|update|delete|upsert|ddl|call|unknown", "required": true },
+        { "name": "tables", "kind": "string[]", "required": true },
+        { "name": "description", "kind": "string", "required": true },
+        { "name": "parameterised", "kind": "enum:yes|no|partly|unknown", "required": true, "doc": "no = request values are concatenated into the SQL text." },
+        { "name": "transaction", "kind": "string", "required": false, "doc": "e.g. 'inside beginTransaction … commit with the invoice line inserts'." },
+        { "name": "target_pattern", "kind": "string", "required": true, "doc": "e.g. 'JdbcTemplate.queryForObject with a bound id' / 'a Spring Data repository findById'." },
+        { "name": "citations", "kind": "citation[]", "required": true }
+      ]
+    },
+    {
       "id": "edgeCase",
       "label": "Edge case",
       "idPrefix": "EC",
@@ -181,6 +235,9 @@
       "superglobalUsage",
       "errorHandlingContract",
       "sideEffect",
+      "httpContract",
+      "authorizationRule",
+      "dataAccess",
       "edgeCase",
       "openQuestion"
     ],
@@ -192,10 +249,13 @@
       "superglobalUsage": 0,
       "errorHandlingContract": 0,
       "sideEffect": 0,
+      "httpContract": 0,
+      "authorizationRule": 0,
+      "dataAccess": 0,
       "edgeCase": 1,
       "openQuestion": 0
     },
-    "emphasis": "Every == / != (loose) comparison is a looseTypeCoercion candidate — note whether PHP 8 changed it and give the strict typed target semantics. Every array is an arrayShapeSemantics claim — decide list vs map vs record. isset/empty/??/@ and undefined reads are nullSafetyContract claims; NEVER conflate empty() with null (empty(\"0\") is true). Every $_GET/$_POST/$_SESSION/$_SERVER touch is a superglobalUsage claim (hidden request/session coupling → explicit injected boundary). Every @ suppression and every false-on-failure return is an errorHandlingContract; classify swallowed vs checked. Treat money-as-float, int overflow→float, (int) truncation, and loose switch as edgeCase claims. Magento DI/plugins/EAV, magic methods, and dynamic include/eval are openQuestions."
+    "emphasis": "Every == / != (loose) comparison is a looseTypeCoercion candidate — note whether PHP 8 changed it and give the strict typed target semantics. Every array is an arrayShapeSemantics claim — decide list vs map vs record. isset/empty/??/@ and undefined reads are nullSafetyContract claims; NEVER conflate empty() with null (empty(\"0\") is true). Every $_GET/$_POST/$_SESSION/$_SERVER touch is a superglobalUsage claim (hidden request/session coupling → explicit injected boundary). Every @ suppression and every false-on-failure return is an errorHandlingContract; classify swallowed vs checked. Treat money-as-float, int overflow→float, (int) truncation, and loose switch as edgeCase claims. Every route the routine serves (listed in the neighbourhood, or a front-controller case) is an httpContract with explicit status codes and body shapes. Every login/role/ownership/CSRF check — or a clearly missing one on a write — is an authorizationRule. Every SQL statement is a dataAccess claim; concatenated request values are parameterised: no. Magento DI/plugins/EAV, magic methods, and dynamic include/eval are openQuestions."
   },
   "owner": "Nous · Java/Spring + .NET migration accelerator",
   "calibratedAgainst": [

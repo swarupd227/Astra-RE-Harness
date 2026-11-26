@@ -1,0 +1,34 @@
+{
+  "entryId": "php-authorization-session-ownership",
+  "schemaId": "php",
+  "title": "Only a logged-in owner may cancel an order: a session check that redirects, and an ownership check folded into the UPDATE's WHERE",
+  "trapCategory": "security/authorization",
+  "difficulty": "hard",
+  "sourcePath": "orders/cancel.php",
+  "sourceLines": "1-19",
+  "sourceContent": "<?php\nsession_start();\nrequire 'db.php';\n\nfunction cancel_order(PDO $pdo, $orderId) {\n    // TRAP: two gates - the session test redirects, and the ownership test is\n    // hidden in the UPDATE (no row changes when the order is someone else's).\n    if (empty($_SESSION['user_id'])) {\n        header('Location: /login.php');\n        exit;\n    }\n    $stmt = $pdo->prepare('UPDATE orders SET status = \\'cancelled\\' WHERE id = ? AND user_id = ? AND status = \\'open\\'');\n    $stmt->execute([$orderId, $_SESSION['user_id']]);\n    if ($stmt->rowCount() === 0) {\n        http_response_code(403);\n        return false;\n    }\n    return true;\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "authorizationRule",
+      "id": "AUTH-1",
+      "pattern": "(?i)(session|logged|login)[\\s\\S]*(redirect|302|login\\.php)|(redirect|302)[\\s\\S]*(session|login)"
+    },
+    {
+      "kind": "authorizationRule",
+      "id": "AUTH-2",
+      "pattern": "(?i)(owner|user_id|belongs|own)"
+    },
+    {
+      "kind": "dataAccess",
+      "id": "DA-1",
+      "pattern": "(?i)(update|orders)"
+    },
+    {
+      "kind": "nullSafetyContract",
+      "id": "NUL-1",
+      "pattern": "(?i)(empty)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "A missing session redirects to /login.php (302) and stops; the ownership check is the user_id condition of the UPDATE, and a zero row count (someone else's order, or not open) answers 403. A port that moves the check into Spring Security must keep both outcomes and must not drop the user_id condition. empty($_SESSION['user_id']) also treats user id 0 / '0' as logged out."
+}

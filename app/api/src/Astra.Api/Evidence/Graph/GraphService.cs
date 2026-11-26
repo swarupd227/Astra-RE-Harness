@@ -48,6 +48,15 @@ public sealed record EntityLinkDto(
 
 public sealed record EntityDetailDto(GraphNode Entity, IReadOnlyList<EntityLinkDto> Links);
 
+/// <summary>One route and one thing it triggers, with both sides' attributes and the link's evidence.</summary>
+public sealed record RouteTrigger(
+    string RouteName,
+    JsonElement? RouteAttrs,
+    string TargetType,
+    string TargetName,
+    JsonElement? LinkAttrs,
+    IReadOnlyList<string> EvidenceIds);
+
 /// <summary>
 /// The entity graph of a source version: what its artefact files say exists (tables, procedures, jobs,
 /// packages …) and how those things relate, each with the evidence that shows it. The graph is derived: it
@@ -244,6 +253,37 @@ public sealed class GraphService
             .ToList();
 
         return new EntityGraphDto(shown.Select(ToNode).ToList(), edges, facets);
+    }
+
+    /// <summary>
+    /// Every route the version serves with what it triggers (a class and the method named on the link, or a script
+    /// and the routines its case calls) — what extraction needs to tell a handler which routes it answers.
+    /// </summary>
+    public async Task<IReadOnlyList<RouteTrigger>> RouteTriggersAsync(Guid versionId, CancellationToken ct)
+    {
+        var routes = await _db.GraphEntities.AsNoTracking()
+            .Where(e => e.SourceVersionId == versionId && e.Type == EntityVocabulary.Route)
+            .ToDictionaryAsync(e => e.Id, ct);
+        if (routes.Count == 0) return Array.Empty<RouteTrigger>();
+        var links = await _db.GraphLinks.AsNoTracking()
+            .Where(l => l.SourceVersionId == versionId && l.Relation == EntityVocabulary.Triggers)
+            .ToListAsync(ct);
+        links = links.Where(l => routes.ContainsKey(l.FromEntityId)).ToList();
+        var targetIds = links.Select(l => l.ToEntityId).ToHashSet();
+        var targets = await _db.GraphEntities.AsNoTracking()
+            .Where(e => targetIds.Contains(e.Id))
+            .ToDictionaryAsync(e => e.Id, ct);
+        return links
+            .Where(l => targets.ContainsKey(l.ToEntityId))
+            .Select(l =>
+            {
+                var route = routes[l.FromEntityId];
+                var target = targets[l.ToEntityId];
+                return new RouteTrigger(route.Name, ParseJson(route.AttrsJson), target.Type, target.Name,
+                    ParseJson(l.AttrsJson), StringList(l.EvidenceJson));
+            })
+            .OrderBy(t => t.RouteName, StringComparer.Ordinal)
+            .ToList();
     }
 
     public async Task<EntityPageDto> ListAsync(Guid versionId, string? type, string? query, int limit, int offset, CancellationToken ct)

@@ -46,6 +46,9 @@ public static class ClaimKindBucketer
         ("arrayShapeSemantics", "associative/dynamic array shape assumptions"),
         ("nullSafetyContract", "null/undefined handling contract"),
         ("superglobalUsage", "superglobal / ambient state access"),
+        ("httpContract", "an HTTP route's method, path, parameters, status codes and response shapes"),
+        ("authorizationRule", "a login, role, ownership or CSRF check, or a missing one"),
+        ("dataAccess", "a database statement: operation, tables, whether values are bound"),
         ("jakartaNamespaceMigration", "javax→jakarta namespace migration"),
         ("removedApiUsage", "use of an API removed in the target runtime"),
         ("deprecatedApiUsage", "use of a deprecated API"),
@@ -124,6 +127,11 @@ public static class ClaimKindBucketer
         TryAddKind(buckets, root, "array_shape_semantics", "arrayShapeSemantics");
         TryAddKind(buckets, root, "null_safety_contracts", "nullSafetyContract");
         TryAddKind(buckets, root, "superglobal_usages", "superglobalUsage");
+        // Web-application kinds (PHP schema 1.1; named neutrally so any web-facing language can declare them):
+        // the HTTP surface callers depend on, the access rules on it, and the data each route reads and writes.
+        TryAddKind(buckets, root, "http_contracts", "httpContract");
+        TryAddKind(buckets, root, "authorization_rules", "authorizationRule");
+        TryAddKind(buckets, root, "data_accesses", "dataAccess");
         // Java 11→21 modernization kinds (Tier-3, in-place upgrade). invariant /
         // edgeCase / openQuestion are shared and already registered above
         // (camelCase); only the six net-new modernization fields need a bucket.

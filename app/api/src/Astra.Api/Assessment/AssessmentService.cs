@@ -518,17 +518,6 @@ public static class EffortRiskModel
         ["delphi"] = 45, ["unibasic"] = 45, ["abl"] = 45, ["cobol"] = 40, ["cpp"] = 35,
     };
 
-    private static readonly Dictionary<string, string> DefaultTarget = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // .NET 10 is the default .NET target everywhere; dotnet8 stays
-        // selectable for clients standardised on the older LTS. C# and
-        // VB.NET only ever had dotnet10 prompts — "dotnet8" here pointed
-        // them at a stack with nothing behind it.
-        ["fortran-f77"] = "dotnet10", ["cpp"] = "dotnet10", ["delphi"] = "dotnet10", ["cobol"] = "java-spring",
-        ["vb6"] = "dotnet10-blazor", ["vbnet"] = "dotnet10-csharp", ["unibasic"] = "java-spring", ["abl"] = "java-spring",
-        ["java"] = "java-spring", ["csharp"] = "dotnet10-webapi",
-    };
-
     public static Result Compute(Inputs i)
     {
         var throughput = i.Language is not null && Throughput.TryGetValue(i.Language, out var t) ? t : 40;
@@ -601,7 +590,8 @@ public static class EffortRiskModel
             summary = "The code is workable but the platform underneath is the problem: 1:1 conversion with a data/infrastructure lift and a thin architecture pass.";
         }
 
-        var target = i.Language is not null && DefaultTarget.TryGetValue(i.Language, out var dt) ? dt : null;
+        // The same default extraction writes specs for (one table, Llm/TargetStacks).
+        var target = Astra.Api.Llm.TargetStacks.DefaultFor(i.Language);
         return new Result(
             new Effort(effortScore, effortBand, new PersonWeeks(low, high), drivers),
             new Risk(riskScore, riskBand, riskDrivers),

@@ -35,6 +35,11 @@ public sealed record ProjectSettings
     public bool Demo { get; init; }
     /// <summary>A QA or scratch project: the Projects list hides it unless "Show test projects" is on.</summary>
     public bool Test { get; init; }
+    /// <summary>
+    /// The stack this project migrates to (<c>java-spring</c>, <c>dotnet10</c> …). Null: each routine goes to its
+    /// language's default (<see cref="Llm.TargetStacks"/>). Extraction writes specs for this target.
+    /// </summary>
+    public string? TargetStack { get; init; }
 
     public static ProjectSettings Default { get; } = new();
 
@@ -54,7 +59,7 @@ public sealed record ProjectSettings
 
     private static readonly HashSet<string> TopLevel = new(StringComparer.Ordinal)
     {
-        "artefactKinds", "pack", "banner", "metadata", "expectedCounts", "demo", "test",
+        "artefactKinds", "pack", "banner", "metadata", "expectedCounts", "demo", "test", "targetStack",
     };
 
     public const int MaxBanner = 200;
@@ -116,6 +121,9 @@ public sealed record ProjectSettings
             if (t.ValueKind is JsonValueKind.True or JsonValueKind.False) test = t.GetBoolean();
             else if (t.ValueKind != JsonValueKind.Null) errors.Add("test must be true or false");
         }
+        var target = ReadString(root, "targetStack", 64, errors)?.ToLowerInvariant();
+        if (target is not null && !Llm.TargetStacks.IsKnown(target))
+            errors.Add($"targetStack '{target}' is not a target stack (e.g. java-spring, dotnet10, dotnet8, react-python)");
 
         if (errors.Count > 0) return (null, errors);
         return (new ProjectSettings
@@ -127,6 +135,7 @@ public sealed record ProjectSettings
             ExpectedCounts = counts,
             Demo = demo,
             Test = test,
+            TargetStack = target,
         }, Array.Empty<string>());
     }
 

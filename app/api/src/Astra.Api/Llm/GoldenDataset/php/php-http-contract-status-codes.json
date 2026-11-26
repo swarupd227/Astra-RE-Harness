@@ -1,0 +1,29 @@
+{
+  "entryId": "php-http-contract-status-codes",
+  "schemaId": "php",
+  "title": "A Laravel handler answers 201, 404 and 422 — the status codes callers depend on must be stated, not left to the target framework",
+  "trapCategory": "http/contract",
+  "difficulty": "medium",
+  "sourcePath": "app/Http/Controllers/InvoiceController.php",
+  "sourceLines": "1-23",
+  "sourceContent": "<?php\nnamespace App\\Http\\Controllers;\n\nuse App\\Models\\Customer;\nuse Illuminate\\Http\\Request;\nuse Illuminate\\Support\\Facades\\DB;\n\nclass InvoiceController extends Controller\n{\n    public function store(Request $request, $customerId)\n    {\n        // TRAP: three outcomes, three status codes - only one is written out.\n        $data = $request->validate(['amount' => 'required|numeric|min:0.01', 'note' => 'nullable|string|max:200']);\n        $customer = Customer::find($customerId);\n        if ($customer === null) {\n            abort(404, 'No such customer');\n        }\n        $id = DB::table('invoices')->insertGetId([\n            'customer_id' => $customer->id, 'amount' => $data['amount'], 'note' => $data['note'] ?? null,\n        ]);\n        return response()->json(['id' => $id, 'amount' => $data['amount']], 201);\n    }\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "httpContract",
+      "id": "HTTP-1",
+      "pattern": "(?i)(201|created)[\\s\\S]*(404|not found)|(404|not found)[\\s\\S]*(201|created)"
+    },
+    {
+      "kind": "httpContract",
+      "id": "HTTP-1b",
+      "pattern": "(?i)(422|validat|errors)"
+    },
+    {
+      "kind": "dataAccess",
+      "id": "DA-1",
+      "pattern": "(?i)(insert|invoices)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "Laravel's validate() answers 422 with an errors object on its own, abort(404) answers 404, and the success path answers 201 with the new id. A Spring or ASP.NET Core rewrite returns 200 and its own validation shape unless the spec says otherwise, which breaks every caller that checks the status. The insert is a data access on invoices with bound values."
+}

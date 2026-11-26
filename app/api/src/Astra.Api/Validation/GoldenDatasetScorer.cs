@@ -75,7 +75,12 @@ public sealed class GoldenDatasetScorer
         //    vbnet/csharp extract prompts live under dotnet10, not dotnet8), so
         //    probe the known stacks and score against whichever one the schema
         //    actually ships an extract prompt for.
-        string[] candidateStacks = { "dotnet10", "dotnet8", "java-spring" };
+        // The language's default target comes first (TargetStacks), so an entry is scored with the prompt the
+        // routine is extracted with; the older .NET and Java stacks remain as fallbacks.
+        var candidateStacks = Llm.TargetStacks.Candidates(null, entry.SchemaId)
+            .Concat(new[] { "dotnet8", "java-spring" })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var prompt = _prompts.GetLatest(entry.SchemaId, "dotnet8", "extract");
         var targetStack = "dotnet8";
         foreach (var ts in candidateStacks)

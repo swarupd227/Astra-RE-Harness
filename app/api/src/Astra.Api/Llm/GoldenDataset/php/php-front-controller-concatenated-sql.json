@@ -1,0 +1,34 @@
+{
+  "entryId": "php-front-controller-concatenated-sql",
+  "schemaId": "php",
+  "title": "A script dispatches on ?action= and concatenates a request value into SQL — each case is a route, and the query must be bound, not copied",
+  "trapCategory": "http/front-controller",
+  "difficulty": "hard",
+  "sourcePath": "legacy/customer_api.php",
+  "sourceLines": "1-19",
+  "sourceContent": "<?php\nrequire_once 'db.php';\n\n// TRAP: one script, two routes chosen by a request parameter; the id goes\n// straight into the SQL text.\nswitch ($_GET['action'] ?? '') {\n    case 'get':\n        $r = mysqli_query($db, \"SELECT id, name, email FROM customers WHERE id = \" . $_GET['id']);\n        $row = mysqli_fetch_assoc($r);\n        header('Content-Type: application/json');\n        echo json_encode($row ?: ['error' => 'not found']);\n        break;\n    case 'delete':\n        mysqli_query($db, \"DELETE FROM customers WHERE id = \" . intval($_POST['id']));\n        echo 'ok';\n        break;\n    default:\n        http_response_code(400);\n}\n",
+  "expectedClaims": [
+    {
+      "kind": "httpContract",
+      "id": "HTTP-1",
+      "pattern": "(?i)(action\\s*=\\s*get|\\?action|action=get|'get')"
+    },
+    {
+      "kind": "httpContract",
+      "id": "HTTP-2",
+      "pattern": "(?i)(action\\s*=\\s*delete|delete)"
+    },
+    {
+      "kind": "dataAccess",
+      "id": "DA-1",
+      "pattern": "(?i)(parameteri[sz]ed\\W+no|concatenat|inject|not (bound|parameteri))"
+    },
+    {
+      "kind": "superglobalUsage",
+      "id": "SG-1",
+      "pattern": "(?i)(\\$_GET|\\$_POST|query|request)"
+    }
+  ],
+  "canonicalInputs": [],
+  "notes": "The switch on $_GET['action'] makes two routes (ANY /legacy/customer_api.php?action=get and ?action=delete) plus a 400 for anything else; the 'not found' case still answers 200 with an error object. The SELECT concatenates the raw request id (injectable — parameterised: no); the DELETE casts with intval first, which is safe but still not bound. The target binds both."
+}

@@ -333,7 +333,8 @@ public sealed class DependencyGraphBuilder
         return idx >= 0 && idx < name.Length - 1 ? name[(idx + 1)..] : name;
     }
 
-    private static IReadOnlyList<string> ReadNameList(JsonDocument? doc)
+    /// <summary>A routine's name list (CommonBlockRefs, CalledSubroutines): the non-blank strings of a JSON array.</summary>
+    public static IReadOnlyList<string> ReadNameList(JsonDocument? doc)
     {
         if (doc is null) return Array.Empty<string>();
         var root = doc.RootElement;

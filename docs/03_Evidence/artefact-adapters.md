@@ -127,6 +127,14 @@ statements. A route is an `route`, not an `endpoint`: the inventory counts **rou
 **endpoints called** (`endpoints`). Not yet read: route group prefixes (`Route::prefix('api')->group(…)`), Eloquent
 models' implicit table names, and routes built from variables; these are gaps, not guesses.
 
+**Routes feed extraction.** When a routine is extracted, `ServedRoutes` (Llm/, pure) matches it against the version's
+route → `triggers` links: a link to a `class` names the handling method (`attrs.method`, or `__invoke`), a link to a
+`script` stands for the file's own statements (the routine named after the file — the *dispatcher*) and lists in
+`attrs.calls` the routines each case calls (the *handlers*). The matches go to the model beside the neighbourhood
+("Routes this routine serves") and onto the extract stream as `routes_attached`, so the spec's `http_contracts` take
+their method and path from the route table rather than guessing them from the handler's body. Nothing here is PHP
+specific: any language whose facts state routes this way gets the same.
+
 ## Linking rules
 
 `LinkingRules.Apply` runs on the merged graph (after the merge, before it is stored) and only adds what a rule can

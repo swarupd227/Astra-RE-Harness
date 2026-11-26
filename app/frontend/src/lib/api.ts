@@ -863,6 +863,8 @@ export type ProjectSettings = {
   demo: boolean;
   /** A QA / scratch project, hidden from the Projects list by default. */
   test?: boolean;
+  /** The stack this project migrates to; null means each language's default. Specs are extracted for it. */
+  targetStack?: string | null;
 };
 
 /** What happened to one file in an attach: added | replaced | unchanged | rejected. */

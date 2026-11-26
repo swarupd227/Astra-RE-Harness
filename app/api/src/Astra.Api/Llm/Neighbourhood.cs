@@ -22,11 +22,15 @@ public sealed record Neighbourhood(
         Array.Empty<CommonBlockRef>(),
         Array.Empty<RoutineRef>());
 
+    /// <summary>The routes this routine serves, from the project's route table (see <see cref="ServedRoutes"/>).</summary>
+    public IReadOnlyList<ServedRoute> Routes { get; init; } = Array.Empty<ServedRoute>();
+
     public bool IsEmpty =>
         Callees.Count == 0
         && Callers.Count == 0
         && CommonBlocks.Count == 0
-        && SiblingsInFile.Count == 0;
+        && SiblingsInFile.Count == 0
+        && Routes.Count == 0;
 }
 
 /// <summary>

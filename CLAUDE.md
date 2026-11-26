@@ -64,11 +64,14 @@ New capability → a tool in `Copilot/CopilotToolRegistry.cs` (persona, mutating
   as an array.
 - **Target stacks**: `.NET 10` (`dotnet10`, and the `dotnet10-*` variants for C#/VB6/VB.NET) is the default
   target for every .NET-bound source language; `dotnet8` stays selectable for estates on the older LTS,
-  `java-spring` is the default for COBOL/UniBasic/ABL/Java. Prompts live under
+  `java-spring` is the default for COBOL/UniBasic/ABL/Java/PHP — one table, `Llm/TargetStacks`, which the
+  assessment also reads. **Extraction is target-aware**: a spec is written with the extract prompt of the project's
+  target (`targetStack` in project settings) or else the language's default, falling back to `dotnet10`; the
+  extract stream names the prompt in `provider_info`. Prompts live under
   `Llm/Prompts/<source>/<target>/`, scaffold prompts under `Llm/Prompts/common/<family>/` (every `dotnet10-*`
   variant shares `common/dotnet10`; see `AnthropicScaffoldProvider.ScaffoldPromptFamily`), archetypes under
   `Llm/Archetypes/<target>/<id>/` with `net10.0` csproj files. Adding a target = prompt + archetype + entry in
-  `ScaffoldEndpoints.PreferredStack` / `AssessmentService.DefaultTarget` / frontend `targetStacks.ts`. The API
+  `ScaffoldEndpoints.PreferredStack` / `Llm/TargetStacks` (default + known names) / frontend `targetStacks.ts`. The API
   image carries the .NET 10 and .NET 8 SDKs so the compile gate can build either. **`react-python`** (FastAPI back end +
   React/Vite/TypeScript front end, archetype `react-python/canonical-form-calculation`, prompt
   `common/react-python`) is the target for form-driven calculations such as workbook macros: its gates run in-process

@@ -106,6 +106,32 @@ public static class AnthropicPromptTemplate
             foreach (var s in nbh.SiblingsInFile) AppendRoutine(sb, s);
             sb.AppendLine();
         }
+        sb.Append(RenderRoutes(nbh.Routes));
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// The routes the routine serves, read from the project's route table. Each is an <c>http_contracts</c>
+    /// candidate when the schema has that kind: the method and path come from here (they are usually declared in
+    /// another file); the parameters, responses and status codes come from the routine's own lines, cited as usual.
+    /// </summary>
+    public static string RenderRoutes(IReadOnlyList<ServedRoute> routes)
+    {
+        if (routes.Count == 0) return "";
+        var sb = new StringBuilder();
+        sb.AppendLine("### Routes this routine serves (from the project's route table)");
+        sb.AppendLine("Each route below is a candidate HTTP contract. Take its method and path from this list — they are declared elsewhere, not in the source below — and read its parameters, responses and status codes from the routine's own lines, citing them as usual. A `dispatcher` is a script whose statements pick the handler by a request parameter.");
+        foreach (var r in routes)
+        {
+            sb.Append("- `").Append(r.Name).Append("` — ").Append(r.Role);
+            var where = new List<string>();
+            if (!string.IsNullOrEmpty(r.DeclaredIn)) where.Add($"declared in {r.DeclaredIn}");
+            if (!string.IsNullOrEmpty(r.Detector)) where.Add(r.Detector!);
+            if (!string.IsNullOrEmpty(r.Parameter)) where.Add($"request parameter `{r.Parameter}` = `{r.Value}`");
+            if (where.Count > 0) sb.Append(" (").Append(string.Join("; ", where)).Append(')');
+            sb.AppendLine();
+        }
+        sb.AppendLine();
         return sb.ToString();
     }
 
