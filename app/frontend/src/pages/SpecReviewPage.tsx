@@ -39,6 +39,8 @@ import { useMediaQuery, useViewportFill } from '@/workspace/hooks';
 
 type Section = { key: string; label: string; claims: SpecClaim[] };
 
+const NO_CLAIMS_REASON = "This spec has no claims to review, so it can't be signed. An engineer can extract it again.";
+
 const SPEC_STARTERS: Starter[] = [
   { label: 'Explain the claims in plain language', intent: 'Explain the claims in plain language' },
   { label: 'Which claims are risky?', intent: 'Which claims are risky?' },
@@ -115,6 +117,8 @@ export function SpecReviewPage() {
       { key: 'open_questions', label: 'Open questions', claims: s.open_questions ?? [] },
     ].filter((sec) => sec.claims.length > 0);
   }, [spec.data]);
+  // A spec with nothing to decide must not read as "every claim decided".
+  const noClaims = !!spec.data?.spec && sections.length === 0;
 
   const outlineItems: OutlineItem[] = sections.map((s) => ({
     section: s.key,
@@ -346,11 +350,13 @@ export function SpecReviewPage() {
                   variant="primary"
                   size="md"
                   onClick={() => setSignOpen(true)}
-                  disabled={!isSme || preconditionFailures.length > 0}
+                  disabled={!isSme || noClaims || preconditionFailures.length > 0}
                   title={
                     !isSme
                       ? "Sign-off is the SME's step — switch persona to SME in the menu at the top right."
-                      : preconditionFailures.length > 0
+                      : noClaims
+                        ? NO_CLAIMS_REASON
+                        : preconditionFailures.length > 0
                         ? `${preconditionFailures.length} claim${preconditionFailures.length === 1 ? '' : 's'} still need a decision:\n` +
                           preconditionFailures.slice(0, 6).join('\n') +
                           (preconditionFailures.length > 6 ? `\n…and ${preconditionFailures.length - 6} more` : '')
@@ -385,7 +391,15 @@ export function SpecReviewPage() {
             disabled control. */}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <WorkflowRail state={sp.state} persona={whoami.data?.persona as any} />
-          {inReview && !isSme && (
+          {inReview && noClaims && (
+            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+              {NO_CLAIMS_REASON}{' '}
+              <Link to={`/subroutines/${s.id}`} className="text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
+                Open the routine
+              </Link>
+            </p>
+          )}
+          {inReview && !noClaims && !isSme && (
             <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
               Sign-off is the <strong className="text-ink-secondary">SME</strong>'s step — switch persona
               in the menu at the top right to act on this spec.

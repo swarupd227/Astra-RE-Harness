@@ -160,9 +160,10 @@ public static class ExtractionEndpoints
             if (sub.State == "EXTRACTING")
             {
                 // No spec exists yet for a fresh PARSED → EXTRACTING transition;
-                // if a Spec row is already present we left it from a prior DRAFT.
-                var hasSpec = await db.Specs.AnyAsync(s => s.SubroutineId == sub.Id);
-                sub.State = hasSpec ? "DRAFT" : "PARSED";
+                // if a Spec row is already present the routine goes back to its state.
+                var priorSpecState = await db.Specs.Where(s => s.SubroutineId == sub.Id)
+                    .OrderByDescending(s => s.CreatedAt).Select(s => s.State).FirstOrDefaultAsync();
+                sub.State = priorSpecState ?? "PARSED";
                 await db.SaveChangesAsync();
                 logger.LogInformation(
                     "Reverted stuck EXTRACTING → {NewState} for subroutine {Id}",

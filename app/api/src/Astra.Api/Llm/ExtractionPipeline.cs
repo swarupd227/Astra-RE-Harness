@@ -34,6 +34,21 @@ public sealed class ExtractionPipeline
     private readonly ILogger<ExtractionPipeline> _logger;
     private readonly Evidence.EvidenceService? _evidence;
     private readonly Evidence.GraphService? _graph;
+    private readonly Schemas.SpecSchemaProvider? _schemas;
+
+    /// <summary>
+    /// May this routine's spec be drafted (again)? From PARSED or DRAFT, and from IN_REVIEW only when the spec there
+    /// has no claims: nothing has been reviewed and nothing can be signed, so drafting it again is the way forward.
+    /// </summary>
+    public static async Task<bool> MayDraftAsync(
+        AppDbContext db, Persistence.Entities.Subroutine sub, Schemas.SpecSchema? schema, CancellationToken ct)
+    {
+        if (sub.State is "PARSED" or "DRAFT") return true;
+        if (sub.State != "IN_REVIEW") return false;
+        var spec = await db.Specs.AsNoTracking().Where(s => s.SubroutineId == sub.Id)
+            .OrderByDescending(s => s.CreatedAt).FirstOrDefaultAsync(ct);
+        return spec is { State: "IN_REVIEW" } && !SpecShape.HasClaims(spec.SpecJson.RootElement, schema);
+    }
 
     public ExtractionPipeline(
         ILlmProvider provider,
@@ -45,8 +60,10 @@ public sealed class ExtractionPipeline
         NeighbourhoodBuilder neighbourhood,
         ILogger<ExtractionPipeline> logger,
         Evidence.EvidenceService? evidence = null,
-        Evidence.GraphService? graph = null)
+        Evidence.GraphService? graph = null,
+        Schemas.SpecSchemaProvider? schemas = null)
     {
+        _schemas = schemas;
         _provider = provider;
         _db = db;
         _blob = blob;
@@ -158,11 +175,14 @@ public sealed class ExtractionPipeline
             yield break;
         }
 
-        // State-machine guard: re-extract is allowed only from PARSED or DRAFT.
+        // State-machine guard: re-extract is allowed from PARSED or DRAFT.
         // From IN_REVIEW / SIGNED, replacing the spec would invalidate every
         // existing claim review and signature. Supersession is the proper
         // forward path (Phase C). EXTRACTING means another run is in flight.
-        if (sub.State is not ("PARSED" or "DRAFT"))
+        // The one exception: a spec in review with no claims at all, which
+        // holds no review and cannot be signed, may be drafted again.
+        var schema = _schemas?.GetById(string.IsNullOrEmpty(sub.SourceLanguage) ? "fortran-f77" : sub.SourceLanguage);
+        if (!await MayDraftAsync(_db, sub, schema, ct))
         {
             yield return new("error", new
             {
@@ -328,6 +348,11 @@ public sealed class ExtractionPipeline
             (payload.SpecJson, payload.InputTokens, payload.OutputTokens, payload.LatencyMs);
         var modelUsed = string.IsNullOrWhiteSpace(payload.Model) ? _provider.Info.Model : payload.Model;
 
+        // A reply is a draft only if there is something in it to review. The call is paid for either way, so it is
+        // recorded; a draft the routine already had is left as it was.
+        var specElement = SpecShape.Unwrap(JsonDocument.Parse(specJsonText).RootElement, schema);
+        var reviewable = SpecShape.HasClaims(specElement, schema);
+
         var llmCall = new LlmCall
         {
             Id = Guid.NewGuid(),
@@ -344,13 +369,35 @@ public sealed class ExtractionPipeline
             CostUsd = ModelPricing.Estimate(
                 _provider.Info.Name, modelUsed, inputTokens, outputTokens,
                 payload.CacheReadTokens, payload.CacheCreationTokens),
-            Status = "success",
+            Status = reviewable ? "success" : "rejected",
             CalledAt = DateTimeOffset.UtcNow,
         };
         await _db.LlmCalls.AddAsync(llmCall, ct);
 
+        if (!reviewable)
+        {
+            sub.State = priorState;
+            await _db.SaveChangesAsync(ct);
+            await _audit.LogAsync(
+                "spec.extraction_rejected",
+                "subroutine", sub.Id,
+                _persona,
+                new { subroutineName = sub.Name, reason = "no_claims", model = modelUsed, promptTemplate = $"{promptId}@{promptVersion}", llmCallId = llmCall.Id },
+                ct: ct);
+            _logger.LogWarning(
+                "Extraction rejected: the reply for subroutine {Sub} holds no claims (call {Call}, {OutTok} output tokens)",
+                sub.Id, llmCall.Id, outputTokens);
+            yield return new("error", new
+            {
+                code = "provider.empty_spec",
+                message = "The model's reply held no claims to review, so no draft was saved. Extract the spec again.",
+                retryable = true,
+            });
+            yield break;
+        }
+
         var existing = await _db.Specs.FirstOrDefaultAsync(s => s.SubroutineId == sub.Id, ct);
-        var specDoc = JsonDocument.Parse(specJsonText);
+        var specDoc = JsonDocument.Parse(specElement.GetRawText());
         var now = DateTimeOffset.UtcNow;
         Spec spec;
         if (existing is null)

@@ -600,7 +600,9 @@ export function SpecSummaryCard({ artifact, size, onIntent }: ArtifactRenderProp
               {inReview
                 ? allReviewed
                   ? 'Every claim reviewed — ready to sign'
-                  : `${formatInt(undecided.length)} claim${undecided.length === 1 ? '' : 's'} still need a decision`
+                  : total === 0
+                    ? 'No claims to review — extract the spec again'
+                    : `${formatInt(undecided.length)} claim${undecided.length === 1 ? '' : 's'} still need a decision`
                 : state === 'DRAFT'
                   ? 'Draft — not yet routed for review'
                   : 'Not yet signed'}
@@ -626,7 +628,7 @@ export function SpecSummaryCard({ artifact, size, onIntent }: ArtifactRenderProp
               onClick={() => setSignOpen(true)}
               disabled={!canSign}
               data-testid="card-sign-spec"
-              title={canSign ? undefined : `${undecided.length} claim${undecided.length === 1 ? '' : 's'} still need a decision`}
+              title={canSign ? undefined : total === 0 ? 'No claims to review — extract the spec again' : `${undecided.length} claim${undecided.length === 1 ? '' : 's'} still need a decision`}
               className="inline-flex items-center gap-1.5 rounded-lg bg-volt px-3 py-1.5 text-caption font-semibold text-on-volt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ShieldCheck size={13} aria-hidden="true" />

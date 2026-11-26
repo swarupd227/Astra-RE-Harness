@@ -126,7 +126,8 @@ public sealed class WorkStepExecutor
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var sub = await db.Subroutines.FirstOrDefaultAsync(s => s.Id == subroutineId);
             if (sub is null || sub.State != "EXTRACTING") return;
-            sub.State = await db.Specs.AnyAsync(s => s.SubroutineId == subroutineId) ? "DRAFT" : "PARSED";
+            sub.State = await db.Specs.Where(s => s.SubroutineId == subroutineId)
+                .OrderByDescending(s => s.CreatedAt).Select(s => s.State).FirstOrDefaultAsync() ?? "PARSED";
             await db.SaveChangesAsync();
         }
         catch (Exception ex)

@@ -892,7 +892,8 @@ public sealed partial class CopilotToolRegistry
     {
         var sub = await ResolveRoutineAsync(input, ctx);
         if (sub is null) return NoRoutine(input);
-        if (sub.State is not ("PARSED" or "DRAFT"))
+        var schema = ctx.Services.GetRequiredService<SpecSchemaProvider>().GetById(sub.SourceLanguage ?? "fortran-f77");
+        if (!await Astra.Api.Llm.ExtractionPipeline.MayDraftAsync(ctx.Db, sub, schema, ctx.Ct))
             return ToolResult.Failure("extract.invalid_state",
                 $"`{sub.Name}` is {sub.State}; extraction is only allowed from PARSED or DRAFT (a spec in review or signed must be superseded instead).");
 

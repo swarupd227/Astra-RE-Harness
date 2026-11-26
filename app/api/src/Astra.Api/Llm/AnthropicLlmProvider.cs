@@ -376,7 +376,10 @@ public sealed class AnthropicLlmProvider : ILlmProvider
 
         // Emit patches + citation pulses in spec-section order so the
         // StreamingSpecPanel populates section by section, matching the mock.
-        var root = specDoc.RootElement;
+        // A reply that nested the spec under a wrapper key is lifted here, so the live view shows its claims too.
+        var root = SpecShape.Unwrap(specDoc.RootElement);
+        if (!root.Equals(specDoc.RootElement))
+            _logger.LogWarning("Anthropic nested the spec under a wrapper key; lifted it (sourceLanguage={SourceLanguage})", schemaId);
         await foreach (var evt in EmitPatchesAndPulsesAsync(root, paced, ct))
             yield return evt;
 

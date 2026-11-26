@@ -4,6 +4,8 @@ using System.Text.Json;
 using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Endpoints;
+using Astra.Api.Llm;
+using Astra.Api.Llm.Schemas;
 using Astra.Api.Persistence;
 using Astra.Api.Persistence.Entities;
 using Astra.Api.Signing;
@@ -32,11 +34,24 @@ public sealed class SpecReviewService
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
     private readonly ILogger<SpecReviewService> _log;
+    private readonly SpecSchemaProvider? _schemas;
+
+    /// <summary>Any claim in a section the spec's language declares. The schema is looked up by the routine's
+    /// language when it was loaded with the spec; the shared sections count either way.</summary>
+    private bool HasClaims(Spec spec)
+    {
+        var language = spec.Subroutine?.SourceLanguage;
+        var schemas = language is { Length: > 0 }
+            ? new[] { _schemas?.GetById(language) }
+            : _schemas?.All().ToArray() ?? Array.Empty<SpecSchema?>();
+        return schemas.DefaultIfEmpty(null).Any(s => SpecShape.HasClaims(spec.SpecJson.RootElement, s));
+    }
 
     public SpecReviewService(
         AppDbContext db, IHsmSigner signer, IBlobClient blob, StorageOptions storage,
-        IAuditLogger audit, ILogger<SpecReviewService> log)
+        IAuditLogger audit, ILogger<SpecReviewService> log, SpecSchemaProvider? schemas = null)
     {
+        _schemas = schemas;
         _db = db;
         _signer = signer;
         _blob = blob;
@@ -179,6 +194,10 @@ public sealed class SpecReviewService
         if (spec.State != "IN_REVIEW")
             return (null, new(400, "spec.invalid_state", $"Sign requires IN_REVIEW state (was {spec.State})."));
 
+        if (!HasClaims(spec))
+            return (null, new(400, "spec.sign.no_claims",
+                "This spec has no claims to review, so it cannot be signed. Extract it again."));
+
         var preconditionFailures = await CheckPreconditionsAsync(spec, ct);
         if (preconditionFailures.Count > 0)
             return (null, new(400, "spec.sign.preconditions_unmet",
@@ -311,6 +330,8 @@ public sealed class SpecReviewService
     public async Task<List<object>> CheckPreconditionsAsync(Spec spec, CancellationToken ct)
     {
         var failures = new List<object>();
+        // An empty spec has nothing undecided, which must not read as "ready to sign".
+        if (!HasClaims(spec)) failures.Add(new { claimPath = "$", issue = "no_claims" });
         var reviews = await _db.ClaimReviews
             .Where(r => r.SpecId == spec.Id)
             .ToDictionaryAsync(r => r.ClaimPath, ct);
