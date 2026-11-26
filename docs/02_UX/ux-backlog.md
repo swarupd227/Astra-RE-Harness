@@ -31,7 +31,8 @@ commit.
 | 22 | Project settings | `/corpora/:id/settings` | Backlog |
 | 23 | Prompt Catalog | `/platform/prompts` | Backlog |
 | 24 | Languages | `/platform/languages` | Backlog |
-| 25+ | Harmonisation, Roles, Validation policy, routine extract & live scaffold screens… | | To review |
+| 25 | Roles & Permissions | `/platform/roles` | Backlog |
+| 26+ | Harmonisation, Validation policy, routine extract & live scaffold screens… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -287,3 +288,13 @@ commit.
    expand; "preview" vs "Production" casing differs.
 4. Eyebrow "Spec schemas" + jargon ("typed claim schema", "taxonomy", "mechanically derivable") → "Languages Astra
    reads, and what it can turn each into."
+
+## 25 · Roles & Permissions (`/platform/roles`)
+1. **A raw error on the page for non-admins**: "Could not load users · ApiError: Request failed (403)" — the users
+   list is Admin-only; show "Only an Admin can see and change who has which role" instead of an error.
+2. Role cards list internal build stages ("Stage 1 · Ingest", "Stage 3 · Extract", "Phase #2 · Validation") — use
+   the product's step names (Ingest, Extract specs, Generate code, Validate) with no stage/phase numbers.
+3. Admin "owns" Signature Health, but re-verifying drift is an SME-and-Admin action elsewhere — make the cards match
+   the capability matrix (generate the "owns" list from the matrix instead of a hand-written list).
+4. "Every user has one role" + persona switcher in the top bar: say that the switcher is a development aid until
+   single sign-on assigns roles, so a reviewer is not confused that anyone can become Admin.

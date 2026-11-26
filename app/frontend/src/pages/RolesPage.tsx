@@ -233,7 +233,13 @@ function UsersPanel() {
         {users.isPending ? (
           <Skeleton className="h-32 w-full" />
         ) : users.isError || !users.data ? (
-          <ErrorBlock title="Could not load users" message={String(users.error)} />
+          users.error instanceof ApiError && users.error.status === 403 ? (
+            <p className="text-body text-ink-secondary" data-testid="users-admin-only">
+              Only an Admin can see and change who has which role.
+            </p>
+          ) : (
+            <ErrorBlock title="Could not load users" message={String(users.error)} />
+          )
         ) : users.data.data.length === 0 ? (
           <p className="text-body text-ink-secondary">
             No users yet. Click "Add user" to create the first one.
@@ -393,7 +399,7 @@ function PersonaCard({ persona }: { persona: PersonaDef }) {
         <div>
           <div className="text-caption uppercase tracking-wide text-ink-tertiary">Owns</div>
           <ul className="mt-1 space-y-0.5">
-            {persona.ownsStages.map((s) => (
+            {persona.ownsStages.map((s) => s.replace(/^(Stage \d+|Phase #?\d+)\s*·\s*/, '')).map((s) => (
               <li key={s} className="font-mono text-caption text-ink-secondary">· {s}</li>
             ))}
           </ul>
