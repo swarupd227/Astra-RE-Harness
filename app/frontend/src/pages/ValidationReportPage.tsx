@@ -198,6 +198,11 @@ export function ValidationReportPage() {
   const equivalenceRun = latestByStage('EQUIVALENCE');
   const falsifyingRun = latestByStage('FALSIFYING');
   const qualityRun = latestByStage('QUALITY');
+  // The fix loop's rounds run the quality rules without the AI reviewer, so the newest QUALITY run may carry no AI
+  // review; the card then also shows the most recent run that had one (runs are newest-first).
+  const lastAiReviewRun = allRuns.find(
+    (r) => r.stage === 'QUALITY' && (r.metrics as { aiReview?: { status?: string } } | null)?.aiReview?.status === 'reviewed',
+  );
 
   // Quality counts once it has run; a package from before the gate existed is judged on the other four.
   const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun, ...(qualityRun ? [qualityRun] : [])]);
@@ -304,6 +309,7 @@ export function ValidationReportPage() {
 
       <QualityFindingsCard
         run={qualityRun}
+        aiReviewRun={lastAiReviewRun}
         onRun={() => quality.mutate()}
         isRunning={quality.isPending}
         errorMessage={quality.error?.message}

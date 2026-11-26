@@ -1885,7 +1885,7 @@ export const api = {
 export type ValidationStage = 'COMPILE' | 'TEST_PACK' | 'QUALITY' | 'EQUIVALENCE' | 'FALSIFYING';
 
 export type QualitySeverity = 'blocker' | 'critical' | 'major' | 'minor' | 'info';
-export type QualityCategory = 'security' | 'standards' | 'maintainability';
+export type QualityCategory = 'security' | 'standards' | 'maintainability' | 'review';
 
 /** One finding of the QUALITY gate: rule, severity, where, why it matters and how to fix it. */
 export type QualityFinding = {

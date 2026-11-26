@@ -843,6 +843,8 @@ public sealed class TestPackValidator
             skipped,
             total,
             fileCount = sources.Count,
+            // JaCoCo line coverage of the main classes (maven sidecar 0.2.0+); null when the sidecar did not measure it.
+            coverage = result.Test?.Coverage is { } cov ? new { lines = cov.Lines, covered = cov.Covered, percent = cov.Percent } : null,
         });
         run.CompletedAt = DateTimeOffset.UtcNow;
 
@@ -888,6 +890,8 @@ public sealed class TestPackValidator
             run.ErrorCode = "test_pack.tests_failed";
             run.Summary = $"{failed} of {total} tests failed · {passed} passed · {skipped} skipped";
         }
+        if (result.Test?.Coverage is { Percent: { } pct } && run.Summary is not null)
+            run.Summary += $" · {pct:0.#}% line coverage";
 
         await _db.SaveChangesAsync(ct);
 

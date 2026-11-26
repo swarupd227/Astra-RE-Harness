@@ -11,6 +11,7 @@ const CATEGORIES: { id: QualityCategory | 'all'; label: string }[] = [
   { id: 'security', label: 'Security' },
   { id: 'standards', label: 'Coding standards' },
   { id: 'maintainability', label: 'Maintainability' },
+  { id: 'review', label: 'Spec & correctness' },
 ];
 
 const SEVERITY_TEXT: Record<QualitySeverity, string> = {
@@ -27,16 +28,37 @@ const SEVERITY_TEXT: Record<QualitySeverity, string> = {
  */
 export function QualityFindingsCard({
   run,
+  aiReviewRun,
   onRun,
   isRunning,
   errorMessage,
 }: {
   run: ValidationRun | undefined;
+  /** The most recent QUALITY run that included the AI review — shown when `run` itself has none. */
+  aiReviewRun?: ValidationRun;
   onRun: () => void;
   isRunning: boolean;
   errorMessage: string | undefined;
 }) {
-  const metrics = (run?.metrics ?? null) as QualityMetrics | null;
+  const latest = (run?.metrics ?? null) as QualityMetrics | null;
+  const earlierAi = !latest?.aiReview && aiReviewRun && aiReviewRun.id !== run?.id
+    ? (aiReviewRun.metrics as QualityMetrics | null)
+    : null;
+  // The rule findings come from the latest run; the AI findings from the latest run that had a review.
+  const metrics: QualityMetrics | null = latest && earlierAi
+    ? {
+        ...latest,
+        aiReview: earlierAi.aiReview ?? null,
+        findings: [...latest.findings, ...earlierAi.findings.filter((f) => f.source === 'ai')],
+        total: latest.total + earlierAi.findings.filter((f) => f.source === 'ai').length,
+        bySeverity: Object.fromEntries(
+          Object.entries(latest.bySeverity).map(([k, v]) => [k, v + earlierAi.findings.filter((f) => f.source === 'ai' && f.severity === k).length]),
+        ) as QualityMetrics['bySeverity'],
+        byCategory: Object.fromEntries(
+          Object.entries(latest.byCategory).map(([k, v]) => [k, v + earlierAi.findings.filter((f) => f.source === 'ai' && f.category === k).length]),
+        ) as QualityMetrics['byCategory'],
+      }
+    : latest;
   const [category, setCategory] = useState<QualityCategory | 'all'>('all');
   const [open, setOpen] = useState<string | null>(null);
   const findings = useMemo(
@@ -89,6 +111,7 @@ export function QualityFindingsCard({
                 {metrics.aiReview.status === 'reviewed'
                   ? `AI review (${metrics.aiReview.model ?? 'model'}): ${metrics.aiReview.kept} finding${metrics.aiReview.kept === 1 ? '' : 's'} kept of ${metrics.aiReview.proposed} proposed, each checked against the code it quotes; advisory, never blocking · US$ ${metrics.aiReview.costUsd.toFixed(3)}`
                   : metrics.aiReview.note ?? `AI review ${metrics.aiReview.status}`}
+                {earlierAi && aiReviewRun && ` · from the review on ${new Date(aiReviewRun.startedAt).toLocaleString()}`}
               </p>
             )}
             {metrics && metrics.total > 0 && (
@@ -103,7 +126,8 @@ export function QualityFindingsCard({
                 </dl>
                 <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Finding category">
                   {CATEGORIES.map((c) => {
-                    const count = c.id === 'all' ? metrics.total : metrics.byCategory[c.id];
+                    const count = c.id === 'all' ? metrics.findings.length : metrics.findings.filter((f) => f.category === c.id).length;
+                    if (c.id === 'review' && count === 0) return null;
                     const active = category === c.id;
                     return (
                       <button

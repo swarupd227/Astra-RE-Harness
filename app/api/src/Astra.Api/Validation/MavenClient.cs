@@ -67,7 +67,36 @@ public sealed class MavenClient
         [property: JsonPropertyName("durationMs")] int DurationMs,
         [property: JsonPropertyName("stdout")] string Stdout,
         [property: JsonPropertyName("stderr")] string Stderr,
-        [property: JsonPropertyName("timedOut")] bool TimedOut);
+        [property: JsonPropertyName("timedOut")] bool TimedOut,
+        [property: JsonPropertyName("coverage")] Coverage? Coverage = null);
+
+    /// <summary>JaCoCo line coverage of the main classes during the test run.</summary>
+    public sealed record Coverage(
+        [property: JsonPropertyName("lines")] int Lines,
+        [property: JsonPropertyName("covered")] int Covered,
+        [property: JsonPropertyName("percent")] double? Percent);
+
+    /// <summary>One SpotBugs/FindSecBugs, PMD or Checkstyle finding, with a project-relative path.</summary>
+    public sealed record ToolFinding(
+        [property: JsonPropertyName("tool")] string Tool,
+        [property: JsonPropertyName("rule")] string Rule,
+        [property: JsonPropertyName("category")] string Category,
+        [property: JsonPropertyName("severity")] string Severity,
+        [property: JsonPropertyName("file")] string File,
+        [property: JsonPropertyName("line")] int? Line,
+        [property: JsonPropertyName("message")] string Message);
+
+    public sealed record ToolRun(
+        [property: JsonPropertyName("ok")] bool Ok,
+        [property: JsonPropertyName("count")] int Count,
+        [property: JsonPropertyName("durationMs")] int DurationMs,
+        [property: JsonPropertyName("error")] string? Error);
+
+    public sealed record AnalyzeResponse(
+        [property: JsonPropertyName("compiled")] bool Compiled,
+        [property: JsonPropertyName("tools")] Dictionary<string, ToolRun> Tools,
+        [property: JsonPropertyName("findings")] List<ToolFinding> Findings,
+        [property: JsonPropertyName("version")] string? Version);
 
     public sealed record CompileAndTestResponse(
         [property: JsonPropertyName("compile")] CompileSummary Compile,
@@ -119,6 +148,21 @@ public sealed class MavenClient
                 $"maven sidecar returned {(int)resp.StatusCode}: {raw}");
         return JsonSerializer.Deserialize<TestSummary>(raw, JsonOpts)
             ?? throw new InvalidOperationException("Empty maven test response.");
+    }
+
+    /// <summary>
+    /// Static analysis for the QUALITY gate (sidecar 0.2.0+): SpotBugs + FindSecBugs, PMD and Checkstyle. Returns
+    /// null when the sidecar predates the route (404) so the gate still runs on the platform's own rules.
+    /// </summary>
+    public async Task<AnalyzeResponse?> AnalyzeAsync(IReadOnlyList<JavaSource> sources, CancellationToken ct = default)
+    {
+        var body = new { sources = sources.Select(s => new { path = s.Path, content = s.Content }).ToArray() };
+        using var resp = await _http.PostAsJsonAsync("/analyze", body, JsonOpts, ct);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        var raw = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"maven sidecar returned {(int)resp.StatusCode}: {raw}");
+        return JsonSerializer.Deserialize<AnalyzeResponse>(raw, JsonOpts);
     }
 
     public async Task<CompileAndTestResponse> CompileAndTestAsync(

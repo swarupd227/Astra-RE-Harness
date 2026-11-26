@@ -68,6 +68,32 @@ COPY warmup-spring/ /warmup-spring/
 RUN cd /warmup-spring && mvn -B test \
  && rm -rf /warmup-spring
 
+# Static-analysis tools for the QUALITY gate (maven_sidecar/analysis.py), downloaded at build time so they run
+# offline: SpotBugs + the FindSecBugs security plugin, PMD, Checkstyle, and JaCoCo (agent + CLI) for test coverage.
+ARG PMD_VERSION=7.7.0
+ARG CHECKSTYLE_VERSION=10.20.1
+ARG SPOTBUGS_VERSION=4.8.6
+ARG FINDSECBUGS_VERSION=1.13.0
+ARG JACOCO_VERSION=0.8.12
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /opt/tools/spotbugs /opt/tools/checkstyle /opt/tools/jacoco \
+ && curl -sSL "https://github.com/spotbugs/spotbugs/releases/download/${SPOTBUGS_VERSION}/spotbugs-${SPOTBUGS_VERSION}.tgz" \
+      | tar -xz -C /opt/tools/spotbugs --strip-components=1 \
+ && mkdir -p /opt/tools/spotbugs/plugin && curl -sSL -o /opt/tools/spotbugs/plugin/findsecbugs-plugin.jar \
+      "https://repo1.maven.org/maven2/com/h3xstream/findsecbugs/findsecbugs-plugin/${FINDSECBUGS_VERSION}/findsecbugs-plugin-${FINDSECBUGS_VERSION}.jar" \
+ && curl -sSL -o /tmp/pmd.zip "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" \
+ && unzip -q /tmp/pmd.zip -d /opt/tools && mv /opt/tools/pmd-bin-${PMD_VERSION} /opt/tools/pmd && rm /tmp/pmd.zip \
+ && curl -sSL -o /opt/tools/checkstyle/checkstyle.jar \
+      "https://github.com/checkstyle/checkstyle/releases/download/checkstyle-${CHECKSTYLE_VERSION}/checkstyle-${CHECKSTYLE_VERSION}-all.jar" \
+ && curl -sSL -o /opt/tools/jacoco/jacocoagent.jar \
+      "https://repo1.maven.org/maven2/org/jacoco/org.jacoco.agent/${JACOCO_VERSION}/org.jacoco.agent-${JACOCO_VERSION}-runtime.jar" \
+ && curl -sSL -o /opt/tools/jacoco/jacococli.jar \
+      "https://repo1.maven.org/maven2/org/jacoco/org.jacoco.cli/${JACOCO_VERSION}/org.jacoco.cli-${JACOCO_VERSION}-nodeps.jar" \
+ && test -s /opt/tools/spotbugs/lib/spotbugs.jar && test -s /opt/tools/spotbugs/plugin/findsecbugs-plugin.jar \
+ && test -x /opt/tools/pmd/bin/pmd && test -s /opt/tools/checkstyle/checkstyle.jar \
+ && test -s /opt/tools/jacoco/jacocoagent.jar && test -s /opt/tools/jacoco/jacococli.jar
+ENV ASTRA_TOOLS_DIR=/opt/tools
+
 COPY maven_sidecar/ maven_sidecar/
 
 ENV PYTHONUNBUFFERED=1 \

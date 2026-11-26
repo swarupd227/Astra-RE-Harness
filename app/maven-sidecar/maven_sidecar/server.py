@@ -42,7 +42,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from maven_sidecar import __version__
+from maven_sidecar import __version__, analysis
 
 
 logging.basicConfig(
@@ -108,9 +108,15 @@ class TestResult(BaseModel):
     stdout: str
     stderr: str
     timed_out: bool = Field(..., alias="timedOut")
+    # JaCoCo line coverage of the main classes during this test run: {lines, covered, percent}; null when unavailable.
+    coverage: Optional[dict] = None
 
     class Config:
         populate_by_name = True
+
+
+class AnalyzeRequest(BaseModel):
+    sources: list[JavaSource]
 
 
 class CompileAndTestRequest(BaseModel):
@@ -139,6 +145,30 @@ class CompileAndTestResult(BaseModel):
 @app.get("/health")
 def health():
     return {"service": "astra-maven", "version": __version__, "workdir": str(WORKDIR)}
+
+
+@app.post("/analyze")
+def analyze_endpoint(req: AnalyzeRequest) -> dict:
+    """Static analysis for the QUALITY gate: SpotBugs + FindSecBugs, PMD and Checkstyle over the package.
+    Returns {compiled, tools: {name: {ok, count, durationMs, error}}, findings: [...], version}."""
+    if not any(s.path.endswith("pom.xml") for s in req.sources):
+        raise HTTPException(status_code=400, detail="At least one source must be a pom.xml.")
+    build_dir = WORKDIR / ("analyze-" + uuid.uuid4().hex)
+    build_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        for src in req.sources:
+            if ".." in Path(src.path).parts:
+                raise HTTPException(status_code=400, detail=f"Path traversal rejected: {src.path}")
+            dest = build_dir / src.path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(src.content, encoding="utf-8")
+        result = analysis.analyze(build_dir)
+        result["version"] = __version__
+        log.info("analyze files=%d findings=%d tools=%s", len(req.sources), len(result["findings"]),
+                 {k: v.get("ok") for k, v in result["tools"].items()})
+        return result
+    finally:
+        shutil.rmtree(build_dir, ignore_errors=True)
 
 
 @app.post("/compile", response_model=CompileResult, response_model_by_alias=True)
@@ -235,7 +265,11 @@ def _test(artifact_id: str, extra_args: list[str], timeout_ms: int) -> TestResul
     if not build_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"artifact_id not found: {artifact_id}")
 
-    args = ["mvn", "-B", "-o", "test", "-Dsurefire.useFile=false"] + (extra_args or [])
+    # JaCoCo's agent records which lines the tests ran, for the coverage figure on the test-pack gate.
+    jacoco_agent = analysis.TOOLS / "jacoco" / "jacocoagent.jar"
+    exec_file = build_dir / "target" / "jacoco.exec"
+    coverage_args = [f"-DargLine=-javaagent:{jacoco_agent}=destfile={exec_file}"] if jacoco_agent.is_file() else []
+    args = ["mvn", "-B", "-o", "test", "-Dsurefire.useFile=false"] + coverage_args + (extra_args or [])
     started = time.monotonic()
     timed_out = False
     try:
@@ -262,6 +296,7 @@ def _test(artifact_id: str, extra_args: list[str], timeout_ms: int) -> TestResul
             stderr = stderr.decode("utf-8", errors="replace")
 
     counts = _parse_surefire_summary(stdout + "\n" + stderr)
+    coverage = _coverage(build_dir, exec_file) if coverage_args and exec_file.is_file() else None
     log.info(
         "test artifact=%s exit=%d tests=%d failed=%d errors=%d skipped=%d %dms timedOut=%s",
         artifact_id, exit_code, counts["tests"], counts["failures"], counts["errors"], counts["skipped"], elapsed_ms, timed_out,
@@ -276,7 +311,23 @@ def _test(artifact_id: str, extra_args: list[str], timeout_ms: int) -> TestResul
         stdout=stdout,
         stderr=stderr,
         timed_out=timed_out,
+        coverage=coverage,
     )
+
+
+def _coverage(build_dir: Path, exec_file: Path) -> Optional[dict]:
+    """JaCoCo CLI → CSV over the main classes → line coverage. Never fails the test run."""
+    classes = build_dir / "target" / "classes"
+    if not classes.is_dir():
+        return None
+    csv = build_dir / "target" / "jacoco.csv"
+    try:
+        subprocess.run(["java", "-jar", str(analysis.TOOLS / "jacoco" / "jacococli.jar"), "report", str(exec_file),
+                        "--classfiles", str(classes), "--csv", str(csv)],
+                       cwd=str(build_dir), capture_output=True, text=True, timeout=60)
+        return analysis.coverage_from_csv(csv.read_text(encoding="utf-8")) if csv.is_file() else None
+    except Exception:  # noqa: BLE001 — coverage is a bonus, the test verdict stands without it
+        return None
 
 
 # ────────────────────────────────────────────────────────────────────────

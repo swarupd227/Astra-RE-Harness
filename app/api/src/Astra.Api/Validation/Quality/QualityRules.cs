@@ -12,7 +12,7 @@ public sealed record QualityFinding(
     string Message,
     string Why,
     string Fix,
-    string Source = "rule",   // rule (deterministic, decides the verdict) | ai (the reviewer agent; advisory)
+    string Source = "rule",   // rule | tool (SpotBugs/PMD/Checkstyle) — deterministic, decide the verdict | ai (the reviewer agent; advisory)
     string? SpecClaimId = null);
 
 /// <summary>
@@ -336,7 +336,7 @@ public static class QualityRules
         var byCategory = new[] { "security", "standards", "maintainability" }.ToDictionary(c => c, c => findings.Count(f => f.Category == c));
         // The verdict is the rules' alone: the same code always gets the same result. The reviewer agent's findings
         // are listed and counted, never blocking on their own.
-        var blockingCount = findings.Count(f => f.Source == "rule" && blocking.Contains(f.Severity));
+        var blockingCount = findings.Count(f => f.Source != "ai" && blocking.Contains(f.Severity));
         return new QualitySummary(findings.Count, blockingCount, bySeverity, byCategory, blockingCount == 0);
     }
 
