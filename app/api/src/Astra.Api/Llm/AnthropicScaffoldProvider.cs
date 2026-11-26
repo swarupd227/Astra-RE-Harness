@@ -165,7 +165,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         string? transportError = null;
         try
         {
-            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(rendered.System, userPrompt, ct);
+            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(CodingStandards.AppendTo(rendered.System, CodingStandards.SectionFor(request.TargetPlatform, _prompts)), userPrompt, ct);
         }
         catch (Exception ex)
         {
@@ -314,7 +314,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         string? transportError = null;
         try
         {
-            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(rendered.System, rendered.User, ct);
+            (rawJson, inputTokens, outputTokens) = await CallAnthropicAsync(CodingStandards.AppendTo(rendered.System, CodingStandards.SectionFor(request.TargetPlatform, _prompts)), rendered.User, ct);
         }
         catch (Exception ex)
         {
@@ -589,7 +589,7 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         // single response, and the output budget is raised above the
         // routine-scale default because a unit is many routines.
         var maxOutput = Math.Max(_opts.MaxOutputTokens, FaithfulConversion.MaxOutputTokens);
-        var body = JsonSerializer.Serialize(BuildToolRequest(rendered.System, userPrompt, FaithfulConversion.EmitPackageTool(), maxOutput));
+        var body = JsonSerializer.Serialize(BuildToolRequest(CodingStandards.AppendTo(rendered.System, CodingStandards.SectionFor(request.TargetPlatform, _prompts)), userPrompt, FaithfulConversion.EmitPackageTool(), maxOutput));
         var cacheKey = $"scaffold:faithful:{request.SourceSchema}:{loaded.Version}";
 
         HttpResponseMessage? resp = null;
