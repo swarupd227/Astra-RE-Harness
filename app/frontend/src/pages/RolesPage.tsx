@@ -74,7 +74,7 @@ export function RolesPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {personas.data.data.map((p) => (
-          <PersonaCard key={p.id} persona={p} />
+          <PersonaCard key={p.id} persona={p} actions={matrix.data.actions} />
         ))}
       </div>
 
@@ -387,7 +387,9 @@ function LabelledSelect({
   );
 }
 
-function PersonaCard({ persona }: { persona: PersonaDef }) {
+function PersonaCard({ persona, actions }: { persona: PersonaDef; actions: PersonaActionDef[] }) {
+  // What this role can do, read off the capability matrix below — the hand-written "owns" list could disagree with it.
+  const canDo = actions.filter((a) => a.allowedPersonas.includes(persona.id));
   return (
     <Card data-testid={`persona-card-${persona.id}`}>
       <CardHeader
@@ -397,10 +399,13 @@ function PersonaCard({ persona }: { persona: PersonaDef }) {
       <CardBody className="space-y-3">
         <p className="text-body text-ink-secondary">{persona.charter}</p>
         <div>
-          <div className="text-caption uppercase tracking-wide text-ink-tertiary">Owns</div>
+          <div className="text-caption text-ink-secondary">Can do ({canDo.length})</div>
           <ul className="mt-1 space-y-0.5">
-            {persona.ownsStages.map((s) => s.replace(/^(Stage \d+|Phase #?\d+)\s*·\s*/, '')).map((s) => (
-              <li key={s} className="font-mono text-caption text-ink-secondary">· {s}</li>
+            {(canDo.length > 0
+              ? canDo.map((a) => a.label)
+              : persona.ownsStages.map((s) => s.replace(/^(Stage \d+|Phase #?\d+)\s*·\s*/, ''))
+            ).map((s) => (
+              <li key={s} className="text-caption text-ink-secondary">· {s}</li>
             ))}
           </ul>
         </div>
