@@ -58,6 +58,35 @@ public static class CommentEndpoints
             return Results.Ok(new { data = rows });
         });
 
+        // ── Recent comments across every spec ────────────────────────
+        // The Comments page's "Recent threads": what people are discussing, so the page is useful even when nobody
+        // has mentioned you. Newest first, deleted ones left out, each with the routine and project it is about.
+        app.MapGet("/api/v1/comments/recent", async (int? limit, AppDbContext db, CancellationToken ct) =>
+        {
+            var take = Math.Clamp(limit ?? 50, 1, 200);
+            var rows = await db.Comments.AsNoTracking()
+                .Where(c => c.DeletedAt == null)
+                .OrderByDescending(c => c.CreatedAt)
+                .Take(take)
+                .Select(c => new
+                {
+                    id = c.Id,
+                    specId = c.SpecId,
+                    claimPath = c.ClaimPath,
+                    isReply = c.ParentCommentId != null,
+                    body = c.Body.Length > 280 ? c.Body.Substring(0, 280) : c.Body,
+                    authorPersona = c.AuthorPersona,
+                    authorDisplay = c.AuthorDisplay,
+                    createdAt = c.CreatedAt,
+                    resolved = c.ResolvedAt != null,
+                    subroutineId = c.Spec!.SubroutineId,
+                    subroutineName = c.Spec!.Subroutine!.Name,
+                    corpusName = c.Spec!.Subroutine!.SourceFile!.SourceVersion!.Corpus!.Name,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(new { data = rows });
+        });
+
         // ── Post a comment (top-level or reply) ──────────────────────
         app.MapPost("/api/v1/specs/{specId:guid}/comments", async (
             Guid specId,

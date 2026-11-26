@@ -65,15 +65,23 @@ public static class AuditEndpoints
             string? type,
             string? actor,
             string? targetType,
+            DateTimeOffset? since,
+            DateTimeOffset? until,
             int? limit,
+            int? offset,
             CancellationToken ct) =>
         {
             var q = db.AuditEvents.AsNoTracking().AsQueryable();
             if (!string.IsNullOrEmpty(type)) q = q.Where(e => e.EventType == type);
             if (!string.IsNullOrEmpty(actor)) q = q.Where(e => e.ActorPersona == actor);
             if (!string.IsNullOrEmpty(targetType)) q = q.Where(e => e.TargetType == targetType);
+            if (since is { } s) q = q.Where(e => e.OccurredAt >= s);
+            if (until is { } u) q = q.Where(e => e.OccurredAt <= u);
 
-            var rows = await q.OrderByDescending(e => e.OccurredAt).Take(limit ?? 200).ToListAsync(ct);
+            var rows = await q.OrderByDescending(e => e.OccurredAt)
+                .Skip(Math.Max(0, offset ?? 0))
+                .Take(Math.Clamp(limit ?? 200, 1, 1000))
+                .ToListAsync(ct);
 
             return Results.Ok(new
             {

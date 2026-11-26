@@ -65,10 +65,12 @@ export const artefactContentUrl = (fileId: string) => `${API_BASE}/api/v1/artefa
 
 // ─── Endpoint helpers (Phase A surface) ──────────────────────────────
 export type HealthResponse = { status: string; service: string };
-export type ReadinessDep = { name: string; status: 'ok' | 'down'; error: string | null };
+export type ReadinessDep = { name: string; status: 'ok' | 'down'; error: string | null; version?: string | null };
 export type ReadinessResponse = {
   status: 'ready' | 'degraded';
   service: string;
+  /** The commit the API image was built from. */
+  build?: string;
   dependencies: ReadinessDep[];
 };
 export type WhoamiResponse = {
@@ -1953,6 +1955,43 @@ export const commentsApi = {
     apiFetch<void>(`/api/v1/comments/${commentId}`, { method: 'DELETE' }),
 };
 
+/** GET /api/v1/compliance/summary — the Compliance page's overview strip. */
+export type ComplianceSummary = {
+  total: number;
+  signed: number;
+  committed: number;
+  validationBypassed: number;
+  exports: number;
+  byType: { type: string; count: number }[];
+};
+export type AuditEventRow = {
+  id: string;
+  eventType: string;
+  actorPersona: string;
+  actorDisplay: string;
+  targetType: string;
+  targetId: string | null;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+};
+export const complianceApi = {
+  summary: (p: { since?: string; until?: string }) => {
+    const qs = new URLSearchParams();
+    if (p.since) qs.set('since', p.since);
+    if (p.until) qs.set('until', p.until);
+    return apiFetch<ComplianceSummary>(`/api/v1/compliance/summary?${qs.toString()}`);
+  },
+  events: (p: { since?: string; until?: string; type?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (p.since) qs.set('since', p.since);
+    if (p.until) qs.set('until', p.until);
+    if (p.type) qs.set('type', p.type);
+    qs.set('limit', String(p.limit ?? 50));
+    if (p.offset) qs.set('offset', String(p.offset));
+    return apiFetch<{ data: AuditEventRow[] }>(`/api/v1/audit?${qs.toString()}`);
+  },
+};
+
 export const notificationsApi = {
   list: (opts: { unreadOnly?: boolean; limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams();
@@ -1968,6 +2007,23 @@ export const notificationsApi = {
     apiFetch<{ id: string; readAt: string }>(`/api/v1/notifications/${id}/read`, { method: 'POST' }),
   markAllRead: () =>
     apiFetch<{ markedRead: number; persona: string }>(`/api/v1/notifications/read-all`, { method: 'POST' }),
+  /** Newest comments across every spec — the Comments page's "Recent threads". */
+  recentComments: (limit = 50) => apiFetch<{ data: RecentComment[] }>(`/api/v1/comments/recent?limit=${limit}`),
+};
+
+export type RecentComment = {
+  id: string;
+  specId: string;
+  claimPath: string | null;
+  isReply: boolean;
+  body: string;
+  authorPersona: string;
+  authorDisplay: string;
+  createdAt: string;
+  resolved: boolean;
+  subroutineId: string;
+  subroutineName: string;
+  corpusName: string;
 };
 
 export type CommentItem = {
