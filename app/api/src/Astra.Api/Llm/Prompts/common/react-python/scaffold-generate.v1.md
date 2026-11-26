@@ -188,6 +188,22 @@ Rules:
     largest table row) or an empty fake port, and assert the lookup error. A test
     that checks the validation itself builds the input with `pytest.raises` around
     the model, not around the service.
+17. **An outside request is sent exactly as the source sends it.** When the
+    routine builds a request for an outside service (a JSON body, a query, a
+    message), reproduce it key for key from the source code: the same names,
+    the same nesting (a key the source writes inside `"advanced":{…}` stays
+    inside it), the same order and the same value types. The fake port in
+    the tests records what it was sent, and one test builds an input, runs the
+    service and asserts the **whole** recorded body equal to the literal the
+    source would send for that input — written by reading the source's
+    request-building code, not your own. A fake that accepts anything proves
+    nothing about the request.
+18. **Every value the request needs can be entered on the form.** Each input
+    the source reads into the request — lists of Yes/No selections and ids
+    included (selected coverages, perils, options) — has a control on the
+    form, and the form starts from a request the outside service accepts:
+    the workbook's current values when the user message lists them, otherwise
+    at least one item in any list the service requires to be non-empty.
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
