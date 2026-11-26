@@ -28,7 +28,7 @@ export function DocQualityChip({ quality }: { quality: DocQuality }) {
   const t = tone(quality);
   const label = quality.score === null
     ? `${passed}/${quality.checks.length} checks`
-    : `Quality ${quality.score}/100 · ${passed}/${quality.checks.length} checks`;
+    : `Quality ${quality.score}/100${quality.score < quality.threshold ? ` — below the ${quality.threshold} bar` : ''} · ${passed}/${quality.checks.length} checks`;
   return (
     <div className="relative" data-testid="doc-quality">
       <button
@@ -36,11 +36,15 @@ export function DocQualityChip({ quality }: { quality: DocQuality }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px]', TONE[t])}
-        title={quality.critique?.summary ?? undefined}
+        title={`${quality.critique?.summary ?? 'An independent reviewer model scored this section.'} Click for the scores, the fixes it asked for and any failed check.`}
       >
         {t === 'ok' ? <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> : <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />}
         {label}
-        {quality.revised && <span className="text-ink-tertiary">· revised</span>}
+        {quality.revised && (
+          <span className="text-ink-tertiary" title="The writer revised this section once after the reviewer's first critique">
+            · revised once
+          </span>
+        )}
         {open ? <ChevronDown className="h-3 w-3" aria-hidden="true" /> : <ChevronRight className="h-3 w-3" aria-hidden="true" />}
       </button>
       {open && (

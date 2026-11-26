@@ -123,13 +123,13 @@ export function SubroutinesPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2" role="search">
           <label className="relative min-w-[260px] flex-1">
-            <span className="sr-only">Search routines by name, signature or file</span>
+            <span className="sr-only">Search routines by name, file or what their spec says they do</span>
             <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
             <input
               type="search"
               value={rawQ}
               onChange={(e) => setRawQ(e.target.value)}
-              placeholder="Search by name, signature or file — e.g. Premium, HYBRD, Module1.bas"
+              placeholder="Search by name, file or what it does — e.g. Premium, HYBRD, validation"
               className="h-9 w-full rounded-md border border-line-subtle bg-raised pl-8 pr-3 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-line-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-volt"
               data-testid="subroutines-search"
               autoFocus
@@ -278,9 +278,11 @@ export function SubroutinesPage() {
   );
 }
 
-function HitRow({ hit, q }: { hit: SubroutineSearchHit & { sourceLanguage?: string | null }; q: string }) {
+function HitRow({ hit, q }: { hit: SubroutineSearchHit & { sourceLanguage?: string | null; matchedInSpec?: boolean }; q: string }) {
   const ql = q.toLowerCase();
-  const matchedPath = !!ql && !hit.name.toLowerCase().includes(ql) && !hit.signature.toLowerCase().includes(ql);
+  const inName = !!ql && (hit.name.toLowerCase().includes(ql) || hit.signature.toLowerCase().includes(ql));
+  const inPath = !!ql && !inName && hit.file.relativePath.toLowerCase().includes(ql);
+  const inSpec = !!ql && !inName && !inPath && !!hit.matchedInSpec;
   const file = hit.file.relativePath.split('/').pop() ?? hit.file.relativePath;
   const office = /\.(xlsm|xls|xlsb|xlam|docm|dotm|pptm|accdb|mdb)\//i.test(hit.file.relativePath);
   const lines = hit.lineEnd - hit.lineStart + 1;
@@ -299,7 +301,8 @@ function HitRow({ hit, q }: { hit: SubroutineSearchHit & { sourceLanguage?: stri
           <span className="block truncate font-mono text-micro text-ink-tertiary" title={hit.file.relativePath}>
             {' '}
             {file} · L{hit.lineStart}–{hit.lineEnd}
-            {matchedPath && <span className="ml-1 text-ink-secondary">· matched in file path</span>}
+            {inPath && <span className="ml-1 text-ink-secondary">· matched in file path</span>}
+            {inSpec && <span className="ml-1 text-ink-secondary">· matched in what the spec says it does</span>}
           </span>
         </Link>
       </td>

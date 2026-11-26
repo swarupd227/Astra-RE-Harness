@@ -80,15 +80,26 @@ public static class SubroutineEndpoints
                     baseQuery = baseQuery.Where(x => !testIds.Contains(x.c.Id));
             }
 
+            HashSet<Guid> specMatches = new();
             if (qUpper is not null)
             {
                 // Postgres ILIKE: case-insensitive substring. Fast enough
                 // for Phase C corpora; pg_trgm similarity ranking lands in
                 // Phase D when the corpus list grows past ~1000 routines.
+                // People search by what a routine does ("premium", "validation"), not only by its identifier: also
+                // match the summary of its spec. Postgres-only jsonb read, parameterised; capped so a broad word
+                // cannot build an enormous IN list.
+                var pattern = $"%{qTrim}%";
+                specMatches = (await db.Database
+                        .SqlQuery<Guid>($"SELECT subroutine_id AS \"Value\" FROM specs WHERE spec_json->>'summary' ILIKE {pattern} LIMIT 2000")
+                        .ToListAsync(ct))
+                    .ToHashSet();
+                var specIds = specMatches.ToList();
                 baseQuery = baseQuery.Where(x =>
-                    EF.Functions.ILike(x.s.Name, $"%{qTrim}%") ||
-                    EF.Functions.ILike(x.s.Signature, $"%{qTrim}%") ||
-                    EF.Functions.ILike(x.f.RelativePath, $"%{qTrim}%"));
+                    EF.Functions.ILike(x.s.Name, pattern) ||
+                    EF.Functions.ILike(x.s.Signature, pattern) ||
+                    EF.Functions.ILike(x.f.RelativePath, pattern) ||
+                    specIds.Contains(x.s.Id));
             }
 
             var total = await baseQuery.CountAsync(ct);
@@ -138,7 +149,12 @@ public static class SubroutineEndpoints
 
             return Results.Ok(new
             {
-                data = rows,
+                data = rows.Select(r => new
+                {
+                    r.id, r.name, r.signature, r.lineStart, r.lineEnd, r.state, r.sourceLanguage, r.file, r.corpus,
+                    // True when the match came from the spec's summary rather than the name, signature or path.
+                    matchedInSpec = specMatches.Contains(r.id),
+                }),
                 total,
                 limit = take,
                 offset = skip,
