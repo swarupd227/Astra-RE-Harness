@@ -1476,6 +1476,8 @@ export const api = {
   listArtefactKinds: () => apiFetch<{ data: ArtefactKindInfo[] }>('/api/v1/artefact-kinds'),
   getCorpusSettings: (id: string) =>
     apiFetch<ProjectSettings>(`/api/v1/corpora/${encodeURIComponent(id)}/settings`),
+  renameCorpus: (id: string, name: string) =>
+    apiFetch<{ id: string; name: string }>(`/api/v1/corpora/${id}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
   putCorpusSettings: (id: string, settings: ProjectSettings) =>
     apiFetch<ProjectSettings>(`/api/v1/corpora/${encodeURIComponent(id)}/settings`, {
       method: 'PUT',

@@ -130,6 +130,8 @@ export function ProjectSettingsPage() {
         }
       />
 
+      <RenameCard id={id} current={corpus.data?.name ?? ''} canEdit={canEdit} />
+
       {!canEdit && (
         <p className="rounded-md border border-line-subtle bg-sunken px-4 py-3 text-caption text-ink-secondary" data-testid="settings-readonly">
           Settings are changed by an Engineer or an Admin. You are viewing them read-only.
@@ -288,5 +290,49 @@ export function ProjectSettingsPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Rename the project (unique names; recorded in the audit trail). */
+function RenameCard({ id, current, canEdit }: { id: string; current: string; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(current);
+  useEffect(() => setName(current), [current]);
+  const rename = useMutation<{ id: string; name: string }, ApiError>({
+    mutationFn: () => api.renameCorpus(id, name.trim()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['corpus', id] });
+      qc.invalidateQueries({ queryKey: ['corpora'] });
+      qc.invalidateQueries({ queryKey: ['copilot', 'overview'] });
+    },
+  });
+  const changed = name.trim().length > 0 && name.trim() !== current;
+  return (
+    <Card>
+      <CardHeader title="Name" description="Shown in the projects list, the rail and every picker. Must be unique." />
+      <CardBody className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={!canEdit || rename.isPending}
+          maxLength={200}
+          aria-label="Project name"
+          className={inputClass + ' min-w-[260px] flex-1'}
+          data-testid="settings-rename-input"
+        />
+        <Button
+          variant="secondary"
+          onClick={() => rename.mutate()}
+          disabled={!canEdit || !changed}
+          loading={rename.isPending}
+          data-testid="settings-rename-save"
+        >
+          Rename
+        </Button>
+        {rename.isError && <p className="basis-full text-caption text-status-failed">{rename.error.message}</p>}
+        {rename.isSuccess && !changed && <p className="basis-full text-caption text-status-ok">Renamed.</p>}
+      </CardBody>
+    </Card>
   );
 }
