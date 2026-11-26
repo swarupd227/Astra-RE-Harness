@@ -209,9 +209,9 @@ export function ValidationPolicyPage() {
         />
         <CardBody>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-caption">
-            <Meta label="Scope" value={p.scope} />
+            <Meta label="Applies to" value={p.scope === 'global' ? 'Every project' : p.scope} />
             <Meta label="Policy version" value={p.version} />
-            <Meta label="Owned by" value={p.ownedBy} />
+            <Meta label="Changed by" value="An Admin (Platform → Validation Policy)" />
           </div>
         </CardBody>
       </Card>
@@ -263,7 +263,7 @@ export function ValidationPolicyPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-caption">
               <Meta label="Auto-retry count" value={String(p.retryDefaults.autoRetryCount)} />
-              <Meta label="Transient flake window" value={p.retryDefaults.transientFlakeWindow} />
+              <Meta label="Transient flake window" value={readableDuration(p.retryDefaults.transientFlakeWindow)} />
             </div>
           )}
         </CardBody>
@@ -332,7 +332,7 @@ function GateCard({
         ) : (
           <>
             {gate.coverageThreshold && <Meta label="Coverage threshold" value={gate.coverageThreshold} />}
-            <Meta label="Retry policy" value={gate.retryPolicy} />
+            <Meta label="Retry policy" value={RETRY_LABEL[gate.retryPolicy] ?? gate.retryPolicy} />
             <Meta label="Blocks commit on failure" value={gate.blockingCommitOnFailure} />
           </>
         )}
@@ -384,3 +384,24 @@ function EditableMeta({
     </label>
   );
 }
+
+/** "PT15M" → "15 minutes"; anything that is not an ISO-8601 duration passes through. */
+function readableDuration(iso: string): string {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(iso ?? '');
+  if (!m) return iso;
+  const parts: string[] = [];
+  const add = (n: string | undefined, unit: string) => {
+    if (n && Number(n) > 0) parts.push(`${Number(n)} ${unit}${Number(n) === 1 ? '' : 's'}`);
+  };
+  add(m[1], 'day');
+  add(m[2], 'hour');
+  add(m[3], 'minute');
+  add(m[4], 'second');
+  return parts.join(' ') || iso;
+}
+
+const RETRY_LABEL: Record<string, string> = {
+  manual: 'An engineer re-runs it',
+  'regenerate-then-run': 'Regenerate the tests, then run them',
+  auto: 'Retried automatically',
+};

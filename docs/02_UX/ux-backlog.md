@@ -32,7 +32,8 @@ commit.
 | 23 | Prompt Catalog | `/platform/prompts` | Backlog |
 | 24 | Languages | `/platform/languages` | Backlog |
 | 25 | Roles & Permissions | `/platform/roles` | Backlog |
-| 26+ | Harmonisation, Validation policy, routine extract & live scaffold screens… | | To review |
+| 26 | Validation policy | `/platform/validation` | Backlog |
+| 27+ | Harmonisation, routine extract & live scaffold screens, scaffold detail, validation report… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -298,3 +299,16 @@ commit.
    the capability matrix (generate the "owns" list from the matrix instead of a hand-written list).
 4. "Every user has one role" + persona switcher in the top bar: say that the switcher is a development aid until
    single sign-on assigns roles, so a reviewer is not confused that anyone can become Admin.
+
+## 26 · Validation policy (`/platform/validation`)
+1. **The policy describes a Fortran demo, not the product**: "Drive the original Fortran (via gfortran sidecar) and the
+   generated C# … one canonical input per CONSUME_ROLL family … as that lands per Phase #5". The equivalence gate
+   should describe what it does for every source language (or say which languages it covers today), with no seed-data
+   names or phase numbers.
+2. It lists 3 gates; the platform now also has a quality gate (security, coding standard, maintainability — commit
+   3b304e7) and React + Python gates (pytest, jest) — derive the gate list from what actually runs per target stack.
+3. Raw values: "PT15M" (ISO duration) → "15 minutes"; "regenerate-then-run" → "Regenerate the tests, then run";
+   "SCOPE global", "POLICY VERSION v1.0", "OWNED BY Nous · Validation engineering" (third brand name again).
+4. "Zero warnings required at project-level error treatment" — unclear; say "The build must succeed with no errors;
+   warnings are reported."
+5. Read-only for everyone today with no hint who changes it — say "Set by an Admin" and, for Admins, show an Edit.
