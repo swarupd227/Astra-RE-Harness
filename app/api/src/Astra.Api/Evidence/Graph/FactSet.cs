@@ -22,6 +22,8 @@ public static class EntityVocabulary
     public const string Class = "class";
     public const string Endpoint = "endpoint";
     public const string Queue = "queue";
+    /// <summary>An HTTP route the application serves (<c>GET /invoices/{id}</c>); an <see cref="Endpoint"/> is one it calls.</summary>
+    public const string Route = "route";
 
     public const string Reads = "reads";
     public const string Writes = "writes";
@@ -47,6 +49,7 @@ public static class EntityVocabulary
         [Class] = "Class",
         [Endpoint] = "Web endpoint",
         [Queue] = "Message queue or exchange",
+        [Route] = "HTTP route served",
         [WorkbookAdapter.WorkbookType] = "Workbook",
         [WorkbookAdapter.SheetType] = "Worksheet",
         [WorkbookAdapter.NamedRangeType] = "Named range",

@@ -84,14 +84,21 @@ public sealed class EvidenceService
     private readonly IBlobClient _blob;
     private readonly GraphService _graph;
     private readonly ILogger<EvidenceService> _logger;
+    private readonly Astra.Api.Parser.IFortranParserClient? _parser;
 
-    public EvidenceService(AppDbContext db, IBlobClient blob, GraphService graph, ILogger<EvidenceService> logger)
+    public EvidenceService(AppDbContext db, IBlobClient blob, GraphService graph, ILogger<EvidenceService> logger,
+        Astra.Api.Parser.IFortranParserClient? parser = null)
     {
         _db = db;
         _blob = blob;
         _graph = graph;
         _logger = logger;
+        _parser = parser;
     }
+
+    /// <summary>Source files whose facts the parser sidecar reads (C# is read here, with Roslyn).</summary>
+    public static bool HasSidecarFacts(string path) =>
+        path.EndsWith(".php", StringComparison.OrdinalIgnoreCase);
 
     // ── building ────────────────────────────────────────────────────────
 
@@ -313,7 +320,7 @@ public sealed class EvidenceService
                     .Where(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code)
                     .Select(f => new { f.Id, f.RelativePath, f.BlobUri, f.FileHash })
                     .ToListAsync(ct))
-                .Where(f => CSharpFacts.IsCSharp(f.RelativePath))
+                .Where(f => CSharpFacts.IsCSharp(f.RelativePath) || (_parser is not null && HasSidecarFacts(f.RelativePath)))
                 .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
                 .ToList();
             if (files.Count == 0) return new CodeFactsOutcome(0, 0, 0, Array.Empty<string>());
@@ -337,7 +344,24 @@ public sealed class EvidenceService
             warnings.AddRange(unreadable.OrderBy(w => w, StringComparer.Ordinal));
 
             // Parsing is CPU work; keep it off the request's thread.
-            var read = await Task.Run(() => CSharpFacts.Read(sources.ToList(), ct), ct);
+            var all = sources.ToList();
+            var csharp = all.Where(s => CSharpFacts.IsCSharp(s.Path)).ToList();
+            var read = csharp.Count == 0
+                ? new Dictionary<string, CodeFileFacts>(StringComparer.Ordinal)
+                : new Dictionary<string, CodeFileFacts>(await Task.Run(() => CSharpFacts.Read(csharp, ct), ct), StringComparer.Ordinal);
+
+            // Languages the parser sidecar reads facts from (PHP): one call for all of them.
+            var sidecar = all.Where(s => HasSidecarFacts(s.Path)).OrderBy(s => s.Path, StringComparer.Ordinal).ToList();
+            if (sidecar.Count > 0 && _parser is not null)
+            {
+                var facts = await _parser.ExtractFactsAsync(sidecar.Select(s => new Astra.Api.Parser.CorpusFile(s.Path, s.Text)).ToList(), ct);
+                warnings.AddRange(facts.Warnings);
+                foreach (var f in facts.Files)
+                {
+                    if (string.IsNullOrWhiteSpace(f.FactsJson)) continue;
+                    read[f.Filename] = new CodeFileFacts(FactSet.FromJson(f.FactsJson), Array.Empty<string>());
+                }
+            }
 
             foreach (var batch in files.Select(f => f.Id).Chunk(2000))
                 await _db.FileFacts.Where(x => batch.Contains(x.SourceFileId)).ExecuteDeleteAsync(ct);
@@ -474,9 +498,10 @@ public sealed class EvidenceService
                 await BuildCodeAsync(versionId, ct);
             }
 
-            // C# read before its facts could be stated (K5), or never read: read now, for the whole project at once.
+            // Code read before its facts could be stated (C# in K5, PHP in P2), or never read: read now, for the whole project at once.
             if (await _db.SourceFiles.AnyAsync(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code
-                    && (EF.Functions.ILike(f.RelativePath, "%.cs") || EF.Functions.ILike(f.RelativePath, "%.csx"))
+                    && (EF.Functions.ILike(f.RelativePath, "%.cs") || EF.Functions.ILike(f.RelativePath, "%.csx")
+                        || (_parser != null && EF.Functions.ILike(f.RelativePath, "%.php")))
                     && !_db.FileFacts.Any(x => x.SourceFileId == f.Id), ct))
             {
                 await BuildCodeFactsAsync(versionId, rebuildGraph: true, ct);

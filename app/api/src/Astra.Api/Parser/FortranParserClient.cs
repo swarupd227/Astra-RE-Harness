@@ -113,6 +113,33 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
         return new CorpusParseOutcome(results, reply.Warnings.ToArray(), CrossFileResolved: true);
     }
 
+    public async Task<FactsOutcome> ExtractFactsAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default)
+    {
+        var none = files.Select(f => new FileFactsJson(f.Filename, "")).ToList();
+        if (files.Count == 0) return new FactsOutcome(none, Array.Empty<string>());
+
+        var req = new Astra.Api.Parser.Grpc.ParseCorpusRequest();
+        foreach (var f in files)
+            req.Files.Add(new Astra.Api.Parser.Grpc.SourceFile { Filename = f.Filename, Content = f.Content });
+        try
+        {
+            var reply = await _client.ExtractFactsAsync(req, cancellationToken: ct);
+            var result = new List<FileFactsJson>(files.Count);
+            for (var i = 0; i < files.Count; i++)
+                result.Add(new FileFactsJson(files[i].Filename, i < reply.Files.Count ? reply.Files[i].FactsJson : ""));
+            return new FactsOutcome(result, reply.Warnings.ToArray());
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+        {
+            return new FactsOutcome(none, new[] { "The parser sidecar predates fact extraction (ExtractFacts), so no facts were read from these files." });
+        }
+        catch (RpcException ex)
+        {
+            _logger.LogError(ex, "Parser sidecar ExtractFacts RPC failed for {Count} files", files.Count);
+            return new FactsOutcome(none, new[] { $"Facts could not be read from these files (parser {ex.StatusCode}: {ex.Status.Detail})." });
+        }
+    }
+
     /// <summary>
     /// The streaming corpus parse: progress events keep the stream busy (a
     /// proxy in front of the sidecar drops one idle for 240 s) and are

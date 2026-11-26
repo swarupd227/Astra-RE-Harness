@@ -103,6 +103,30 @@ whose key is, is counted and reported as a note (`… were not read`), never tur
 analysis: a name is followed back through locals, fields, constants and a few helpers (`TimeSpan.FromSeconds`,
 `Uri`, `string.Format`, interpolation, `??`), not through calls.
 
+## PHP (code facts, read by the parser sidecar)
+
+Read with the real PHP grammar (nikic/PHP-Parser 5, `app/parser-sidecar/php_tools/php_scan.php`, run by the PHP CLI in
+the sidecar image) — the code is parsed, never executed. The scanner states only what the code literally contains:
+routines, calls resolved through `use` imports, typed and promoted properties, locals assigned from `new`, and
+`$this`/`self`/`static`/`parent`, plus neutral **sites** (calls with their literal arguments, SQL strings, superglobal
+reads, includes, `switch` dispatch). Small **detectors** (`parser_sidecar/php_facts.py`) read those sites; adding a
+framework is adding a detector, nothing else. The API asks for the facts with the `ExtractFacts` RPC (one call for all
+of a version's `.php` files, from `EvidenceService.BuildCodeFactsAsync`) and stores them like the C# facts.
+
+| Found | Entity | Link | Detector |
+|---|---|---|---|
+| a route the application serves | `route` named `VERB /path` (`GET /invoices/{id}`, `GET\|POST /search`, `ANY /x`) | `triggers` → the handler `class` (`attrs.method`) | `Route::get/post/…/match/any`, `Route::resource/apiResource` (Laravel); `$router->…` (Lumen), `$app->…` (Slim), `$routes->…` (CodeIgniter 4); `#[Route]` on methods with a class prefix (Symfony and alike) |
+| a front controller's dispatch | `route` named `ANY /script.php?param=value` | `triggers` → the `script` | `switch ($_REQUEST['action'])` (high), `switch ($action)` where the variable's name says what it is (medium) |
+| SQL text | `table` | `reads` / `writes` | any string or concatenation that starts with a SQL verb (medium when concatenated) |
+| a query builder or active record | `table` | `references` (`DB::table`), `reads`/`writes` (`$this->db->get/insert/…`), `contains` (`Schema::create`, which also declares it) | Laravel, CodeIgniter 3 style |
+| a setting read | `config-key` | `reads` | `env()`, `getenv()`, `config()`, `ini_get()`, `Config::get()`, `$_ENV[…]` |
+| an include | `file` | `references` | `include`/`require` with a literal path |
+
+The actor of a link is the class the code is in, or the `script` (the file path) for a function or the file's own
+statements. A route is an `route`, not an `endpoint`: the inventory counts **routes served** (`routes`) apart from
+**endpoints called** (`endpoints`). Not yet read: route group prefixes (`Route::prefix('api')->group(…)`), Eloquent
+models' implicit table names, and routes built from variables; these are gaps, not guesses.
+
 ## Linking rules
 
 `LinkingRules.Apply` runs on the merged graph (after the merge, before it is stored) and only adds what a rule can

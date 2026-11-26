@@ -31,6 +31,7 @@ public static class InventoryRules
         ("config-keys", "Configuration keys", EntityVocabulary.ConfigKey),
         ("classes", "Classes that use something outside themselves", EntityVocabulary.Class),
         ("endpoints", "Web endpoints called", EntityVocabulary.Endpoint),
+        ("routes", "HTTP routes served", EntityVocabulary.Route),
         ("queues", "Message queues and exchanges", EntityVocabulary.Queue),
     };
 

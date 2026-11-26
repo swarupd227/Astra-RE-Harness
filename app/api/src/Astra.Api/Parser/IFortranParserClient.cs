@@ -34,7 +34,22 @@ public interface IFortranParserClient
         IReadOnlyList<CorpusFile> files,
         CancellationToken ct = default,
         Action<int, int>? onProgress = null);
+
+    /// <summary>
+    /// Facts the files state for the entity graph (routes served, tables read and written, settings read,
+    /// includes), one FactSet JSON per file, for the languages the sidecar reads facts from (PHP). A sidecar
+    /// that predates the call, or a client that does not implement it, answers no facts and says so.
+    /// </summary>
+    Task<FactsOutcome> ExtractFactsAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default) =>
+        Task.FromResult(new FactsOutcome(
+            files.Select(f => new FileFactsJson(f.Filename, "")).ToList(),
+            new[] { "This parser client does not read facts." }));
 }
+
+/// <param name="FactsJson">The FactSet JSON for the file; empty when the sidecar reads no facts from it.</param>
+public sealed record FileFactsJson(string Filename, string FactsJson);
+
+public sealed record FactsOutcome(IReadOnlyList<FileFactsJson> Files, IReadOnlyList<string> Warnings);
 
 public sealed record ParserPing(string Service, string Version);
 

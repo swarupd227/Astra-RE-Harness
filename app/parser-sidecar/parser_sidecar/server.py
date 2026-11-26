@@ -41,6 +41,7 @@ from parser_sidecar.abl_parser import parse_source as _abl_parse_v0
 from parser_sidecar.java_parser import parse_source as _java_parse_v0
 from parser_sidecar.php_parser import parse_source as _php_parse_v0
 from parser_sidecar import php_native as _php_native
+from parser_sidecar import php_facts as _php_facts
 from parser_sidecar.unibasic_parser import parse_source as _unibasic_parse_v0
 
 # Phase 9.4.a — production Delphi parser (tree-sitter-pascal per ADR-031).
@@ -387,6 +388,34 @@ class ParserServicer(parser_pb2_grpc.ParserServicer):
         if "error" in outcome:
             context.abort(grpc.StatusCode.INTERNAL, f"corpus parse failed: {outcome['error']}")
         yield parser_pb2.ParseCorpusEvent(done=outcome["reply"])
+
+    def ExtractFacts(self, request, context):
+        """Facts for the entity graph, one FactSet JSON per file (PHP today; other files answer empty)."""
+        import json as _json
+        started = time.time()
+        files = [(f.filename or f"<inline-{i}>", f.content or "") for i, f in enumerate(request.files)]
+        reply = parser_pb2.ExtractFactsReply()
+        php = [(i, fn, c) for i, (fn, c) in enumerate(files) if _routes_to_php(fn)]
+        facts_by_index: dict = {}
+        if php:
+            if not _php_native.available():
+                reply.warnings.append("php: PHP-Parser is not available in this sidecar, so no facts were read from PHP files.")
+            else:
+                try:
+                    scans = _php_native.scan([(fn, c) for _, fn, c in php])
+                    by_file, warnings = _php_facts.facts_for([(fn, sc) for (_, fn, _), sc in zip(php, scans)])
+                    reply.warnings.extend(warnings)
+                    for (i, fn, _) in php:
+                        facts_by_index[i] = by_file.get(fn) or {"entities": [], "links": []}
+                except _php_native.ScanFailed as e:
+                    reply.warnings.append(f"php: facts could not be read ({e}).")
+        for i, (fn, _) in enumerate(files):
+            facts = facts_by_index.get(i)
+            reply.files.add(filename=fn, facts_json=_json.dumps(facts, separators=(",", ":")) if facts else "")
+        log.info("extracted facts files=%d php=%d entities=%d links=%d in %.1fs", len(files), len(php),
+                 sum(len(f["entities"]) for f in facts_by_index.values()),
+                 sum(len(f["links"]) for f in facts_by_index.values()), time.time() - started)
+        return reply
 
     def _parse_corpus_reply(self, request, on_progress):
         started = time.time()

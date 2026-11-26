@@ -35,6 +35,11 @@ service Parser {
   // exactly one `done` carrying the same reply ParseCorpus would return.
   // Prefer it; fall back to ParseCorpus against an older sidecar.
   rpc ParseCorpusStream(ParseCorpusRequest) returns (stream ParseCorpusEvent);
+
+  // Facts a corpus states for the entity graph (routes served, tables read/written, settings read, includes),
+  // one FactSet JSON per file, for the languages the sidecar reads facts from (PHP). Additive: an older
+  // sidecar answers UNIMPLEMENTED and the API carries on without them.
+  rpc ExtractFacts(ParseCorpusRequest) returns (ExtractFactsReply);
 }
 
 message PingRequest {}
@@ -133,4 +138,16 @@ message ParseCorpusEvent {
     ParseProgress progress = 1;
     ParseCorpusReply done = 2;
   }
+}
+
+message FileFacts {
+  string filename = 1;
+  // {"entities":[{type,name,locator,attrs}],"links":[{relation,from,to,locator,confidence,attrs}]}
+  string facts_json = 2;
+}
+
+message ExtractFactsReply {
+  // Same order as the request; a file the sidecar reads no facts from has empty facts_json.
+  repeated FileFacts files = 1;
+  repeated string warnings = 2;
 }

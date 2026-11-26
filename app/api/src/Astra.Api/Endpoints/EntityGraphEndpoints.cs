@@ -42,10 +42,13 @@ public static class EntityGraphEndpoints
             return Results.Ok(await graph.ListAsync(v, type, q, limit ?? 50, offset ?? 0, ct));
         });
 
-        // One thing and everything linked to it. The name may hold slashes (a file path), so it takes the rest of the path.
+        // One thing and everything linked to it. The name may hold slashes (a file path, a route such as
+        // "GET /invoices/{id}"), so it takes the rest of the path. ASP.NET decodes every escape in the path except
+        // %2F, so a client that encodes the name with encodeURIComponent would otherwise never find it.
         app.MapGet("/api/v1/corpora/{id:guid}/entities/{type}/{**name}", async (
             Guid id, string type, string name, Guid? versionId, EvidenceService evidence, GraphService graph, CancellationToken ct) =>
         {
+            name = name.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase);
             var (found, version) = await evidence.ResolveVersionAsync(id, versionId, ct);
             if (!found) return NotFound("corpus.not_found", "No such project.");
             if (version is not { } v) return NotFound("entity.not_found", "This project has no source version yet.");

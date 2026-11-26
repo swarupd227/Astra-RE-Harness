@@ -71,6 +71,11 @@ final class Scanner extends NodeVisitorAbstract
         $this->internal = array_flip(get_defined_functions()['internal']);
     }
 
+    public function isInternal(string $function): bool
+    {
+        return isset($this->internal[strtolower($function)]);
+    }
+
     public function enterNode(Node $node)
     {
         if ($node instanceof Stmt\Class_ || $node instanceof Stmt\Interface_ || $node instanceof Stmt\Trait_ || $node instanceof Stmt\Enum_) {
@@ -273,7 +278,8 @@ final class Scanner extends NodeVisitorAbstract
                     public function __construct(public array &$calls, private $owner) {}
                     public function enterNode(Node $n)
                     {
-                        if ($n instanceof Expr\FuncCall && $n->name instanceof Name) $this->calls[] = short_name($n->name->toString());
+                        // PHP's own functions (json_encode, mysqli_query) are not what a case dispatches to.
+                        if ($n instanceof Expr\FuncCall && $n->name instanceof Name && !$this->owner->isInternal(short_name($n->name->toString()))) $this->calls[] = short_name($n->name->toString());
                         if ($n instanceof Expr\StaticCall && $n->class instanceof Name && $n->name instanceof Node\Identifier) $this->calls[] = short_name($n->class->toString()) . '::' . $n->name->toString();
                         if ($n instanceof Expr\MethodCall && $n->name instanceof Node\Identifier) $this->calls[] = '->' . $n->name->toString();
                         return null;
@@ -406,6 +412,10 @@ final class Scanner extends NodeVisitorAbstract
     private function chainRoot(Expr $e): ?string
     {
         while ($e instanceof Expr\MethodCall || $e instanceof Expr\NullsafeMethodCall || $e instanceof Expr\PropertyFetch || $e instanceof Expr\StaticCall) {
+            // $this->db->where(...)->get('users'): the root is the object property, not $this.
+            if ($e instanceof Expr\PropertyFetch && $e->var instanceof Expr\Variable && $e->var->name === 'this' && $e->name instanceof Node\Identifier) {
+                return '$this->' . $e->name->toString();
+            }
             if ($e instanceof Expr\StaticCall) return $e->class instanceof Name ? ($e->class->toString() . '::' . ($e->name instanceof Node\Identifier ? $e->name->toString() : '')) : null;
             $e = $e->var;
         }
