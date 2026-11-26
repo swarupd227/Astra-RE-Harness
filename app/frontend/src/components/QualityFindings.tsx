@@ -84,6 +84,13 @@ export function QualityFindingsCard({
         ) : (
           <>
             <p className="text-body text-ink-secondary" data-testid="quality-summary">{run.summary}</p>
+            {metrics?.aiReview && (
+              <p className="text-caption text-ink-tertiary" data-testid="quality-ai-review">
+                {metrics.aiReview.status === 'reviewed'
+                  ? `AI review (${metrics.aiReview.model ?? 'model'}): ${metrics.aiReview.kept} finding${metrics.aiReview.kept === 1 ? '' : 's'} kept of ${metrics.aiReview.proposed} proposed, each checked against the code it quotes; advisory, never blocking · US$ ${metrics.aiReview.costUsd.toFixed(3)}`
+                  : metrics.aiReview.note ?? `AI review ${metrics.aiReview.status}`}
+              </p>
+            )}
             {metrics && metrics.total > 0 && (
               <>
                 <dl className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-caption">
@@ -137,7 +144,12 @@ function FindingRow({ finding: f, open, onToggle }: { finding: QualityFinding; o
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-sunken">
         <span className={`w-16 shrink-0 font-mono text-caption ${SEVERITY_TEXT[f.severity]}`}>{f.severity}</span>
         <span className="min-w-0 flex-1">
-          <span className="block text-body text-ink-primary">{f.message}</span>
+          <span className="block text-body text-ink-primary">
+            {f.message}
+            {f.source === 'ai' && (
+              <span className="ml-2 rounded-sm bg-status-info/15 px-1.5 py-0.5 align-middle font-mono text-[10px] text-status-info">AI review</span>
+            )}
+          </span>
           <span className="block truncate font-mono text-caption text-ink-tertiary">
             {f.file}{f.line ? `:${f.line}` : ''} · {f.rule}
           </span>

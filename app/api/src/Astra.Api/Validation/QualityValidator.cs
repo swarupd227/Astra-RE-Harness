@@ -29,9 +29,15 @@ public sealed class QualityValidator
     private readonly StorageOptions _storage;
     private readonly IAuditLogger _audit;
     private readonly ILogger<QualityValidator> _log;
+    private readonly QualityReviewer? _reviewer;
 
-    public QualityValidator(AppDbContext db, IBlobClient blob, StorageOptions storage, IAuditLogger audit, ILogger<QualityValidator> log)
+    /// <summary>The AI review must leave room inside App Service's 230 s request limit for the synchronous route.</summary>
+    private static readonly TimeSpan ReviewTimeout = TimeSpan.FromSeconds(150);
+
+    public QualityValidator(AppDbContext db, IBlobClient blob, StorageOptions storage, IAuditLogger audit, ILogger<QualityValidator> log,
+        QualityReviewer? reviewer = null)
     {
+        _reviewer = reviewer;
         _db = db;
         _blob = blob;
         _storage = storage;
@@ -39,9 +45,11 @@ public sealed class QualityValidator
         _log = log;
     }
 
-    public async Task<ValidationRun> RunAsync(Guid scaffoldId, DevPersonaContext? actor, CancellationToken ct)
+    /// <param name="aiReview">Also ask the reviewer agent (advisory findings, one model call). The auto-fix loop
+    /// leaves it off between rounds; the gate run from the report or a thread has it on.</param>
+    public async Task<ValidationRun> RunAsync(Guid scaffoldId, DevPersonaContext? actor, CancellationToken ct, bool aiReview = true)
     {
-        var scaffold = await _db.Scaffolds.FirstOrDefaultAsync(s => s.Id == scaffoldId, ct)
+        var scaffold = await _db.Scaffolds.Include(s => s.Spec).ThenInclude(sp => sp!.Subroutine).FirstOrDefaultAsync(s => s.Id == scaffoldId, ct)
             ?? throw new InvalidOperationException($"Scaffold {scaffoldId} not found.");
 
         var run = new ValidationRun
@@ -68,21 +76,38 @@ public sealed class QualityValidator
                 .Where(f => f.Path.Length > 0)
                 .ToList();
 
-            var findings = QualityRules.Scan(files);
+            var findings = QualityRules.Scan(files).ToList();
+            QualityReviewResult? review = null;
+            if (aiReview && _reviewer is not null)
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(ReviewTimeout);
+                review = await _reviewer.ReviewAsync(_db, scaffold, scaffold.Spec?.Subroutine?.Name ?? "",
+                    scaffold.Spec?.SpecJson.RootElement.GetRawText(), files, timeout.Token);
+                findings.AddRange(review.Findings);
+                findings = findings
+                    .OrderBy(f => Array.IndexOf(QualityRules.Severities, f.Severity))
+                    .ThenBy(f => f.Source == "rule" ? 0 : 1)
+                    .ThenBy(f => f.File, StringComparer.Ordinal).ThenBy(f => f.Line ?? 0).ToList();
+            }
             var summary = QualityRules.Summarise(findings);
+            // The verdict and its sentence come from the rules; the reviewer's findings are counted separately.
+            var ruleSummary = QualityRules.Summarise(findings.Where(f => f.Source == "rule").ToList());
 
             var report = new StringBuilder();
             report.AppendLine($"=== quality === {scaffold.TargetPlatform} · {files.Count} files · {findings.Count} findings · {summary.Blocking} blocking");
             foreach (var s in QualityRules.Severities) report.AppendLine($"  {s}: {summary.BySeverity[s]}");
             report.AppendLine();
+            if (review is not null)
+                report.AppendLine($"  AI review: {review.Status} · {review.Findings.Count} kept of {review.Proposed} proposed{(review.Note is null ? "" : $" · {review.Note}")}");
             foreach (var f in findings)
             {
-                report.AppendLine(QualityRules.FormatLine(f));
+                report.AppendLine(QualityRules.FormatLine(f) + (f.Source == "ai" ? "  [AI review, advisory]" : ""));
                 report.AppendLine($"    why: {f.Why}");
                 report.AppendLine($"    fix: {f.Fix}");
             }
             report.AppendLine();
-            report.AppendLine($"=== verdict === {(summary.Passed ? "PASSED" : "FAILED")}");
+            report.AppendLine($"=== verdict === {(ruleSummary.Passed ? "PASSED" : "FAILED")}");
 
             run.LogBlobUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, $"validation/{run.Id:N}/quality.log", report.ToString(), ct: ct);
             run.MetricsJson = JsonSerializer.Serialize(new
@@ -97,12 +122,19 @@ public sealed class QualityValidator
                 findings = findings.Take(MaxFindingsInMetrics).Select(f => new
                 {
                     rule = f.Rule, category = f.Category, severity = f.Severity, file = f.File, line = f.Line,
-                    message = f.Message, why = f.Why, fix = f.Fix,
+                    message = f.Message, why = f.Why, fix = f.Fix, source = f.Source, specClaimId = f.SpecClaimId,
                 }),
+                aiReview = review is null ? null : new
+                {
+                    status = review.Status, kept = review.Findings.Count, proposed = review.Proposed, dropped = review.Dropped,
+                    model = review.Model, llmCallId = review.LlmCallId, costUsd = review.CostUsd, note = review.Note,
+                },
             });
-            run.Status = summary.Passed ? "PASSED" : "FAILED";
-            run.ErrorCode = summary.Passed ? null : "quality.blocking_findings";
-            run.Summary = SummaryLine(summary);
+            run.Status = ruleSummary.Passed ? "PASSED" : "FAILED";
+            run.ErrorCode = ruleSummary.Passed ? null : "quality.blocking_findings";
+            run.Summary = SummaryLine(ruleSummary) + (review is { Status: "reviewed" } r
+                ? $" · AI review: {r.Findings.Count} finding{(r.Findings.Count == 1 ? "" : "s")}"
+                : "");
             run.CompletedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
         }

@@ -1714,6 +1714,12 @@ export const api = {
   // Quality gate: security, coding-standard and maintainability checks on the generated package (reads it; builds nothing).
   validateQuality: (scaffoldId: string) =>
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/quality`, { method: 'POST' }),
+  // Fix until green: regenerate and re-run compile, tests and quality in a bounded loop (runs in the background).
+  startAutoFix: (scaffoldId: string, rounds?: number) =>
+    apiFetch<{ runId: string; scaffoldId: string; rounds: number; eventsUrl: string }>(
+      `/api/v1/scaffolds/${scaffoldId}/autofix${rounds ? `?rounds=${rounds}` : ''}`,
+      { method: 'POST' },
+    ),
   validateEquivalence: (scaffoldId: string) =>
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/equivalence`, { method: 'POST' }),
   // Phase 9.3.b — 4th gate (property-based testing / falsifying-input search).
@@ -1891,6 +1897,9 @@ export type QualityFinding = {
   message: string;
   why: string;
   fix: string;
+  /** rule = deterministic check (decides the verdict); ai = the reviewer agent (advisory, verified against the code). */
+  source?: 'rule' | 'ai';
+  specClaimId?: string | null;
 };
 
 /** Metrics on a QUALITY ValidationRun. */
@@ -1903,6 +1912,15 @@ export type QualityMetrics = {
   blockOn: QualitySeverity[];
   truncated: boolean;
   findings: QualityFinding[];
+  aiReview?: {
+    status: 'reviewed' | 'skipped' | 'failed' | 'timed_out';
+    kept: number;
+    proposed: number;
+    dropped: number;
+    model: string | null;
+    costUsd: number;
+    note: string | null;
+  } | null;
 };
 export type ValidationStatus = 'RUNNING' | 'PASSED' | 'FAILED' | 'ERRORED';
 

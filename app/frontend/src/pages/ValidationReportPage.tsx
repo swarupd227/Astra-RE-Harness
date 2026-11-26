@@ -100,10 +100,13 @@ export function ValidationReportPage() {
     enabled: !!id,
   });
 
+  // While the fix loop runs in the background, its gate results land here as each round finishes.
+  const [autoFixRunning, setAutoFixRunning] = useState(false);
   const runs = useQuery({
     queryKey: ['validation', id],
     queryFn: () => api.listValidationRuns(id),
     enabled: !!id,
+    refetchInterval: autoFixRunning ? 10_000 : false,
   });
 
   // ScaffoldResponse doesn't carry sourceLanguage (it's on the subroutine,
@@ -137,6 +140,14 @@ export function ValidationReportPage() {
       return api.validateTestPack(id);
     },
     onSuccess: refetchRuns,
+  });
+  const autoFix = useMutation({
+    mutationFn: () => api.startAutoFix(id),
+    onSuccess: () => {
+      setAutoFixRunning(true);
+      // Stop polling after 30 minutes; the loop narrates its end in the thread either way.
+      window.setTimeout(() => setAutoFixRunning(false), 30 * 60_000);
+    },
   });
   const quality = useMutation({
     mutationFn: () => api.validateQuality(id),
@@ -208,7 +219,23 @@ export function ValidationReportPage() {
         }
         title="Validation report"
         lead="Four independent gates run against the generated scaffold: buildability, claim-mapped test coverage, cross-runtime equivalence to the original source, and a property-based search for falsifying inputs against the signed spec. All four must be green before the scaffold can be committed. A fifth check reads the code itself for security problems, coding-standard breaches and maintainability issues."
-        actions={<OverallBadge verdict={overall} />}
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {overall !== 'all-green' && (
+              <Button
+                variant="primary"
+                onClick={() => autoFix.mutate()}
+                disabled={autoFix.isPending || autoFixRunning}
+                title="Run compile, the claim tests and the quality checks; regenerate with every failure in hand and run them again, until all pass or the allowed rounds are used."
+                data-testid="fix-until-green"
+              >
+                {(autoFix.isPending || autoFixRunning) && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                {autoFixRunning ? 'Fixing…' : 'Fix until green'}
+              </Button>
+            )}
+            <OverallBadge verdict={overall} />
+          </div>
+        }
       />
 
       {scaffold.data?.llmCall && (
@@ -267,6 +294,13 @@ export function ValidationReportPage() {
           runLabel="Run 4th gate"
         />
       </div>
+
+      {autoFixRunning && (
+        <p className="rounded-md border border-volt/40 bg-volt/10 px-4 py-2 text-body text-ink-primary" data-testid="autofix-running">
+          The fix loop is running: each round regenerates the code with every failure in hand and runs compile, the claim tests and the quality checks again. Results appear below as each round finishes.
+        </p>
+      )}
+      {autoFix.error && <p className="text-caption text-status-fail">{autoFix.error.message}</p>}
 
       <QualityFindingsCard
         run={qualityRun}

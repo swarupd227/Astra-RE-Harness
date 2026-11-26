@@ -117,6 +117,32 @@ public static class ValidationEndpoints
             }
         });
 
+        // ─── Fix until green: the bounded regenerate-and-re-gate loop (background) ─
+        app.MapPost("/api/v1/scaffolds/{id:guid}/autofix", async (
+            Guid id,
+            int? rounds,
+            AppDbContext db,
+            Astra.Api.Copilot.AutoFixService autofix,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Engineer)
+                return Forbid("auth.engineer_required", "Only engineers can start the fix loop.");
+            var scaffold = await db.Scaffolds.AsNoTracking().Include(s => s.Spec).ThenInclude(sp => sp!.Subroutine)
+                .FirstOrDefaultAsync(s => s.Id == id, ct);
+            if (scaffold is null) return NotFound("scaffold.not_found");
+            if (scaffold.Spec?.State != "SIGNED")
+                return BadRequest("spec.not_signed", "The loop regenerates from the signed spec, so the spec must be signed first.");
+            var n = rounds ?? await ValidationPolicyEndpoints.AutoRetryCountAsync(db, ct) ?? Astra.Api.Copilot.AutoFixService.DefaultRounds;
+            var runId = autofix.Start(scaffold.SpecId, scaffold.Spec?.Subroutine?.Name ?? scaffold.Id.ToString(), scaffold.TargetPlatform,
+                n, persona.Persona, persona.DisplayName);
+            return Results.Accepted($"/api/v1/runs/{runId}/events", new
+            {
+                runId, scaffoldId = id, rounds = Math.Clamp(n, 1, Astra.Api.Copilot.AutoFixService.MaxRounds),
+                eventsUrl = $"/api/v1/runs/{runId}/events",
+            });
+        });
+
         // ─── Trigger a cross-runtime equivalence pass (sync) ────────────────
         app.MapPost("/api/v1/scaffolds/{id:guid}/validate/equivalence", async (
             Guid id,

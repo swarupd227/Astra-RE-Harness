@@ -254,7 +254,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         RouteOrNull(text) ?? ("get_programme_status", new { });
 
     /// <summary>The keyword rule that matches, or null when only the default would apply.</summary>
-    private static (string Tool, object Input)? RouteOrNull(string text)
+    internal static (string Tool, object Input)? RouteOrNull(string text)
     {
         var t = text.ToLowerInvariant();
         var quotedMatch = Regex.Match(text, "[`\"']([^`\"']+)[`\"']").Groups[1].Value;
@@ -300,6 +300,8 @@ public sealed class MockCopilotBrain : ICopilotBrain
         if (Regex.IsMatch(t, @"\bgates\b|\bvalidation\b")) return ("get_validation_results", new { });
         if (Regex.IsMatch(t, @"\bwho signed\b|\bsigned by\b|\bthis spec\b|\bwhat spec\b|\breview decisions\b"))
             return ("get_spec", new { subroutineId = name ?? "" });
+        if (Regex.IsMatch(t, @"\buntil (it'?s |they'?re |all )?green\b|\bfix loop\b|\bauto[- ]?fix\b|\bmake (it|them) green\b"))
+            return ("fix_until_green", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\bquality\b|\bsecurity (review|check|checks|scan)\b|\bcoding standards?\b|\bstatic analysis\b"))
             return ("run_gate", new { subroutineId = name ?? "", gate = "quality" });
         if (Regex.IsMatch(t, @"\bcompile\b|\bgate\b|\btest[- ]pack\b")) return ("run_gate", new { subroutineId = name ?? "", gate = t.Contains("test") ? "test-pack" : "compile" });

@@ -108,6 +108,19 @@ public static class ValidationPolicyEndpoints
         return app;
     }
 
+    /// <summary>The admin's auto-retry count (0–10) when set above zero; otherwise null and the caller's default applies.</summary>
+    public static async Task<int?> AutoRetryCountAsync(AppDbContext db, CancellationToken ct)
+    {
+        var row = await db.PlatformConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.Key == ConfigKey, ct);
+        if (row is null) return null;
+        try
+        {
+            var o = JsonSerializer.Deserialize<PolicyOverride>(row.ValueJson, JsonOpts);
+            return o?.RetryDefaults?.AutoRetryCount is > 0 and var n ? n : null;
+        }
+        catch { return null; }
+    }
+
     // ─── Effective-policy merge ──────────────────────────────────────────
 
     private static async Task<object> LoadEffectiveAsync(AppDbContext db, CancellationToken ct)

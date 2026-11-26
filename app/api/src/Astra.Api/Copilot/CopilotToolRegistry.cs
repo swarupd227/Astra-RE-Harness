@@ -305,6 +305,20 @@ public sealed class CopilotToolRegistry
         });
         _tools.Add(new CopilotTool
         {
+            Name = "fix_until_green",
+            Agent = "validation",
+            Mutating = true,
+            AllowedPersonas = new[] { Persona.Engineer },
+            Description = "Repair a routine's generated code in a bounded loop: run compile, the claim test pack and the quality checks; when any fails, regenerate once with all the failures in hand and run every gate again; stop when all pass or after the allowed rounds (the validation policy's auto-retry count, else 2; max 5). The best version is kept if a round makes things worse. Runs in the background and narrates each round. Engineer only.",
+            InputSchema = Obj(
+                ("scaffoldId", Str("Scaffold id.")),
+                ("subroutineId", Str("Routine id or exact name (alternative; uses the latest scaffold).")),
+                ("rounds", Int("Optional: regenerations allowed, 1–5."))),
+            Describe = async (input, ctx) => $"fix `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the routine"}` until compile, tests and quality are green (each round regenerates the code)",
+            Execute = FixUntilGreenAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
             Name = "generate_docs",
             Agent = "discovery",
             Mutating = true,
@@ -1045,35 +1059,8 @@ public sealed class CopilotToolRegistry
                 .OrderByDescending(r => r.StartedAt)
                 .FirstOrDefaultAsync(ctx.Ct);
             if (lastFailed is not null)
-            {
-                string? log = null;
-                var blobs = ctx.Services.GetRequiredService<Astra.Api.Storage.IBlobClient>();
-                if (lastFailed.LogBlobUri is { Length: > 0 } uri)
-                {
-                    try { log = await blobs.GetTextAsync(uri, ctx.Ct); }
-                    catch (Exception) { /* the summary still describes the failure */ }
-                }
-                // The failed package's files, so every error can quote its line.
-                var previousFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                try
-                {
-                    var failedScaffold = await ctx.Db.Scaffolds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == lastFailed.ScaffoldId, ctx.Ct);
-                    if (failedScaffold?.PackageBlobUri is { Length: > 0 } packageUri)
-                    {
-                        using var manifest = JsonDocument.Parse(await blobs.GetTextAsync(packageUri, ctx.Ct));
-                        if (manifest.RootElement.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
-                            foreach (var f in files.EnumerateArray())
-                                if (f.TryGetProperty("path", out var fp) && fp.ValueKind == JsonValueKind.String
-                                    && f.TryGetProperty("content", out var fc) && fc.ValueKind == JsonValueKind.String)
-                                    previousFiles[fp.GetString()!.Replace('\\', '/')] = fc.GetString()!;
-                    }
-                }
-                catch (Exception) { /* the hint still lists the errors */ }
-                repairHint = Astra.Api.Validation.GateFailureDigest.Parse(lastFailed.Stage, log)
-                    .ToRepairHint(path => previousFiles.TryGetValue(path.Replace('\\', '/'), out var c) ? c : null);
-                if (string.IsNullOrWhiteSpace(repairHint))
-                    repairHint = $"The previous attempt failed the {lastFailed.Stage} gate: {lastFailed.Summary}";
-            }
+                repairHint = await Astra.Api.Validation.RepairHints.BuildAsync(
+                    ctx.Db, ctx.Services.GetRequiredService<Astra.Api.Storage.IBlobClient>(), [lastFailed], ctx.Ct);
         }
 
         var runId = runs.StartScaffold(spec.Id, name, chosen, ctx.Actor.Persona, ctx.Actor.DisplayName, repairHint);
@@ -1093,6 +1080,37 @@ public sealed class CopilotToolRegistry
         return new ToolResult(true,
             new { runId, specId = spec.Id, name, targetStack = chosen, archetype = match.Manifest.Id, status = "started" },
             $"generating {chosen} for {name}",
+            new[] { ToolResult.Artifact("runProgress", runId.ToString(), props) },
+            runId);
+    }
+
+    private static async Task<ToolResult> FixUntilGreenAsync(JsonElement input, ToolContext ctx)
+    {
+        var scaffold = await ResolveScaffoldAsync(input, ctx);
+        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
+        if (scaffold.Spec?.State != "SIGNED")
+            return ToolResult.Failure("spec.not_signed", "The loop regenerates from the signed spec and runs its claim tests, so the spec must be signed first.");
+        var rounds = ReadInt(input, "rounds")
+            ?? await Endpoints.ValidationPolicyEndpoints.AutoRetryCountAsync(ctx.Db, ctx.Ct)
+            ?? AutoFixService.DefaultRounds;
+        var name = scaffold.Spec?.Subroutine?.Name ?? scaffold.Id.ToString();
+        var runId = ctx.Services.GetRequiredService<AutoFixService>()
+            .Start(scaffold.SpecId, name, scaffold.TargetPlatform, rounds, ctx.Actor.Persona, ctx.Actor.DisplayName);
+        ctx.Services.GetRequiredService<Narrator>().Track(runId, ctx.ConversationId, "validation", "autofix", name, ctx.CorpusId,
+            ctx.Actor.Persona.ToString().ToLowerInvariant(), ctx.Actor.DisplayName);
+        var props = new
+        {
+            kind = "gate",
+            corpusId = ctx.CorpusId,
+            label = $"Fix until green · {name}",
+            agent = "validation",
+            state = "RUNNING",
+            startedAt = DateTimeOffset.UtcNow,
+            links = new[] { new { label = "Open full view", href = $"/scaffolds/{scaffold.Id}/validation" } },
+        };
+        return new ToolResult(true,
+            new { runId, scaffoldId = scaffold.Id, name, rounds = Math.Clamp(rounds, 1, AutoFixService.MaxRounds), status = "started" },
+            $"fix loop started for {name}",
             new[] { ToolResult.Artifact("runProgress", runId.ToString(), props) },
             runId);
     }
