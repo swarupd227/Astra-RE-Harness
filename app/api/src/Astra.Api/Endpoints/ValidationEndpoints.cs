@@ -97,6 +97,26 @@ public static class ValidationEndpoints
             }
         });
 
+        // ─── Trigger the quality gate (sync; reads the package, builds nothing) ─
+        app.MapPost("/api/v1/scaffolds/{id:guid}/validate/quality", async (
+            Guid id,
+            QualityValidator validator,
+            DevPersonaContext persona,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Engineer)
+                return Forbid("auth.engineer_required", "Only engineers can trigger validation.");
+            try
+            {
+                var run = await validator.RunAsync(id, persona, ct);
+                return Results.Ok(ToResponse(run));
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+            {
+                return NotFound("scaffold.not_found");
+            }
+        });
+
         // ─── Trigger a cross-runtime equivalence pass (sync) ────────────────
         app.MapPost("/api/v1/scaffolds/{id:guid}/validate/equivalence", async (
             Guid id,

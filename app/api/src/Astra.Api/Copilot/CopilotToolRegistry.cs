@@ -295,11 +295,11 @@ public sealed class CopilotToolRegistry
             Agent = "validation",
             Mutating = true,
             AllowedPersonas = new[] { Persona.Engineer },
-            Description = "Run a validation gate on a routine's latest generated code: compile (builds it) or test-pack (generates and runs the claim tests). Runs in the background. Engineer only.",
+            Description = "Run a validation gate on a routine's latest generated code: compile (builds it), test-pack (generates and runs the claim tests) or quality (security, coding-standard and maintainability checks on the code: secrets, injection, unsafe calls, open CORS, Spring constructor injection and validated request bodies, logging, swallowed exceptions). Runs in the background. Engineer only.",
             InputSchema = Obj(
                 ("scaffoldId", Str("Scaffold id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative; uses the latest scaffold).")),
-                ("gate", Enum("compile", "test-pack"))),
+                ("gate", Enum("compile", "test-pack", "quality"))),
             Describe = async (input, ctx) => $"run the {Read(input, "gate") ?? "compile"} gate for `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the routine"}`",
             Execute = RunGateAsync,
         });
@@ -1102,7 +1102,7 @@ public sealed class CopilotToolRegistry
         var scaffold = await ResolveScaffoldAsync(input, ctx);
         if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
         var gate = (Read(input, "gate") ?? "compile").Trim().ToLowerInvariant();
-        if (gate is not ("compile" or "test-pack")) return ToolResult.Failure("gate.unknown", "gate must be compile or test-pack.");
+        if (gate is not ("compile" or "test-pack" or "quality")) return ToolResult.Failure("gate.unknown", "gate must be compile, test-pack or quality.");
 
         var runs = ctx.Services.GetRequiredService<BackgroundRunService>();
         var narrator = ctx.Services.GetRequiredService<Narrator>();

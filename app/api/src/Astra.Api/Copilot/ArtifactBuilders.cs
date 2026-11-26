@@ -446,7 +446,7 @@ public static class ArtifactBuilders
             .OrderByDescending(v => v.StartedAt)
             .ToListAsync(ct);
         var latestByStage = runs.GroupBy(r => r.Stage).Select(g => g.First()).ToList();
-        var order = new[] { "COMPILE", "TEST_PACK", "EQUIVALENCE", "FALSIFYING" };
+        var order = new[] { "COMPILE", "TEST_PACK", "QUALITY", "EQUIVALENCE", "FALSIFYING" };
         var gates = order.Select(stage =>
         {
             var r = latestByStage.FirstOrDefault(x => x.Stage == stage);

@@ -410,6 +410,13 @@ public static class ScaffoldEndpoints
                             ? "Run POST /scaffolds/{id}/validate/test-pack before committing."
                             : $"Latest TEST_PACK run is {testPack.Status} ({testPack.Summary}). Re-validate before committing.");
 
+                // Quality (security / standards): a run that found blocking issues stops the commit. A package
+                // that was never checked is not blocked here, so scaffolds from before the gate existed still commit.
+                var quality = latestByStage.FirstOrDefault(r => r.Stage == "QUALITY");
+                if (quality is not null && quality.Status != "PASSED")
+                    return BadRequest("commit.quality_not_passed",
+                        $"Latest QUALITY run is {quality.Status} ({quality.Summary}). Fix the blocking findings or re-run the quality gate before committing.");
+
                 var equivalence = latestByStage.FirstOrDefault(r => r.Stage == "EQUIVALENCE");
                 if (equivalence is null || equivalence.Status != "PASSED")
                     return BadRequest("commit.equivalence_not_passed",

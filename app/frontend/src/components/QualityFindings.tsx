@@ -1,0 +1,154 @@
+import { useMemo, useState } from 'react';
+import { Loader2, ShieldAlert } from 'lucide-react';
+import type { QualityCategory, QualityFinding, QualityMetrics, QualitySeverity, ValidationRun } from '@/lib/api';
+import { Card, CardBody } from '@/components/Card';
+import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
+
+const SEVERITIES: QualitySeverity[] = ['blocker', 'critical', 'major', 'minor', 'info'];
+const CATEGORIES: { id: QualityCategory | 'all'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'security', label: 'Security' },
+  { id: 'standards', label: 'Coding standards' },
+  { id: 'maintainability', label: 'Maintainability' },
+];
+
+const SEVERITY_TEXT: Record<QualitySeverity, string> = {
+  blocker: 'text-status-fail',
+  critical: 'text-status-fail',
+  major: 'text-status-warn',
+  minor: 'text-ink-secondary',
+  info: 'text-ink-tertiary',
+};
+
+/**
+ * The QUALITY gate on the validation report: a verdict line, counts by severity, and the findings grouped by
+ * category — each with where it is, why it matters and how to fix it. Blocker and critical findings fail the gate.
+ */
+export function QualityFindingsCard({
+  run,
+  onRun,
+  isRunning,
+  errorMessage,
+}: {
+  run: ValidationRun | undefined;
+  onRun: () => void;
+  isRunning: boolean;
+  errorMessage: string | undefined;
+}) {
+  const metrics = (run?.metrics ?? null) as QualityMetrics | null;
+  const [category, setCategory] = useState<QualityCategory | 'all'>('all');
+  const [open, setOpen] = useState<string | null>(null);
+  const findings = useMemo(
+    () => (metrics?.findings ?? []).filter((f) => category === 'all' || f.category === category),
+    [metrics, category],
+  );
+  const edge =
+    run?.status === 'PASSED' ? 'border-l-status-ok' : run?.status === 'FAILED' || run?.status === 'ERRORED' ? 'border-l-status-fail' : 'border-l-line-subtle';
+
+  return (
+    <Card className={`border-l-2 ${edge}`} data-testid="validation-card-quality">
+      <CardBody className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-md bg-volt/10 text-volt-ink">
+              <ShieldAlert className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-h-md font-semibold text-ink-primary">Quality</h2>
+              <p className="mt-0.5 text-caption text-ink-tertiary">
+                Security, coding standards and maintainability · blocker and critical findings fail the gate
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {run && (
+              <Badge tone={run.status === 'PASSED' ? 'signed' : run.status === 'RUNNING' ? 'draft' : 'failed'}>
+                {run.status === 'PASSED' ? 'passed' : run.status.toLowerCase()}
+              </Badge>
+            )}
+            <Button variant="secondary" onClick={onRun} disabled={isRunning} data-testid="run-quality">
+              {isRunning && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {run ? 'Run again' : 'Run quality checks'}
+            </Button>
+          </div>
+        </div>
+
+        {errorMessage && <p className="text-caption text-status-fail">{errorMessage}</p>}
+
+        {!run ? (
+          <p className="text-body text-ink-tertiary">
+            Not run yet. The check reads the generated package for secrets, injection-prone queries, unsafe calls,
+            disabled certificate checks and open CORS, and for the coding standards a reviewer raises first.
+          </p>
+        ) : (
+          <>
+            <p className="text-body text-ink-secondary" data-testid="quality-summary">{run.summary}</p>
+            {metrics && metrics.total > 0 && (
+              <>
+                <dl className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-caption">
+                  {SEVERITIES.map((s) => (
+                    <div key={s} className="flex items-baseline gap-1.5">
+                      <dt className="text-ink-tertiary">{s}</dt>
+                      <dd className={metrics.bySeverity[s] > 0 ? SEVERITY_TEXT[s] : 'text-ink-tertiary'}>{metrics.bySeverity[s]}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Finding category">
+                  {CATEGORIES.map((c) => {
+                    const count = c.id === 'all' ? metrics.total : metrics.byCategory[c.id];
+                    const active = category === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setCategory(c.id)}
+                        className={`rounded-md border px-2.5 py-1 text-caption ${active ? 'border-volt bg-volt/10 text-ink-primary' : 'border-line-subtle text-ink-secondary hover:bg-sunken'}`}
+                        data-testid={`quality-tab-${c.id}`}
+                      >
+                        {c.label} · {count}
+                      </button>
+                    );
+                  })}
+                </div>
+                <ul className="divide-y divide-line-subtle rounded-md border border-line-subtle" data-testid="quality-findings">
+                  {findings.map((f, i) => (
+                    <FindingRow key={`${f.rule}-${f.file}-${f.line}-${i}`} finding={f} open={open === `${i}`} onToggle={() => setOpen(open === `${i}` ? null : `${i}`)} />
+                  ))}
+                  {findings.length === 0 && <li className="px-3 py-3 text-caption text-ink-tertiary">Nothing in this category.</li>}
+                </ul>
+                {metrics.truncated && (
+                  <p className="text-caption text-ink-tertiary">Only the first findings are listed; the full report is in the run's log below.</p>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function FindingRow({ finding: f, open, onToggle }: { finding: QualityFinding; open: boolean; onToggle: () => void }) {
+  return (
+    <li>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-sunken">
+        <span className={`w-16 shrink-0 font-mono text-caption ${SEVERITY_TEXT[f.severity]}`}>{f.severity}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-body text-ink-primary">{f.message}</span>
+          <span className="block truncate font-mono text-caption text-ink-tertiary">
+            {f.file}{f.line ? `:${f.line}` : ''} · {f.rule}
+          </span>
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-1 px-3 pb-3 pl-[5.75rem] text-caption">
+          <p className="text-ink-secondary"><span className="text-ink-tertiary">Why it matters: </span>{f.why}</p>
+          <p className="text-ink-secondary"><span className="text-ink-tertiary">Fix: </span>{f.fix}</p>
+        </div>
+      )}
+    </li>
+  );
+}

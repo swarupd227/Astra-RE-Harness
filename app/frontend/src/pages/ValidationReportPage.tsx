@@ -23,6 +23,7 @@ import {
   type ValidationStatus,
 } from '@/lib/api';
 import { prettySchema } from '@/lib/targetStacks';
+import { QualityFindingsCard } from '@/components/QualityFindings';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -137,6 +138,10 @@ export function ValidationReportPage() {
     },
     onSuccess: refetchRuns,
   });
+  const quality = useMutation({
+    mutationFn: () => api.validateQuality(id),
+    onSuccess: refetchRuns,
+  });
   const equivalence = useMutation({
     mutationFn: () => api.validateEquivalence(id),
     onSuccess: refetchRuns,
@@ -181,8 +186,10 @@ export function ValidationReportPage() {
   const testPackRun = latestByStage('TEST_PACK');
   const equivalenceRun = latestByStage('EQUIVALENCE');
   const falsifyingRun = latestByStage('FALSIFYING');
+  const qualityRun = latestByStage('QUALITY');
 
-  const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun]);
+  // Quality counts once it has run; a package from before the gate existed is judged on the other four.
+  const overall = computeOverall([compileRun, testPackRun, equivalenceRun, falsifyingRun, ...(qualityRun ? [qualityRun] : [])]);
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup">
@@ -200,7 +207,7 @@ export function ValidationReportPage() {
           </span>
         }
         title="Validation report"
-        lead="Four independent gates run against the generated scaffold: buildability, claim-mapped test coverage, cross-runtime equivalence to the original source, and a property-based search for falsifying inputs against the signed spec. All four must be green before the scaffold can be committed."
+        lead="Four independent gates run against the generated scaffold: buildability, claim-mapped test coverage, cross-runtime equivalence to the original source, and a property-based search for falsifying inputs against the signed spec. All four must be green before the scaffold can be committed. A fifth check reads the code itself for security problems, coding-standard breaches and maintainability issues."
         actions={<OverallBadge verdict={overall} />}
       />
 
@@ -260,6 +267,13 @@ export function ValidationReportPage() {
           runLabel="Run 4th gate"
         />
       </div>
+
+      <QualityFindingsCard
+        run={qualityRun}
+        onRun={() => quality.mutate()}
+        isRunning={quality.isPending}
+        errorMessage={quality.error?.message}
+      />
 
       <Card>
         <CardHeader

@@ -341,6 +341,7 @@ builder.Services.AddScoped<Astra.Api.Compliance.ComplianceFeedExporter>();
 builder.Services.AddScoped<Astra.Api.Validation.CompileValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackGenerator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackValidator>();
+builder.Services.AddScoped<Astra.Api.Validation.QualityValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.GoldenDatasetScorer>();
 builder.Services.AddHttpClient("gfortran");
 builder.Services.AddScoped<Astra.Api.Validation.GfortranClient>();

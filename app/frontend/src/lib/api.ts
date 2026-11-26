@@ -1711,6 +1711,9 @@ export const api = {
     }),
   validateTestPack: (scaffoldId: string) =>
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/test-pack`, { method: 'POST' }),
+  // Quality gate: security, coding-standard and maintainability checks on the generated package (reads it; builds nothing).
+  validateQuality: (scaffoldId: string) =>
+    apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/quality`, { method: 'POST' }),
   validateEquivalence: (scaffoldId: string) =>
     apiFetch<ValidationRun>(`/api/v1/scaffolds/${scaffoldId}/validate/equivalence`, { method: 'POST' }),
   // Phase 9.3.b — 4th gate (property-based testing / falsifying-input search).
@@ -1873,7 +1876,34 @@ export const api = {
 
 // ─── Validation types ─────────────────────────────────────────────────
 
-export type ValidationStage = 'COMPILE' | 'TEST_PACK' | 'EQUIVALENCE' | 'FALSIFYING';
+export type ValidationStage = 'COMPILE' | 'TEST_PACK' | 'QUALITY' | 'EQUIVALENCE' | 'FALSIFYING';
+
+export type QualitySeverity = 'blocker' | 'critical' | 'major' | 'minor' | 'info';
+export type QualityCategory = 'security' | 'standards' | 'maintainability';
+
+/** One finding of the QUALITY gate: rule, severity, where, why it matters and how to fix it. */
+export type QualityFinding = {
+  rule: string;
+  category: QualityCategory;
+  severity: QualitySeverity;
+  file: string;
+  line: number | null;
+  message: string;
+  why: string;
+  fix: string;
+};
+
+/** Metrics on a QUALITY ValidationRun. */
+export type QualityMetrics = {
+  total: number;
+  blocking: number;
+  bySeverity: Record<QualitySeverity, number>;
+  byCategory: Record<QualityCategory, number>;
+  fileCount: number;
+  blockOn: QualitySeverity[];
+  truncated: boolean;
+  findings: QualityFinding[];
+};
 export type ValidationStatus = 'RUNNING' | 'PASSED' | 'FAILED' | 'ERRORED';
 
 // Phase 9.3.b/c — per-claim metrics shape on a FALSIFYING ValidationRun.

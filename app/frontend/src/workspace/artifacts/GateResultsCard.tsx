@@ -9,6 +9,7 @@ const GATE_LABELS: Record<string, string> = {
   test_pack: 'Test pack',
   testpack: 'Test pack',
   equivalence: 'Equivalence',
+  quality: 'Quality (security · standards)',
   falsifying: 'Falsifying inputs',
   'property-based': 'Falsifying inputs',
 };

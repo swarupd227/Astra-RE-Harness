@@ -59,11 +59,28 @@ public sealed record GateFailureDigest(
         @"^(Runner error:|=== .* failed to start|.*did not finish within .*s\.?|.*No \.NET SDKs were found.*|.*command not found.*)$",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
+    // QualityValidator's report: `QUALITY src/main/java/X.java:42 SEC-SQL-CONCATENATION critical: A SQL statement is built …`
+    private static readonly Regex QualityLine = new(
+        @"^QUALITY (?<file>\S+?)(?::(?<line>\d+))? (?<code>[A-Z][A-Z0-9-]+) (?<sev>blocker|critical|major|minor|info): (?<msg>.*?)\s*$",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
+    /// <summary>Quality findings a regeneration is asked to fix: blocking ones first, then major.</summary>
+    private static readonly string[] RepairSeverities = ["blocker", "critical", "major"];
+
     public static GateFailureDigest Parse(string stage, string? log)
     {
         log ??= "";
         var errors = new List<CompileError>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        if (stage.Equals("QUALITY", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var sev in RepairSeverities)
+                foreach (Match m in QualityLine.Matches(log))
+                    if (m.Groups["sev"].Value == sev)
+                        Add(errors, seen, new(m.Groups["file"].Value, m.Groups["line"].Success ? int.Parse(m.Groups["line"].Value) : null,
+                            m.Groups["code"].Value, $"[{sev}] {m.Groups["msg"].Value}"));
+            return new GateFailureDigest(stage, errors, [], errors.Count, 0, null);
+        }
         foreach (Match m in DotnetError.Matches(log))
             Add(errors, seen, new(Relative(m.Groups["file"].Value), int.Parse(m.Groups["line"].Value), m.Groups["code"].Value, m.Groups["msg"].Value));
         foreach (Match m in TsError.Matches(log))
@@ -131,6 +148,19 @@ public sealed record GateFailureDigest(
             return sb.ToString();
         }
 
+        if (Errors.Count > 0 && Stage.Equals("QUALITY", StringComparison.OrdinalIgnoreCase))
+        {
+            var first = Errors[0];
+            sb.Append($"The quality gate for `{routineName}` found {Errors.Count} issue{(Errors.Count == 1 ? "" : "s")} to fix in the generated code. ");
+            sb.Append($"The first is {Where(first)}: `{first.Code}` — {first.Message.TrimEnd('.')}. ");
+            sb.Append("I can regenerate the code with these findings in hand and run the gate again.");
+            sb.AppendLine().AppendLine();
+            foreach (var e in Errors.Take(5))
+                sb.AppendLine($"- {Where(e)} `{e.Code}` {e.Message}");
+            if (Errors.Count > 5) sb.AppendLine($"- … {Errors.Count - 5} more in the report");
+            return sb.ToString().TrimEnd();
+        }
+
         if (Errors.Count > 0)
         {
             var first = Errors[0];
@@ -178,6 +208,19 @@ public sealed record GateFailureDigest(
     public string ToRepairHint(Func<string, string?>? readFile = null)
     {
         var sb = new StringBuilder();
+        if (Errors.Count > 0 && Stage.Equals("QUALITY", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine($"The previous attempt failed the QUALITY gate (security, coding standards, maintainability) with {Errors.Count} finding(s). Fix every one of them without changing behaviour; the tests must still pass.");
+            foreach (var e in Errors.Take(25))
+            {
+                sb.AppendLine($"- {Where(e)} {e.Code}: {e.Message}");
+                var line = OffendingLine(e, readFile);
+                if (line is not null) sb.AppendLine($"  the line was: `{line}`");
+                var fix = Quality.QualityRules.FixFor(e.Code);
+                if (fix is not null) sb.AppendLine($"  fix: {fix}");
+            }
+            return sb.ToString().TrimEnd();
+        }
         if (Errors.Count > 0)
         {
             sb.AppendLine($"The previous attempt failed the {Stage} gate with {Errors.Count} compiler error(s). Fix every one of them; keep the file layout and the tests unchanged unless an error is in a test.");
