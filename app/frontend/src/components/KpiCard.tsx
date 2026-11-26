@@ -31,6 +31,7 @@ export function KpiCard({
   accent = 'indigo',
   alert = false,
   className,
+  testId,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -41,9 +42,11 @@ export function KpiCard({
   accent?: Accent;
   alert?: boolean;
   className?: string;
+  testId?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className={clsx(
         'card p-5 transition-colors duration-fast',
         alert ? 'border-status-fail/50 ring-1 ring-status-fail/30' : 'hover:border-line',

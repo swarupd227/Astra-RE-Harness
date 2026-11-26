@@ -31,40 +31,44 @@ public sealed class MockLlmProvider : ILlmProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
+        // The pauses only exist so a person can watch the spec being written. When nobody is
+        // (pattern analysis, golden-dataset scoring) the same events come out at once.
+        Task Pause(int ms) => request.BulkMode ? Task.CompletedTask : Task.Delay(ms, ct);
+
         // Stage 1 — priming
         yield return Stage("priming", 1, "Loading prompt template");
-        await Task.Delay(220, ct);
+        await Pause(220);
 
         // Stage 2 — loading source
         yield return Stage("loading_source", 2, $"Reading {request.SourcePath}");
-        await Task.Delay(360, ct);
+        await Pause(360);
 
         // Stage 3 — streaming
         yield return Stage("streaming", 3, "Drafting behavioural specification");
-        await Task.Delay(150, ct);
+        await Pause(150);
 
         // Header fields
         yield return Patch("/$schema", "https://nous.dev/schemas/re-harness/spec/v1.json");
         yield return Patch("/routine", request.SubroutineName);
         yield return Patch("/source_path", request.SourcePath);
         yield return Patch("/source_lines", $"1-{request.LineCount}");
-        await Task.Delay(SectionPauseMs, ct);
+        await Pause(SectionPauseMs);
 
         // Summary — streamed by characters so the UX feels like the model is
         // composing prose. Each token batch updates the same JSON path.
         yield return Patch("/summary", "");
-        await foreach (var chunk in StreamTextChunks(CanonicalSpec.Summary, 7, 35, ct))
+        await foreach (var chunk in StreamTextChunks(CanonicalSpec.Summary, 7, 35, Pause, ct))
         {
             yield return Token(chunk, "/summary");
         }
         yield return Patch("/summary", CanonicalSpec.Summary);
-        await Task.Delay(SectionPauseMs, ct);
+        await Pause(SectionPauseMs);
 
         // Inputs / Outputs
         yield return Patch("/inputs", CanonicalSpec.Inputs);
-        await Task.Delay(SectionPauseMs, ct);
+        await Pause(SectionPauseMs);
         yield return Patch("/outputs", CanonicalSpec.Outputs);
-        await Task.Delay(SectionPauseMs, ct);
+        await Pause(SectionPauseMs);
 
         // Invariants — emitted one at a time, each followed by a citation
         // pulse on the source pane.
@@ -72,10 +76,10 @@ public sealed class MockLlmProvider : ILlmProvider
         for (int i = 0; i < CanonicalSpec.Invariants.Length; i++)
         {
             var inv = CanonicalSpec.Invariants[i];
-            await Task.Delay(InvariantPauseMs, ct);
+            await Pause(InvariantPauseMs);
             yield return Patch($"/invariants/{i}", inv);
             yield return CitationPulse($"$.invariants[{i}]", inv.Citations[0].Lines);
-            await Task.Delay(CitationPulsePauseMs, ct);
+            await Pause(CitationPulsePauseMs);
         }
 
         // Side effects + edge cases + open questions
@@ -83,7 +87,7 @@ public sealed class MockLlmProvider : ILlmProvider
         for (int i = 0; i < CanonicalSpec.SideEffects.Length; i++)
         {
             var se = CanonicalSpec.SideEffects[i];
-            await Task.Delay(420, ct);
+            await Pause(420);
             yield return Patch($"/side_effects/{i}", se);
             yield return CitationPulse($"$.side_effects[{i}]", se.Citations[0].Lines);
         }
@@ -92,7 +96,7 @@ public sealed class MockLlmProvider : ILlmProvider
         for (int i = 0; i < CanonicalSpec.EdgeCases.Length; i++)
         {
             var ec = CanonicalSpec.EdgeCases[i];
-            await Task.Delay(420, ct);
+            await Pause(420);
             yield return Patch($"/edge_cases/{i}", ec);
             yield return CitationPulse($"$.edge_cases[{i}]", ec.Citations[0].Lines);
         }
@@ -100,14 +104,14 @@ public sealed class MockLlmProvider : ILlmProvider
         yield return Patch("/open_questions", Array.Empty<object>());
         for (int i = 0; i < CanonicalSpec.OpenQuestions.Length; i++)
         {
-            await Task.Delay(420, ct);
+            await Pause(420);
             yield return Patch($"/open_questions/{i}", CanonicalSpec.OpenQuestions[i]);
         }
 
         // Stage 4 — validating
-        await Task.Delay(420, ct);
+        await Pause(420);
         yield return Stage("validating", 4, "Schema + citation post-validation");
-        await Task.Delay(280, ct);
+        await Pause(280);
 
         // Stage 5 — persisting
         yield return Stage("persisting", 5, "Writing draft spec to Postgres");
@@ -141,6 +145,7 @@ public sealed class MockLlmProvider : ILlmProvider
         string text,
         int minSize,
         int maxSize,
+        Func<int, Task> pause,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var rng = new Random(42);
@@ -152,7 +157,7 @@ public sealed class MockLlmProvider : ILlmProvider
             var end = Math.Min(i + size, text.Length);
             yield return text[i..end];
             i = end;
-            await Task.Delay(rng.Next(20, 60), ct);
+            await pause(rng.Next(20, 60));
         }
     }
 

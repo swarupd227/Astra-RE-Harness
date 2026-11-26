@@ -102,6 +102,22 @@ public static class DevEndpoints
                 });
             }
 
+            // The VB6 sample ships inside the image, so a reset can always bring it back (no network).
+            var seedVb6 = cfg.GetValue("Database:SeedVb6Demo", false);
+            if (seedVb6)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var bgScope = scopeFactory.CreateScope();
+                        var seeder = bgScope.ServiceProvider.GetRequiredService<Vb6DemoSeed>();
+                        await seeder.SeedAsync();
+                    }
+                    catch (Exception ex) { log.LogWarning(ex, "Background VB6 Inventory Sample reseed failed"); }
+                });
+            }
+
             log.LogWarning("Demo state reset via POST /api/v1/dev/reset");
             return Results.Ok(new
             {
@@ -109,7 +125,8 @@ public static class DevEndpoints
                 seeded = true,
                 minpackSeeding = seedMinpack,
                 lapackBlasSeeding = seedLapackBlas,
-                mvcMusicStoreSeeding = seedMvcMusicStore
+                mvcMusicStoreSeeding = seedMvcMusicStore,
+                vb6Seeding = seedVb6
             });
         });
 

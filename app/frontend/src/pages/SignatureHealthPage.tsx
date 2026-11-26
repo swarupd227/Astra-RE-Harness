@@ -88,9 +88,10 @@ export function SignatureHealthPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_1fr_2fr]">
-        <KpiCard label="Signed specs" value={q.data.totalSigned} icon={BadgeCheck} accent="indigo" />
-        <KpiCard label="Healthy"      value={q.data.totalSigned - q.data.drifted} icon={ShieldCheck} accent="emerald" />
+        <KpiCard testId="signature-stat-signed" label="Signed specs" value={q.data.totalSigned} icon={BadgeCheck} accent="indigo" />
+        <KpiCard testId="signature-stat-healthy" label="Healthy"      value={q.data.totalSigned - q.data.drifted} icon={ShieldCheck} accent="emerald" />
         <KpiCard
+          testId="signature-stat-drifted"
           label="Drifted"
           value={q.data.drifted}
           icon={ShieldAlert}

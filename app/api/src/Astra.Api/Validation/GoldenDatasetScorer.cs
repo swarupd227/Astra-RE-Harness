@@ -104,7 +104,10 @@ public sealed class GoldenDatasetScorer
             PromptTemplateId: promptId,
             PromptTemplateVersion: promptVersion,
             SourceLanguage: entry.SchemaId,
-            TargetStack: targetStack);
+            TargetStack: targetStack,
+            // Only the final spec is read, so skip the pacing meant for someone watching it stream.
+            // With ~160 entries that pacing alone held score-all open for half an hour.
+            BulkMode: true);
 
         string? finalSpecJson = null;
         await foreach (var ev in _provider.ExtractAsync(request, ct))

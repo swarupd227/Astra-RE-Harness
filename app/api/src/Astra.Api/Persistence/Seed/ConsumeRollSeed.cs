@@ -50,7 +50,10 @@ public sealed class ConsumeRollSeed
         _logger.LogInformation("Seeding {Name}", CorpusName);
 
         // 1. Upload the canonical CONSUME_ROLL.FOR to MinIO.
-        var sourceText = ConsumeRollSource.Fortran;
+        // Stored the way every ingest stores a file (LF). A checkout with CRLF endings would otherwise
+        // compile them into the literal, and the first re-sync of the same text would count as a change
+        // and supersede its signed spec.
+        var sourceText = ConsumeRollSource.Fortran.ReplaceLineEndings("\n");
         var fileHash = Sha256(sourceText);
         var versionId = Guid.NewGuid();
         var objectName = $"{versionId}/{FilePath}";

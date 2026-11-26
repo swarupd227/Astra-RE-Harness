@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 type Tone =
   | 'neutral'
@@ -35,14 +35,16 @@ export function Badge({
   children,
   icon,
   className,
+  ...rest
 }: {
   tone?: Tone;
   children: ReactNode;
   icon?: ReactNode;
-  className?: string;
-}) {
+} & Omit<HTMLAttributes<HTMLSpanElement>, 'children'>) {
   return (
     <span
+      // Test ids, titles and ARIA attributes reach the element.
+      {...rest}
       className={clsx(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums',
         tones[tone],
