@@ -676,13 +676,28 @@ function relativeTime(iso: string): string {
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
+/** "validation.completed" → "Validation finished"; unknown types read as words ("test_pack.generated" → "Test pack generated"). */
+const EVENT_WORDS: Record<string, string> = {
+  'spec.signed': 'Spec signed',
+  'spec.generated': 'Spec extracted',
+  generated: 'Spec extracted',
+  'spec.routed': 'Sent for review',
+  'claim.accept': 'Claim accepted',
+  'claim.edit': 'Claim edited',
+  'claim.reject': 'Claim rejected',
+  'scaffold.generated': 'Code generated',
+  'scaffold.committed': 'Code committed',
+  'validation.started': 'Validation started',
+  'validation.completed': 'Validation finished',
+  'test_pack.generated': 'Tests generated',
+  'migration_plan.generated': 'Migration plan made',
+  'corpus.ingested': 'Source ingested',
+  'compliance.feed_exported': 'Compliance export',
+};
 function shortEvent(t: string): string {
-  return t
-    .replace(/^corpus\./, '')
-    .replace(/^spec\./, '')
-    .replace(/^claim\./, '')
-    .replace(/^scaffold\./, '')
-    .replace(/^comment\./, 'comment.');
+  if (EVENT_WORDS[t]) return EVENT_WORDS[t];
+  const words = t.replace(/^(corpus|spec|claim|scaffold)\./, '').replace(/[._]/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function eventBadgeTone(t: string): 'draft' | 'review' | 'signed' | 'scaffolded' | 'failed' | 'neutral' {

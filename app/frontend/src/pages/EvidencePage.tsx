@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Layers, Search, X } from 'lucide-react';
@@ -187,8 +187,18 @@ export function EvidencePage() {
       ) : (
         <Card className={clsx('overflow-hidden transition-opacity', evidence.isPlaceholderData && 'opacity-60')}>
           <ul className="divide-y divide-line-subtle" data-testid="evidence-list">
-            {data!.data.map((e) => (
-              <li key={e.shortId} className="flex items-center gap-3 px-4 py-2.5" data-testid="evidence-row" data-short-id={e.shortId}>
+            {data!.data.map((e, i, all) => (
+              <Fragment key={e.shortId}>
+              {/* A heading wherever the file changes: 33 flat rows for one workbook read as one file's parts. */}
+              {(i === 0 || all[i - 1].path !== e.path) && (
+                <li className="bg-sunken/50 px-4 py-1.5 font-mono text-micro text-ink-secondary" data-testid="evidence-file-heading" title={e.path}>
+                  {e.path.split('/').pop()}
+                  <span className="ml-2 text-ink-tertiary">
+                    {all.filter((x) => x.path === e.path).length} item{all.filter((x) => x.path === e.path).length === 1 ? '' : 's'}
+                  </span>
+                </li>
+              )}
+              <li className="flex items-center gap-3 px-4 py-2.5" data-testid="evidence-row" data-short-id={e.shortId}>
                 <input
                   type="checkbox"
                   checked={picked.includes(e.shortId)}
@@ -209,6 +219,7 @@ export function EvidencePage() {
                 </span>
                 {!kind && <Badge tone="neutral" className="hidden sm:inline-flex">{e.kindLabel}</Badge>}
               </li>
+              </Fragment>
             ))}
           </ul>
           <div className="flex items-center justify-between gap-3 border-t border-line-subtle px-4 py-3">
