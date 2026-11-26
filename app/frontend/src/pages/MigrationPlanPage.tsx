@@ -120,7 +120,7 @@ export function MigrationPlanPage() {
         tone="indigo"
         eyebrow={corpus.data?.name ?? corpusId}
         title="Migration plan"
-        lead="Dependency-aware wave assignment for the corpus's latest source version. Wave 1 starts with leaf routines (no in-corpus callees); each subsequent wave depends only on routines in earlier waves."
+        lead="The order to migrate this project's routines in. Each wave only depends on routines in earlier waves, so you can finish one wave before starting the next."
       />
 
       {isAdmin && (
@@ -336,7 +336,7 @@ export function MigrationPlanPage() {
       <Card>
         <CardBody>
           <Link to={`/corpora/${corpusId}`} className="text-caption text-volt-ink hover:underline">
-            ← Back to corpus
+            ← Back to project
           </Link>
           {' · '}
           <Link
@@ -415,13 +415,25 @@ function WaveCard({
             <p className={clsx('font-mono text-caption font-semibold uppercase tracking-wider', eyebrow[waveBucket])}>
               wave {wave.waveNumber}
             </p>
-            <h3 className="text-body-lg font-semibold text-ink-primary">{wave.name}</h3>
+            <h3 className="text-body-lg font-semibold text-ink-primary">{wave.name.replace(/\b1 routines\b/, '1 routine')}</h3>
           </div>
-          <div className="text-right font-mono text-caption text-ink-tertiary">
-            <div>{wave.routineCount} routines</div>
-            <div>
-              signed: {lc.signed} · scaffolded: {lc.scaffolded} · committed: {lc.committed}
-            </div>
+          <div className="min-w-[180px] text-right text-caption text-ink-secondary">
+            {(() => {
+              const done = lc.scaffolded + lc.committed;
+              const pct = wave.routineCount ? Math.round((done / wave.routineCount) * 100) : 0;
+              return (
+                <>
+                  <div>
+                    <span className="font-mono text-ink-primary">{done}</span> of {wave.routineCount} routine
+                    {wave.routineCount === 1 ? '' : 's'} have code
+                    {lc.signed > 0 && ` · ${lc.signed} signed`}
+                  </div>
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-sunken" aria-hidden="true">
+                    <div className="h-full bg-status-ok" style={{ width: `${pct}%` }} />
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
         <ul className="grid grid-cols-1 gap-1 md:grid-cols-2 lg:grid-cols-3">
@@ -433,6 +445,18 @@ function WaveCard({
     </Card>
   );
 }
+
+/** Same words as Home, Projects and Routines. */
+const PILL_LABEL: Record<string, string> = {
+  PARSED: 'Not started',
+  EXTRACTING: 'Extracting',
+  DRAFT: 'Draft',
+  IN_REVIEW: 'In review',
+  SIGNED: 'Signed',
+  SCAFFOLDING: 'Generating',
+  SCAFFOLDED: 'With code',
+  COMMITTED: 'Committed',
+};
 
 function RoutinePill({
   routine,
@@ -455,7 +479,7 @@ function RoutinePill({
       >
         <span className="truncate font-mono text-caption text-ink-primary">{routine.name}</span>
         <span className="flex items-center gap-1">
-          <Badge tone={tone}>{routine.state}</Badge>
+          <Badge tone={tone}>{PILL_LABEL[routine.state] ?? routine.state}</Badge>
           <ArrowRight className="h-3 w-3 text-ink-tertiary opacity-0 group-hover:opacity-100" />
         </span>
       </button>

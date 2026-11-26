@@ -236,6 +236,22 @@ export function DependencyGraphPage() {
     });
     cyRef.current = cy;
 
+    // Open with the whole graph in view: fit once the layout settles, and again whenever the canvas changes size
+    // (it can mount while its pane is still being laid out, which left the graph off-canvas — a blank box).
+    cy.one('layoutstop', () => {
+      cy.resize();
+      cy.fit(undefined, 32);
+    });
+    const container = containerRef.current;
+    const ro =
+      typeof ResizeObserver !== 'undefined' && container
+        ? new ResizeObserver(() => {
+            cy.resize();
+            if (!cy.elements('.faded').length) cy.fit(undefined, 32);
+          })
+        : null;
+    if (ro && container) ro.observe(container);
+
     // Single-tap on node: focus its neighbourhood.
     // Double-tap on the same node: drill into the routine page.
     cy.on('tap', 'node', (evt) => {
@@ -270,6 +286,7 @@ export function DependencyGraphPage() {
     });
 
     return () => {
+      ro?.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
@@ -326,7 +343,7 @@ export function DependencyGraphPage() {
         tone="violet"
         eyebrow={corpus.data?.name ?? corpusId}
         title="Dependency graph"
-        lead="Parser-extracted call graph + shared-storage references. Nodes colour by their assigned migration wave. Click any routine to highlight its full upstream and downstream path · double-click to drill in."
+        lead="Which routines call which, coloured by migration wave."
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
@@ -365,7 +382,7 @@ export function DependencyGraphPage() {
               <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-line-subtle bg-raised/95 p-2.5 shadow-card">
                 <p className="label mb-1.5">Wave</p>
                 <div className="space-y-1">
-                  {[1, 2, 3, 4, 5].map((w) => (
+                  {[1, 2, 3, 4, 5].filter((w) => w <= Math.max(1, ...[...waveByRoutine.values()])).map((w) => (
                     <div key={w} className="flex items-center gap-2">
                       <span
                         className="inline-block h-2.5 w-2.5 rounded-full"
@@ -402,17 +419,27 @@ export function DependencyGraphPage() {
 
         <aside className="space-y-3">
           <div className="card p-4">
-            <p className="label mb-2">Stats</p>
-            <ul className="space-y-1 font-mono text-[12px] text-ink-secondary">
-              <li>nodes: {g.stats.nodeCount}</li>
-              <li>call edges: {g.stats.callEdgeCount}</li>
-              <li>shared-storage edges: {g.stats.sharedStorageEdgeCount}</li>
-              <li>SCCs (cycles): {g.stats.sccCount}</li>
-              <li>leaves: {g.stats.leafCount}</li>
-              <li>roots: {g.stats.rootCount}</li>
-              <li>external callees: {g.stats.externalCalleeCount}</li>
-              <li>modules: {g.moduleGraph.stats.moduleCount}</li>
-              <li>module cycles: {g.moduleGraph.stats.cyclicGroupCount}</li>
+            <p className="label mb-2">In this graph</p>
+            <ul className="space-y-1.5 text-caption text-ink-secondary" data-testid="dep-graph-stats">
+              <li>
+                <strong className="text-ink-primary">{g.stats.nodeCount}</strong> routines,{' '}
+                <strong className="text-ink-primary">{g.stats.callEdgeCount}</strong> calls between them
+              </li>
+              <li>
+                {g.stats.rootCount} entry point{g.stats.rootCount === 1 ? '' : 's'} (nothing calls them) ·{' '}
+                {g.stats.leafCount} call nothing else
+              </li>
+              <li className={g.stats.sccCount > 0 ? 'text-status-warn' : undefined}>
+                {g.stats.sccCount === 0 ? 'No call cycles' : `${g.stats.sccCount} call cycle${g.stats.sccCount === 1 ? '' : 's'} — these migrate together`}
+              </li>
+              {g.stats.externalCalleeCount > 0 && (
+                <li>{g.stats.externalCalleeCount} call{g.stats.externalCalleeCount === 1 ? '' : 's'} to outside code (listed below)</li>
+              )}
+              <li>
+                {g.stats.sharedStorageEdgeCount} shared worksheet / variable link{g.stats.sharedStorageEdgeCount === 1 ? '' : 's'} ·{' '}
+                {g.moduleGraph.stats.moduleCount} module{g.moduleGraph.stats.moduleCount === 1 ? '' : 's'}
+                {g.moduleGraph.stats.cyclicGroupCount > 0 ? ` · ${g.moduleGraph.stats.cyclicGroupCount} module cycle(s)` : ''}
+              </li>
             </ul>
           </div>
 
@@ -447,7 +474,7 @@ export function DependencyGraphPage() {
                 onChange={(e) => setHideSharedStorage(e.target.checked)}
                 className="rounded border-line accent-volt"
               />
-              Hide shared-storage edges
+              Hide shared worksheet / variable links
             </label>
           </div>
 
@@ -496,7 +523,7 @@ export function DependencyGraphPage() {
               to={`/corpora/${corpusId}`}
               className="text-[12px] font-semibold text-volt-ink hover:underline hover:underline"
             >
-              ← Back to corpus
+              ← Back to project
             </Link>
           </div>
         </aside>

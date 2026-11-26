@@ -110,7 +110,7 @@ export function SystemPage() {
               <dt className="text-ink-secondary">Spent</dt>
               <dd className="font-mono">{t ? formatMoney(t.costTodayUsd) : '…'}</dd>
               <dt className="text-ink-secondary">Median latency</dt>
-              <dd className="font-mono">{t?.p50LatencyMs != null ? `${formatInt(Math.round(t.p50LatencyMs))} ms` : '—'}</dd>
+              <dd className="font-mono">{t?.p50LatencyMs != null ? formatLatency(t.p50LatencyMs) : '—'}</dd>
               <dt className="text-ink-secondary">Cache hits</dt>
               <dd className="font-mono">{t ? formatPercent(t.cacheHitRate) : '…'}</dd>
             </dl>
@@ -181,6 +181,13 @@ export function SystemPage() {
       </Card>
     </div>
   );
+}
+
+/** 840 ms · 4.2 s · 2.8 min — whichever reads naturally. */
+function formatLatency(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${(ms / 60_000).toFixed(1)} min`;
 }
 
 function ShaLink({ sha }: { sha: string }) {
