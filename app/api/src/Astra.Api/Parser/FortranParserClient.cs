@@ -113,31 +113,71 @@ public sealed class FortranParserClient : IFortranParserClient, IDisposable
         return new CorpusParseOutcome(results, reply.Warnings.ToArray(), CrossFileResolved: true);
     }
 
+    /// <summary>The most source text one ExtractFacts call carries — well inside the 32 MiB message limit.</summary>
+    public const int FactsBatchBytes = 8 * 1024 * 1024;
+    /// <summary>The most files one ExtractFacts call carries, so each call finishes long before a proxy's idle cut-off.</summary>
+    public const int FactsBatchFiles = 400;
+
+    /// <summary>
+    /// Cuts the files into consecutive batches no larger than <paramref name="maxBytes"/> of text and
+    /// <paramref name="maxFiles"/> files, keeping their order (a version's files arrive sorted by path, so a folder's
+    /// files stay together). A file larger than the byte limit travels alone.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<int>> FactBatches(IReadOnlyList<CorpusFile> files, int maxBytes = FactsBatchBytes, int maxFiles = FactsBatchFiles)
+    {
+        var batches = new List<IReadOnlyList<int>>();
+        var current = new List<int>();
+        long bytes = 0;
+        for (var i = 0; i < files.Count; i++)
+        {
+            var size = (long)System.Text.Encoding.UTF8.GetByteCount(files[i].Content ?? "") + files[i].Filename.Length;
+            if (current.Count > 0 && (bytes + size > maxBytes || current.Count >= maxFiles))
+            {
+                batches.Add(current);
+                current = new List<int>();
+                bytes = 0;
+            }
+            current.Add(i);
+            bytes += size;
+        }
+        if (current.Count > 0) batches.Add(current);
+        return batches;
+    }
+
+    /// <summary>
+    /// Facts for every file, read in batches (see <see cref="FactBatches"/>): a large estate's source is many times the
+    /// gRPC message limit, and one huge call would also outlast the idle cut-off of a proxy in front of the sidecar. A
+    /// batch that fails leaves its files without facts and says so; the others still count.
+    /// </summary>
     public async Task<FactsOutcome> ExtractFactsAsync(IReadOnlyList<CorpusFile> files, CancellationToken ct = default)
     {
-        var none = files.Select(f => new FileFactsJson(f.Filename, "")).ToList();
-        if (files.Count == 0) return new FactsOutcome(none, Array.Empty<string>());
+        var result = files.Select(f => new FileFactsJson(f.Filename, "")).ToArray();
+        if (files.Count == 0) return new FactsOutcome(result, Array.Empty<string>());
 
-        var req = new Astra.Api.Parser.Grpc.ParseCorpusRequest();
-        foreach (var f in files)
-            req.Files.Add(new Astra.Api.Parser.Grpc.SourceFile { Filename = f.Filename, Content = f.Content });
-        try
+        var warnings = new List<string>();
+        foreach (var batch in FactBatches(files))
         {
-            var reply = await _client.ExtractFactsAsync(req, cancellationToken: ct);
-            var result = new List<FileFactsJson>(files.Count);
-            for (var i = 0; i < files.Count; i++)
-                result.Add(new FileFactsJson(files[i].Filename, i < reply.Files.Count ? reply.Files[i].FactsJson : ""));
-            return new FactsOutcome(result, reply.Warnings.ToArray());
+            var req = new Astra.Api.Parser.Grpc.ParseCorpusRequest();
+            foreach (var i in batch)
+                req.Files.Add(new Astra.Api.Parser.Grpc.SourceFile { Filename = files[i].Filename, Content = files[i].Content });
+            try
+            {
+                var reply = await _client.ExtractFactsAsync(req, cancellationToken: ct);
+                for (var k = 0; k < batch.Count && k < reply.Files.Count; k++)
+                    result[batch[k]] = new FileFactsJson(files[batch[k]].Filename, reply.Files[k].FactsJson);
+                warnings.AddRange(reply.Warnings);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+            {
+                return new FactsOutcome(result, new[] { "The parser sidecar predates fact extraction (ExtractFacts), so no facts were read from these files." });
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "Parser sidecar ExtractFacts RPC failed for a batch of {Count} files", batch.Count);
+                warnings.Add($"Facts could not be read from {batch.Count} file(s) starting at {files[batch[0]].Filename} (parser {ex.StatusCode}: {ex.Status.Detail}).");
+            }
         }
-        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
-        {
-            return new FactsOutcome(none, new[] { "The parser sidecar predates fact extraction (ExtractFacts), so no facts were read from these files." });
-        }
-        catch (RpcException ex)
-        {
-            _logger.LogError(ex, "Parser sidecar ExtractFacts RPC failed for {Count} files", files.Count);
-            return new FactsOutcome(none, new[] { $"Facts could not be read from these files (parser {ex.StatusCode}: {ex.Status.Detail})." });
-        }
+        return new FactsOutcome(result, warnings);
     }
 
     /// <summary>

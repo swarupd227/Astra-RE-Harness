@@ -72,6 +72,21 @@ public class SidecarFactsContractTests
         Assert.Equal("HTTP route served", EntityVocabulary.Types[EntityVocabulary.Route]);
     }
 
+    [Fact]
+    public void A_large_estates_facts_are_read_in_batches_that_keep_file_order()
+    {
+        var files = Enumerable.Range(0, 10)
+            .Select(i => new Astra.Api.Parser.CorpusFile($"f{i:00}.php", new string('x', i == 4 ? 900 : 100)))
+            .ToList();
+        var batches = Astra.Api.Parser.FortranParserClient.FactBatches(files, maxBytes: 500, maxFiles: 3);
+
+        Assert.Equal(Enumerable.Range(0, 10), batches.SelectMany(b => b));          // every file once, in order
+        Assert.All(batches, b => Assert.True(b.Count <= 3));
+        Assert.Contains(batches, b => b.SequenceEqual(new[] { 4 }));                // larger than the limit: alone
+        Assert.All(batches.Where(b => b.Count > 1), b => Assert.True(b.Sum(i => files[i].Content.Length + 7) <= 500));
+        Assert.Empty(Astra.Api.Parser.FortranParserClient.FactBatches(Array.Empty<Astra.Api.Parser.CorpusFile>()));
+    }
+
     [Theory]
     [InlineData("app/Http/Controllers/InvoiceController.php", true)]
     [InlineData("legacy/API.PHP", true)]
