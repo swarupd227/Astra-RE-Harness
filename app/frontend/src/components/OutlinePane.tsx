@@ -76,8 +76,8 @@ export function OutlinePane({
                     >
                       <StateDot state={state} />
                       <span className="text-ink-primary">{c.id}</span>
-                      <span className="ml-auto truncate text-ink-tertiary">
-                        {claimBodyText(c).slice(0, 24)}
+                      <span className="ml-auto line-clamp-2 text-right text-ink-tertiary" title={claimBodyText(c)}>
+                        {outlineLabel(claimBodyText(c))}
                       </span>
                     </button>
                   </li>
@@ -140,4 +140,20 @@ function StateDot({ state }: { state: string }) {
             ? 'bg-status-scaffolded'
             : 'bg-status-untouched';
   return <span className={clsx('h-2 w-2 shrink-0 rounded-full', cls)} aria-hidden="true" />;
+}
+
+/**
+ * A claim's outline label: its first clause (up to a colon, semicolon or full stop), cut at a word boundary — not
+ * the first 24 characters, which left "Coverage ID mapping: for" and three identical "API response parsing for".
+ * The full text is on hover.
+ */
+function outlineLabel(text: string, max = 64): string {
+  const t = text.trim();
+  const clause = t.split(/[:;.](\s|$)/)[0] || t;
+  // When the first clause is too generic to tell siblings apart, keep a little of what follows.
+  const base = clause.length < 14 && t.length > clause.length ? t : clause;
+  if (base.length <= max) return base;
+  const cut = base.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > 20 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
