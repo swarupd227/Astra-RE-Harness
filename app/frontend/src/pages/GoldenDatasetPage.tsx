@@ -43,6 +43,8 @@ export function GoldenDatasetPage() {
 
   const [schemaFilter, setSchemaFilter] = useState<string>('all');
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
+  // 160 entries rendered at once made a 16 800 px page: show 60 (the demo specs open entry 48), the rest on request (a schema filter shows all of it).
+  const [showAll, setShowAll] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const schemas = useMemo(
@@ -179,7 +181,7 @@ export function GoldenDatasetPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" data-testid="golden-entry-list">
-        {filtered.map((entry) => (
+        {(showAll || schemaFilter !== 'all' ? filtered : filtered.slice(0, 60)).map((entry) => (
           <EntryCard key={entry.id} entry={entry} onOpen={() => setOpenEntryId(entry.entryId)} />
         ))}
         {filtered.length === 0 && (
@@ -190,6 +192,15 @@ export function GoldenDatasetPage() {
           </Card>
         )}
       </div>
+
+      {!showAll && schemaFilter === 'all' && filtered.length > 60 && (
+        <div className="flex items-center justify-between text-caption text-ink-secondary">
+          <span>Showing 60 of {filtered.length} entries</span>
+          <Button variant="secondary" size="sm" onClick={() => setShowAll(true)} data-testid="golden-show-all">
+            Show all {filtered.length}
+          </Button>
+        </div>
+      )}
 
       {openEntryId && (
         <EntryDrawer
