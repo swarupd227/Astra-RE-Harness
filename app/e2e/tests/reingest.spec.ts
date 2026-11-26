@@ -17,18 +17,12 @@
  *
  * Runs in ~60s end-to-end on a warm stack.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { switchPersona, waitForReviewableClaims } from './helpers/persona';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ENG_HEADERS = { 'X-Dev-Persona': 'engineer' };
 const SME_HEADERS = { 'X-Dev-Persona': 'sme' };
-
-async function switchPersona(page: Page, persona: 'engineer' | 'sme') {
-  const label = persona === 'sme' ? 'SME' : 'Engineer';
-  await page.locator('button[aria-haspopup="menu"]').click();
-  await page.getByRole('menuitemradio', { name: new RegExp(`^${label}\\s`) }).click();
-  await page.waitForLoadState('networkidle');
-}
 
 test.describe('Phase C.3 · Re-sync → SUPERSEDED', () => {
   test.beforeEach(async ({ page }) => {
@@ -68,6 +62,7 @@ test.describe('Phase C.3 · Re-sync → SUPERSEDED', () => {
 
     await test.step('SME accepts all + resolves open questions + signs', async () => {
       await switchPersona(page, 'sme');
+      await waitForReviewableClaims(page);
 
       // Iterate whatever the spec rendered — mock emits a fixed inventory
       // (INV-1..6, SE-1..2, EC-1..4, Q-1..3) but real Anthropic picks its

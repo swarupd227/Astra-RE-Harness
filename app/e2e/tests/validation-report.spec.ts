@@ -2,35 +2,20 @@
  * Phase #2d — validation report card.
  *
  * Smoke-tests the new /scaffolds/{id}/validation surface:
- *   - The three stage cards render
+ *   - The four stage cards render
  *   - Each stage's "Run" CTA triggers the underlying validator
  *   - The summary text + status badges update after a successful run
  *   - The build/test/equivalence log is reachable via the "View log" modal
  *
- * Assumes the demo-path test has already scaffolded a CONSUME_ROLL spec
- * (which is the common e2e prelude). We pick the seeded scaffold by
- * walking the seed corpus rather than relying on a SCAFFOLDED state from
- * a previous test run, since playwright workers don't share state by
- * default.
+ * Builds the seed routine's signed spec and generated code through the API if
+ * they are not there yet. The gates themselves are real: compile and test pack
+ * run `dotnet` inside the API, equivalence needs the gfortran sidecar and the
+ * fourth gate the property-test sidecar.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { ensureSeedScaffold } from './helpers/scaffold';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
-const ENG = { 'X-Dev-Persona': 'engineer' };
-
-async function getScaffoldId(page: Page): Promise<string | null> {
-  const list = await page.request.get(`${API_BASE}/api/v1/corpora`, { headers: ENG }).then((r) => r.json());
-  const seed = list.data.find((c: { name: string }) => c.name === 'Roll-stock inventory demo (Fortran F77)');
-  if (!seed) return null;
-  const detail = await page.request.get(`${API_BASE}/api/v1/corpora/${seed.id}`, { headers: ENG }).then((r) => r.json());
-  const subId = detail.latestVersion.files[0].subroutines[0].id;
-  const spec = await page.request.get(`${API_BASE}/api/v1/subroutines/${subId}/spec`, { headers: ENG }).then((r) => r.json());
-  if (!spec?.id) return null;
-  const sc = await page.request.get(`${API_BASE}/api/v1/specs/${spec.id}/scaffold`, { headers: ENG });
-  if (sc.status() === 404) return null;
-  const scBody = await sc.json();
-  return scBody.id;
-}
 
 test.describe('Phase #2d · Validation report card', () => {
   test.beforeEach(async ({ page }) => {
@@ -38,17 +23,18 @@ test.describe('Phase #2d · Validation report card', () => {
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
   });
 
-  test('three stage cards render; Run buttons trigger validators; logs are reachable', async ({ page }) => {
-    const scaffoldId = await getScaffoldId(page);
-    test.skip(!scaffoldId, 'No SCAFFOLDED CONSUME_ROLL — run demo-path first.');
+  test('stage cards render; Run buttons trigger validators; logs are reachable', async ({ page }) => {
+    test.setTimeout(600_000);
+    const { id: scaffoldId } = await ensureSeedScaffold(page.request, API_BASE);
 
     await page.goto(`/scaffolds/${scaffoldId}/validation`);
     await expect(page.getByRole('heading', { name: 'Validation report', level: 1 })).toBeVisible();
 
-    // All three cards present.
+    // All four cards present.
     await expect(page.getByTestId('validation-card-compile')).toBeVisible();
     await expect(page.getByTestId('validation-card-test-pack')).toBeVisible();
     await expect(page.getByTestId('validation-card-equivalence')).toBeVisible();
+    await expect(page.getByTestId('validation-card-falsifying')).toBeVisible();
 
     // Helper: click a card's Run button, wait for the underlying POST to land,
     // then for the list-refetch GET to settle. Without this, "Build succeeded"
@@ -80,10 +66,14 @@ test.describe('Phase #2d · Validation report card', () => {
 
     await triggerStage('validation-card-equivalence', /Run equivalence/, '/validate/equivalence');
     const equivalenceCard = page.getByTestId('validation-card-equivalence');
-    await expect(equivalenceCard.getByText(/Smoke equivalence/)).toBeVisible({ timeout: 60_000 });
+    // CONSUME_ROLL has a per-routine harness: gfortran runs the original beside the C# on the same inputs.
+    await expect(equivalenceCard.getByText(/Per-routine equivalence: CONSUME_ROLL .* agree row-for-row/))
+      .toBeVisible({ timeout: 60_000 });
 
-    // Overall verdict banner should report "all gates green" once all three are PASSED.
-    await expect(page.getByText(/All gates green/)).toBeVisible();
+    // The overall verdict needs all four gates, so run the property-based one too.
+    await triggerStage('validation-card-falsifying', /Run 4th gate/, '/validate/falsifying');
+    await expect(page.getByTestId('validation-card-falsifying').getByText(/^Passed$/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/All 4 gates green/)).toBeVisible();
 
     // Log drill-down works. Use the COMPILE card's View log button.
     await compileCard.getByRole('button', { name: /^View log$/ }).click();

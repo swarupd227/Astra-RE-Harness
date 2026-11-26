@@ -38,6 +38,35 @@ Override targets via env:
 BASE_URL=http://localhost:35173 API_BASE=http://localhost:38080 npm test
 ```
 
+## What the stack needs
+
+- **A database you can lose.** Many specs call `POST /api/v1/dev/reset`, which
+  drops every table. Point the suite at a throwaway Postgres, never one you
+  are working in.
+- **API settings:** `Dev__ResetEnabled=true`, `Database__SeedDemo=true`
+  (compose: `DATABASE_SEED_DEMO=true` — the CONSUME_ROLL project most specs
+  start from; it is off by default), the MINPACK and VB6 seeds on (their
+  defaults), and the mock LLM providers.
+- **Network:** the MINPACK seed clones from GitHub, and the compile and test
+  pack gates restore NuGet packages.
+- **Language sidecars**, only for the specs that run them:
+
+  | Spec | Needs |
+  | --- | --- |
+  | `per-routine-equivalence` | `gfortran-sidecar` |
+  | `cobol-deptpay-equivalence` | `gnucobol-sidecar` |
+  | `validation-report` | `gfortran-sidecar`, `property-test-sidecar` |
+
+  Without them those requests answer 503.
+- **A built frontend** is steadier than the dev server, whose first page load
+  can outlast the navigation timeout on a busy machine:
+
+  ```bash
+  cd app/frontend
+  VITE_API_BASE_URL=http://localhost:38080 npx vite build
+  npx vite preview --port 35173 --strictPort
+  ```
+
 ## What the test covers
 
 One `demo-path.spec.ts` test runs the entire Appendix A 4-minute flow:

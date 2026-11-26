@@ -15,17 +15,11 @@
  * fallback block in the modal is a copy-pastable proof, but the in-
  * browser verify is the runtime evidence.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { switchPersona, waitForReviewableClaims } from './helpers/persona';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ENG = { 'X-Dev-Persona': 'engineer' };
-
-async function switchPersona(page: Page, persona: 'engineer' | 'sme') {
-  const label = persona === 'sme' ? 'SME' : 'Engineer';
-  await page.locator('button[aria-haspopup="menu"]').click();
-  await page.getByRole('menuitemradio', { name: new RegExp(`^${label}\\s`) }).click();
-  await page.waitForLoadState('networkidle');
-}
 
 test.describe('UX polish #2 · Evidence Trail', () => {
   test.beforeEach(async ({ page }) => {
@@ -52,6 +46,7 @@ test.describe('UX polish #2 · Evidence Trail', () => {
     await expect(page).toHaveURL(/\/review$/);
 
     await switchPersona(page, 'sme');
+    await waitForReviewableClaims(page);
     const cardIds = await page.locator('article[id^="claim-"]').evaluateAll(
       (els) => els.map((el) => (el as HTMLElement).id.replace(/^claim-/, '')),
     );

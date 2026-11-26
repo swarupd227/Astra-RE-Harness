@@ -2,35 +2,55 @@
  * Phase #4 / 2.0 — Platform nav scaffold.
  *
  * Asserts:
- *   - The Platform section is hidden from non-admin personas (engineer / SME).
- *   - When persona = admin, the Platform section is visible and lists the
- *     five sub-pages (Prompts / Languages / Validation / Signatures / Roles)
- *     even when they're still showing a "Coming in 2.X" placeholder.
+ *   - The rail's Platform section is for everyone, but its Admin-only pages
+ *     (Overview, Portfolio) and the whole Admin section are hidden from other
+ *     personas.
+ *   - An Admin gets those, with the configuration pages in the Admin section.
  *   - The /platform index renders for admin and links to each sub-page tile.
  *   - The /platform index gates non-admin access with an "Admin only" message.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** Folded rail sections open on a click and remember it. */
+async function openSection(page: Page, name: 'platform' | 'admin') {
+  const header = page.getByTestId(`rail-section-${name}`);
+  if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+  await expect(header).toHaveAttribute('aria-expanded', 'true');
+}
 
 test.describe('Phase #4.2.0 · Platform nav scaffold', () => {
-  test('Platform section is hidden for engineer persona', async ({ page }) => {
+  test('Admin-only navigation is hidden for the engineer persona', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
     await page.reload();
-    await expect(page.getByTestId('nav-platform-section')).toHaveCount(0);
+    // Wait for the persona to be known before asserting that anything is absent.
+    await expect(page.getByRole('button', { name: 'Persona: Engineer' })).toBeVisible();
+    await openSection(page, 'platform');
+    const rail = page.getByTestId('left-nav');
+    await expect(rail.getByTestId('nav-prompt-catalog')).toBeVisible();
+    await expect(rail.getByTestId('rail-section-admin')).toHaveCount(0);
+    await expect(rail.getByTestId('nav-overview')).toHaveCount(0);
+    await expect(rail.getByTestId('nav-portfolio')).toHaveCount(0);
+    await expect(rail.getByTestId('nav-validation-policy')).toHaveCount(0);
   });
 
-  test('Platform section appears for admin persona with the 5 sub-page links', async ({ page }) => {
+  test('Admin persona gets the configuration pages in the rail', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'admin'));
     await page.reload();
-    const section = page.getByTestId('nav-platform-section');
-    await expect(section).toBeVisible();
-    // Each sub-page entry must be rendered even when placeholdered.
-    await expect(section.getByText(/Prompt Catalog/)).toBeVisible();
-    await expect(section.getByText(/Languages/)).toBeVisible();
-    await expect(section.getByText(/Validation Policy/)).toBeVisible();
-    await expect(section.getByText(/Signature Health/)).toBeVisible();
-    await expect(section.getByText(/Roles & Permissions/)).toBeVisible();
+    await openSection(page, 'platform');
+    await openSection(page, 'admin');
+    const rail = page.getByTestId('left-nav');
+    for (const [id, label] of [
+      ['nav-overview', 'Overview'],
+      ['nav-prompt-catalog', 'Prompt Catalog'],
+      ['nav-languages', 'Languages'],
+      ['nav-signature-health', 'Signature Health'],
+      ['nav-validation-policy', 'Validation Policy'],
+      ['nav-roles-&-permissions', 'Roles & Permissions'],
+    ]) {
+      await expect(rail.getByTestId(id)).toHaveText(label);
+    }
   });
 
   test('/platform index renders for admin with one tile per upcoming surface', async ({ page }) => {

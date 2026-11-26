@@ -48,10 +48,16 @@ export default defineConfig({
     // latency (observed >5s just for the base HTML response) — 15s wasn't
     // enough margin once the full SPA bundle load is added on top.
     navigationTimeout: 45_000,
-    // RECORD_DEMO: slow every action by 600ms so a stakeholder can watch
-    // each click land. The test will naturally take ~1 min longer; that's
-    // the cost of stakeholder-readable pacing.
-    launchOptions: recordDemo ? { slowMo: 600 } : {},
+    launchOptions: {
+      // Specs check where a recording is playing, never what it sounds like. On a machine whose audio
+      // device the headless browser cannot open (a remote desktop, a CI box) the playback clock never
+      // moves; with audio output off Chromium plays into a silent sink that keeps time.
+      args: ['--disable-audio-output'],
+      // RECORD_DEMO: slow every action by 600ms so a stakeholder can watch
+      // each click land. The test will naturally take ~1 min longer; that's
+      // the cost of stakeholder-readable pacing.
+      ...(recordDemo ? { slowMo: 600 } : {}),
+    },
   },
   projects: [
     {

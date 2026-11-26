@@ -10,23 +10,9 @@
  * scaffold).
  */
 import { expect, test, type Page } from '@playwright/test';
+import { openGeneratedCode, switchPersona, waitForReviewableClaims } from './helpers/persona';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
-
-/** Switch the dev persona via the top-right menu and wait for the page to refetch. */
-async function switchPersona(page: Page, persona: 'engineer' | 'sme' | 'observer' | 'admin') {
-  const labelByPersona = { engineer: 'Engineer', sme: 'SME', observer: 'Observer', admin: 'Admin' } as const;
-  const label = labelByPersona[persona];
-
-  // Trigger has aria-haspopup="menu". Click to open the dropdown.
-  await page.locator('button[aria-haspopup="menu"]').click();
-  // Menu items have role="menuitemradio". The accessible name is
-  // "<Label> <tagline>", e.g. "SME Reviews and signs specs...". Match the
-  // accessible name with a leading-label prefix.
-  await page.getByRole('menuitemradio', { name: new RegExp(`^${label}\\s`) }).click();
-  // Persona switch triggers window.location.reload(); wait for the new render.
-  await page.waitForLoadState('networkidle');
-}
 
 async function getSeededSubroutineId(page: Page): Promise<string> {
   // Find the synthetic seed by name — MINPACK is auto-seeded too and
@@ -97,6 +83,7 @@ test.describe('Appendix A · 4-minute demo path', () => {
     // ── Stage 2:00 — SME reviews every claim ────────────────────────
     await test.step('SME accepts all + resolves open questions + signs', async () => {
       await switchPersona(page, 'sme');
+      await waitForReviewableClaims(page);
 
       // Every ReviewableClaimCard renders as <article id="claim-{id}">. The
       // mock provider emits a fixed inventory (INV-1..6, SE-1..2, EC-1..4,
@@ -161,22 +148,9 @@ test.describe('Appendix A · 4-minute demo path', () => {
     // ── Stage 3:00 — Engineer generates scaffold ────────────────────
     await test.step('engineer generates scaffold', async () => {
       await switchPersona(page, 'engineer');
-      // The Spec review surface for a SIGNED spec shows either Generate scaffold
-      // or Open scaffold (if one already exists from a previous run).
-      const generate = page.getByRole('link', { name: /Generate scaffold/ });
-      const openExisting = page.getByRole('link', { name: /Open scaffold/ });
-      if (await generate.count()) {
-        await generate.click();
-        // Wait for the streaming surface to complete and the Open scaffold CTA to appear.
-        await expect(page.getByRole('button', { name: /Open scaffold/ })).toBeVisible({
-          timeout: 30_000,
-        });
-        await page.getByRole('button', { name: /Open scaffold/ }).click();
-      } else {
-        await openExisting.click();
-      }
+      await openGeneratedCode(page);
       // Scaffold artifact view — file tree + Monaco + traceability.
-      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet10/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /\d+ files · \d+ TODOs · \.NET 10/ })).toBeVisible();
       if (beat) await page.waitForTimeout(beat);  // see file tree + traceability
     });
 
@@ -198,13 +172,13 @@ test.describe('Appendix A · 4-minute demo path', () => {
         .then((r) => r.json())).id}/audit`).then((r) => r.json());
       const types = new Set<string>(audit.data.map((e: any) => e.eventType));
       // Phase B's lifecycle markers should all be present.
-      expect(types).toEqual(
-        expect.objectContaining(new Set([
+      expect([...types]).toEqual(
+        expect.arrayContaining([
           'spec.extracted',
           'spec.routed',
           'spec.signed',
           'scaffold.generated',
-        ])),
+        ]),
       );
       // Every claim card the SME touched produced a claim.* audit row.
       // Real Claude emits a variable claim count per run; we just require

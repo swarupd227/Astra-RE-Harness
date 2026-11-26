@@ -10,24 +10,15 @@
  *     portfolio table.
  *   - The Spec-review header shows the inline signature-health badge for
  *     a signed spec.
+ *
+ * Signs the seed routine through the API if nothing has yet, so the signed-spec
+ * tests never skip for want of an earlier run.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { ensureSeedSignedSpec } from './helpers/scaffold';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ADMIN = { 'X-Dev-Persona': 'admin' };
-const ENG = { 'X-Dev-Persona': 'engineer' };
-
-async function getSignedSpecId(page: Page): Promise<string | null> {
-  const list = await page.request.get(`${API_BASE}/api/v1/corpora`, { headers: ENG }).then((r) => r.json());
-  const seed = list.data.find((c: { name: string }) => c.name === 'Roll-stock inventory demo (Fortran F77)');
-  if (!seed) return null;
-  const detail = await page.request.get(`${API_BASE}/api/v1/corpora/${seed.id}`, { headers: ENG }).then((r) => r.json());
-  const subId = detail.latestVersion.files[0].subroutines[0].id;
-  const spec = await page.request
-    .get(`${API_BASE}/api/v1/subroutines/${subId}/spec`, { headers: ENG })
-    .then((r) => r.json());
-  return spec?.state === 'SIGNED' ? (spec.id as string) : null;
-}
 
 test.describe('Phase #4.2.4 · Signature Health', () => {
   test.beforeEach(async ({ page }) => {
@@ -45,8 +36,7 @@ test.describe('Phase #4.2.4 · Signature Health', () => {
   });
 
   test('Per-spec verdict is healthy for a signed spec on the current SourceVersion', async ({ page }) => {
-    const specId = await getSignedSpecId(page);
-    test.skip(!specId, 'No SIGNED CONSUME_ROLL spec available.');
+    const { specId } = await ensureSeedSignedSpec(page.request, API_BASE);
     const res = await page.request.get(`${API_BASE}/api/v1/specs/${specId}/signature-health`, { headers: ADMIN });
     expect(res.ok()).toBe(true);
     const body = await res.json();
@@ -55,21 +45,24 @@ test.describe('Phase #4.2.4 · Signature Health', () => {
   });
 
   test('/platform/signatures renders stat cards + portfolio table', async ({ page }) => {
+    const { specId } = await ensureSeedSignedSpec(page.request, API_BASE);
+    const portfolio = await page.request.get(`${API_BASE}/api/v1/signature-health`, { headers: ADMIN }).then((r) => r.json());
+
     await page.goto('/platform/signatures');
     await expect(page.getByTestId('signature-health-page')).toBeVisible();
-    await expect(page.getByText(/Signed specs/)).toBeVisible();
-    await expect(page.getByText(/Healthy/)).toBeVisible();
-    await expect(page.getByText(/Drifted/)).toBeVisible();
+    // Each card: its label and the number the API reports.
+    const card = (id: string) => page.getByTestId(`signature-stat-${id}`);
+    await expect(card('signed')).toHaveText(`Signed specs${portfolio.totalSigned}`);
+    await expect(card('healthy')).toHaveText(`Healthy${portfolio.totalSigned - portfolio.drifted}`);
+    await expect(card('drifted')).toHaveText(`Drifted${portfolio.drifted}`);
+    await expect(page.getByTestId(`portfolio-row-${specId}`)).toContainText('Healthy');
   });
 
   test('SpecReview header shows the signature-health badge for a signed spec', async ({ page }) => {
-    const specId = await getSignedSpecId(page);
-    test.skip(!specId, 'No SIGNED spec.');
-    const spec = await page.request.get(`${API_BASE}/api/v1/specs/${specId}`, { headers: ENG }).then((r) => r.json());
-    const subId = spec.subroutine.id;
+    const { specId, subroutineId } = await ensureSeedSignedSpec(page.request, API_BASE);
 
     await page.evaluate(() => window.localStorage.setItem('astra.devPersona', 'engineer'));
-    await page.goto(`/subroutines/${subId}/review`);
-    await expect(page.getByTestId(`signature-health-${specId}`)).toBeVisible();
+    await page.goto(`/subroutines/${subroutineId}/review`);
+    await expect(page.getByTestId(`signature-health-${specId}`)).toHaveText('Healthy');
   });
 });

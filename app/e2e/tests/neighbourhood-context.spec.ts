@@ -16,60 +16,65 @@
  * companion golden-dataset entry
  * `fortran-callee-side-effect-inheritance` measures the LLM-quality
  * improvement; this test pins the wiring itself.
+ *
+ * It makes its own two-routine project, so it does not depend on what state
+ * other specs have left the seed routine in.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { API_BASE, JSON_ENG, newProject } from './helpers/projects';
 
-const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
-const ENG = { 'X-Dev-Persona': 'engineer' };
+/** ALPHA calls BETA, which is in the same project, and shares a COMMON block with it. */
+const CALLER_AND_CALLEE = `\\
+      SUBROUTINE ALPHA(X)
+      INTEGER X, TOTAL
+      COMMON /SHARED/ TOTAL
+      CALL BETA(X)
+      RETURN
+      END
+      SUBROUTINE BETA(X)
+      INTEGER X, TOTAL
+      COMMON /SHARED/ TOTAL
+      TOTAL = TOTAL + X
+      RETURN
+      END
+`;
 
-async function getSeededRollRoutineId(page: Page): Promise<string> {
-  // The CONSUME_ROLL synthetic seed has CallSubroutines = [INV_READ,
-  // INV_WRITE, EMIT_EVENT] — a perfect neighbourhood test bed.
-  const corpora = await page.request.get(`${API_BASE}/api/v1/corpora`).then((r) => r.json());
-  const seed = corpora.data.find((c: { name: string }) => c.name === 'Roll-stock inventory demo (Fortran F77)');
-  if (!seed) test.skip(true, 'CONSUME_ROLL seed corpus not present.');
-  const detail = await page.request.get(`${API_BASE}/api/v1/corpora/${seed.id}`).then((r) => r.json());
-  return detail.latestVersion.files[0].subroutines[0].id;
+/** Server-sent events as `event:` / `data:` pairs. */
+function parseEvents(stream: string): Array<{ event: string; data: any }> {
+  return stream
+    .split(/\r?\n\r?\n/)
+    .map((block) => {
+      const event = /^event: (.*)$/m.exec(block)?.[1];
+      const data = /^data: (.*)$/m.exec(block)?.[1];
+      return event && data ? { event, data: JSON.parse(data) } : null;
+    })
+    .filter((e) => e !== null);
 }
 
 test.describe('Phase 7.0 · Neighbourhood context', () => {
   test('extract SSE stream emits neighbourhood_attached when callees exist', async ({ page }) => {
-    const subId = await getSeededRollRoutineId(page);
+    const corpusId = await newProject(page, [], { prefix: 'neighbourhood-e2e', source: CALLER_AND_CALLEE });
+    const detail = await page.request.get(`${API_BASE}/api/v1/corpora/${corpusId}`, { headers: JSON_ENG }).then((r) => r.json());
+    const alpha = detail.latestVersion.files[0].subroutines.find((s: { name: string }) => s.name === 'ALPHA');
 
-    // Hit the SSE endpoint and read the raw event stream. We don't need
-    // to wait for the full extract — just the early `neighbourhood_attached`
-    // event (fires before the provider call).
-    const res = await page.request.post(
-      `${API_BASE}/api/v1/subroutines/${subId}/extract`,
-      { headers: ENG, timeout: 60_000 },
-    );
+    const res = await page.request.post(`${API_BASE}/api/v1/subroutines/${alpha.id}/extract`, {
+      headers: JSON_ENG,
+      timeout: 60_000,
+    });
     expect(res.status()).toBe(200);
     expect(res.headers()['content-type']).toContain('text/event-stream');
 
-    // Read up to the first ~24 lines — enough for the prelude.
-    const reader = (await res.body()).toString('utf-8').split('\n');
-    const neighbourhoodEvent = reader
-      .filter((l) => l.startsWith('data:'))
-      .map((l) => l.slice(5).trim())
-      .map((s) => {
-        try {
-          return JSON.parse(s);
-        } catch {
-          return null;
-        }
-      })
-      .find((d) => d && d.type === 'neighbourhood_attached');
+    const events = parseEvents((await res.body()).toString('utf-8'));
+    const names = events.map((e) => e.event);
+    expect(names).toContain('neighbourhood_attached');
+    // Attached before the provider starts writing the spec.
+    expect(names.indexOf('neighbourhood_attached')).toBeLessThan(names.indexOf('patch'));
+    expect(names).not.toContain('error');
 
-    expect(neighbourhoodEvent, 'neighbourhood_attached event missing from extract stream').toBeTruthy();
-    // CONSUME_ROLL calls INV_READ, INV_WRITE, EMIT_EVENT — but those
-    // routines aren't separately ingested in the seed (the source is a
-    // self-contained single-file synthetic). So `callees` may be ≥ 0
-    // depending on whether the seed registered the callees as
-    // resolvable rows. The wiring is what we pin; the count specifics
-    // are checked by the golden-dataset scorer.
-    expect(typeof neighbourhoodEvent.data.callees).toBe('number');
-    expect(typeof neighbourhoodEvent.data.callers).toBe('number');
-    expect(typeof neighbourhoodEvent.data.commonBlocks).toBe('number');
-    expect(typeof neighbourhoodEvent.data.siblingsInFile).toBe('number');
+    const attached = events.find((e) => e.event === 'neighbourhood_attached')!.data;
+    expect(attached.callees).toBe(1);
+    expect(attached.callers).toBe(0);
+    expect(attached.commonBlocks).toBeGreaterThanOrEqual(1);
+    expect(typeof attached.siblingsInFile).toBe('number');
   });
 });

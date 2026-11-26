@@ -3,8 +3,8 @@
  *
  *   - GET /api/v1/corpora/{id}/dependency-graph returns the expected
  *     shape for the seed corpus (CONSUME_ROLL with 3 external callees).
- *   - The page at /corpora/{id}/dependency-graph renders the
- *     React Flow surface with at least the seed routine visible.
+ *   - The page at /corpora/{id}/dependency-graph draws the graph
+ *     (Cytoscape canvas) with the seed routine in it.
  *   - 404 on an unknown corpus id.
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -67,15 +67,34 @@ test.describe('Phase 8.0.a · Dependency graph', () => {
     expect(res.status()).toBe(404);
   });
 
-  test('UI renders the graph page with React Flow', async ({ page }) => {
+  test('UI renders the graph page with the seed routine drawn', async ({ page }) => {
     const corpusId = await getSeededCorpusId(page);
+    const graph = await page.request.get(`${API_BASE}/api/v1/corpora/${corpusId}/dependency-graph`).then((r) => r.json());
+    const consume = graph.nodes.find((n: { name: string }) => n.name === 'CONSUME_ROLL');
+
     await page.goto(`/corpora/${corpusId}/dependency-graph`);
     await expect(page.getByTestId('dependency-graph-page')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Dependency graph' })).toBeVisible();
-    // The CONSUME_ROLL node should render. The custom node component
-    // tags itself with data-testid="graph-node-<subroutineId>".
-    const consumeNode = await page.request.get(`${API_BASE}/api/v1/corpora/${corpusId}/dependency-graph`).then((r) => r.json());
-    const consume = consumeNode.nodes.find((n: { name: string }) => n.name === 'CONSUME_ROLL');
-    await expect(page.getByTestId(`graph-node-${consume.id}`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(`External callees (${graph.externalCallees.length})`)).toBeVisible();
+
+    // The graph is painted on a canvas, so there is no element per routine to look for.
+    // Cytoscape keeps its instance on the container; ask it what it is showing.
+    const canvas = page.getByTestId('dep-graph-canvas');
+    await expect(canvas.locator('canvas').first()).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          canvas.evaluate((el, id) => {
+            const cy = (el as unknown as { _cyreg?: { cy?: any } })._cyreg?.cy;
+            if (!cy) return null;
+            const node = cy.getElementById(id);
+            if (node.empty()) return null;
+            const box = node.renderedBoundingBox();
+            const onScreen = box.x2 > 0 && box.y2 > 0 && box.x1 < el.clientWidth && box.y1 < el.clientHeight;
+            return { label: node.data('label'), drawn: node.visible() && onScreen };
+          }, consume.id),
+        { timeout: 15_000 },
+      )
+      .toEqual({ label: 'CONSUME_ROLL', drawn: true });
   });
 });

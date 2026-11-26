@@ -9,27 +9,15 @@
  *   - GET /api/v1/providers/settings
  *   - /subroutines/:id/spec   (compact strip variant)
  *   - /scaffolds/:id/validation (full card variant)
+ *
+ * The two page tests build what they need on the seed routine (signed spec,
+ * generated code) through the API, so they never skip for want of an earlier run.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { ensureSeedScaffold, ensureSeedSignedSpec } from './helpers/scaffold';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ENG = { 'X-Dev-Persona': 'engineer' };
-
-async function getKnownIds(page: Page): Promise<{ subId: string | null; scaffoldId: string | null }> {
-  const list = await page.request.get(`${API_BASE}/api/v1/corpora`, { headers: ENG }).then((r) => r.json());
-  const seed = list.data.find((c: { name: string }) => c.name === 'Roll-stock inventory demo (Fortran F77)');
-  if (!seed) return { subId: null, scaffoldId: null };
-  const detail = await page.request.get(`${API_BASE}/api/v1/corpora/${seed.id}`, { headers: ENG }).then((r) => r.json());
-  const subId = detail.latestVersion.files[0].subroutines[0].id as string;
-  const spec = await page.request
-    .get(`${API_BASE}/api/v1/subroutines/${subId}/spec`, { headers: ENG })
-    .then((r) => r.json());
-  if (!spec?.id) return { subId, scaffoldId: null };
-  const sc = await page.request.get(`${API_BASE}/api/v1/specs/${spec.id}/scaffold`, { headers: ENG });
-  if (sc.status() === 404) return { subId, scaffoldId: null };
-  const scBody = await sc.json();
-  return { subId, scaffoldId: scBody.id as string };
-}
 
 test.describe('Phase #4 · Provider Settings surface', () => {
   test.beforeEach(async ({ page }) => {
@@ -61,14 +49,14 @@ test.describe('Phase #4 · Provider Settings surface', () => {
     // are only present when the prompt library has loaded the canonical fortran-extract prompt
     expect(body.promptLibrary).toBeTruthy();
     expect(body.promptLibrary.schemaId).toBe('fortran-f77');
-    expect(body.promptLibrary.targetStack).toBe('dotnet8');
+    expect(body.promptLibrary.targetStack).toBe('dotnet10');
   });
 
   test('Validation page renders the full Provider Settings card with trust chips', async ({ page }) => {
-    const { scaffoldId } = await getKnownIds(page);
-    test.skip(!scaffoldId, 'No SCAFFOLDED CONSUME_ROLL — run demo-path first.');
+    test.setTimeout(300_000);
+    const scaffold = await ensureSeedScaffold(page.request, API_BASE);
 
-    await page.goto(`/scaffolds/${scaffoldId}/validation`);
+    await page.goto(`/scaffolds/${scaffold.id}/validation`);
     await expect(page.getByRole('heading', { name: 'Validation report', level: 1 })).toBeVisible();
 
     // Card is present and labelled
@@ -86,21 +74,13 @@ test.describe('Phase #4 · Provider Settings surface', () => {
   });
 
   test('Spec page renders the compact Provider Settings strip', async ({ page }) => {
-    const { subId } = await getKnownIds(page);
-    test.skip(!subId, 'No CONSUME_ROLL subroutine — seed corpus missing.');
+    const { subroutineId } = await ensureSeedSignedSpec(page.request, API_BASE);
 
-    // Try the review surface first — that's where a SME/observer arrives.
-    // Fall back to the draft page if the spec is not yet in review.
-    const reviewUrl = `/subroutines/${subId}/review`;
-    const draftUrl = `/subroutines/${subId}/spec`;
-    await page.goto(reviewUrl);
-    if ((await page.getByText(/No spec yet/).count()) > 0) {
-      await page.goto(draftUrl);
-    }
+    await page.goto(`/subroutines/${subroutineId}/review`);
 
     const card = page.getByTestId('provider-settings-card');
     await expect(card).toBeVisible();
     // At least one residency-style chip is rendered.
-    await expect(card.getByText(/ZDR|No training|No retention|Enterprise endpoint|Offline/)).toBeVisible();
+    await expect(card.getByText(/ZDR|No training|No retention|Enterprise endpoint|Offline/).first()).toBeVisible();
   });
 });

@@ -78,12 +78,12 @@ test.describe('Phase C.1 · Ingest', () => {
     await expect(page).toHaveURL(/\/(projects|corpora)\/[0-9a-f-]+$/, { timeout: 30_000 });
     await expect(page.getByRole('heading', { name: corpusName, level: 1 })).toBeVisible();
 
-    // Both subroutines should be listed by name with the line ranges fparser2
-    // extracted. The accessible name on the surrounding link is
-    // "L<start>–<end> <NAME> <STATE>" with a Unicode en-dash; matching the
-    // link by name regex sidesteps brittle text= regex escaping.
-    await expect(page.getByRole('link', { name: /L1\D+\d+\s+GREET\s+PARSED/ }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /L14\D+\d+\s+FAREWELL\s+PARSED/ }).first()).toBeVisible();
+    // Both routines should be listed by name with the line ranges fparser2
+    // extracted. Each link reads "<NAME> <state> L<start>–<end>"; a freshly
+    // parsed routine's state is shown as "Not started".
+    const routines = page.getByTestId('project-routines');
+    await expect(routines.getByRole('link', { name: /^GREET\s+Not started\s+L1\D+\d+$/ })).toBeVisible();
+    await expect(routines.getByRole('link', { name: /^FAREWELL\s+Not started\s+L14\D+\d+$/ })).toBeVisible();
 
     // ── Cross-check via the API — parser data, not a stub ────────────
     const corporaResp = await page.request

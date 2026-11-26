@@ -13,26 +13,20 @@
  * the handler (e.g. `btnSubmit_Click` vs `frmOrderEntry.btnSubmit_Click`)
  * so the test is resilient to either form.
  *
- * NO dev/reset — that would wipe the VB6 corpus. Skips cleanly if the
- * seed has not appeared after 60s (synthetic seed is faster than git-
- * clone seeds; the budget is generous).
+ * No dev/reset of its own. Other specs reset the database; the API seeds
+ * the sample again afterwards, so this spec can run in any order. Skips
+ * cleanly if the seed has not appeared after 60s.
  *
  * Recording: demo recording for this routine is on hold per Phase 10
  * scope. The test exists today as the artefact that will drive the
  * demo recording once Phase 10.0 ships green.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { openGeneratedCode, switchPersona, waitForReviewableClaims } from './helpers/persona';
 
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:38080';
 const ENG = { 'X-Dev-Persona': 'engineer' };
 const VB6_NAME = 'VB6 Inventory Sample (Nous)';
-
-async function switchPersona(page: Page, persona: 'engineer' | 'sme') {
-  const label = persona === 'sme' ? 'SME' : 'Engineer';
-  await page.locator('button[aria-haspopup="menu"]').click();
-  await page.getByRole('menuitemradio', { name: new RegExp(`^${label}\\s`) }).click();
-  await page.waitForLoadState('networkidle');
-}
 
 async function findVb6SubmitHandler(
   page: Page,
@@ -149,6 +143,7 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
 
     await test.step('SME accepts every claim + resolves every open question + signs', async () => {
       await switchPersona(page, 'sme');
+      await waitForReviewableClaims(page);
 
       // VB6 claims span the same canonical taxonomy as Delphi / C++:
       // each card has `id="claim-<claim-id>"` so the existing
@@ -214,22 +209,12 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
     });
 
     await test.step('engineer generates scaffold from canonical-vb6-winforms', async () => {
-      const generate = page.getByRole('link', { name: /Generate scaffold/ });
-      const openExisting = page.getByRole('link', { name: /Open scaffold/ });
-      if (await generate.count()) {
-        await generate.click();
-        await expect(page.getByRole('button', { name: /Open scaffold/ })).toBeVisible({
-          timeout: 120_000,
-        });
-        await page.getByRole('button', { name: /Open scaffold/ }).click();
-      } else {
-        await openExisting.click();
-      }
+      await openGeneratedCode(page, 120_000);
       // The WinForms archetype emits 7 source files (OrderEntryForm.cs +
       // OrderRepository.cs + InvoiceExporter.cs + SpecClaimAttribute.cs +
-      // 2 csproj + 1 test file). Heading shape: `N files · M TODOs · dotnet10`.
+      // 2 csproj + 1 test file). Heading shape: `N files · M TODOs · .NET 10`.
       await expect(
-        page.getByRole('heading', { name: /\d+ files · \d+ TODOs · dotnet1[08]/ }),
+        page.getByRole('heading', { name: /\d+ files · \d+ TODOs · \.NET 10/ }),
       ).toBeVisible();
     });
 
@@ -243,13 +228,13 @@ test.describe('VB6 · Inventory Sample demo · frmOrderEntry.btnSubmit_Click end
         .get(`${API_BASE}/api/v1/specs/${spec.id}/audit`, { headers: ENG })
         .then((r) => r.json());
       const types = new Set<string>(audit.data.map((e: { eventType: string }) => e.eventType));
-      expect(types).toEqual(
-        expect.objectContaining(new Set([
+      expect([...types]).toEqual(
+        expect.arrayContaining([
           'spec.extracted',
           'spec.routed',
           'spec.signed',
           'scaffold.generated',
-        ])),
+        ]),
       );
     });
   });

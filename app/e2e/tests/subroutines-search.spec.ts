@@ -4,7 +4,7 @@
  * The previous tests left two corpora ingested (the seed CONSUME_ROLL
  * and the real MINPACK from GitHub). This test:
  *
- *   1. Navigates from the left nav into the new /subroutines page
+ *   1. Navigates from the left nav ("Routines") into the /subroutines page
  *   2. Verifies search picks up matches across BOTH corpora
  *   3. Filters by corpus and confirms the filter narrows correctly
  *   4. Filters by state, confirms it works
@@ -41,11 +41,11 @@ test.describe('Phase C.12 · Cross-corpus search', () => {
 
     // ── Navigate via the left nav ────────────────────────────────────
     await page.goto('/');
-    await page.getByRole('navigation', { name: /Primary/ }).getByRole('link', { name: /^Subroutines$/ }).click();
+    await page.getByRole('navigation', { name: /Primary/ }).getByRole('link', { name: /^Routines$/ }).click();
     await expect(page).toHaveURL(/\/subroutines$/);
-    await expect(page.getByRole('heading', { name: 'Subroutines', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Routines', level: 1 })).toBeVisible();
 
-    // ── Default view is empty; type a query ──────────────────────────
+    // ── Type a query (a search looks at every state) ──────────────────────────
     await page.getByTestId('subroutines-search').fill('HYBR');
     const results = page.getByTestId('search-results');
     await expect(results).toBeVisible();
