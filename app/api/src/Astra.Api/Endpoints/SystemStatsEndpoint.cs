@@ -21,6 +21,38 @@ public static class SystemStatsEndpoint
 {
     public static IEndpointRouteBuilder MapSystemStatsEndpoint(this IEndpointRouteBuilder app)
     {
+        // GET /api/v1/system/problems — what needs someone, for System health: validation runs still "running" long
+        // after any run finishes (a restarted container leaves them stuck; there is no reconciliation yet) and the
+        // validation runs that failed in the last day, each with the routine they belong to.
+        app.MapGet("/api/v1/system/problems", async (AppDbContext db, CancellationToken ct) =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stuckBefore = now.AddMinutes(-30);
+            var since = now.AddDays(-1);
+            var rows = await db.ValidationRuns.AsNoTracking()
+                .Where(v => (v.Status == "RUNNING" && v.StartedAt < stuckBefore)
+                         || ((v.Status == "FAILED" || v.Status == "ERRORED") && v.StartedAt >= since))
+                .OrderByDescending(v => v.StartedAt)
+                .Take(50)
+                .Select(v => new
+                {
+                    id = v.Id,
+                    scaffoldId = v.ScaffoldId,
+                    stage = v.Stage,
+                    status = v.Status,
+                    summary = v.Summary,
+                    startedAt = v.StartedAt,
+                    routineName = v.Spec!.Subroutine!.Name,
+                    subroutineId = v.Spec!.SubroutineId,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(new
+            {
+                stuck = rows.Where(r => r.status == "RUNNING"),
+                failed = rows.Where(r => r.status != "RUNNING"),
+            });
+        });
+
         app.MapGet("/api/v1/system/stats", async (AppDbContext db, CancellationToken ct) =>
         {
             // ── Corpora ──────────────────────────────────────────────

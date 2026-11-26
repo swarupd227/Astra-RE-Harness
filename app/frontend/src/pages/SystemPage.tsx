@@ -3,7 +3,8 @@ import { CheckCircle2, CircleSlash } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { conversationsApi } from '@/lib/conversations';
-import { formatInt, formatMoney, formatPercent } from '@/workspace/format';
+import { systemApi } from '@/lib/api';
+import { formatInt, formatMoney, formatPercent, relativeTime } from '@/workspace/format';
 import { api, type ReadinessDep } from '@/lib/api';
 import { buildInfo } from '@/lib/version';
 import { Card, CardBody, CardHeader } from '@/components/Card';
@@ -157,6 +158,8 @@ export function SystemPage() {
         </CardBody>
       </Card>
 
+      <ProblemsCard />
+
       <Card>
         <CardHeader title="You" />
         <CardBody>
@@ -228,5 +231,47 @@ function DependencyRow({ dep, pulsing }: { dep: ReadinessDep; pulsing: boolean }
         <span className={clsx('text-caption', ok ? 'text-ink-secondary' : 'font-medium text-status-failed')}>{ok ? 'Answering' : 'Down'}</span>
       </div>
     </li>
+  );
+}
+
+const STAGE_WORD: Record<string, string> = { COMPILE: 'Build', TEST_PACK: 'Tests', QUALITY: 'Quality', EQUIVALENCE: 'Equivalence' };
+
+/** Validation runs stuck in "running" (a restart leaves them so) and the ones that failed in the last day. */
+function ProblemsCard() {
+  const q = useQuery({ queryKey: ['system-problems'], queryFn: systemApi.problems, refetchInterval: 60_000, retry: 0 });
+  if (q.isError) return null; // an older API without the endpoint: say nothing rather than show an error
+  const stuck = q.data?.stuck ?? [];
+  const failed = q.data?.failed ?? [];
+  return (
+    <Card>
+      <CardHeader
+        title="Recent problems"
+        description="Validation runs stuck for over 30 minutes, and runs that failed in the last day."
+        action={q.data ? <Badge tone={stuck.length + failed.length ? 'failed' : 'success'}>{stuck.length + failed.length ? `${stuck.length + failed.length} to look at` : 'None'}</Badge> : null}
+      />
+      <CardBody className="p-0">
+        {!q.data ? (
+          <div className="p-6"><Skeleton className="h-10 w-full" /></div>
+        ) : stuck.length + failed.length === 0 ? (
+          <p className="px-6 py-4 text-caption text-ink-secondary">Nothing stuck or failing.</p>
+        ) : (
+          <ul className="divide-y divide-line-subtle" data-testid="system-problems">
+            {[...stuck, ...failed].map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2.5 text-caption">
+                <span className={clsx('font-medium', r.status === 'RUNNING' ? 'text-status-warn' : 'text-status-failed')}>
+                  {r.status === 'RUNNING' ? 'Stuck' : 'Failed'}
+                </span>
+                <span className="text-ink-primary">{STAGE_WORD[r.stage] ?? r.stage}</span>
+                <Link to={`/scaffolds/${r.scaffoldId}/validation`} className="font-mono text-ink-link hover:underline">
+                  {r.routineName}
+                </Link>
+                <span className="min-w-0 flex-1 truncate text-ink-secondary" title={r.summary}>{r.summary}</span>
+                <span className="text-ink-tertiary">{relativeTime(r.startedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
   );
 }

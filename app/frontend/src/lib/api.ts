@@ -2046,6 +2046,20 @@ export const complianceApi = {
   },
 };
 
+export type SystemProblem = {
+  id: string;
+  scaffoldId: string;
+  stage: string;
+  status: string;
+  summary: string;
+  startedAt: string;
+  routineName: string;
+  subroutineId: string;
+};
+export const systemApi = {
+  problems: () => apiFetch<{ stuck: SystemProblem[]; failed: SystemProblem[] }>('/api/v1/system/problems'),
+};
+
 export const notificationsApi = {
   list: (opts: { unreadOnly?: boolean; limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams();
