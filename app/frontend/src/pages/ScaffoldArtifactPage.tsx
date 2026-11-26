@@ -113,15 +113,20 @@ export function ScaffoldArtifactPage() {
       <header className="border-b border-line-subtle bg-raised px-6 py-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link to={`/`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary" aria-label="Back">
+            <Link
+              to={evidence.data?.subroutine?.id ? `/subroutines/${evidence.data.subroutine.id}` : '/scaffolds'}
+              className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
+              aria-label={evidence.data?.subroutine?.name ? `Back to ${evidence.data.subroutine.name}` : 'Back to generated code'}
+            >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-status-warn/10 text-status-scaffolded">
               <Cog className="h-4 w-4" aria-hidden="true" />
             </span>
             <div>
+              {/* Name the routine above the heading (the heading text itself is what the demo specs look for). */}
               <p className="label">
-                Scaffolded package
+                Generated package{evidence.data?.subroutine?.name ? ` · ${evidence.data.subroutine.name}` : ''}
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
                 {sc.fileCount} files · {sc.todoCount} TODOs · {prettyStack(sc.targetPlatform)}
@@ -132,7 +137,7 @@ export function ScaffoldArtifactPage() {
                 </p>
               )}
             </div>
-            <Badge tone={isCommitted ? 'signed' : 'scaffolded'}>{sc.state}</Badge>
+            <Badge tone={isCommitted ? 'signed' : 'scaffolded'}>{isCommitted ? 'Committed' : 'Generated'}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -159,12 +164,16 @@ export function ScaffoldArtifactPage() {
             </button>
             <PreviewButton state={previewState} />
             {!isCommitted && (
-              <Button variant="primary" size="md" onClick={onCommit} loading={committing}>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={onCommit}
+                loading={committing}
+                title="Records a placeholder commit — Git isn't connected for this project yet"
+              >
                 <GitCommit className="h-4 w-4" />
                 Commit to Git
-                <span className="ml-2 rounded-sm border border-on-volt/30 bg-on-volt/10 px-1.5 py-0.5 font-mono text-micro uppercase">
-                  stub
-                </span>
+                <span className="ml-1.5 text-micro font-normal text-ink-tertiary">(not connected)</span>
               </Button>
             )}
             {isCommitted && sc.git && (

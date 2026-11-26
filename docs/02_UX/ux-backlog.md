@@ -34,7 +34,8 @@ commit.
 | 25 | Roles & Permissions | `/platform/roles` | Backlog |
 | 26 | Validation policy | `/platform/validation` | Backlog |
 | 27 | Harmonisation | `/platform/harmonisation` | Backlog |
-| 28+ | Routine extract & live scaffold screens, scaffold detail, validation report… | | To review |
+| 28 | Generated package | `/scaffolds/:id` | Backlog |
+| 29+ | Routine extract & live scaffold screens, validation report (Q2 owner: UX Refresh session)… | | To review |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -322,3 +323,14 @@ commit.
    an Engineer (Admin-only?). Show the button disabled with who can run it, or say "An Admin runs a pass".
 3. Explain when it is worth running: "Needs at least two signed specs in the project — Travel has 31" and show that
    count per project in the picker.
+
+## 28 · Generated package (`/scaffolds/:id`)
+1. **No title says what this is**: the page heads "Scaffolded package" with no routine or project name — add
+   "CalculateApiPremium · Travel insurance demo — React + Python package" and a breadcrumb back to the routine.
+2. **"Commit to Git · STUB"** is an enabled-looking button labelled with an internal word; either hide it until Git
+   commit is wired, or disable it with "Git commit isn't connected for this project yet".
+3. The gate results (build / tests / quality) are not on this page — only a "Validation report" link. Show the three
+   results as a strip under the title (same data as Generated code's Build/Tests columns), with "Fix until green" there.
+4. "SCAFFOLDED" raw state pill and "Scaffolded package" → "Generated package · Ready" / "Tests failing" from the gates.
+5. The preview ("It closes itself at 9:27:48 PM") is good — say how long is left ("closes in 23 min") and offer
+   "Keep it running".
