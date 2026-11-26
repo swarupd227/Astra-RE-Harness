@@ -145,6 +145,25 @@ test.describe('PHP read for the entity graph', () => {
     expect(legacyRel).toContain('references:db.php');
   });
 
+  test('an admin can read a version\'s facts again in place, keeping its routines', async ({ page }) => {
+    test.skip(!phpSidecar, 'needs parser sidecar 0.6+ (PHP-Parser)');
+    const id = await ingest(page);
+    const routinesBefore = (await getJson(page, `/api/v1/corpora/${id}/dependency-graph`)).nodes.map((n: any) => n.id).sort();
+
+    const engineer = await page.request.post(`${API_BASE}/api/v1/corpora/${id}/refresh-facts`, { headers: { 'X-Dev-Persona': 'engineer' } });
+    expect(engineer.status()).toBe(403);
+    const admin = await page.request.post(`${API_BASE}/api/v1/corpora/${id}/refresh-facts`, { headers: { 'X-Dev-Persona': 'admin' }, timeout: 60_000 });
+    expect(admin.status()).toBe(202);
+    expect((await admin.json()).state).toBe('refreshing');
+
+    await expect.poll(async () => {
+      const inv = await getJson(page, `/api/v1/corpora/${id}/inventory`, 'observer');
+      return inv.measures.find((m: any) => m.key === 'routes')?.found;
+    }, { timeout: 120_000 }).toBe(4);
+    const routinesAfter = (await getJson(page, `/api/v1/corpora/${id}/dependency-graph`)).nodes.map((n: any) => n.id).sort();
+    expect(routinesAfter).toEqual(routinesBefore);
+  });
+
   test('the inventory counts routes served apart from endpoints called', async ({ page }) => {
     test.skip(!phpSidecar, 'needs parser sidecar 0.6+ (PHP-Parser)');
     const id = await ingest(page);

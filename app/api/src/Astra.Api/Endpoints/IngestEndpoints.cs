@@ -4,6 +4,7 @@ using Astra.Api.Auth;
 using Astra.Api.Ingest;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Endpoints;
 
@@ -79,6 +80,43 @@ public static class IngestEndpoints
             return r is null
                 ? Results.NotFound(new { error = new { code = "corpus.not_found" } })
                 : Results.Ok(new { corpusId = r.CorpusId, versionId = r.VersionId, files = r.Files, routines = r.Routines, updated = r.Updated, warnings = r.Warnings });
+        });
+
+        // Read a version's code facts again (routes, tables, settings — C# and PHP), in place: after a parser or
+        // detector upgrade, or when a read failed (a batch the sidecar could not answer). Facts are derived, so this
+        // only replaces them and rebuilds the graph; routines, specs and runs keep their ids. A large estate takes
+        // minutes, so it runs on the application's lifetime and the route answers at once.
+        app.MapPost("/api/v1/corpora/{id:guid}/refresh-facts", async (
+            Guid id, Persistence.AppDbContext db, IServiceScopeFactory scopes, IHostApplicationLifetime lifetime,
+            DevPersonaContext actor, Audit.IAuditLogger audit, ILoggerFactory lf, CancellationToken ct) =>
+        {
+            if (actor.Persona != Persona.Admin)
+                return Results.Json(new { error = new { code = "auth.admin_required" } }, statusCode: 403);
+            var corpus = await db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
+            if (corpus is null) return Results.NotFound(new { error = new { code = "corpus.not_found" } });
+            var versionId = corpus.LatestVersionId
+                ?? await db.SourceVersions.Where(v => v.CorpusId == id).OrderByDescending(v => v.IngestedAt)
+                    .Select(v => (Guid?)v.Id).FirstOrDefaultAsync(ct);
+            if (versionId is not { } v) return Results.NotFound(new { error = new { code = "version.not_found" } });
+
+            await audit.LogAsync("corpus.facts_refresh_started", "corpus", id, actor, new { versionId = v }, ct: ct);
+            var log = lf.CreateLogger("Astra.Api.FactsRefresh");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = scopes.CreateScope();
+                    var evidence = scope.ServiceProvider.GetRequiredService<Evidence.EvidenceService>();
+                    var r = await evidence.BuildCodeFactsAsync(v, rebuildGraph: true, lifetime.ApplicationStopping);
+                    log.LogInformation("Facts refreshed for version {Version}: {Files} files, {Entities} entities, {Links} links, {Warnings} warning(s)",
+                        v, r.Files, r.Entities, r.Links, r.Warnings.Count);
+                }
+                catch (Exception ex)
+                {
+                    log.LogError(ex, "Facts refresh failed for version {Version}", v);
+                }
+            });
+            return Results.Accepted($"/api/v1/corpora/{id}/inventory", new { corpusId = id, versionId = v, state = "refreshing" });
         });
 
         grp.MapPost("upload", async (HttpRequest request, IngestRunService runs, DevPersonaContext actor, CancellationToken ct) =>
