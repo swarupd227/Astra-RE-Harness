@@ -121,7 +121,7 @@ function Hero({
               >
                 <Cpu className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
                 <span className="text-ink-tertiary">Provider</span>
-                <span className="font-mono font-semibold text-ink-primary">{provider}</span>
+                <span className="font-semibold text-ink-primary">{provider === 'anthropic' ? 'Claude (Anthropic)' : provider}</span>
                 {model && <span className="font-mono text-ink-tertiary">· {shortModel(model)}</span>}
               </span>
             )}
@@ -176,7 +176,7 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
     {
       label: 'Claude spend',
       value: formatUsd(stats.llm.totalCostUsd),
-      sub: `${stats.llm.totalCalls} call${stats.llm.totalCalls === 1 ? '' : 's'}${stats.llm.avgLatencyMs ? ` · ${(stats.llm.avgLatencyMs / 1000).toFixed(1)}s avg` : ''}`,
+      sub: `${stats.llm.totalCalls.toLocaleString()} call${stats.llm.totalCalls === 1 ? '' : 's'}${stats.llm.avgLatencyMs ? ` · ${(stats.llm.avgLatencyMs / 1000).toFixed(1)}s avg` : ''}`,
       icon: Sparkles,
       tone: 'draft' as const,
     },
@@ -336,9 +336,10 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
                           {c.fileCount.toLocaleString()} file{c.fileCount === 1 ? '' : 's'} · {c.totalLoc.toLocaleString()} LOC · changed {relativeTime(c.updatedAt)}
                         </p>
                       </div>
-                      <Badge tone={c.state === 'PARSED' ? 'signed' : c.state === 'FAILED' ? 'failed' : 'draft'}>
-                        {formatState(c.state)}
-                      </Badge>
+                      {/* Only a state that needs a look earns a badge; "Parsed" on every row said nothing. */}
+                      {c.state !== 'PARSED' && (
+                        <Badge tone={c.state === 'FAILED' ? 'failed' : 'draft'}>{formatState(c.state)}</Badge>
+                      )}
                       <ChevronRight className="h-4 w-4 shrink-0 text-ink-tertiary opacity-0 transition-opacity duration-fast group-hover:opacity-100" />
                     </Link>
                   </li>
@@ -664,10 +665,13 @@ function SignedSpecsCard() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
+/** The shared words: "not started", "with code" — not the engine's PARSED / SCAFFOLDED. */
+const STATE_WORD: Record<string, string> = { PARSED: 'not started', SCAFFOLDED: 'with code', IN_REVIEW: 'in review' };
+
 function subroutineStateSummary(byState: Record<string, number>): string {
   const order = ['PARSED', 'DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDED'];
   const parts = order
-    .map((s) => (byState[s] ? `${byState[s]} ${s.toLowerCase().replace(/_/g, ' ')}` : null))
+    .map((s) => (byState[s] ? `${byState[s].toLocaleString()} ${STATE_WORD[s] ?? s.toLowerCase().replace(/_/g, ' ')}` : null))
     .filter(Boolean) as string[];
   return parts.length === 0 ? 'no subroutines yet' : parts.slice(0, 3).join(' · ');
 }
@@ -721,16 +725,19 @@ function eventBadgeTone(t: string): 'draft' | 'review' | 'signed' | 'scaffolded'
 }
 
 function eventSubject(e: AuditEvent): string {
+  if (e.targetName) return e.targetName;
   const p = (e.payload ?? {}) as Record<string, unknown>;
   if (typeof p.subroutine === 'string') return p.subroutine;
   if (typeof p.name === 'string') return p.name;
   if (typeof p.routine === 'string') return p.routine;
-  return e.targetType;
+  return TARGET_WORD[e.targetType] ?? e.targetType;
 }
+
+const TARGET_WORD: Record<string, string> = { spec: 'a spec', scaffold: 'generated code', corpus: 'a project', subroutine: 'a code unit' };
 
 function shortModel(model: string): string {
   // Trim long anthropic ids like "claude-sonnet-4-5-20250929" to "sonnet 4.5"
   const m = /claude-(sonnet|opus|haiku)-(\d)-(\d)/i.exec(model);
-  if (m) return `${m[1].toLowerCase()} ${m[2]}.${m[3]}`;
+  if (m) return `${m[1].charAt(0).toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2]}.${m[3]}`;
   return model.length > 28 ? model.slice(0, 28) + '…' : model;
 }

@@ -378,3 +378,10 @@ screen. Review it on the next spec an SME signs.
    project's repair loop. **Done:** stuck runs listed first; failed runs grouped by project with counts per check
    (Build 6 · Tests 32), folded; the API returns the project and up to 300 rows.
 9. Comments — fine ("Mark all read" already disabled when nothing is unread).
+10. **Dashboard** — counted test projects (48 projects vs 32 on Home), raw numbers ("62323 parsed", "30997 calls"),
+    "anthropic · sonnet 4.5", a "Parsed" badge on every changed project, activity rows saying "scaffold" / "spec".
+    **Done:** `/system/stats` leaves test projects out (same rule as Home); numbers formatted, state words shared
+    ("not started", "with code"); "Claude (Anthropic) · Sonnet 4.5"; badge only for a state that needs a look; activity
+    rows name the code unit (audit `targetName`).
+11. **Home** — workbook projects said "VB6" (the grammar) where Projects says "VBA". **Done:** the overview says "vba"
+    for VB6-grammar code inside an Office document (display only; stats and assessment targets unchanged).

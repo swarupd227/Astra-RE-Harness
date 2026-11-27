@@ -2342,6 +2342,8 @@ export type AuditEvent = {
   actorDisplay: string;
   targetType: string;
   targetId: string | null;
+  /** The target in words (code unit / project name), from APIs that name it. */
+  targetName?: string | null;
   occurredAt: string;
   payload: Record<string, unknown>;
 };

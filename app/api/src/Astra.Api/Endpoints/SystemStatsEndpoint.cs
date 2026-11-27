@@ -60,13 +60,20 @@ public static class SystemStatsEndpoint
         app.MapGet("/api/v1/system/stats", async (AppDbContext db, CancellationToken ct) =>
         {
             // ── Corpora ──────────────────────────────────────────────
-            var corporaTotal = await db.Corpora.CountAsync(ct);
-            var corporaByState = await db.Corpora.AsNoTracking()
-                .GroupBy(c => c.State)
-                .Select(g => new { state = g.Key, count = g.Count() })
+            // QA / scratch projects (ProjectSettings.IsTestProject) are left out, as on Home and the project list, so
+            // every page counts the same estate. The rule reads the name and settings, so it runs in memory over
+            // the (few dozen) project rows.
+            var allCorpora = await db.Corpora.AsNoTracking()
+                .Select(c => new { c.Id, c.Name, c.SettingsJson, c.State, c.TotalLoc, c.FileCount })
                 .ToListAsync(ct);
-            var totalLoc = await db.Corpora.SumAsync(c => (long?)c.TotalLoc, ct) ?? 0L;
-            var totalFiles = await db.Corpora.SumAsync(c => (long?)c.FileCount, ct) ?? 0L;
+            var real = allCorpora.Where(c => !Artefacts.ProjectSettings.IsTestProject(c.Name, c.SettingsJson)).ToList();
+            var realIds = real.Select(c => c.Id).ToList();
+            var corporaTotal = real.Count;
+            var corporaByState = real.GroupBy(c => c.State)
+                .Select(g => new { state = g.Key, count = g.Count() })
+                .ToList();
+            var totalLoc = real.Sum(c => (long)c.TotalLoc);
+            var totalFiles = real.Sum(c => (long)c.FileCount);
 
             // ── Subroutines (latest-version-only) ────────────────────
             // Mirrors the gating in /api/v1/subroutines so the home count
@@ -76,7 +83,7 @@ public static class SystemStatsEndpoint
                 join f in db.SourceFiles.AsNoTracking() on s.SourceFileId equals f.Id
                 join v in db.SourceVersions.AsNoTracking() on f.SourceVersionId equals v.Id
                 join c in db.Corpora.AsNoTracking() on v.CorpusId equals c.Id
-                where c.LatestVersionId == v.Id
+                where c.LatestVersionId == v.Id && realIds.Contains(c.Id)
                 select s;
             var subsTotal = await subQuery.CountAsync(ct);
             var subsByState = await subQuery

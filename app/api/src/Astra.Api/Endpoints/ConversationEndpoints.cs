@@ -24,6 +24,11 @@ namespace Astra.Api.Endpoints;
 /// </summary>
 public static class ConversationEndpoints
 {
+    /// <summary>A file inside an Office document: "Rating.xlsm/Module1.bas", "Report.docm/ThisDocument.cls".</summary>
+    internal static readonly System.Text.RegularExpressions.Regex OfficeMember = new(
+        @"\.(xls[mbx]?|xlam|docm?|dotm|pptm?|accdb|mdb)/",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     public sealed record PostMessageRequest(string Text);
 
     public static IEndpointRouteBuilder MapConversationEndpoints(this IEndpointRouteBuilder app)
@@ -235,6 +240,17 @@ public static class ConversationEndpoints
             {
                 var thread = await conversations.EnsureProgrammeAsync(c.Id, ct);
                 var (_, _, language) = await conversations.ProgrammeStatsAsync(c, ct);
+                // VBA is read with the VB6 grammar ("vb6"); it lives inside an Office document ("Book.xlsm/Module1.bas").
+                // Say "vba" for those, as the project list does — display only, the stats themselves stay "vb6".
+                if (language == "vb6")
+                {
+                    var candidates = await db.SourceFiles.AsNoTracking()
+                        .Where(f => f.SourceVersionId == c.LatestVersionId
+                            && (f.RelativePath.Contains(".xls") || f.RelativePath.Contains(".doc") || f.RelativePath.Contains(".dot")
+                                || f.RelativePath.Contains(".ppt") || f.RelativePath.Contains(".accdb/") || f.RelativePath.Contains(".mdb/")))
+                        .Select(f => f.RelativePath).Take(50).ToListAsync(ct);
+                    if (candidates.Any(p => OfficeMember.IsMatch(p))) language = "vba";
+                }
                 var counts = await conversations.FunnelAsync(c, ct);
                 var isTest = Artefacts.ProjectSettings.IsTestProject(c.Name, c.SettingsJson);
                 if (!isTest) totals = totals.Add(counts);
