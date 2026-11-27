@@ -44,7 +44,7 @@ public sealed record ProjectSettings
     public static ProjectSettings Default { get; } = new();
 
     private static readonly Regex TestName = new(
-        @"^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        @"^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test|-e2e-\d", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// A QA / scratch project: flagged in its settings, or named like one ("ZZZ-…", "…-DELETE-ME"). Lists hide these

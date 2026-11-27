@@ -70,11 +70,15 @@ export function MissionControl({
   }
   if (!overview) return null;
 
+  // QA / scratch projects (flagged Test, or e2e-named) stay off Home, as they do off the project list and the rail.
+  const programmes = overview.programmes.filter((p) => !p.isTest);
   const t = overview.totals;
   const verified = (t?.scaffolded ?? 0) + (t?.committed ?? 0);
-  const running = overview.programmes.filter((p) => p.latestRun && ACTIVE_RUN.has(p.latestRun.state.toUpperCase())).length;
-  const recent = [...overview.programmes]
-    .sort((a, b) => (b.latestRun?.startedAt ?? '').localeCompare(a.latestRun?.startedAt ?? ''))
+  const running = programmes.filter((p) => p.latestRun && ACTIVE_RUN.has(p.latestRun.state.toUpperCase())).length;
+  // "Where you left off" = the projects that changed most recently (ingest, re-sync, settings), not the last
+  // pattern-analysis run, which most projects never have.
+  const recent = [...programmes]
+    .sort((a, b) => lastTouched(b).localeCompare(lastTouched(a)))
     .slice(0, 3);
 
   return (
@@ -91,7 +95,7 @@ export function MissionControl({
         <Kpi
           icon={Layers}
           label="Programmes"
-          value={formatInt(overview.programmes.length)}
+          value={formatInt(programmes.length)}
           sub={`${formatInt(t?.total)} code units`}
           to="/projects"
           testid="home-kpi-programmes"
@@ -123,7 +127,7 @@ export function MissionControl({
         />
       </ul>
 
-      {overview.programmes.length === 0 ? (
+      {programmes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line px-5 py-6 text-center">
           <p className="text-body font-medium text-ink-primary">No programmes yet</p>
           <p className="mt-1 text-caption text-ink-secondary">Upload source or connect a repository to start.</p>
@@ -161,7 +165,7 @@ export function MissionControl({
                 aria-hidden="true"
               />
               <span className="text-body font-medium text-ink-primary">All programmes</span>
-              <span className="text-caption text-ink-secondary">{formatInt(overview.programmes.length)}</span>
+              <span className="text-caption text-ink-secondary">{formatInt(programmes.length)}</span>
               <span className="ml-auto hidden w-64 md:block">
                 <FunnelBar counts={overview.totals} dense className="[&>div:last-child]:hidden" />
               </span>
@@ -176,7 +180,7 @@ export function MissionControl({
                   <FunnelBar counts={overview.totals} />
                 </div>
                 <ul className="divide-y divide-line-subtle" aria-label="Programmes">
-                  {overview.programmes.map((p) => (
+                  {programmes.map((p) => (
                     <ProgrammeRow key={p.corpusId} p={p} />
                   ))}
                 </ul>
@@ -269,6 +273,12 @@ function Kpi({
   );
 }
 
+function lastTouched(p: OverviewProgramme): string {
+  const run = p.latestRun?.startedAt ?? '';
+  const upd = p.updatedAt && !p.updatedAt.startsWith('0001') ? p.updatedAt : '';
+  return upd > run ? upd : run;
+}
+
 function RecentCard({ p }: { p: OverviewProgramme }) {
   return (
     <li>
@@ -279,19 +289,22 @@ function RecentCard({ p }: { p: OverviewProgramme }) {
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-body font-medium text-ink-primary" title={p.name}>
+            <p className="line-clamp-2 text-body font-medium text-ink-primary" title={p.name}>
               {p.name}
             </p>
             <p className="text-caption text-ink-secondary">
               {formatLanguage(p.sourceLanguage)} · {formatInt(p.counts?.total)} code units
-              {p.latestRun ? ` · ${relativeTime(p.latestRun.startedAt)}` : ''}
+              {lastTouched(p) ? ` · updated ${relativeTime(lastTouched(p))}` : ''}
             </p>
           </div>
-          {p.latestRun && <StatePill state={p.latestRun.state} size="xs" />}
+          {/* Only a run in flight earns a pill; a finished pattern run's "Succeeded" read as the project's status. */}
+          {p.latestRun && ACTIVE_RUN.has(p.latestRun.state.toUpperCase()) && (
+            <StatePill state={p.latestRun.state} size="xs" />
+          )}
         </div>
         <FunnelBar counts={p.counts} dense className="[&>div:last-child]:hidden" />
-        <p className="mt-auto flex items-center gap-1.5 text-caption font-medium text-ink-primary">
-          <span className="truncate">{nextStep(p.counts)}</span>
+        <p className="mt-auto flex items-start gap-1.5 text-caption font-medium text-ink-primary">
+          <span className="min-w-0">{nextStep(p.counts)}</span>
           <ArrowRight
             size={13}
             className="shrink-0 text-ink-tertiary transition-transform group-hover:translate-x-0.5"

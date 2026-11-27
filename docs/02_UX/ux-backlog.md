@@ -357,3 +357,15 @@ Reviewed on one user-approved run: `StartAgain` (27 lines, Actuarial sample - au
 ## 30 · Live code generation (`/specs/:id/scaffold`)
 Not reviewed: it needs a signed spec, and signing is a human SME decision — the agent does not sign specs to reach a
 screen. Review it on the next spec an SME signs.
+
+## Second pass (2026-11-28, live, 1440×900)
+1. **Home** — e2e / QA projects (`php-facts-e2e-…`) showed on Home and in the rail; "Continue where you left off" was
+   ordered by the last pattern-analysis run and carried that run's "Succeeded" pill, which read as the project's status
+   (even on "Nothing ingested yet"); names and next steps were cut off. **Done:** the overview flags `isTest` (e2e names
+   count as test, API and frontend share the rule) and leaves test projects out of the totals; Home lists only real
+   projects, ordered by last change, "updated N ago", a pill only for a run in flight, names on two lines, next step wraps.
+2. **Projects / Code units** — language names raw ("php", "unibasic", "vbnet"); "1 files". **Done:** PHP, UniBasic,
+   VB.NET, VBA, OpenEdge ABL … in the shared formatter; singular file.
+3. **Generated code** — a dozen rows read "__construct" with nothing to tell them apart. **Done:** file name under the name.
+4. **Model provider** — Test connection beside the key status (page 21 item 2). **Done.**
+5. My reviews — fine as is.

@@ -270,6 +270,12 @@ function ProjectGroup({ id, name, rows }: { id: string; name: string; rows: Scaf
                     <Link to={`/scaffolds/${s.id}`} className="block truncate font-mono font-semibold text-ink-primary hover:underline" title={s.sourcePath}>
                       {s.routineName}
                     </Link>
+                    {/* The file tells same-named units apart ("__construct" in a dozen classes). */}
+                    {s.sourcePath && (
+                      <span className="block truncate font-mono text-micro text-ink-tertiary" title={s.sourcePath}>
+                        {s.sourcePath.split('/').pop()}
+                      </span>
+                    )}
                     {s.gitBranch && (
                       <span className="mt-0.5 inline-flex items-center gap-1 font-mono text-micro text-ink-tertiary">
                         <GitBranch size={11} aria-hidden="true" /> {s.gitBranch}

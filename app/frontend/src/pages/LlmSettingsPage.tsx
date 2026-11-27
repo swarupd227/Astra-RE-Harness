@@ -136,6 +136,55 @@ export function LlmSettingsPage() {
             </div>
           </dl>
 
+          {/* Test beside the status it proves: a live, zero-cost call to the models endpoint with the effective key. */}
+          <div className="mt-4 space-y-3 border-t border-line-subtle pt-4" data-testid="llm-test-connection">
+            <Button
+              variant="secondary"
+              onClick={() => test.mutate()}
+              disabled={!isAdmin || !s.keyConfigured || test.isPending}
+              title={!isAdmin ? 'Admin only' : !s.keyConfigured ? 'No key configured' : undefined}
+            >
+              {test.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <PlugZap className="h-4 w-4" />}
+              Test connection
+            </Button>
+
+            {testResult && (
+              <div
+                className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${
+                  testResult.ok
+                    ? 'border-status-ok/40 bg-status-ok/10 text-status-ok'
+                    : 'border-status-fail/40 bg-status-fail/10 text-status-fail'
+                }`}
+                data-testid="llm-test-result"
+              >
+                {testResult.ok
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <div>
+                  {testResult.ok ? (
+                    <>
+                      <p className="font-medium">
+                        Connected to {testResult.endpoint} in {testResult.latencyMs} ms.
+                      </p>
+                      {testResult.models && testResult.models.length > 0 && (
+                        <p className="mt-0.5 font-mono text-xs opacity-80">
+                          models: {testResult.models.join(', ')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="font-medium">{testResult.error}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            <p className="text-caption text-ink-tertiary">
+              Makes a zero-cost call to Anthropic's models endpoint with the key in use now{!isAdmin ? ' · Admin only' : ''}.
+            </p>
+          </div>
+
           {s.requiresRestart && (
             <p className="mt-4 rounded border border-status-warn/40 bg-status-warn/10 px-3 py-2 text-sm text-status-warn">
               A key is saved, but the API started without one and is running the mock
@@ -258,61 +307,6 @@ export function LlmSettingsPage() {
               )}
             </div>
           )}
-        </CardBody>
-      </Card>
-
-      {/* ── Test connection ────────────────────────────────────────── */}
-      <Card>
-        <CardHeader title={<span className="flex items-center gap-2"><PlugZap className="h-4 w-4 text-ink-tertiary" />Test connection</span>} />
-        <CardBody>
-          <div className="space-y-3">
-            <p className="text-sm text-ink-secondary">
-              Makes a live, zero-cost call to the Anthropic models endpoint with the
-              currently effective key.
-            </p>
-            <Button
-              variant="secondary"
-              onClick={() => test.mutate()}
-              disabled={!isAdmin || !s.keyConfigured || test.isPending}
-              title={!isAdmin ? 'Admin only' : !s.keyConfigured ? 'No key configured' : undefined}
-            >
-              {test.isPending
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <PlugZap className="h-4 w-4" />}
-              Test connection
-            </Button>
-
-            {testResult && (
-              <div
-                className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${
-                  testResult.ok
-                    ? 'border-status-ok/40 bg-status-ok/10 text-status-ok'
-                    : 'border-status-fail/40 bg-status-fail/10 text-status-fail'
-                }`}
-                data-testid="llm-test-result"
-              >
-                {testResult.ok
-                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-                <div>
-                  {testResult.ok ? (
-                    <>
-                      <p className="font-medium">
-                        Connected to {testResult.endpoint} in {testResult.latencyMs} ms.
-                      </p>
-                      {testResult.models && testResult.models.length > 0 && (
-                        <p className="mt-0.5 font-mono text-xs opacity-80">
-                          models: {testResult.models.join(', ')}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="font-medium">{testResult.error}</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </CardBody>
       </Card>
 

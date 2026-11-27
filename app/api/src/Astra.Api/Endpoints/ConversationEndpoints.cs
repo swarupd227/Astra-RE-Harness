@@ -236,11 +236,13 @@ public static class ConversationEndpoints
                 var thread = await conversations.EnsureProgrammeAsync(c.Id, ct);
                 var (_, _, language) = await conversations.ProgrammeStatsAsync(c, ct);
                 var counts = await conversations.FunnelAsync(c, ct);
-                totals = totals.Add(counts);
+                var isTest = Artefacts.ProjectSettings.IsTestProject(c.Name, c.SettingsJson);
+                if (!isTest) totals = totals.Add(counts);
                 var run = await db.PatternAnalysisRuns.AsNoTracking()
                     .Where(r => r.CorpusId == c.Id).OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync(ct);
                 programmes.Add(new OverviewProgrammeDto(c.Id, thread.Id, c.Name, language, counts,
-                    run is null ? null : new LatestRunDto(run.Id, "pattern-analysis", run.State, run.StartedAt, run.Summary)));
+                    run is null ? null : new LatestRunDto(run.Id, "pattern-analysis", run.State, run.StartedAt, run.Summary),
+                    c.UpdatedAt, isTest));
             }
 
             var since = DateTimeOffset.UtcNow.Date;

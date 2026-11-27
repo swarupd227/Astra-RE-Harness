@@ -119,8 +119,11 @@ public sealed record FunnelCounts(
 
 public sealed record LatestRunDto(Guid Id, string Kind, string State, DateTimeOffset StartedAt, string Summary);
 
+/// <param name="IsTest">A QA / scratch project (<c>ProjectSettings.IsTestProject</c>): kept in the list so pages that
+/// look a project up by id still find it, but left out of <see cref="OverviewDto.Totals"/> and off Home.</param>
 public sealed record OverviewProgrammeDto(
-    Guid CorpusId, Guid ConversationId, string Name, string? SourceLanguage, FunnelCounts Counts, LatestRunDto? LatestRun);
+    Guid CorpusId, Guid ConversationId, string Name, string? SourceLanguage, FunnelCounts Counts, LatestRunDto? LatestRun,
+    DateTimeOffset UpdatedAt = default, bool IsTest = false);
 
 public sealed record TelemetryDto(decimal CostTodayUsd, int CallsToday, double? P50LatencyMs, double? CacheHitRate);
 

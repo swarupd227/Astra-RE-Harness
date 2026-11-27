@@ -18,7 +18,8 @@ import { absoluteTime, formatInt, formatLanguage, relativeTime } from '@/workspa
 /** A parse that has not finished in a day is stuck, not "in progress". */
 const STUCK_MS = 24 * 60 * 60 * 1000;
 /** Names that mark a QA / scratch project even before anyone flags it in settings. */
-const TEST_NAME = /^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test/i;
+// Same rule as the API's ProjectSettings.IsTestProject (including the e2e suite's "…-e2e-<timestamp>" projects).
+const TEST_NAME = /^zzz[-_ ]|delete[-_ ]?me|[-_ ]proof$|^qa[-_ ]test|-e2e-\d/i;
 
 type Health = 'attention' | 'progress' | 'healthy';
 type SortKey = 'activity' | 'name' | 'progress' | 'size';
@@ -490,7 +491,7 @@ function ProjectsTable({
                   {r.isTestish && <span className="shrink-0 text-micro text-ink-tertiary">test</span>}
                 </div>
                 <p className="mt-0.5 pl-[21px] font-mono text-micro text-ink-tertiary">
-                  {formatInt(r.fileCount)} files · {formatInt(r.totalLoc)} lines
+                  {formatInt(r.fileCount)} file{r.fileCount === 1 ? '' : 's'} · {formatInt(r.totalLoc)} lines
                 </p>
               </td>
               <td className="px-3 py-2.5">
@@ -535,7 +536,7 @@ function ProjectCard({ row: r }: { row: Row }) {
       <p className="flex items-center gap-2 text-caption text-ink-secondary">
         <SourceIcon type={r.sourceType} />
         <span>
-          {r.counts ? `${formatInt(r.counts.total)} code units` : `${formatInt(r.fileCount)} files`} ·{' '}
+          {r.counts ? `${formatInt(r.counts.total)} code units` : `${formatInt(r.fileCount)} file${r.fileCount === 1 ? '' : 's'}`} ·{' '}
           <span title={absoluteTime(r.updatedAt)}>{relativeTime(r.updatedAt)}</span>
         </span>
         {r.isTestish && <span className="text-micro text-ink-tertiary">· test</span>}

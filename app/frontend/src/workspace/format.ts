@@ -113,6 +113,15 @@ const LANGUAGES: Record<string, string> = {
   csharp: 'C#',
   java: 'Java',
   typescript: 'TypeScript',
+  javascript: 'JavaScript',
+  php: 'PHP',
+  unibasic: 'UniBasic',
+  vba: 'VBA',
+  vbnet: 'VB.NET',
+  openedge: 'OpenEdge ABL',
+  abl: 'OpenEdge ABL',
+  python: 'Python',
+  sql: 'SQL',
 };
 
 export function formatLanguage(lang: string | null | undefined): string {

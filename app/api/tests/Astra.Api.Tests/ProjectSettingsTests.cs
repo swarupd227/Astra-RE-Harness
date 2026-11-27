@@ -198,6 +198,8 @@ public class ProjectSettingsTests
     [InlineData("qa-test sample", null, true)]
     [InlineData("Travel insurance demo - rater workbook", null, false)]
     [InlineData("Proofing engine", null, false)]
+    [InlineData("php-facts-e2e-1795692212", null, true)]
+    [InlineData("Release e2e checklist", null, false)]
     [InlineData("Travel insurance demo", "{\"test\":true}", true)]
     [InlineData("Travel insurance demo", "not json", false)]
     public void IsTestProject_ByNameOrSetting(string name, string? settings, bool expected) =>

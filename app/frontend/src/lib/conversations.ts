@@ -125,6 +125,10 @@ export type OverviewProgramme = {
   sourceLanguage: string | null;
   counts: FunnelCounts;
   latestRun: { id: string; kind: string; state: string; startedAt: string; summary: string } | null;
+  /** When the project last changed (ingest, re-sync, settings). Absent from older APIs. */
+  updatedAt?: string;
+  /** A QA / scratch project: left out of the totals and off Home. */
+  isTest?: boolean;
 };
 
 export type Overview = {
