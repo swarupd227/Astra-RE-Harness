@@ -1184,6 +1184,15 @@ export type LlmSettings = {
   keyRejected?: boolean;
   keyRejectedAt?: string | null;
 };
+export type LlmModelsInUse = {
+  days: number;
+  configured: { purpose: string; model: string }[];
+  used: {
+    model: string; purpose: string; calls: number; failures: number; costUsd: number;
+    lastUsedAt: string; prompts: string[];
+  }[];
+};
+
 export type LlmTestResult = {
   ok: boolean;
   latencyMs: number;
@@ -1200,6 +1209,7 @@ export const api = {
 
   // Task #178 — LLM key setup + test connection (admin-only writes)
   getLlmSettings: () => apiFetch<LlmSettings>('/api/v1/settings/llm'),
+  getLlmModels: (days = 30) => apiFetch<LlmModelsInUse>(`/api/v1/settings/llm/models?days=${days}`),
   setLlmKey: (apiKey: string) =>
     apiFetch<LlmSettings>('/api/v1/settings/llm/key', {
       method: 'PUT',

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2, KeyRound, Loader2, PlugZap, RotateCcw, Save, ShieldCheck, XCircle,
+  Boxes, CheckCircle2, KeyRound, Loader2, PlugZap, RotateCcw, Save, ShieldCheck, XCircle,
 } from 'lucide-react';
 import { api, ApiError, type LlmTestResult } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
@@ -26,6 +26,7 @@ export function LlmSettingsPage() {
   const isAdmin = whoami.data?.persona === 'admin';
 
   const settings = useQuery({ queryKey: ['llm-settings'], queryFn: api.getLlmSettings });
+  const models = useQuery({ queryKey: ['llm-models'], queryFn: () => api.getLlmModels(30) });
 
   const [draftKey, setDraftKey] = useState('');
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null);
@@ -105,7 +106,7 @@ export function LlmSettingsPage() {
               </dd>
             </div>
             <div>
-              <dt className="label">Model</dt>
+              <dt className="label">Default model</dt>
               <dd className="mt-0.5 font-mono text-sm text-ink-primary">{s.model}</dd>
             </div>
             <div>
@@ -140,6 +141,71 @@ export function LlmSettingsPage() {
               A key is saved, but the API started without one and is running the mock
               provider. Restart the API service to activate real Claude calls.
             </p>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* ── Models in use ──────────────────────────────────────────── */}
+      {/* One key, several models: each job is configured separately, and what was actually called comes from the
+          call ledger — so "Default model" above is not mistaken for the whole story. */}
+      <Card data-testid="llm-models-in-use">
+        <CardHeader
+          title={<span className="flex items-center gap-2"><Boxes className="h-4 w-4 text-ink-tertiary" />Models in use</span>}
+          description="Every job uses the key above; each picks its own model."
+        />
+        <CardBody>
+          {models.isPending ? (
+            <Skeleton className="h-32 w-full" />
+          ) : models.isError || !models.data ? (
+            <p className="text-sm text-ink-tertiary">Could not load the model list: {String(models.error)}</p>
+          ) : (
+            <div className="space-y-5">
+              <div>
+                <p className="label mb-1.5">Configured</p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {models.data.configured.map((c) => (
+                      <tr key={c.purpose} className="border-t border-line-subtle first:border-t-0">
+                        <td className="py-1.5 pr-4 text-ink-secondary">{c.purpose}</td>
+                        <td className="py-1.5 font-mono text-ink-primary">{c.model}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <p className="label mb-1.5">Called in the last {models.data.days} days</p>
+                {models.data.used.length === 0 ? (
+                  <p className="text-sm text-ink-tertiary">No real model calls in this period.</p>
+                ) : (
+                  <table className="w-full text-sm" data-testid="llm-models-used">
+                    <thead>
+                      <tr className="text-left text-caption text-ink-tertiary">
+                        <th className="pb-1 pr-4 font-medium">Job</th>
+                        <th className="pb-1 pr-4 font-medium">Model</th>
+                        <th className="pb-1 pr-4 text-right font-medium">Calls</th>
+                        <th className="pb-1 pr-4 text-right font-medium">Cost</th>
+                        <th className="pb-1 text-right font-medium">Last used</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {models.data.used.map((u) => (
+                        <tr key={u.model + u.purpose} className="border-t border-line-subtle" title={`Prompts: ${u.prompts.join(', ')}`}>
+                          <td className="py-1.5 pr-4 text-ink-secondary">{u.purpose}</td>
+                          <td className="py-1.5 pr-4 font-mono text-ink-primary">{u.model}</td>
+                          <td className="py-1.5 pr-4 text-right font-mono text-ink-primary">
+                            {u.calls.toLocaleString()}
+                            {u.failures > 0 && <span className="ml-1 text-status-fail">({u.failures.toLocaleString()} failed)</span>}
+                          </td>
+                          <td className="py-1.5 pr-4 text-right font-mono text-ink-secondary">${u.costUsd.toFixed(2)}</td>
+                          <td className="py-1.5 text-right text-ink-tertiary">{new Date(u.lastUsedAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           )}
         </CardBody>
       </Card>
