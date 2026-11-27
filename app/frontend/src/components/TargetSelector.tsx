@@ -61,7 +61,12 @@ export function TargetSelector({
   }
   if (q.isError || !q.data) return null;
 
-  const options = buildStackOptions(q.data.data, sourceLanguage);
+  const all = buildStackOptions(q.data.data, sourceLanguage);
+  // Where the picker is a side note (compact), show only what can be picked — plus the current choice even if it no
+  // longer is — and fold the rest behind one line, so a VB6 routine isn't greeted by five locked cards.
+  const shown = compact ? all.filter((o) => o.selectable || o.stack === value) : all;
+  const folded = compact ? all.filter((o) => !shown.includes(o)) : [];
+  const options = shown;
 
   return (
     <div data-testid="target-selector" className="space-y-2">
@@ -86,7 +91,27 @@ export function TargetSelector({
             onSelect={() => onChange(opt.stack)}
           />
         ))}
+        {options.length === 0 && (
+          <p className="text-caption text-ink-tertiary">
+            No target stack can build {sourceLanguage ? prettySchema(sourceLanguage) : 'this'} code yet.
+          </p>
+        )}
       </div>
+      {folded.length > 0 && (
+        <details className="text-caption" data-testid="target-unavailable">
+          <summary className="cursor-pointer text-ink-tertiary hover:text-ink-primary">
+            {folded.length} more stack{folded.length === 1 ? '' : 's'} not available
+            {sourceLanguage ? ` for ${prettySchema(sourceLanguage)}` : ''}
+          </summary>
+          <ul className="mt-1.5 space-y-0.5 pl-4">
+            {folded.map((o) => (
+              <li key={o.stack} className="text-ink-tertiary" data-testid={`target-unavailable-${o.stack}`}>
+                <span className="text-ink-secondary">{prettyStack(o.stack)}</span> — {o.blockedReason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

@@ -77,7 +77,7 @@ commit.
 1. Review workspace fills the viewport; evidence trail moves into an "Evidence & signature" drawer; dev-posture note Admin-only.
 2. Primary button follows state: Sign spec → Generate code → Open generated code (Regenerate behind "⋯" + confirm).
 3. Re-extract in a "⋯" menu; on a signed spec the confirm names what is replaced.
-4. Target stack: chosen + eligible stacks; ineligible ones folded; consistent names.
+4. Target stack: chosen + eligible stacks; ineligible ones folded; consistent names. **Done:** compact pickers (routine page, regenerate) show eligible + chosen, the rest folded with reasons.
 5. Claim outline chips cut at word boundaries, distinguishing near-duplicates.
 6. One stepper and "Next" logic shared by routine page and spec review; shorter breadcrumb; one status pill.
    **Done (78f1a93):** `WorkflowStatus` — rail + the page's blocker or "Next: action · owner" (switch-persona hint) on both pages.
