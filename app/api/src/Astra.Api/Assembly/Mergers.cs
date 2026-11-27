@@ -48,7 +48,7 @@ internal static class PropertiesMerger
 /// that has the table declares it so — otherwise one unit's inserts would break another's. Tables are ordered so a
 /// foreign key never points at a table created later; other statements are kept once each, in order.
 /// </summary>
-internal static class SchemaMerger
+public static class SchemaMerger
 {
     private static readonly Regex CreateTable = new(
         @"^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`""\[]?[\w.]+[`""\]]?)\s*\((.*)\)\s*([^()]*)$",
@@ -104,8 +104,18 @@ internal static class SchemaMerger
                     tableOrder.Add(key);
                 }
                 if (!t.Units.Contains(unit)) t.Units.Add(unit);
-                foreach (var (name, def) in columns)
+                // A table has one primary key. The first unit's key (inline on a column or a PRIMARY KEY (...) clause)
+                // is kept; a later unit's different key is dropped and reported, never added beside it.
+                var hadKey = HasPrimaryKey(t);
+                var incomingKey = DescribeKey(columns, constraints);
+                if (hadKey && incomingKey is not null && !string.Equals(incomingKey, DescribeKey(t), StringComparison.OrdinalIgnoreCase))
+                    conflicts.Add(new AssemblyConflict("primary-key", t.DisplayName,
+                        $"one unit keys it on {DescribeKey(t)} and another on {incomingKey}; the first is kept.", t.Units.ToList()));
+                foreach (var (name, rawDef) in columns)
                 {
+                    var def = rawDef;
+                    if ((hadKey || HasPrimaryKey(t)) && Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase))
+                        def = Regex.Replace(def, @"\s+PRIMARY\s+KEY\b", " NOT NULL", RegexOptions.IgnoreCase);
                     var notNull = Regex.IsMatch(def, @"\bNOT\s+NULL\b", RegexOptions.IgnoreCase) || Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
                     t.NotNullVotes[name] = t.NotNullVotes.GetValueOrDefault(name) + (notNull ? 1 : 0);
                     if (t.Columns.TryGetValue(name, out var existing))
@@ -121,9 +131,10 @@ internal static class SchemaMerger
                 }
                 foreach (var c in constraints)
                 {
-                    var isPk = Regex.IsMatch(c, @"^PRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
-                    if (isPk && t.Constraints.Any(x => Regex.IsMatch(x, @"^PRIMARY\s+KEY\b", RegexOptions.IgnoreCase))) continue;
-                    if (!t.Constraints.Any(x => Squash(x) == Squash(c))) t.Constraints.Add(c);
+                    var isPk = IsKeyClause(c);
+                    if (isPk && (hadKey || HasPrimaryKey(t))) continue;
+                    // Spacing is not a difference: "REFERENCES t (id)" and "REFERENCES t(id)" are one constraint.
+                    if (!t.Constraints.Any(x => Tight(x) == Tight(c))) t.Constraints.Add(c);
                 }
             }
 
@@ -240,6 +251,28 @@ internal static class SchemaMerger
 
     private static string Bare(string name) => name.Trim('`', '"', '[', ']').ToLowerInvariant();
     private static string Squash(string s) => Regex.Replace(s, @"\s+", " ").Trim().ToLowerInvariant();
+    private static string Tight(string s) => Regex.Replace(s, @"\s+", "").ToLowerInvariant();
+
+    /// <summary>A table-level key clause: PRIMARY KEY (...) or CONSTRAINT name PRIMARY KEY (...).</summary>
+    private static bool IsKeyClause(string c) =>
+        Regex.IsMatch(c, @"^(?:CONSTRAINT\s+[`""\[]?\w+[`""\]]?\s+)?PRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
+
+    private static bool HasPrimaryKey(Table t) =>
+        t.Constraints.Any(IsKeyClause) || t.Columns.Values.Any(d => Regex.IsMatch(d, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase));
+
+    private static string? DescribeKey(Table t) =>
+        DescribeKey(t.Columns.Select(kv => (kv.Key, kv.Value)).ToList(), t.Constraints);
+
+    /// <summary>The key's columns, e.g. "(rowid)" or "(fk_soc, fk_user)"; null when the statement declares none.</summary>
+    private static string? DescribeKey(IReadOnlyList<(string Name, string Def)> columns, IReadOnlyList<string> constraints)
+    {
+        var inline = columns.FirstOrDefault(c => Regex.IsMatch(c.Def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase));
+        if (inline.Name is not null) return $"({inline.Name.ToLowerInvariant()})";
+        var clause = constraints.FirstOrDefault(IsKeyClause);
+        if (clause is null) return null;
+        var cols = Regex.Match(clause, @"PRIMARY\s+KEY\s*\(([^)]*)\)", RegexOptions.IgnoreCase).Groups[1].Value;
+        return "(" + string.Join(", ", cols.Split(',').Select(x => Bare(x.Trim()))) + ")";
+    }
 }
 
 /// <summary>

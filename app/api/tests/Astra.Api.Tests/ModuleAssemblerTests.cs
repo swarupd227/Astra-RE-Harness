@@ -266,6 +266,29 @@ public class ModuleAssemblerTests
     }
 
     [Fact]
+    public void A_table_keeps_one_primary_key_and_one_copy_of_each_constraint()
+    {
+        // Two units keyed the same link table differently (seen on a real estate: H2 refused the merged table with
+        // "Attempt to define a second primary key", and every test whose context needed the schema failed).
+        var a = "CREATE TABLE IF NOT EXISTS links (\n rowid BIGINT AUTO_INCREMENT PRIMARY KEY,\n fk_soc BIGINT NOT NULL,\n fk_user BIGINT NOT NULL,\n FOREIGN KEY (fk_soc) REFERENCES soc (rowid)\n);";
+        var b = "CREATE TABLE IF NOT EXISTS links (\n fk_soc BIGINT NOT NULL,\n fk_user BIGINT NOT NULL,\n PRIMARY KEY (fk_soc, fk_user),\n FOREIGN KEY (fk_soc) REFERENCES soc(rowid),\n UNIQUE (fk_soc, fk_user)\n);";
+        var c = "CREATE TABLE IF NOT EXISTS other (\n id BIGINT NOT NULL,\n PRIMARY KEY (id)\n);\nCREATE TABLE IF NOT EXISTS other (\n id BIGINT PRIMARY KEY\n);";
+        var conflicts = new List<AssemblyConflict>();
+        var schema = SchemaMerger.Merge(new[] { ("a", a), ("b", b), ("c", c) }, conflicts, new List<SharedItem>(), new List<string>());
+
+        var links = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS links \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(links, "PRIMARY KEY"));
+        Assert.Contains("rowid BIGINT AUTO_INCREMENT PRIMARY KEY", links);                         // the first unit's key wins
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(links, "FOREIGN KEY"));          // spacing is not a difference
+        Assert.Contains("UNIQUE (fk_soc, fk_user)", links);                                       // other constraints still merge
+        Assert.Contains(conflicts, x => x.Kind == "primary-key" && x.Name == "links");
+
+        var other = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS other \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(other, "PRIMARY KEY"));          // same key, two spellings
+        Assert.DoesNotContain(conflicts, x => x.Kind == "primary-key" && x.Name == "other");
+    }
+
+    [Fact]
     public void Properties_and_pom_are_merged_and_disagreements_reported()
     {
         var m = Build();
