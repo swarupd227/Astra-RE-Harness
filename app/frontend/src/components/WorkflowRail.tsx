@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 
 /**
  * The workflow spine — five steps from ingested source to generated code,
@@ -188,5 +189,49 @@ export function WorkflowRail({
         );
       })}
     </nav>
+  );
+}
+
+/**
+ * The rail plus one line saying what happens now — the same on the routine page and in spec review, so "where am
+ * I and what next" reads identically wherever the routine is open. A page passes `reason` when the next step is
+ * blocked for a page-specific cause (claims still undecided, no claims); otherwise the line names the next action and
+ * its owner, and says so when that owner is not the active persona.
+ */
+export function WorkflowStatus({
+  state,
+  persona,
+  reason,
+  className,
+}: {
+  state: string | null | undefined;
+  persona?: Persona | null;
+  /** A page-specific blocker, shown instead of the generic next step. */
+  reason?: ReactNode;
+  className?: string;
+}) {
+  const next = nextStepFor(state);
+  const notYours = !next.done && !!persona && persona !== next.owner && persona !== 'admin';
+  return (
+    <div className={clsx('flex flex-wrap items-center justify-between gap-x-6 gap-y-2', className)}>
+      <WorkflowRail state={state} persona={persona} />
+      {reason ?? (
+        <p className="text-caption text-ink-secondary" data-testid="workflow-next">
+          {next.done ? (
+            <>Done: <strong className="text-ink-primary">code generated from the signed spec</strong></>
+          ) : (
+            <>
+              Next: <strong className="text-ink-primary">{next.action}</strong>
+              <span className="text-ink-tertiary"> · {next.ownerLabel}</span>
+              {notYours && (
+                <span className="text-ink-tertiary">
+                  {' '}— the {next.ownerLabel}'s step; switch persona in the menu at the top right to act.
+                </span>
+              )}
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }

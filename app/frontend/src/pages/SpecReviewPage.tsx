@@ -26,7 +26,7 @@ import { ProviderSettingsCard } from '@/components/ProviderSettingsCard';
 import { TargetSelector } from '@/components/TargetSelector';
 import { isOfficeDocumentPath, prettySchema, prettyStack } from '@/lib/targetStacks';
 import { useTargetStack } from '@/hooks/useTargetStack';
-import { WorkflowRail } from '@/components/WorkflowRail';
+import { WorkflowStatus } from '@/components/WorkflowRail';
 import { SignatureHealthBadge } from '@/components/SignatureHealthBadge';
 import { MonacoSource, type Citation } from '@/components/MonacoSource';
 import { OutlinePane, type OutlineItem } from '@/components/OutlinePane';
@@ -399,35 +399,36 @@ export function SpecReviewPage() {
         {/* Where this routine sits in the workflow, and — when the primary
             CTA is disabled — why. A tooltip alone is not discoverable on a
             disabled control. */}
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <WorkflowRail state={sp.state} persona={whoami.data?.persona as any} />
-          {inReview && noClaims && (
-            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
-              {NO_CLAIMS_REASON}{' '}
-              <Link to={`/subroutines/${s.id}`} className="text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
-                Open the routine
-              </Link>
-            </p>
-          )}
-          {inReview && !noClaims && !isSme && (
-            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
-              Sign-off is the <strong className="text-ink-secondary">SME</strong>'s step — switch persona
-              in the menu at the top right to act on this spec.
-            </p>
-          )}
-          {inReview && isSme && preconditionFailures.length > 0 && (
-            <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
-              <strong className="text-ink-secondary">{preconditionFailures.length}</strong>{' '}
-              claim{preconditionFailures.length === 1 ? '' : 's'} still need a decision before this spec can be signed.
-            </p>
-          )}
-          {signed && whoami.data?.persona !== 'engineer' && (
-            <p className="text-caption text-ink-tertiary" data-testid="scaffold-blocked-reason">
-              Code generation is the <strong className="text-ink-secondary">Engineer</strong>'s step — switch
-              persona to choose a target stack and generate.
-            </p>
-          )}
-        </div>
+        <WorkflowStatus
+          className="mt-2"
+          state={sp.state}
+          persona={whoami.data?.persona as any}
+          reason={
+            inReview && noClaims ? (
+              <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+                {NO_CLAIMS_REASON}{' '}
+                <Link to={`/subroutines/${s.id}`} className="text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
+                  Open the routine
+                </Link>
+              </p>
+            ) : inReview && !isSme ? (
+              <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+                Sign-off is the <strong className="text-ink-secondary">SME</strong>'s step — switch persona
+                in the menu at the top right to act on this spec.
+              </p>
+            ) : inReview && preconditionFailures.length > 0 ? (
+              <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
+                <strong className="text-ink-secondary">{preconditionFailures.length}</strong>{' '}
+                claim{preconditionFailures.length === 1 ? '' : 's'} still need a decision before this spec can be signed.
+              </p>
+            ) : signed && whoami.data?.persona !== 'engineer' ? (
+              <p className="text-caption text-ink-tertiary" data-testid="scaffold-blocked-reason">
+                Code generation is the <strong className="text-ink-secondary">Engineer</strong>'s step — switch
+                persona to choose a target stack and generate.
+              </p>
+            ) : null
+          }
+        />
       </header>
 
       <div className="flex items-center justify-end gap-3 border-b border-line-subtle bg-raised px-6 py-1">

@@ -11,7 +11,7 @@ import { Button } from '@/components/Button';
 import { MonacoSource } from '@/components/MonacoSource';
 import { TargetSelector } from '@/components/TargetSelector';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { WorkflowRail, nextStepFor } from '@/components/WorkflowRail';
+import { WorkflowStatus, nextStepFor } from '@/components/WorkflowRail';
 import { PageHero } from '@/components/PageHero';
 import { useTargetStack } from '@/hooks/useTargetStack';
 import { isOfficeDocumentPath, prettySchema, prettyStack } from '@/lib/targetStacks';
@@ -78,7 +78,6 @@ export function SubroutineDetailPage() {
   // `sourceLanguage` since ingest, the frontend type just omitted it).
   const officeVba = isOfficeDocumentPath(s.file.relativePath);
   const help = officeVba ? null : helpForSchemaId(s.sourceLanguage);
-  const next = nextStepFor(s.state);
   // Any state past PARSED means a spec exists whose reviews re-extraction
   // would discard.
   const hasExistingSpec = ['DRAFT', 'IN_REVIEW', 'SIGNED', 'SCAFFOLDED'].includes(s.state);
@@ -127,13 +126,11 @@ export function SubroutineDetailPage() {
       />
 
       {/* Where this routine is in the workflow, and what happens next. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-line-subtle bg-raised px-4 py-2.5">
-        <WorkflowRail state={s.state} persona={whoami.data?.persona as any} />
-        <p className="text-caption text-ink-secondary">
-          Next: <strong className="text-ink-primary">{next.action}</strong>
-          <span className="text-ink-tertiary"> · {next.ownerLabel}</span>
-        </p>
-      </div>
+      <WorkflowStatus
+        state={s.state}
+        persona={whoami.data?.persona as any}
+        className="rounded-lg border border-line-subtle bg-raised px-4 py-2.5"
+      />
 
       {help && (
         <div
