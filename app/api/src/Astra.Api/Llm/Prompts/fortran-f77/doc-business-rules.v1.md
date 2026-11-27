@@ -1,6 +1,6 @@
 ---
 id: fortran-doc-business-rules
-version: v2.0
+version: v2.1
 schemaId: fortran-f77
 targetStack: doc
 kind: doc-business-rules

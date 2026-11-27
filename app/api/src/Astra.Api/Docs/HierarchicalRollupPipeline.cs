@@ -36,9 +36,9 @@ namespace Astra.Api.Docs;
 public sealed class HierarchicalRollupPipeline
 {
     public const string ModulePromptId = "fortran-doc-module";
-    public const string ModulePromptVersion = "v3.0";
+    public const string ModulePromptVersion = "v3.1";
     public const string OverviewPromptId = "fortran-doc-overview";
-    public const string OverviewPromptVersion = "v2.0";
+    public const string OverviewPromptVersion = "v2.1";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -117,6 +117,7 @@ public sealed class HierarchicalRollupPipeline
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var blob = scope.ServiceProvider.GetRequiredService<IBlobClient>();
         var classifier = scope.ServiceProvider.GetRequiredService<RoutineTierClassifier>();
+        var language = await DocLanguage.DominantAsync(db, sourceVersionId, ct);
 
         var rows = await db.DocSections
             .AsNoTracking()
@@ -192,7 +193,7 @@ public sealed class HierarchicalRollupPipeline
                 await sem.WaitAsync(ct);
                 try
                 {
-                    await WriteModuleAsync(captured, tiers, index, diagrams, blob, runId, corpusId, sourceVersionId, ct);
+                    await WriteModuleAsync(captured, tiers, index, diagrams, blob, runId, corpusId, sourceVersionId, language, ct);
                     lock (lockObj) { successCount++; }
                 }
                 catch (Exception ex)
@@ -216,7 +217,7 @@ public sealed class HierarchicalRollupPipeline
         DocCitations.CorpusIndex index,
         IReadOnlyDictionary<string, string> diagrams,
         IBlobClient blob,
-        Guid runId, Guid corpusId, Guid sourceVersionId,
+        Guid runId, Guid corpusId, Guid sourceVersionId, string? language,
         CancellationToken ct)
     {
         var moduleName = ModuleNameOf(group.RelativePath);
@@ -278,7 +279,7 @@ public sealed class HierarchicalRollupPipeline
 
         var request = new DocWriteRequest(
             ModulePromptId, ModulePromptVersion,
-            _assets.SystemBlocks(_modulePrompt, "module"),
+            _assets.SystemBlocks(_modulePrompt, "module", language),
             userMessage,
             "emit_module_document", "Emit the module document as markdown plus its structured meta.",
             ModuleToolSchema,
@@ -344,6 +345,7 @@ public sealed class HierarchicalRollupPipeline
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var classifier = scope.ServiceProvider.GetRequiredService<RoutineTierClassifier>();
+        var language = await DocLanguage.DominantAsync(db, sourceVersionId, ct);
 
         var modules = await db.DocSections
             .AsNoTracking()
@@ -427,7 +429,7 @@ public sealed class HierarchicalRollupPipeline
 
             var request = new DocWriteRequest(
                 OverviewPromptId, OverviewPromptVersion,
-                _assets.SystemBlocks(_overviewPrompt, "overview"),
+                _assets.SystemBlocks(_overviewPrompt, "overview", language),
                 userMessage,
                 "emit_system_overview", "Emit the system overview as markdown plus its structured meta.",
                 OverviewToolSchema,

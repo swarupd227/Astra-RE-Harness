@@ -15,15 +15,17 @@ public sealed class DocPromptAssets
     public string RevisePrompt { get; }
 
     private readonly IReadOnlyDictionary<string, string> _exemplars;
+    private readonly IReadOnlyDictionary<string, string> _languages;
 
     private DocPromptAssets(
         string styleGuide, string criticPrompt, string revisePrompt,
-        IReadOnlyDictionary<string, string> exemplars)
+        IReadOnlyDictionary<string, string> exemplars, IReadOnlyDictionary<string, string>? languages = null)
     {
         StyleGuide = styleGuide;
         CriticPrompt = criticPrompt;
         RevisePrompt = revisePrompt;
         _exemplars = exemplars;
+        _languages = languages ?? new Dictionary<string, string>();
     }
 
     public static DocPromptAssets Load(string contentRoot)
@@ -39,7 +41,65 @@ public sealed class DocPromptAssets
             if (path is not null)
                 exemplars[kind] = StripFrontmatter(File.ReadAllText(path));
         }
-        return new DocPromptAssets(style, critic, revise, exemplars);
+        var guidancePath = TryResolvePath(contentRoot, "docs", "language-guidance.md");
+        var languages = guidancePath is null
+            ? new Dictionary<string, string>()
+            : ParseLanguageGuidance(StripFrontmatter(File.ReadAllText(guidancePath)));
+        return new DocPromptAssets(style, critic, revise, exemplars, languages);
+    }
+
+    /// <summary>
+    /// The language-guidance file as language id → block. Each <c>## id, id</c> heading opens a block that serves
+    /// every id it lists; <c>default</c> serves languages without their own.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ParseLanguageGuidance(string text)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string[]? ids = null;
+        var body = new System.Text.StringBuilder();
+        void Flush()
+        {
+            if (ids is null) return;
+            var block = "# Source language\n\n" + body.ToString().Trim() + "\n";
+            foreach (var id in ids) map[id] = block;
+        }
+        foreach (var raw in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (raw.StartsWith("## ", StringComparison.Ordinal))
+            {
+                Flush();
+                ids = raw[3..].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                body.Clear();
+            }
+            else if (ids is not null) body.AppendLine(raw);
+        }
+        Flush();
+        return map;
+    }
+
+    /// <summary>The language-guidance file under a content root, parsed; empty when it does not ship.</summary>
+    public static IReadOnlyDictionary<string, string> LoadLanguageGuidance(string contentRoot) =>
+        TryResolvePath(contentRoot, "docs", "language-guidance.md") is { } p
+            ? ParseLanguageGuidance(StripFrontmatter(File.ReadAllText(p)))
+            : new Dictionary<string, string>();
+
+    /// <summary>The guidance block for a source language (its own, else <c>default</c>), or null when none ships.</summary>
+    public string? LanguageBlock(string? language) => LanguageBlock(_languages, language);
+
+    /// <summary><see cref="LanguageBlock(string?)"/> over a given guidance map.</summary>
+    public static string? LanguageBlock(IReadOnlyDictionary<string, string> _languages, string? language)
+    {
+        if (_languages.Count == 0) return null;
+        if (!string.IsNullOrWhiteSpace(language) && _languages.TryGetValue(language.Trim(), out var own)) return own;
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            // fortran-f77-like ids: try the family before the dash (php-8 → php).
+            var family = language.Split('-', 2)[0];
+            if (_languages.TryGetValue(family, out var fam)) return fam;
+        }
+        return _languages.TryGetValue("default", out var d)
+            ? d.Replace("as named in the input", string.IsNullOrWhiteSpace(language) ? "not recorded" : language)
+            : null;
     }
 
     /// <summary>Exemplar for a section kind, or null when none ships.
@@ -52,17 +112,24 @@ public sealed class DocPromptAssets
 
     /// <summary>
     /// System blocks for a writer call, in order: style guide, exemplar (when
-    /// one exists for the kind), then the kind prompt. The writer marks the
-    /// last block with cache_control so the whole prefix is cached.
+    /// one exists for the kind), the kind prompt, then the source language's
+    /// guidance (when a language is given). The writer marks the last block with
+    /// cache_control so the whole prefix is cached — once per language.
     /// </summary>
-    public IReadOnlyList<string> SystemBlocks(string kindPrompt, string? exemplarKind)
+    public IReadOnlyList<string> SystemBlocks(string kindPrompt, string? exemplarKind, string? language = null)
     {
-        var blocks = new List<string>(3) { StyleGuide };
+        var blocks = new List<string>(4) { StyleGuide };
         if (exemplarKind is not null && Exemplar(exemplarKind) is { } exemplar)
             blocks.Add(exemplar);
         blocks.Add(kindPrompt);
+        if (language is not null && LanguageBlock(language) is { } guidance)
+            blocks.Add(guidance);
         return blocks;
     }
+
+    /// <summary>A single system prompt (pipelines that send one string) with the language's guidance appended.</summary>
+    public string WithLanguage(string systemPrompt, string? language) =>
+        language is not null && LanguageBlock(language) is { } guidance ? systemPrompt.TrimEnd() + "\n\n" + guidance : systemPrompt;
 
     /// <summary>Read a prompt file under Llm/Prompts and strip its YAML frontmatter.</summary>
     public static string ReadPrompt(string contentRoot, params string[] segments) =>

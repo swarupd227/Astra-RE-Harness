@@ -29,7 +29,7 @@ namespace Astra.Api.Docs;
 public sealed class RoutineSummaryPipeline
 {
     public const string PromptId = "fortran-doc-summary";
-    public const string PromptVersion = "v2.0";
+    public const string PromptVersion = "v2.1";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DocsOptions _docsOpts;
@@ -225,7 +225,7 @@ public sealed class RoutineSummaryPipeline
 
             var request = new DocWriteRequest(
                 PromptId, PromptVersion,
-                _assets.SystemBlocks(_prompt, "routine-summary"),
+                _assets.SystemBlocks(_prompt, "routine-summary", sub.SourceLanguage),
                 user,
                 "emit_routine_summary", "Emit the routine's transition-documentation summary as structured fields.",
                 RoutineSummaryToolSchema,

@@ -1,6 +1,6 @@
 ---
 id: fortran-doc-module
-version: v3.0
+version: v3.1
 schemaId: fortran-f77
 targetStack: doc
 kind: doc-module
@@ -35,7 +35,7 @@ Write these sections in this order, skipping any that has nothing true to say:
 1. `# <title>` — the file name and a noun phrase for what it is, e.g. `# lmder.f — Levenberg–Marquardt driver with analytic Jacobian`.
 2. An opening paragraph or two: what the file is for, in the domain's terms; where it sits (who calls it, what it depends on); the one thing a reader must know before touching it.
 3. `## What it provides` — the routines an outside caller uses, and what each is for. Prose when there are a few; a `Routine | Purpose` table when there are more than five. Routines that only serve other routines in the same file belong under *How it works*, not here.
-4. `## How it works` — the strategy shared across routines: the algorithm, the data flow, state carried in COMMON blocks or unit-level variables, error-reporting conventions, precision variants. This is where reading the source pays off. Cite lines.
+4. `## How it works` — the strategy shared across routines: the algorithm, the data flow, shared state (COMMON blocks, unit-level or global variables, sessions, static fields, database tables), error-reporting conventions, precision variants. This is where reading the source pays off. Cite lines.
 5. `## Working in this file` — the constraints an engineer must respect when editing: the order things must happen in, invariants between routines, conventions that must be kept. One paragraph is often enough.
 6. `## Risks and traps` — only what the summaries and source show: unchecked bounds, silent no-ops, numeric limits, shared state. Bulleted, each with a citation. Skip the section when there are none.
 7. `## Routine map` — one line per routine in the file, in source order: `` `NAME` `` — role in one clause — citation. Use a table when the file has more than eight routines. Every routine named in the input appears here, including any listed under `omitted.dropped_routines` (say "not read — dropped for budget" for those). The reviewer checks coverage.

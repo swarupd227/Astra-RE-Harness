@@ -459,10 +459,11 @@ public sealed class CatalogPipeline
         try
         {
             var built = await build(db, scope.ServiceProvider, ct);
+            var language = await DocLanguage.DominantAsync(db, sourceVersionId, ct);
             var prose = ProseKinds.Contains(sectionKind);
             var request = new DocWriteRequest(
-                PromptIdFor(sectionKind), prose ? "v2.0" : "v1.0",
-                _assets.SystemBlocks(systemPrompt, exemplarKind),
+                PromptIdFor(sectionKind), prose ? "v2.1" : "v1.1",
+                _assets.SystemBlocks(systemPrompt, exemplarKind, language),
                 built.UserMessage,
                 "emit_catalogue", "Emit the catalogue entries.",
                 prose ? ProseCatalogueToolSchema : StructuredCatalogueToolSchema,

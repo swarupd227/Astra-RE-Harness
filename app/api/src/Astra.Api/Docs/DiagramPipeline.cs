@@ -30,11 +30,12 @@ namespace Astra.Api.Docs;
 public sealed class DiagramPipeline
 {
     private const string SequencePromptId = "fortran-doc-sequence-diagram";
-    private const string SequencePromptVersion = "v1.0";
+    private const string SequencePromptVersion = "v1.1";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DocsOptions _docsOpts;
     private readonly string _sequencePrompt;
+    private readonly IReadOnlyDictionary<string, string> _languageGuidance;
     private readonly AnthropicOptions _anthropic;
     private readonly string _baseUrl;
     private readonly string _apiVersion;
@@ -65,7 +66,12 @@ public sealed class DiagramPipeline
         var promptPath = candidates.FirstOrDefault(File.Exists)
             ?? throw new FileNotFoundException("doc-sequence-diagram prompt not found.");
         _sequencePrompt = StripFrontmatter(File.ReadAllText(promptPath));
+        _languageGuidance = DocPromptAssets.LoadLanguageGuidance(env.ContentRootPath);
     }
+
+    /// <summary>The sequence prompt with the routine's source-language guidance appended (same block the other doc writers get).</summary>
+    private string WithLanguage(string prompt, string? language) =>
+        DocPromptAssets.LanguageBlock(_languageGuidance, language) is { } g ? prompt.TrimEnd() + "\n\n" + g : prompt;
 
     public sealed record StageOutcome(int Diagrams, int Failed, int Skipped);
 
@@ -166,7 +172,7 @@ public sealed class DiagramPipeline
 
                     var userMessage = BuildSequenceUserMessage(captured.Name, summary, callees, routineLines);
                     var payload = await CallAnthropicAsync(
-                        httpFactory, _docsOpts.SonnetModel, _sequencePrompt, userMessage, ct);
+                        httpFactory, _docsOpts.SonnetModel, WithLanguage(_sequencePrompt, captured.SourceLanguage), userMessage, ct);
 
                     using var doc = JsonDocument.Parse(payload);
 
