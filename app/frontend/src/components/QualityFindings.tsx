@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { API_BASE, type QualityCategory, type QualityFinding, type QualityMetrics, type QualitySeverity, type ValidationRun } from '@/lib/api';
 import { Card, CardBody } from '@/components/Card';
+import { withToken } from '@/lib/auth';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 
@@ -127,7 +128,7 @@ export function QualityFindingsCard({
             )}
             {metrics?.sbom && run && (
               <a
-                href={`${API_BASE}/api/v1/scaffolds/${run.scaffoldId}/sbom`}
+                href={withToken(`${API_BASE}/api/v1/scaffolds/${run.scaffoldId}/sbom`)}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-block text-caption text-ink-secondary underline decoration-line-subtle underline-offset-2 hover:text-ink-primary"

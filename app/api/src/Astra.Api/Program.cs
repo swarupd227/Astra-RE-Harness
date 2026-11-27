@@ -94,6 +94,7 @@ else
 // ─── Dev-persona auth shim (Phase A; OIDC replaces this in Phase C) ───
 builder.Services.Configure<DevPersonaOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.AddScoped<DevPersonaContext>();
+builder.Services.AddScoped<Astra.Api.Auth.AuthService>();
 
 // ─── Seed pipeline ────────────────────────────────────────────────────
 builder.Services.AddScoped<ConsumeRollSeed>();
@@ -595,6 +596,29 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_evidence_chunks_version_kind
               ON evidence_chunks (source_version_id, kind);
             ALTER TABLE evidence_chunks ADD COLUMN IF NOT EXISTS ordinal integer NOT NULL DEFAULT 0;
+            """);
+
+        // Sign-in (Auth:Mode=password): people and their sessions. Only password and token hashes are stored.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                id               uuid          PRIMARY KEY,
+                username         varchar(64)   NOT NULL UNIQUE,
+                display_name     varchar(120)  NOT NULL,
+                personas         varchar(64)   NOT NULL,
+                password_hash    varchar(256)  NOT NULL,
+                failed_attempts  integer       NOT NULL DEFAULT 0,
+                locked_until     timestamptz   NULL,
+                created_at       timestamptz   NOT NULL DEFAULT now()
+            );
+            """);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS app_sessions (
+                id          uuid         PRIMARY KEY,
+                user_id     uuid         NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+                token_hash  varchar(64)  NOT NULL UNIQUE,
+                created_at  timestamptz  NOT NULL DEFAULT now(),
+                expires_at  timestamptz  NOT NULL
+            );
             """);
 
         // WS7 K7 — the claims read from narrative evidence, checked against structured evidence (one document per version).
@@ -1285,6 +1309,19 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ─── Sign-in: the first admin (Auth:Mode=password only) ───────────────
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        await scope.ServiceProvider.GetRequiredService<Astra.Api.Auth.AuthService>().EnsureBootstrapAdminAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Creating the first admin failed");
+    }
+}
+
 // ─── Orphaned-run cleanup ─────────────────────────────────────────────
 // Docs, pattern-analysis, and harmonisation runs execute as in-process
 // fire-and-forget tasks; a container restart kills them mid-flight and
@@ -1358,6 +1395,7 @@ app.UseCors();
 app.UseMiddleware<DevPersonaMiddleware>();
 
 app.MapHealthEndpoints();
+app.MapAuthEndpoints();
 app.MapWhoamiEndpoint();
 app.MapSystemStatsEndpoint();
 // Task #178 — apply any UI-stored LLM key before serving, then expose the

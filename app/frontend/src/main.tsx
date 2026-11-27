@@ -9,7 +9,11 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { App } from './App';
+import { installAuth } from './lib/auth';
 import './index.css';
+
+// Every API request from this page carries the sign-in session (password mode); before anything renders.
+installAuth();
 
 const queryClient = new QueryClient({
   defaultOptions: {

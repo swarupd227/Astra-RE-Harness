@@ -1,6 +1,8 @@
 import { LlmKeyBanner } from '@/components/PlatformStatus';
 import { useCallback, useEffect, useState } from 'react';
-import { Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { LoginPage } from '@/pages/LoginPage';
+import { fetchAuthMode, getToken, signOut } from '@/lib/auth';
 import { TopBar } from '@/shell/TopBar';
 import { LeftNav } from '@/shell/LeftNav';
 import { MobileNav } from '@/shell/MobileNav';
@@ -101,6 +103,20 @@ export function App() {
       if (chordTimer) clearTimeout(chordTimer);
     };
   }, [navigate, openHelp]);
+
+  // Sign-in gate (the API's password mode): nothing of the platform shows before a session exists.
+  const location = useLocation();
+  const [authMode, setAuthMode] = useState<'password' | 'dev-header' | null>(null);
+  useEffect(() => {
+    void fetchAuthMode().then(setAuthMode);
+  }, []);
+  useEffect(() => {
+    if (location.pathname === '/logout') void signOut();
+  }, [location.pathname]);
+  if (location.pathname === '/login') return <LoginPage />;
+  if (authMode === 'password' && !getToken()) {
+    return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />;
+  }
 
   return (
     <EvidenceProvider>

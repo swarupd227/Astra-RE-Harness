@@ -15,6 +15,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<EvidenceChunk> EvidenceChunks => Set<EvidenceChunk>();
     public DbSet<FileFactsRow> FileFacts => Set<FileFactsRow>();
     public DbSet<ClaimSetRow> ClaimSets => Set<ClaimSetRow>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<AppSession> AppSessions => Set<AppSession>();
     public DbSet<GraphEntity> GraphEntities => Set<GraphEntity>();
     public DbSet<GraphLink> GraphLinks => Set<GraphLink>();
     public DbSet<Spec> Specs => Set<Spec>();
@@ -194,6 +196,34 @@ public sealed class AppDbContext : DbContext
         });
 
         // WS7 K7 — the claims read from narrative evidence and what structured evidence says about them.
+        modelBuilder.Entity<AppUser>(b =>
+        {
+            b.ToTable("app_users");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.Username).HasColumnName("username").HasMaxLength(64).IsRequired();
+            b.HasIndex(x => x.Username).IsUnique();
+            b.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(120).IsRequired();
+            b.Property(x => x.Personas).HasColumnName("personas").HasMaxLength(64).IsRequired();
+            b.Property(x => x.PasswordHash).HasColumnName("password_hash").HasMaxLength(256).IsRequired();
+            b.Property(x => x.FailedAttempts).HasColumnName("failed_attempts");
+            b.Property(x => x.LockedUntil).HasColumnName("locked_until");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<AppSession>(b =>
+        {
+            b.ToTable("app_sessions");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.UserId).HasColumnName("user_id");
+            b.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+            b.HasIndex(x => x.TokenHash).IsUnique();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            b.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ClaimSetRow>(b =>
         {
             b.ToTable("claim_sets");

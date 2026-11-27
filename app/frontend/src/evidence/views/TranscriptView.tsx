@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { Play } from 'lucide-react';
 import { artefactContentUrl } from '@/lib/api';
+import { withToken } from '@/lib/auth';
 import { Button } from '@/components/Button';
 import { SourceLines, textOf, type EvidenceBodyProps } from '@/evidence/views/DefaultBody';
 
@@ -85,7 +86,7 @@ export function TranscriptView({ detail }: EvidenceBodyProps) {
             ref={player}
             controls
             preload="metadata"
-            src={artefactContentUrl(audio.fileId)}
+            src={withToken(artefactContentUrl(audio.fileId))}
             className="w-full"
             data-testid="transcript-audio"
             onTimeUpdate={(e) => {

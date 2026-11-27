@@ -13,6 +13,7 @@ import {
   artefactContentUrl,
 } from '@/lib/api';
 import { fromDrop, fromPicker, formatBytes } from '@/lib/artefactFiles';
+import { withToken } from '@/lib/auth';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardBody, CardHeader } from '@/components/Card';
@@ -394,7 +395,7 @@ function FileList({
               {f.lineCount > 0 ? ` · ${f.lineCount.toLocaleString()} lines` : ''}
             </span>
             <a
-              href={`${artefactContentUrl(f.id)}?download=1`}
+              href={withToken(`${artefactContentUrl(f.id)}?download=1`)}
               download
               className="shrink-0 text-micro text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
               data-testid="artefact-file-download"
