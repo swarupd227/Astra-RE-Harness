@@ -105,12 +105,15 @@ function ProgrammeLink({
 }) {
   const title = conversation.programme?.name ?? conversation.title;
   const preview = conversation.lastMessagePreview ?? 'No messages yet';
-  const initials = title
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
+  // Initials from words that start with a letter or digit: "HUGE (plain PHP …)" → "HP", not "H(".
+  const initials =
+    title
+      .split(/[\s\-–—_/]+/)
+      .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ''))
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join('') || '·';
 
   const className = ({ isActive }: { isActive: boolean }) =>
     clsx(

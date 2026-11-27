@@ -385,3 +385,9 @@ screen. Review it on the next spec an SME signs.
     rows name the code unit (audit `targetName`).
 11. **Home** — workbook projects said "VB6" (the grammar) where Projects says "VBA". **Done:** the overview says "vba"
     for VB6-grammar code inside an Office document (display only; stats and assessment targets unchanged).
+12. **Rail** — programme avatars took punctuation ("H(", "S(", "O("). **Done:** initials from words starting with a
+    letter or digit ("HUGE (plain PHP …)" → "HP").
+13. **Signature Health** — "By corpus" chart squeezed ~20 projects onto a 130 px vertical bar chart (two clipped
+    labels). **Done:** "By project", horizontal bars with readable names, drifted first, on its own row under the tiles.
+14. **Golden Dataset** — "Schema" filter listed raw ids (fortran-f77, vbnet). **Done:** "Language" with names (values
+    unchanged).

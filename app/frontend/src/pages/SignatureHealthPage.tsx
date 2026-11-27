@@ -87,7 +87,7 @@ export function SignatureHealthPage() {
         lead="Signed specifications across all projects. A signature drifts when its project is re-synced after signing, and needs re-verification."
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_1fr_2fr]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard testId="signature-stat-signed" label="Signed specs" value={q.data.totalSigned} icon={BadgeCheck} accent="indigo" />
         <KpiCard testId="signature-stat-healthy" label="Healthy"      value={q.data.totalSigned - q.data.drifted} icon={ShieldCheck} accent="emerald" />
         <KpiCard
@@ -98,8 +98,8 @@ export function SignatureHealthPage() {
           accent={q.data.drifted > 0 ? 'rose' : 'slate'}
           alert={q.data.drifted > 0}
         />
-        <SigHealthByCorpusChart rows={q.data.rows} />
       </div>
+      <SigHealthByCorpusChart rows={q.data.rows} />
 
       {actionError && <ErrorBlock title="Re-verify failed" message={actionError} />}
 
@@ -260,22 +260,24 @@ function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
   // Non-visual equivalent — summarise healthy vs drifted for assistive tech.
   const totalHealthy = data.reduce((n, d) => n + d.Healthy, 0);
   const totalDrifted = data.reduce((n, d) => n + d.Drifted, 0);
-  const chartLabel = `Signature health by corpus across ${data.length} ${
-    data.length === 1 ? 'corpus' : 'corpora'
+  const chartLabel = `Signature health by project across ${data.length} ${
+    data.length === 1 ? 'project' : 'projects'
   }: ${totalHealthy} healthy, ${totalDrifted} drifted.`;
+  // One bar per project, drifted first then largest: names stay readable instead of two clipped axis labels.
+  const sorted = [...data].sort((a, b) => b.Drifted - a.Drifted || b.Healthy + b.Drifted - (a.Healthy + a.Drifted));
 
   return (
     <div className="card p-4">
-      <p className="label mb-2">By corpus</p>
+      <p className="label mb-2">By project</p>
       {data.length === 0 ? (
         <p className="text-[12px] text-ink-secondary">No signed specs yet.</p>
       ) : (
-        <div style={{ width: '100%', height: 130 }} role="img" aria-label={chartLabel}>
+        <div style={{ width: '100%', height: Math.max(90, sorted.length * 22 + 40) }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
-            <BarChart data={data} margin={{ top: 0, right: 4, left: -16, bottom: -4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-              <XAxis dataKey="name" tick={{ fontSize: 9, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} />
-              <YAxis tick={{ fontSize: 9, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} allowDecimals={false} />
+            <BarChart data={sorted} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 9, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={{ stroke: ct.grid }} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" width={210} tick={{ fontSize: 10, fill: ct.tick }} axisLine={{ stroke: ct.grid }} tickLine={false} interval={0} />
               <Tooltip contentStyle={{ ...ct.tooltip, fontSize: 11 }} itemStyle={{ color: ct.tooltip.color }} cursor={{ fill: ct.grid, opacity: 0.4 }} />
               <Legend iconType="circle" formatter={ct.legendText} wrapperStyle={{ ...ct.legend, fontSize: 10, paddingTop: 0 }} />
               <Bar dataKey="Healthy" stackId="a" fill={ct.ok} />
@@ -289,5 +291,5 @@ function SigHealthByCorpusChart({ rows }: { rows: SignatureHealth[] }) {
 }
 
 function shortName(name: string): string {
-  return name.length > 22 ? `${name.slice(0, 20)}…` : name;
+  return name.length > 34 ? `${name.slice(0, 32)}…` : name;
 }

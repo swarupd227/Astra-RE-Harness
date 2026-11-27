@@ -1,3 +1,4 @@
+import { formatLanguage } from '@/workspace/format';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Play, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
@@ -160,7 +161,7 @@ export function GoldenDatasetPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Filter
-              label="Schema"
+              label="Language"
               value={schemaFilter}
               onChange={setSchemaFilter}
               options={['all', ...schemas]}
@@ -738,7 +739,7 @@ function Filter({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {o === 'all' ? 'All languages' : formatLanguage(o)}
           </option>
         ))}
       </select>
