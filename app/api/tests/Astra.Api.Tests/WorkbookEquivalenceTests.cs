@@ -204,6 +204,23 @@ public class WorkbookEquivalenceTests
     }
 
     [Fact]
+    public void A_package_for_a_signed_cell_contract_must_offer_its_entry_point_and_the_repair_digest_carries_why()
+    {
+        var spec = JsonDocument.Parse(Spec).RootElement;
+        var missing = WorkbookContract.EntryPointProblem(spec, _ => null);
+        Assert.Contains("backend/app/contract.py is missing", missing);
+        Assert.Contains("is missing", WorkbookContract.EntryPointProblem(spec, p => p == "backend/app/other.py" ? "x" : null));
+        Assert.Contains("no top-level", WorkbookContract.EntryPointProblem(spec, _ => "class C:\n    def run(self, inputs): pass\n"));
+        Assert.Null(WorkbookContract.EntryPointProblem(spec, _ => "import json\n\ndef run(inputs: dict) -> dict:\n    return {}\n"));
+        Assert.Null(WorkbookContract.EntryPointProblem(JsonDocument.Parse("{\"invariants\":[]}").RootElement, _ => null));
+
+        var digest = GateFailureDigest.Parse("COMPILE", "=== cell contract entry point ===\nerror WCC001: " + missing + "\n");
+        var e = Assert.Single(digest.Errors);
+        Assert.Equal("WCC001", e.Code);
+        Assert.Contains("def run(inputs: dict) -> dict", digest.ToRepairHint());
+    }
+
+    [Fact]
     public void The_canned_answer_has_every_response_field()
     {
         var canned = WorkbookEquivalenceRunner.Canned(Contract().Requests[0]);

@@ -92,6 +92,24 @@ public sealed record WorkbookContract(
         return new(inputs, selections, outputs, requests, ids);
     }
 
+    /// <summary>
+    /// Why a React + Python package does not offer the entry point its signed cell contract needs, or null when it does
+    /// (or the spec has no cell contract). <paramref name="readFile"/> reads a package file by its path, null when absent.
+    /// </summary>
+    public static string? EntryPointProblem(JsonElement spec, Func<string, string?> readFile)
+    {
+        if (spec.ValueKind != JsonValueKind.Object || !spec.TryGetProperty("workbook_cell_contracts", out var w)
+            || w.ValueKind != JsonValueKind.Array || w.GetArrayLength() == 0) return null;
+        var text = readFile("backend/app/contract.py");
+        if (text is null)
+            return "backend/app/contract.py is missing. The signed spec has a workbook cell contract, so the package must add " +
+                   "backend/app/contract.py with `def run(inputs: dict) -> dict`: inputs keyed by the contract's field names " +
+                   "(selections as lists of marked ids), returning the contract's output fields. The equivalence gate calls it.";
+        return Regex.IsMatch(text, @"^def\s+run\s*\(", RegexOptions.Multiline)
+            ? null
+            : "backend/app/contract.py has no top-level `def run(inputs: dict) -> dict`, the entry point the equivalence gate calls.";
+    }
+
     /// <summary>The id of the item on <paramref name="row"/>, or null when it is read from a column whose value is not a whole number.</summary>
     public static int? IdFor(Selection s, int row, Func<string, object?> cellValue)
     {

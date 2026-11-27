@@ -425,7 +425,16 @@ public sealed class CompileValidator
                 ? await RunNpmBuildAsync(frontendDir, ct)
                 : (-1, "=== frontend/ directory missing from scaffold ===\n");
 
+            // A package for a workbook routine with a signed cell contract must offer the entry point the equivalence
+            // gate calls; without it the gate could only skip, so the build is not finished.
+            var specJson = await _db.Specs.AsNoTracking().Where(s => s.Id == scaffold.SpecId).Select(s => s.SpecJson).FirstOrDefaultAsync(ct);
+            var entryProblem = specJson is null ? null : WorkbookEquivalence.WorkbookContract.EntryPointProblem(specJson.RootElement,
+                rel => File.Exists(Path.Combine(tempDir, rel)) ? File.ReadAllText(Path.Combine(tempDir, rel)) : null);
+            if (entryProblem is not null && pyExit == 0) pyExit = 2;
+
             var combinedLogText = new StringBuilder()
+                // "error WCC001: …" so the repair digest (GateFailureDigest.BareError) hands it to the regeneration.
+                .AppendLine(entryProblem is null ? "" : "=== cell contract entry point ===\nerror WCC001: " + entryProblem + "\n")
                 .AppendLine("=== backend (pip install + compileall + import every module) ===").AppendLine(pyLog).AppendLine()
                 .AppendLine("=== frontend (npm install + tsc + vite build) ===").AppendLine(npmLog)
                 .ToString();
@@ -457,7 +466,8 @@ public sealed class CompileValidator
                 run.Status = "FAILED";
                 run.ErrorCode = "compile.build_failed";
                 var parts = new List<string>();
-                if (pyExit != 0) parts.Add(importFailures > 0 ? $"backend: {importFailures} module{(importFailures == 1 ? "" : "s")} failed to import" : $"backend exit {pyExit}");
+                if (entryProblem is not null) parts.Add("backend: no app/contract.py run() for the signed cell contract");
+                else if (pyExit != 0) parts.Add(importFailures > 0 ? $"backend: {importFailures} module{(importFailures == 1 ? "" : "s")} failed to import" : $"backend exit {pyExit}");
                 if (npmExit != 0) parts.Add($"frontend exit {npmExit}");
                 run.Summary = $"Build failed · {string.Join(", ", parts)}";
             }
