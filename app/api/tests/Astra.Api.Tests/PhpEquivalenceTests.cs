@@ -268,6 +268,8 @@ public class PhpEquivalenceTests
         Assert.Equal("SKIPPED", EquivalenceComparer.Compare(O("""{"ok":true,"returnValue":1}"""),
             O("""{"ok":true,"exception":{"class":"NotSupplied","message":"m"},"unsupplied":["OrderRepository.findById"]}""")).Status);
         Assert.Equal("SKIPPED", EquivalenceComparer.Compare(O("""{"ok":true,"returnValue":1}"""), O("""{"ok":false,"inputError":"input \"abc\" for qty has no Java value"}""")).Status);
+        foreach (var msg in new[] { "Call to a member function query() on null", "Undefined constant \\\"DOL_DOCUMENT_ROOT\\\"", "Call to undefined method Societe::fetch()" })
+            Assert.Equal("SKIPPED", EquivalenceComparer.Compare(O($$$"""{"ok":true,"exception":{"class":"Error","message":"{{{msg}}}"}}"""), O("""{"ok":true,"returnValue":1}""")).Status);
         Assert.Equal("ERRORED", EquivalenceComparer.Compare(O("""{"ok":false,"timedOut":true}"""), O("""{"ok":true}""")).Status);
         Assert.Equal("ERRORED", EquivalenceComparer.Compare(O("""{"ok":true,"returnValue":1}"""), null).Status);
     }

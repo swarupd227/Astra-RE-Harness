@@ -31,6 +31,8 @@ final class State
     public static string $root = '';
     public static ?float $started = null;
     public static bool $calling = false;
+    public static array $stubs = [];
+    public static array $loaded = [];
 }
 
 function write_result(): void
@@ -396,7 +398,10 @@ function load_index(): void
             }
             return;
         }
-        require_once $snippet;
+        // Not require_once: a snippet whose declaration failed (a parent not yet stubbed) must load again on retry.
+        if (isset(State::$loaded[$snippet])) return;
+        require $snippet;
+        State::$loaded[$snippet] = true;
     });
     // functions first (they may name classes, which autoload)
     foreach (State::$index['functionFiles'] as $f) {
@@ -431,6 +436,12 @@ function locate(array $entry): array
             }
         }
     }
+    // A class hint that matches nothing (the parser names the enclosing type its own way) is dropped: the name and
+    // the line still say which routine it is.
+    if (!$cands && $class !== null) {
+        $entry['className'] = null;
+        return locate($entry);
+    }
     if (!$cands) throw new \RuntimeException("routine '$name' is not declared in the supplied files");
     usort($cands, fn($a, $b) => $b[0] <=> $a[0]);
     return $cands[0][1];
@@ -439,8 +450,48 @@ function locate(array $entry): array
 function reflect(array $loc): \ReflectionFunctionAbstract
 {
     if ($loc['kind'] === 'function') return new \ReflectionFunction($loc['fqn']);
-    $rc = new \ReflectionClass($loc['class']);
-    return $rc->getMethod($loc['name']);
+    // The method's class may extend a class (or implement an interface, use a trait) declared in a file that was not
+    // supplied — a framework base class such as Dolibarr's CommonObject. That type is stubbed as an empty declaration
+    // written by the driver (its name checked to be an identifier; nothing from the request is evaluated) and noted;
+    // a routine that then relies on the stub's behaviour fails visibly and the vector is skipped by the comparer.
+    for ($attempt = 0; $attempt < 24; $attempt++) {
+        try {
+            $rc = new \ReflectionClass($loc['class']);
+            // Constant expressions in defaults are evaluated lazily; evaluate them here, inside the retry.
+            for ($c = $rc; $c !== false; $c = $c->getParentClass()) {
+                $c->getConstants();
+                $c->getDefaultProperties();
+            }
+            return $rc->getMethod($loc['name']);
+        } catch (\Error | \ReflectionException $e) {
+            // A class declaration that names a constant the application defines while it boots (osTicket's
+            // TICKET_TABLE, Dolibarr's MAIN_DB_PREFIX): the constant stands in as its own name, and that is noted.
+            if (preg_match('/^Undefined constant "([A-Za-z_][A-Za-z0-9_]*)"$/', $e->getMessage(), $c) && !defined($c[1])) {
+                define($c[1], $c[1]);
+                State::$stubs[] = 'constant ' . $c[1];
+                continue;
+            }
+            if (!preg_match('/^(Class|Interface|Trait) "([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)" not found/', $e->getMessage(), $m)) throw $e;
+            if (strcasecmp(ltrim($m[2], '\\'), ltrim($loc['class'], '\\')) === 0) throw $e;   // never stub the routine's own class
+            stub_type(strtolower($m[1]), $m[2]);
+        }
+    }
+    throw new \RuntimeException('too many missing types around ' . $loc['class']);
+}
+
+function stub_type(string $kind, string $fqn): void
+{
+    $fqn = ltrim($fqn, '\\');
+    $pos = strrpos($fqn, '\\');
+    $ns = $pos === false ? '' : substr($fqn, 0, $pos);
+    $short = $pos === false ? $fqn : substr($fqn, $pos + 1);
+    $word = $kind === 'interface' ? 'interface' : ($kind === 'trait' ? 'trait' : 'class');
+    // A stubbed base class accepts any constructor arguments and any property, so the subclass can be built.
+    $decl = $word === 'class' ? "#[\\AllowDynamicProperties]\nclass $short { public function __construct(...\$a) {} }" : "$word $short {}";
+    $snippet = State::$root . '/.astra-stub-' . md5($fqn) . '.php';
+    file_put_contents($snippet, "<?php\n" . ($ns !== '' ? "namespace $ns;\n" : '') . $decl . "\n");
+    require_once $snippet;
+    State::$stubs[] = $word . ' ' . $fqn;
 }
 
 function describe(\ReflectionFunctionAbstract $f): array
@@ -612,6 +663,7 @@ function run_vector(array $req): void
         return;
     }
     State::$result['routine'] = describe($f);
+    State::$result['stubs'] = State::$stubs;
     apply_superglobals(isset($vector['superglobals']) ? (array) $vector['superglobals'] : []);
     $refs = [];
     $notes = [];
@@ -628,6 +680,10 @@ function run_vector(array $req): void
         return;
     }
     if ($f instanceof \ReflectionMethod) $f->setAccessible(true);
+    foreach (State::$stubs as $s)
+        $notes[] = str_starts_with($s, 'constant ')
+            ? "$s is defined when the application boots; it stands in as its own name here"
+            : "$s is not in the supplied files; an empty stand-in was declared";
     State::$result['notes'] = $notes;
     $sessionBefore = json_encode(normalize($_SESSION));
     State::$calling = true;
@@ -665,6 +721,7 @@ function inspect(array $req): void
     load_index();
     try {
         State::$result['routine'] = describe(reflect(locate($req['entry'])));
+        State::$result['stubs'] = State::$stubs;
         State::$result['ok'] = true;
     } catch (\Throwable $e) {
         State::$result['loadError'] = get_class($e) . ': ' . $e->getMessage();

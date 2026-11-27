@@ -26,6 +26,11 @@ public static partial class EquivalenceComparer
     [GeneratedRegex(@"Call to undefined (?:function|method) ([\w\\:]+)|Class ""?([\w\\]+)""? not found|Interface ""?([\w\\]+)""? not found", RegexOptions.IgnoreCase)]
     private static partial Regex MissingSymbol();
 
+    // The routine reached something the run cannot give it: a collaborator or global that is null here, a constant the
+    // application defines at boot (DOL_DOCUMENT_ROOT, ABSPATH, …), a method a stubbed base class does not have.
+    [GeneratedRegex(@"Call to a member function (\w+)\(\) on null|Undefined constant ""?([\w\\]+)""?|Call to undefined method ([\w\\]+::\w+)", RegexOptions.IgnoreCase)]
+    private static partial Regex MissingEnvironment();
+
     public static Verdict Compare(JsonObject? php, JsonObject? java)
     {
         var notes = new List<string>();
@@ -44,6 +49,13 @@ public static partial class EquivalenceComparer
             var cls = Str(phpEx, "class") ?? "Error";
             if ((cls is "TypeError" or "ArgumentCountError") && SignatureMismatch().IsMatch(msg))
                 return new(Skipped, $"The inputs do not fit the PHP signature ({cls}: {msg}).", null, notes);
+            if (MissingEnvironment().Match(msg) is { Success: true } me)
+            {
+                var what = me.Groups[1].Success ? $"`{me.Groups[1].Value}()` on an object it does not have here (a global or an injected collaborator)"
+                    : me.Groups[2].Success ? $"the constant `{me.Groups[2].Value}`, which the application defines when it boots"
+                    : $"`{me.Groups[3].Value}()`, which a base class outside the supplied files would provide";
+                return new(Skipped, $"The PHP routine reaches {what}; the run cannot supply it.", null, notes);
+            }
             if (MissingSymbol().Match(msg) is { Success: true } ms)
             {
                 var sym = ms.Groups.Cast<Group>().Skip(1).FirstOrDefault(g => g.Success)?.Value ?? "a symbol";

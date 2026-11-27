@@ -168,6 +168,49 @@ def test_methods_classes_across_files_and_constructorless_instances():
     assert run("money", [{"id": "m", "args": [1, 2.5]}])["results"][0]["returnValue"] == "3.50"
 
 
+def test_a_base_class_outside_the_supplied_files_is_stubbed_and_a_wrong_class_hint_is_ignored():
+    src = """<?php
+require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+class Societe extends CommonObject implements Lockable
+{
+    public $db;
+    public function __construct($db) { $this->db = $db; }
+    public function check_code($code) { return preg_match('/^[A-Z]{2}[0-9]{4}$/', $code) ? 0 : -1; }
+    public function load($id) { return $this->db->query("SELECT 1"); }
+}
+"""
+    body = {"files": [{"path": "htdocs/societe/class/societe.class.php", "content": src}],
+            "entry": {"name": "check_code", "path": "htdocs/societe/class/societe.class.php", "line": 7, "className": "Societe extends CommonObject"},
+            "vectors": [{"id": "ok", "args": ["CU0001"]}, {"id": "bad", "args": ["x"]}]}
+    res = client.post("/run", json=body).json()
+    by = {r["id"]: r for r in res["results"]}
+    assert by["ok"]["returnValue"] == 0 and by["bad"]["returnValue"] == -1
+    assert any("CommonObject" in n for n in by["ok"]["notes"])
+    assert sorted(by["ok"]["stubs"]) == ["class CommonObject", "interface Lockable"]
+    body["entry"]["name"] = "load"
+    body["vectors"] = [{"id": "db", "args": [1]}]
+    r = client.post("/run", json=body).json()["results"][0]
+    assert "on null" in r["exception"]["message"]
+
+
+def test_a_boot_time_constant_in_a_class_declaration_stands_in_as_its_own_name():
+    src = """<?php
+class Ticket {
+    static $meta = array('table' => TICKET_TABLE, 'pk' => array('ticket_id'));
+    var $ticket_pid;
+    function isChild($pid=false) { return ($this->ticket_pid || $pid); }
+    function table() { return static::$meta['table']; }
+}
+"""
+    files = [{"path": "include/class.ticket.php", "content": src}]
+    res = client.post("/run", json={"files": files, "entry": {"name": "isChild"},
+                                    "vectors": [{"id": "a", "named": {"pid": 5}}, {"id": "b", "named": {"pid": 0}}]}).json()
+    assert [r["returnValue"] for r in res["results"]] == [True, False]
+    assert any("TICKET_TABLE" in n for n in res["results"][0]["notes"])
+    r = client.post("/run", json={"files": files, "entry": {"name": "table"}, "vectors": [{"args": []}]}).json()["results"][0]
+    assert r["returnValue"] == "TICKET_TABLE"
+
+
 def test_guarded_function_declarations_are_kept():
     body = {"files": [{"path": "legacy.php", "content": GUARDED}], "entry": {"name": "legacy_round"},
             "vectors": [{"id": "g", "args": [2.345]}]}
