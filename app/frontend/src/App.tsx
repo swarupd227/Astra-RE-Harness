@@ -106,7 +106,7 @@ export function App() {
     <EvidenceProvider>
     {/* The shell is exactly one screen and never scrolls itself: <main> (and the nav) are the only scroll boxes, so the
         browser never shows a second scrollbar beside the app's. */}
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas text-ink-primary">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-canvas text-ink-primary">
       <a
         href="#main-content"
         className="sr-only z-50 rounded-md bg-volt px-4 py-2 text-body font-medium text-on-volt focus:not-sr-only focus:absolute focus:left-3 focus:top-2"
@@ -121,7 +121,7 @@ export function App() {
         <LeftNav />
         {/* <main> is the scroll container: the Workspace fills it (h-full);
             legacy pages scroll inside it under the fixed chrome. */}
-        <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas">
+        <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas">
           <Routes>
             {/* The conversation is the primary surface. */}
             <Route path="/" element={<WorkspacePage />} />
