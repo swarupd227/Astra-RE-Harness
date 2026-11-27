@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, AlertTriangle, X, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
+import { parsePartialJson } from '@/lib/partialSpec';
 import {
   applyPatch,
   streamExtraction,
@@ -162,23 +163,35 @@ export function LiveExtractionPage() {
     return () => window.clearInterval(timer);
   }, [status, errorMessage, id, navigate]);
 
+  // A real provider only sends structured patches when it has finished, so while it writes, the spec is read from the
+  // text streamed so far: the summary and each claim appear as rows the moment they are complete.
+  const deferredText = useDeferredValue(streamedText);
+  const shownDraft: DraftSpec = useMemo(() => {
+    if (Object.keys(draft).length > 0 || !deferredText) return draft;
+    const partial = parsePartialJson(deferredText);
+    return partial && typeof partial === 'object' ? (partial as DraftSpec) : {};
+  }, [draft, deferredText]);
+  const claimsSoFar =
+    (shownDraft.invariants?.length ?? 0) + (shownDraft.side_effects?.length ?? 0) + (shownDraft.edge_cases?.length ?? 0);
+
   const citations: Citation[] = useMemo(() => {
     const all: Citation[] = [];
     const collect = (lines: string, tone?: 'accent') => {
+      if (typeof lines !== 'string') return;
       const r = parseRange(lines);
       if (r) all.push({ lineStart: r[0], lineEnd: r[1], tone });
     };
-    draft.invariants?.forEach((i) =>
+    shownDraft.invariants?.forEach((i) =>
       i.citations?.forEach((c) => collect(c.lines, activeCitation === c.lines ? 'accent' : undefined)),
     );
-    draft.side_effects?.forEach((s) =>
+    shownDraft.side_effects?.forEach((s) =>
       s.citations?.forEach((c) => collect(c.lines, activeCitation === c.lines ? 'accent' : undefined)),
     );
-    draft.edge_cases?.forEach((e) =>
+    shownDraft.edge_cases?.forEach((e) =>
       e.citations?.forEach((c) => collect(c.lines, activeCitation === c.lines ? 'accent' : undefined)),
     );
     return all;
-  }, [draft, activeCitation]);
+  }, [shownDraft, activeCitation]);
 
   if (sub.isPending || source.isPending) {
     return (
@@ -277,7 +290,13 @@ export function LiveExtractionPage() {
               <span className="inline-block h-2 w-2 rounded-full bg-volt motion-safe:animate-pulse" aria-hidden="true" />
               <span>Claude is writing the spec — usually about a minute for a code unit this size</span>
             </span>
-            <span className="font-mono">{streamedText.length.toLocaleString()} characters so far</span>
+            <span className="font-mono" data-testid="claims-so-far">
+              {claimsSoFar > 0
+                ? `${claimsSoFar} claim${claimsSoFar === 1 ? '' : 's'} so far`
+                : shownDraft.summary
+                  ? 'summary written'
+                  : `${streamedText.length.toLocaleString()} characters so far`}
+            </span>
           </div>
           {/* The raw stream is machine JSON (schema URLs, field ids): available, not in front of the user. */}
           <details className="mt-1 text-caption">
@@ -330,7 +349,7 @@ export function LiveExtractionPage() {
                 </div>
               )}
               <StreamingSpecPanel
-                draft={draft}
+                draft={shownDraft}
                 onCitationClick={onCite}
                 activeCitation={activeCitation}
               />

@@ -35,7 +35,7 @@ commit.
 | 26 | Validation policy | `/platform/validation` | Live (UI + API text) |
 | 27 | Harmonisation | `/platform/harmonisation` | Live |
 | 28 | Generated package | `/scaffolds/:id` | Live (gate strip) |
-| 29 | Extract spec (live) | `/subroutines/:id/extract` | Live: finished heading + next-step button, plain stages, raw stream folded; readable claim rows while streaming open |
+| 29 | Extract spec (live) | `/subroutines/:id/extract` | Live: finished heading + next-step button, plain stages, raw stream folded; readable claim rows while streaming (done) |
 | 30 | Live code generation | `/specs/:id/scaffold` | Not reviewed — needs a signed spec, and signing is an SME's decision |
 
 ## 1 · Home (`/`)

@@ -74,7 +74,7 @@ export function StreamingSpecPanel({
           <ul className="space-y-2">
             {draft.invariants!.map((inv, i) => (
               <ClaimCard
-                key={inv.id}
+                key={inv.id ?? i}
                 id={`INV-${i + 1}`}
                 body={inv.description ?? inv.statement ?? inv.condition ?? inv.claim ?? ''}
                 supplemental={
@@ -228,7 +228,7 @@ function ClaimCard({
   id: string;
   body: string;
   supplemental?: string;
-  citations: { lines: string }[];
+  citations?: { lines: string }[];
   confidence?: string;
   onCite?: (lines: string) => void;
   active?: string | null;
@@ -257,7 +257,7 @@ function ClaimCard({
         <p className="mt-1 text-caption italic text-ink-secondary">{supplemental}</p>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {citations.map((c, i) => (
+        {(citations ?? []).filter((c) => typeof c?.lines === 'string').map((c, i) => (
           <button
             key={i}
             type="button"
