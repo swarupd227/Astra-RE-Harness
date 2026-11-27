@@ -190,6 +190,20 @@ public class WorkbookEquivalenceTests
     }
 
     [Fact]
+    public void The_workbook_is_recalculated_over_what_the_routine_wrote_and_a_formula_the_package_does_not_return_is_not_a_difference()
+    {
+        var c = Contract();
+        var written = WorkbookEquivalenceRunner.WrittenByPackage(c, Pkg("""{"outputs":{"api_premium":142.29,"status":"OK","total":1}}""")).ToList();
+        var cell = Assert.Single(written);                                       // the service's value; 'status' is not a number, 'total' is the workbook's
+        Assert.Equal((Dash, "F17", 142.29), (cell.Sheet, cell.Cell, cell.Value!.GetValue<double>()));
+
+        var saved = WorkbookEquivalenceVectors.Build(c, Sheets())[0];
+        var checks = WorkbookEquivalenceRunner.Compare(c, saved, Pkg("""{"outputs":{"api_premium":1.0},"requests":[]}"""),
+            Pkg("""{"values":{"1. Rating Dashboard!F15":136.275606}}"""), (_, _) => null, live: false);
+        Assert.DoesNotContain(checks, x => x.What == "total");                   // not returned by the package: the workbook keeps it
+    }
+
+    [Fact]
     public void The_canned_answer_has_every_response_field()
     {
         var canned = WorkbookEquivalenceRunner.Canned(Contract().Requests[0]);

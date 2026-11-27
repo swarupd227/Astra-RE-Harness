@@ -155,7 +155,8 @@ public sealed class WorkbookEquivalenceRunner
                             ["vectors"] = new JsonArray(vectors.Select(v => (JsonNode)new JsonObject
                             {
                                 ["id"] = v.Id,
-                                ["cells"] = new JsonArray(v.Cells.Select(c => (JsonNode)new JsonObject { ["sheet"] = c.Sheet, ["cell"] = c.Cell, ["value"] = c.Value?.DeepClone() }).ToArray()),
+                                ["cells"] = new JsonArray(v.Cells.Concat(WrittenByPackage(contract, pkgById.GetValueOrDefault(v.Id)))
+                                    .Select(c => (JsonNode)new JsonObject { ["sheet"] = c.Sheet, ["cell"] = c.Cell, ["value"] = c.Value?.DeepClone() }).ToArray()),
                             }).ToArray()),
                         };
                         await File.WriteAllTextAsync(Path.Combine(wbDir, "job.json"), wbJob.ToJsonString(), ct);
@@ -279,6 +280,9 @@ public sealed class WorkbookEquivalenceRunner
                 want = Number(wb?["values"]?[$"{o.Sheet}!{o.Cell}"]);
                 from = $"the workbook's formula in {o.Sheet}!{o.Cell}";
                 if (want is null) continue;      // engine unavailable, failed, or the cell has no value: noted in the transcript, not a difference
+                // A cell the workbook computes, that the package does not return (a display formula over what the routine
+                // wrote, like =F17-F15): the workbook keeps computing it, so there is nothing of the package's to compare.
+                if (got is null) continue;
             }
             else if (o.ComputedBy == "service")
             {
@@ -299,6 +303,19 @@ public sealed class WorkbookEquivalenceRunner
             checks.Add(new("output", o.Field, ok, $"package {Show(got)} vs {Show(want)} from {from}{(ok ? "" : $" (off by {Show(got - want)}, tolerance {Show(o.Tolerance)})")}"));
         }
         return checks;
+    }
+
+    /// <summary>
+    /// The cells the routine itself writes (its own results and what the service returned), set to the package's values
+    /// for the case before the workbook is recalculated — so a formula over them (=F17-F15) sees what the routine wrote,
+    /// as it would in Excel, instead of the value saved from the last time the macro ran.
+    /// </summary>
+    internal static IEnumerable<WorkbookEquivalenceVectors.CellValue> WrittenByPackage(WorkbookContract c, JsonObject? pkg)
+    {
+        if (pkg?["outputs"] is not JsonObject outputs) yield break;
+        foreach (var o in c.Outputs.Where(o => o.ComputedBy is "service" or "routine"))
+            if (Value(outputs, o.Field) is { } v)
+                yield return new(o.Sheet, o.Cell, JsonValue.Create(v));
     }
 
     /// <summary>The answer the gate gives in place of the outside service offline: the response fields, filled with neutral values.</summary>
