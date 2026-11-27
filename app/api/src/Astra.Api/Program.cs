@@ -354,6 +354,7 @@ builder.Services.AddScoped<Astra.Api.Validation.TestPackValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.QualityValidator>();
 builder.Services.AddSingleton<Astra.Api.Validation.Quality.QualityReviewer>();
 builder.Services.AddSingleton<Astra.Api.Copilot.AutoFixService>();
+builder.Services.AddSingleton<Astra.Api.Assembly.AssemblyService>();
 builder.Services.AddScoped<Astra.Api.Validation.GoldenDatasetScorer>();
 builder.Services.AddHttpClient("gfortran");
 builder.Services.AddScoped<Astra.Api.Validation.GfortranClient>();
@@ -621,6 +622,33 @@ using (var scope = app.Services.CreateScope())
             );
             """);
 
+        // Module assembly — one application built from many code units' checked packages.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS assemblies (
+                id                 uuid           PRIMARY KEY,
+                corpus_id          uuid           NOT NULL,
+                source_version_id  uuid           NULL,
+                name               varchar(200)   NOT NULL,
+                target_stack       varchar(64)    NOT NULL,
+                state              varchar(32)    NOT NULL,
+                selection_json     text           NOT NULL DEFAULT '{{}}',
+                report_json        text           NULL,
+                package_blob_uri   varchar(1024)  NULL,
+                gate_log_blob_uri  varchar(1024)  NULL,
+                unit_count         integer        NOT NULL DEFAULT 0,
+                excluded_count     integer        NOT NULL DEFAULT 0,
+                file_count         integer        NOT NULL DEFAULT 0,
+                compile_status     varchar(32)    NULL,
+                test_status        varchar(32)    NULL,
+                tests_total        integer        NOT NULL DEFAULT 0,
+                tests_failed       integer        NOT NULL DEFAULT 0,
+                summary            varchar(1024)  NOT NULL DEFAULT '',
+                created_by         varchar(200)   NULL,
+                created_at         timestamptz    NOT NULL DEFAULT now(),
+                completed_at       timestamptz    NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_assemblies_corpus_created ON assemblies (corpus_id, created_at);
+            """);
         // WS7 K7 — the claims read from narrative evidence, checked against structured evidence (one document per version).
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS claim_sets (
@@ -1396,6 +1424,7 @@ app.UseMiddleware<DevPersonaMiddleware>();
 
 app.MapHealthEndpoints();
 app.MapAuthEndpoints();
+app.MapAssemblyEndpoints();
 app.MapWhoamiEndpoint();
 app.MapSystemStatsEndpoint();
 // Task #178 — apply any UI-stored LLM key before serving, then expose the

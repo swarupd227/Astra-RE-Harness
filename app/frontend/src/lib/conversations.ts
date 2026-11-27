@@ -61,7 +61,8 @@ export type ArtifactKind =
   | 'flowBoard'
   | 'docSection'
   | 'workRun'
-  | 'reviewQueue';
+  | 'reviewQueue'
+  | 'assembly';
 
 export type Artifact = {
   kind: ArtifactKind;

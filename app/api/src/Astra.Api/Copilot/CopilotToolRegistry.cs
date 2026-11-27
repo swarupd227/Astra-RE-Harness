@@ -356,6 +356,7 @@ public sealed partial class CopilotToolRegistry
         });
 
         RegisterWorkTools();
+        RegisterAssemblyTools();
         RegisterTargetTools();
     }
 

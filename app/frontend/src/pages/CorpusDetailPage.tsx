@@ -16,6 +16,7 @@ import { ArtefactSources } from '@/components/ArtefactSources';
 import { PageHero } from '@/components/PageHero';
 import { formatState } from '@/lib/labels';
 import { unitKind } from '@/lib/unitKind';
+import { ModuleAssemblyPanel } from '@/components/ModuleAssemblyPanel';
 
 const OFFICE_DOC = /\.(xlsm|xls|xlsb|xlam|docm|dotm|pptm|accdb|mdb)\//i;
 
@@ -209,6 +210,9 @@ export function CorpusDetailPage() {
         <a href="#routines" className="rounded-md px-2.5 py-1 text-ink-secondary hover:bg-raised hover:text-ink-primary">
           Code units ({formatInt(routineCount)})
         </a>
+        <a href="#assemblies" className="rounded-md px-2.5 py-1 text-ink-secondary hover:bg-raised hover:text-ink-primary" data-testid="jump-assemblies">
+          One application
+        </a>
         <a href="#sources" className="rounded-md px-2.5 py-1 text-ink-secondary hover:bg-raised hover:text-ink-primary">
           Sources &amp; evidence
         </a>
@@ -249,6 +253,10 @@ export function CorpusDetailPage() {
 
       <section id="routines" className="scroll-mt-4">
         <RoutineBrowser files={files} />
+      </section>
+
+      <section id="assemblies" className="scroll-mt-4">
+        <ModuleAssemblyPanel corpusId={c.id} />
       </section>
 
       {/* The routines are what people come here for, so they come first; evidence is the supporting material. */}

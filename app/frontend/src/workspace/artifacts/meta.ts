@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   ListChecks,
   ListTree,
+  Package,
   ShieldCheck,
   Waves,
   Workflow,
@@ -43,6 +44,7 @@ const KINDS: Record<string, KindMeta> = {
   docSection: { label: 'Documentation', icon: BookOpen },
   workRun: { label: 'Agent run', icon: Workflow },
   reviewQueue: { label: 'Review queue', icon: ListChecks },
+  assembly: { label: 'Assembled application', icon: Package },
 };
 
 export function artifactKindLabel(kind: string): string {
@@ -91,6 +93,8 @@ export function artifactTitle(artifact: Artifact): string {
       return str(p.label, 'Agent run');
     case 'reviewQueue':
       return 'Review queue';
+    case 'assembly':
+      return str(p.name, 'Assembled application');
     default:
       return artifact.kind;
   }

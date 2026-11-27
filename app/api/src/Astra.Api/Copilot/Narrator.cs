@@ -333,6 +333,22 @@ public sealed class Narrator
                 }
                 break;
             }
+            case "assembly":
+            {
+                var a = await db.ModuleAssemblies.AsNoTracking().FirstOrDefaultAsync(x => x.Id == t.RunId, ct);
+                if (a is null) { markdown = summary ?? "Assembly finished."; break; }
+                artifacts.Add(CopilotToolRegistry.AssemblyArtifact(a));
+                var left = a.ExcludedCount > 0 ? $" {a.ExcludedCount:N0} matching code unit(s) were left out — the card says why." : "";
+                markdown = $"**{a.Name}**: {a.Summary}{left}";
+                if (a.State == "PASSED")
+                    suggestions.Add(new("What's in it?", $"Show the assembled application {a.Name}"));
+                else
+                {
+                    suggestions.Add(new("Why did it fail?", $"Explain why the assembled application {a.Name} failed and what would fix it"));
+                    if (a.ExcludedCount > 0) suggestions.Add(new("Fix the left-out units", $"Fix until green the code units left out of {a.Name}"));
+                }
+                break;
+            }
             case "work-run":
             {
                 var queue = scope.ServiceProvider.GetRequiredService<Astra.Api.Work.WorkQueue>();

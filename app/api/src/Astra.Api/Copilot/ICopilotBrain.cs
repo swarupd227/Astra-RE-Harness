@@ -244,6 +244,8 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "get_spec" => "loading the spec",
         "rank_routines" => "ranking the code units",
         "run_assessment" => "starting the assessment",
+        "assemble_module" => "assembling the application",
+        "get_assembly" => "reading the assembled application",
         "explain_claim" => "pulling up the claim and its source",
         "search_docs" => "searching the documentation",
         "list_modules" => "listing the modules",
@@ -272,6 +274,21 @@ public sealed class MockCopilotBrain : ICopilotBrain
 
         if (RouteBatch(t, text) is { } batch) return batch;
         if (RouteTarget(t) is { } target) return target;
+        if (Regex.IsMatch(t, @"\bassembl(e|ed|ing|y)\b|\bone (application|app|service)\b|\bmerge (these |the )?(code )?units\b"))
+        {
+            if (Regex.IsMatch(t, @"\b(how did|show|status|what'?s in|did it)\b") && !Regex.IsMatch(t, @"\b(assemble the|build one|merge)\b"))
+                return ("get_assembly", new { });
+            var waveNo = Regex.Match(t, @"\bwave\s+(\d+)\b").Groups[1].Value;
+            var path = quoted is { } q && q.Contains('/') ? q
+                : Regex.Match(t, @"\b(?:the|for)\s+([a-z0-9_.-]+)\s+module\b").Groups[1].Value is { Length: > 0 } mod ? mod
+                : Regex.Match(t, @"\bmodule\s+([a-z0-9_./-]+)").Groups[1].Value;
+            return ("assemble_module", new
+            {
+                pathPrefix = path.Length > 0 ? path : null,
+                wave = waveNo.Length > 0 ? int.Parse(waveNo) : (int?)null,
+                requireTests = Regex.IsMatch(t, @"\btests? pass|\bpassing tests\b|\bgreen\b"),
+            });
+        }
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
         if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
         if (Regex.IsMatch(t, @"\bmigration plan\b|\bwaves?\b"))

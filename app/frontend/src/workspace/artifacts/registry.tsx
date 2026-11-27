@@ -17,6 +17,7 @@ import { FlowBoardCard } from './FlowBoardCard';
 import { DocSectionCard } from './DocSectionCard';
 import { WorkRunCard } from './WorkRunCard';
 import { ReviewQueueCard } from './ReviewQueueCard';
+import { AssemblyCard } from './AssemblyCard';
 
 export type ArtifactSize = 'card' | 'pane';
 
@@ -75,6 +76,8 @@ export function renderArtifact(artifact: Artifact, opts: RenderOptions): ReactNo
       return <ReviewQueueCard artifact={a} size={size} onIntent={onIntent} />;
     case 'docSection':
       return <DocSectionCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'assembly':
+      return <AssemblyCard artifact={a} size={size} onIntent={onIntent} />;
     default: {
       const fallback: Artifact = {
         kind: 'text',

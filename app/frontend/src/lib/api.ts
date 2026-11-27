@@ -2542,3 +2542,48 @@ export type ArchetypeProposalDetail = ArchetypeProposal & {
   files: ArchetypeProposalFile[];
   compileLog?: string;
 };
+
+// ─── Module assembly: one application from a module's code units ───────────────
+
+export type ModuleAssembly = {
+  id: string;
+  corpusId: string;
+  name: string;
+  targetStack: string;
+  /** RUNNING, then PASSED (builds and tests pass together), FAILED or ERRORED. */
+  state: 'RUNNING' | 'PASSED' | 'FAILED' | 'ERRORED' | string;
+  summary: string;
+  unitCount: number;
+  excludedCount: number;
+  fileCount: number;
+  compileStatus: string | null;
+  testStatus: string | null;
+  testsTotal: number;
+  testsFailed: number;
+  createdBy: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  downloadUrl: string | null;
+  report: Record<string, unknown> | null;
+};
+
+export type StartAssemblyBody = {
+  pathPrefix?: string;
+  waveId?: string;
+  unitIds?: string[];
+  targetStack?: string;
+  requireTests?: boolean;
+  name?: string;
+};
+
+export const assemblyApi = {
+  start: (corpusId: string, body: StartAssemblyBody) =>
+    apiFetch<{ assemblyId: string; runId: string; statusUrl: string; assembly: ModuleAssembly }>(
+      `/api/v1/corpora/${corpusId}/assemblies`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  list: (corpusId: string) => apiFetch<{ data: ModuleAssembly[] }>(`/api/v1/corpora/${corpusId}/assemblies`),
+  get: (id: string) => apiFetch<ModuleAssembly>(`/api/v1/assemblies/${id}`),
+  /** The assembled project as a zip (a link the browser opens; wrap with withToken). */
+  packageUrl: (id: string) => `${API_BASE}/api/v1/assemblies/${id}/package.zip`,
+};

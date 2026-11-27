@@ -27,6 +27,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Scaffold> Scaffolds => Set<Scaffold>();
     public DbSet<ValidationRun> ValidationRuns => Set<ValidationRun>();
+    public DbSet<ModuleAssembly> ModuleAssemblies => Set<ModuleAssembly>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
@@ -502,6 +503,34 @@ public sealed class AppDbContext : DbContext
             // alone (the old Phase B.4 constraint), which made generating a
             // second target silently overwrite the first.
             b.HasIndex(x => new { x.SpecId, x.TargetPlatform }).IsUnique();
+        });
+
+        modelBuilder.Entity<ModuleAssembly>(b =>
+        {
+            b.ToTable("assemblies");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.CorpusId).HasColumnName("corpus_id");
+            b.Property(x => x.SourceVersionId).HasColumnName("source_version_id");
+            b.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            b.Property(x => x.TargetStack).HasColumnName("target_stack").HasMaxLength(64).IsRequired();
+            b.Property(x => x.State).HasColumnName("state").HasMaxLength(32).IsRequired();
+            b.Property(x => x.SelectionJson).HasColumnName("selection_json").HasColumnType("text").IsRequired();
+            b.Property(x => x.ReportJson).HasColumnName("report_json").HasColumnType("text");
+            b.Property(x => x.PackageBlobUri).HasColumnName("package_blob_uri").HasMaxLength(1024);
+            b.Property(x => x.GateLogBlobUri).HasColumnName("gate_log_blob_uri").HasMaxLength(1024);
+            b.Property(x => x.UnitCount).HasColumnName("unit_count");
+            b.Property(x => x.ExcludedCount).HasColumnName("excluded_count");
+            b.Property(x => x.FileCount).HasColumnName("file_count");
+            b.Property(x => x.CompileStatus).HasColumnName("compile_status").HasMaxLength(32);
+            b.Property(x => x.TestStatus).HasColumnName("test_status").HasMaxLength(32);
+            b.Property(x => x.TestsTotal).HasColumnName("tests_total");
+            b.Property(x => x.TestsFailed).HasColumnName("tests_failed");
+            b.Property(x => x.Summary).HasColumnName("summary").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.CreatedBy).HasColumnName("created_by").HasMaxLength(200);
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            b.HasIndex(x => new { x.CorpusId, x.CreatedAt });
         });
 
         modelBuilder.Entity<ValidationRun>(b =>
