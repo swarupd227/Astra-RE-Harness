@@ -78,7 +78,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # Phase 11.0.g — documentation export.
 # pandoc: mkdocs zip (no-op), docx, and pdf (--pdf-engine=weasyprint) formats.
 # weasyprint: HTML→PDF renderer; avoids a TeX distribution (~200 MB total).
-# Both packages are in Debian Bookworm apt repos.
+# Both packages are in Debian Bookworm apt repos. fonts-dejavu-core: the face the quality report PDF names
+# (Validation/Quality/QualityReport.cs), so its layout does not depend on whatever font the base image carries.
 #
 # libssl3 / libcurl4 / ca-certificates: LibGit2Sharp's bundled native
 # libgit2 binary links against these at runtime. Kept explicit even though
@@ -95,6 +96,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     weasyprint \
+    fonts-dejavu-core \
     python3 \
     python3-venv \
     python3-pip \

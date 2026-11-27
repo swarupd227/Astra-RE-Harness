@@ -239,6 +239,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "route_for_review" => "routing the spec",
         "generate_scaffold" => "generating the code",
         "run_gate" => "running the gate",
+        "get_quality_report" => "putting the quality report together",
         "list_programmes" => "listing the programmes",
         "read_routine" => "reading the code unit",
         "get_spec" => "loading the spec",
@@ -289,6 +290,9 @@ public sealed class MockCopilotBrain : ICopilotBrain
                 requireTests = Regex.IsMatch(t, @"\btests? pass|\bpassing tests\b|\bgreen\b"),
             });
         }
+        // "Quality report for X" reads the stored proof; it must win over the quality gate (an action) below.
+        if (Regex.IsMatch(t, @"\bquality (report|certificate|evidence|proof)\b|\bproof of (the )?(quality|checks)\b|\bwhat checks (were|have been) (run|done)\b"))
+            return ("get_quality_report", new { subroutineId = name ?? "", scope = Regex.IsMatch(t, @"\b(programme|project|portfolio|every routine|all routines)\b") && name is null ? "programme" : "routine" });
         if (Regex.IsMatch(t, @"\b(programmes|projects|corpora|every programme|all programmes)\b")) return ("list_programmes", new { });
         if (Regex.IsMatch(t, @"\bassess(ment)?\b")) return ("run_assessment", new { });
         if (Regex.IsMatch(t, @"\bmigration plan\b|\bwaves?\b"))

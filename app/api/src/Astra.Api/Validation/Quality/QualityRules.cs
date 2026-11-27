@@ -340,6 +340,15 @@ public static class QualityRules
         return new QualitySummary(findings.Count, blockingCount, bySeverity, byCategory, blockingCount == 0);
     }
 
+    /// <summary>How many rules the platform's own scan has (line rules plus the three package-level checks).</summary>
+    public static int RuleCount => Rules.Length + 3;
+
+    /// <summary>A short fingerprint of the rule table (ids, severities, patterns), so a report can name exactly
+    /// which rule set checked the code: the same table always gives the same fingerprint.</summary>
+    public static string RuleSetFingerprint { get; } = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes(string.Join("\n", Rules.Select(r => $"{r.Id}|{r.Severity}|{r.Pattern}|{r.Unless}"))
+            + "\nSTD-SPRING-FIELD-INJECTION|STD-SPRING-NO-ERROR-HANDLER|MNT-FILE-TOO-LONG")))[..12].ToLowerInvariant();
+
     /// <summary>One line per finding, in the shape <see cref="GateFailureDigest"/> reads back for a repair.</summary>
     public static string FormatLine(QualityFinding f) =>
         $"QUALITY {f.File}{(f.Line is { } n ? $":{n}" : "")} {f.Rule} {f.Severity}: {f.Message}";

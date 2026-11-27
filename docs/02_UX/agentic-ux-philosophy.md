@@ -88,7 +88,7 @@ three words.
 ## The card registry (`src/workspace/artifacts/`)
 
 `funnel · runProgress · routineList · clusterGrid · specSummary · programmeList · routine · gateResults ·
-scaffoldTree · planWaves · flowBoard · assessment · docSection · workRun · reviewQueue · assembly · text`. A card renders from `{kind, refId, props}` in the
+scaffoldTree · planWaves · flowBoard · assessment · docSection · workRun · reviewQueue · assembly · qualityReport · qualityRollup · text`. A card renders from `{kind, refId, props}` in the
 message's `artifacts`; the same component powers the card size, the pane size, and (where one exists) the
 page. Props contracts live in `ArtifactBuilders.cs`; the frontend must be defensive (`props.items ?? []`).
 `workRun` (many agents across many routines) and `reviewQueue` (specs waiting for an SME) keep themselves current
@@ -97,6 +97,11 @@ from the API; see `docs/05_Runtime/parallel-agent-runs.md`.
 page): which units went in, which were left out and why, what is held once, where units disagreed, and whether the
 merged project builds and its tests pass together. The merge is deterministic (`Assembly/`, one assembler per target
 stack — java-spring so far); the card follows `GET /api/v1/assemblies/{id}` while it runs.
+`qualityReport` ("quality report for X", tool `get_quality_report`) is the proof of what was checked on a routine's code:
+each gate, each check with its tool and version (including checks that did not run or do not apply), findings, libraries,
+tests and the verdict, built only from gate runs on the current version of the code (`Validation/Quality/QualityReport.cs`);
+it downloads as PDF (`GET /api/v1/scaffolds/{id}/quality-report.pdf`). `qualityRollup` is the programme view
+(`GET /api/v1/corpora/{id}/quality-report[?format=pdf]`).
 
 ## Citations and evidence (`src/evidence/`)
 

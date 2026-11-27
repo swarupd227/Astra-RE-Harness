@@ -176,6 +176,18 @@ public sealed partial class CopilotToolRegistry
                 ("scaffoldId", Str("Scaffold id (alternative)."))),
             Execute = GetValidationResultsAsync,
         });
+        _tools.Add(new CopilotTool
+        {
+            Name = "get_quality_report",
+            Agent = "validation",
+            Description = "The quality report that proves what was checked on a routine's generated code: each gate (build, claim test pack, quality, equivalence) with its result and time, each check inside the quality gate with its tool and version (rule scan, AI reviewer, SpotBugs/FindSecBugs, PMD, Checkstyle, ruff, bandit, known-vulnerability check, SBOM) including checks that did not run or do not apply, findings by severity, libraries, tests, and the verdict; downloadable as PDF. Only runs on the current version of the code count. With scope=programme (or no routine), a one-row-per-routine roll-up for the programme.",
+            InputSchema = Obj(
+                ("subroutineId", Str("Routine id or exact name.")),
+                ("scaffoldId", Str("Scaffold id (alternative).")),
+                ("scope", Enum("routine", "programme")),
+                ("corpusId", Str("Programme id or name, for scope=programme. Optional in a programme thread."))),
+            Execute = GetQualityReportAsync,
+        });
 
         // ── Acting (confirmation required) ───────────────────────────────
         _tools.Add(new CopilotTool
@@ -823,6 +835,43 @@ public sealed partial class CopilotToolRegistry
         return gates is null
             ? ToolResult.Failure("scaffold.not_found", "Scaffold not found.")
             : ToolResult.Success(gates.Value.Payload, $"gates for {scaffold.Spec?.Subroutine?.Name}", gates.Value.Artifact);
+    }
+
+    private static async Task<ToolResult> GetQualityReportAsync(JsonElement input, ToolContext ctx)
+    {
+        var reports = ctx.Services.GetRequiredService<Astra.Api.Validation.Quality.QualityReportService>();
+        var wantsProgramme = Read(input, "scope") == "programme";
+        var scaffold = wantsProgramme ? null : await ResolveScaffoldAsync(input, ctx);
+        if (scaffold is not null)
+        {
+            var r = await reports.BuildAsync(scaffold.Id, ctx.Ct);
+            if (r is null) return ToolResult.Failure("scaffold.not_found", "Scaffold not found.");
+            var ran = r.Checks.Count(c => c.Status == "ran");
+            var payload = new
+            {
+                scaffoldId = r.Subject.ScaffoldId, routine = r.Subject.Routine, verdict = r.Verdict.Status, reason = r.Verdict.Reason,
+                gates = r.Gates.Select(g => new { g.Stage, g.Status, g.Summary }),
+                checks = r.Checks.Select(c => new { c.Name, c.Version, c.Status, c.Findings, c.Note }),
+                findings = new { r.Findings.Total, r.Findings.Blocking, r.Findings.BySeverity },
+                pdfUrl = $"/api/v1/scaffolds/{r.Subject.ScaffoldId}/quality-report.pdf",
+            };
+            return ToolResult.Success(payload, $"quality report for {r.Subject.Routine}: {r.Verdict.Status.ToLowerInvariant()}, {ran} checks ran",
+                ToolResult.Artifact("qualityReport", r.Subject.ScaffoldId.ToString(), r));
+        }
+        if (!wantsProgramme && (Read(input, "subroutineId") is { Length: > 0 } || Read(input, "scaffoldId") is { Length: > 0 }))
+            return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        var list = new List<Astra.Api.Validation.Quality.QualityReport>();
+        foreach (var sid in (await reports.LatestScaffoldsForCorpusAsync(corpus.Id, ctx.Ct)).Take(200))
+            if (await reports.BuildAsync(sid, ctx.Ct) is { } rep) list.Add(rep);
+        var rollup = Astra.Api.Validation.Quality.QualityRollup.From(corpus.Id, corpus.Name, list, Endpoints.HealthEndpoints.Build, DateTimeOffset.UtcNow);
+        return ToolResult.Success(
+            new { corpusId = corpus.Id, programme = corpus.Name, rollup.Routines, rollup.Passed, rollup.Failed, rollup.Incomplete,
+                  rows = rollup.Rows.Take(40).Select(x => new { x.Routine, x.Verdict, x.Blocking }),
+                  pdfUrl = $"/api/v1/corpora/{corpus.Id}/quality-report?format=pdf" },
+            $"quality roll-up for {corpus.Name}: {rollup.Passed} of {rollup.Routines} passed",
+            ToolResult.Artifact("qualityRollup", corpus.Id.ToString(), rollup));
     }
 
     // ═══ Mutating tools ══════════════════════════════════════════════════

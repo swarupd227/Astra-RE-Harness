@@ -45,6 +45,8 @@ const KINDS: Record<string, KindMeta> = {
   workRun: { label: 'Agent run', icon: Workflow },
   reviewQueue: { label: 'Review queue', icon: ListChecks },
   assembly: { label: 'Assembled application', icon: Package },
+  qualityReport: { label: 'Quality report', icon: ShieldCheck },
+  qualityRollup: { label: 'Quality report', icon: ShieldCheck },
 };
 
 export function artifactKindLabel(kind: string): string {
@@ -95,6 +97,12 @@ export function artifactTitle(artifact: Artifact): string {
       return 'Review queue';
     case 'assembly':
       return str(p.name, 'Assembled application');
+    case 'qualityReport': {
+      const r = str((p.subject as Record<string, unknown> | undefined)?.routine);
+      return r ? `Quality report · ${r}` : 'Quality report';
+    }
+    case 'qualityRollup':
+      return str(p.programme) ? `Quality report · ${str(p.programme)}` : 'Quality report';
     default:
       return artifact.kind;
   }
@@ -116,6 +124,7 @@ export function artifactLink(artifact: Artifact): { label: string; href: string 
     case 'clusterGrid':
       return ref ? { label: 'Open pattern analysis', href: `/projects/${ref}/pattern-analysis` } : null;
     case 'gateResults':
+    case 'qualityReport':
       return ref ? { label: 'Open validation report', href: `/scaffolds/${ref}/validation` } : null;
     case 'scaffoldTree':
       return ref ? { label: 'Open scaffold', href: `/scaffolds/${ref}` } : null;

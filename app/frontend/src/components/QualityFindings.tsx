@@ -137,6 +137,17 @@ export function QualityFindingsCard({
                 Bill of materials (CycloneDX) · {metrics.sbom.components} libraries
               </a>
             )}
+            {run && (
+              <a
+                href={`${API_BASE}/api/v1/scaffolds/${run.scaffoldId}/quality-report.pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-3 inline-block text-caption text-ink-secondary underline decoration-line-subtle underline-offset-2 hover:text-ink-primary"
+                data-testid="quality-report-pdf-link"
+              >
+                Quality report (PDF): every check, tool version and finding
+              </a>
+            )}
             {metrics?.aiReview && (
               <p className="text-caption text-ink-tertiary" data-testid="quality-ai-review">
                 {metrics.aiReview.status === 'reviewed'

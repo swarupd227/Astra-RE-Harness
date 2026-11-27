@@ -352,6 +352,7 @@ builder.Services.AddScoped<Astra.Api.Validation.CompileValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackGenerator>();
 builder.Services.AddScoped<Astra.Api.Validation.TestPackValidator>();
 builder.Services.AddScoped<Astra.Api.Validation.QualityValidator>();
+builder.Services.AddScoped<Astra.Api.Validation.Quality.QualityReportService>();
 builder.Services.AddSingleton<Astra.Api.Validation.Quality.QualityReviewer>();
 builder.Services.AddSingleton<Astra.Api.Copilot.AutoFixService>();
 builder.Services.AddSingleton<Astra.Api.Assembly.AssemblyService>();

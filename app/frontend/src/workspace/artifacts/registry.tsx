@@ -18,6 +18,7 @@ import { DocSectionCard } from './DocSectionCard';
 import { WorkRunCard } from './WorkRunCard';
 import { ReviewQueueCard } from './ReviewQueueCard';
 import { AssemblyCard } from './AssemblyCard';
+import { QualityReportCard, QualityRollupCard } from './QualityReportCard';
 
 export type ArtifactSize = 'card' | 'pane';
 
@@ -74,6 +75,10 @@ export function renderArtifact(artifact: Artifact, opts: RenderOptions): ReactNo
       return <WorkRunCard artifact={a} size={size} onIntent={onIntent} />;
     case 'reviewQueue':
       return <ReviewQueueCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'qualityReport':
+      return <QualityReportCard artifact={a} size={size} onIntent={onIntent} />;
+    case 'qualityRollup':
+      return <QualityRollupCard artifact={a} size={size} onIntent={onIntent} />;
     case 'docSection':
       return <DocSectionCard artifact={a} size={size} onIntent={onIntent} />;
     case 'assembly':

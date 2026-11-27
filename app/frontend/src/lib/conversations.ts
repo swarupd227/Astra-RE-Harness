@@ -62,7 +62,9 @@ export type ArtifactKind =
   | 'docSection'
   | 'workRun'
   | 'reviewQueue'
-  | 'assembly';
+  | 'assembly'
+  | 'qualityReport'
+  | 'qualityRollup';
 
 export type Artifact = {
   kind: ArtifactKind;

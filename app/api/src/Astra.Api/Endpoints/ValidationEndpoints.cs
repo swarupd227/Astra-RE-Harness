@@ -132,6 +132,37 @@ public static class ValidationEndpoints
             return NotFound("sbom.not_found");
         });
 
+        // ─── Quality report: what was checked, with which tool and version, and the verdict ─
+        app.MapGet("/api/v1/scaffolds/{id:guid}/quality-report", async (Guid id, Astra.Api.Validation.Quality.QualityReportService reports, CancellationToken ct) =>
+            await reports.BuildAsync(id, ct) is { } r ? Results.Ok(r) : NotFound("scaffold.not_found"));
+
+        app.MapGet("/api/v1/scaffolds/{id:guid}/quality-report.pdf", async (Guid id, Astra.Api.Validation.Quality.QualityReportService reports, CancellationToken ct) =>
+        {
+            if (await reports.BuildAsync(id, ct) is not { } r) return NotFound("scaffold.not_found");
+            var pdf = await reports.RenderPdfAsync(Astra.Api.Validation.Quality.QualityReportHtml.Render(r), ct);
+            return Results.File(pdf, "application/pdf", $"quality-report-{Slug(r.Subject.Routine)}-{r.GeneratedAt:yyyyMMdd}.pdf");
+        });
+
+        app.MapGet("/api/v1/scaffolds/{id:guid}/quality-report.html", async (Guid id, Astra.Api.Validation.Quality.QualityReportService reports, CancellationToken ct) =>
+            await reports.BuildAsync(id, ct) is { } r
+                ? Results.Content(Astra.Api.Validation.Quality.QualityReportHtml.Render(r), "text/html; charset=utf-8")
+                : NotFound("scaffold.not_found"));
+
+        app.MapGet("/api/v1/corpora/{id:guid}/quality-report", async (Guid id, string? format, AppDbContext db,
+            Astra.Api.Validation.Quality.QualityReportService reports, CancellationToken ct) =>
+        {
+            var corpus = await db.Corpora.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
+            if (corpus is null) return NotFound("corpus.not_found");
+            var list = new List<Astra.Api.Validation.Quality.QualityReport>();
+            foreach (var sid in (await reports.LatestScaffoldsForCorpusAsync(id, ct)).Take(500))
+                if (await reports.BuildAsync(sid, ct) is { } r) list.Add(r);
+            var rollup = Astra.Api.Validation.Quality.QualityRollup.From(id, corpus.Name, list, HealthEndpoints.Build, DateTimeOffset.UtcNow);
+            if (string.Equals(format, "pdf", StringComparison.OrdinalIgnoreCase))
+                return Results.File(await reports.RenderPdfAsync(Astra.Api.Validation.Quality.QualityReportHtml.Render(rollup), ct),
+                    "application/pdf", $"quality-report-{Slug(corpus.Name)}-{rollup.GeneratedAt:yyyyMMdd}.pdf");
+            return Results.Ok(rollup);
+        });
+
         // ─── Fix until green: the bounded regenerate-and-re-gate loop (background) ─
         app.MapPost("/api/v1/scaffolds/{id:guid}/autofix", async (
             Guid id,
@@ -575,6 +606,15 @@ public static class ValidationEndpoints
         Results.BadRequest(new { error = new { code, message } });
     private static IResult Forbid(string code, string message) =>
         Results.Json(new { error = new { code, message } }, statusCode: 403);
+
+    /// <summary>A file-name-safe form of a routine or programme name.</summary>
+    internal static string Slug(string name)
+    {
+        var s = new string(name.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-').ToArray());
+        while (s.Contains("--")) s = s.Replace("--", "-");
+        s = s.Trim('-');
+        return s.Length == 0 ? "report" : s.Length > 60 ? s[..60] : s;
+    }
 
     /// <summary>
     /// Phase 9.5.b — run the cached candidate executable per callback.

@@ -791,6 +791,7 @@ public sealed class CopilotOrchestrator
         "get_migration_plan" => "Loading the migration plan",
         "get_flow_board" => "Reading the flow board",
         "get_validation_results" => "Loading the gate results",
+        "get_quality_report" => "Putting the quality report together",
         "survey_corpus" => "Starting the pattern survey",
         "extract_spec" => "Starting the spec draft",
         "route_for_review" => "Routing for review",
