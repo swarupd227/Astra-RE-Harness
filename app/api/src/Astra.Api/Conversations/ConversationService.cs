@@ -142,7 +142,9 @@ public sealed class ConversationService
             .Where(c => c.LatestVersionId != null)
             .OrderByDescending(c => c.UpdatedAt)
             .ToListAsync(ct);
-        foreach (var c in corpora)
+        // QA / scratch projects (flagged Test, or named like one) stay out of the rail, as they do out of the
+        // project list; their thread is still reachable by id or by corpusId.
+        foreach (var c in corpora.Where(c => !Artefacts.ProjectSettings.IsTestProject(c.Name, c.SettingsJson)))
         {
             var conv = await EnsureProgrammeAsync(c.Id, ct);
             result.Add(await RenderAsync(conv, ct));
