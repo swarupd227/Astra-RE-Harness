@@ -470,6 +470,20 @@ builder.Services.AddCors(opt => opt.AddDefaultPolicy(p => p
     // and file downloads silently fall back to hardcoded names.
     .WithExposedHeaders("Content-Disposition", "X-Astra-Row-Count")));
 
+// JSON is compressed (a large project's file list is ~800 KB raw, ~10x smaller compressed). Only the default text/JSON
+// types are covered, so server-sent event streams (text/event-stream) and file downloads pass through untouched and
+// unbuffered. Fastest level: the win is bytes on the wire, not the last few percent.
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    o.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(
+    o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(
+    o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+
 var app = builder.Build();
 
 // ─── Schema bootstrap + seed ─────────────────────────────────────────
@@ -1419,6 +1433,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseResponseCompression();
 app.UseSerilogRequestLogging();
 app.UseCors();
 app.UseMiddleware<DevPersonaMiddleware>();

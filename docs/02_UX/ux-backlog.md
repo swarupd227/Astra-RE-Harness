@@ -9,7 +9,7 @@ commit.
 |---|---|---|---|
 | 1 | Home | `/` | Live |
 | 2 | Projects list | `/projects` | Live |
-| 3 | Project detail | `/projects/:id` | Live (tabs → section nav; virtualisation open) |
+| 3 | Project detail | `/projects/:id` | Live (tabs → section nav; routines paged — page 8 200 px / 2 200 nodes, so no virtualisation needed; API JSON + bundle now compressed) |
 | 4 | Routines | `/subroutines` | Live, incl. search over spec summaries |
 | 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification live (78f1a93) |
 | 6 | Generated code | `/scaffolds` | Live (gates per package, live previews) |
