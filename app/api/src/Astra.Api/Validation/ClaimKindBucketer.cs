@@ -49,6 +49,8 @@ public static class ClaimKindBucketer
         ("httpContract", "an HTTP route's method, path, parameters, status codes and response shapes"),
         ("authorizationRule", "a login, role, ownership or CSRF check, or a missing one"),
         ("dataAccess", "a database statement: operation, tables, whether values are bound"),
+        ("workbookCellContract", "the workbook cells a routine reads as inputs and writes or computes as outputs"),
+        ("outsideRequest", "the exact request a routine sends an outside service and what it reads back"),
         ("jakartaNamespaceMigration", "javax→jakarta namespace migration"),
         ("removedApiUsage", "use of an API removed in the target runtime"),
         ("deprecatedApiUsage", "use of a deprecated API"),
@@ -132,6 +134,10 @@ public static class ClaimKindBucketer
         TryAddKind(buckets, root, "http_contracts", "httpContract");
         TryAddKind(buckets, root, "authorization_rules", "authorizationRule");
         TryAddKind(buckets, root, "data_accesses", "dataAccess");
+        // Workbook kinds (vb6 schema 1.1, VBA inside an Office document): which cells are the routine's inputs and
+        // outputs, and the exact request it sends an outside service. The workbook equivalence gate reads both.
+        TryAddKind(buckets, root, "workbook_cell_contracts", "workbookCellContract");
+        TryAddKind(buckets, root, "outside_requests", "outsideRequest");
         // Java 11→21 modernization kinds (Tier-3, in-place upgrade). invariant /
         // edgeCase / openQuestion are shared and already registered above
         // (camelCase); only the six net-new modernization fields need a bucket.

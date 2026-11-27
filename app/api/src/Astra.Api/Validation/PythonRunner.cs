@@ -90,6 +90,41 @@ public static class PythonRunner
         return (testExit, log + "=== python -m pytest ===\n" + testLog);
     }
 
+    /// <summary>Runs a script in the backend's virtual environment (prepared by <see cref="PrepareAsync"/>), from the backend directory.</summary>
+    public static Task<(int ExitCode, string Log)> RunInVenvAsync(string backendDir, string args, CancellationToken ct) =>
+        RunAsync(VenvPython(backendDir), args, backendDir, RunTimeout, ct);
+
+    private static readonly SemaphoreSlim ToolLock = new(1, 1);
+
+    /// <summary>
+    /// A virtual environment for one of the platform's own Python tools (e.g. the formula engine), made once per server
+    /// and reused: keyed by <paramref name="name"/> and the exact requirements, so a version bump makes a fresh one.
+    /// Returns its python, or null with the install log when it could not be made.
+    /// </summary>
+    public static async Task<(string? Python, string Log)> EnsureToolVenvAsync(string name, string requirements, CancellationToken ct)
+    {
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(requirements)))[..12].ToLowerInvariant();
+        var dir = Path.Combine(Path.GetTempPath(), $"astra-tool-{name}-{key}");
+        var ready = Path.Combine(dir, ".ready");
+        await ToolLock.WaitAsync(ct);
+        try
+        {
+            if (File.Exists(ready)) return (VenvPython(dir), "=== tool environment reused ===\n");
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(Path.Combine(dir, "requirements.txt"), requirements, ct);
+            var (exit, log) = await PrepareAsync(dir, ct);
+            if (exit != 0) return (null, log);
+            await File.WriteAllTextAsync(ready, DateTimeOffset.UtcNow.ToString("O"), ct);
+            return (VenvPython(dir), log);
+        }
+        finally { ToolLock.Release(); }
+    }
+
+    /// <summary>Runs a script with a given python (a tool environment's), from <paramref name="workDir"/>.</summary>
+    public static Task<(int ExitCode, string Log)> RunWithAsync(string python, string args, string workDir, CancellationToken ct) =>
+        RunAsync(python, args, workDir, RunTimeout, ct);
+
     // pytest's last line: "==== 5 passed, 1 failed, 2 skipped in 0.31s ====" (or "-q": "5 passed in 0.31s").
     private static readonly Regex SummaryLine = new(@"^=*\s*(?<body>(?:\d+ \w+(?:, )?)+) in [\d.]+s", RegexOptions.Multiline | RegexOptions.Compiled);
     private static readonly Regex Count = new(@"(?<n>\d+) (?<what>passed|failed|errors?|skipped|xfailed|xpassed|deselected)", RegexOptions.Compiled);

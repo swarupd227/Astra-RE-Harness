@@ -161,6 +161,7 @@ public static class ValidationEndpoints
         // ─── Trigger a cross-runtime equivalence pass (sync) ────────────────
         app.MapPost("/api/v1/scaffolds/{id:guid}/validate/equivalence", async (
             Guid id,
+            bool? live,
             HttpRequest http,
             CrossRuntimeValidator validator,
             DevPersonaContext persona,
@@ -186,7 +187,8 @@ public static class ValidationEndpoints
             }
             try
             {
-                var run = await validator.RunAsync(id, persona, ct, extra);
+                // ?live=true: a workbook routine's outside calls go to the real service (default: answered by the gate).
+                var run = await validator.RunAsync(id, persona, ct, extra, live == true);
                 return Results.Ok(ToResponse(run));
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))

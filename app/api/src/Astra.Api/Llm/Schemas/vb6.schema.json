@@ -1,6 +1,6 @@
 {
   "$schema": "https://astra.nous.ai/spec-schema/v1",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "id": "vb6",
   "displayName": "Visual Basic 6 → .NET 10",
   "description": "VB6 source: .bas standard modules, .cls class modules, and .frm forms (property-bag header + code-behind). Calibrated against the Nous-authored 'VB6 Inventory Sample' seed corpus and on the long-tail quirks Rubberduck VBA's grammar enumerates: Variant arithmetic, On Error Resume Next swallow semantics, default-property access (rs!Field, rs(\"col\")), late-bound Set obj = CreateObject(...), implicit DAO/ADO record navigation. Per ADR-035 the production parser loads Rubberduck's ANTLR4 grammar via the antlr4-python3 runtime; until that lands, the v0 tokenizer in vb6_parser.py provides the structural surface.",
@@ -145,6 +145,108 @@
       ]
     },
     {
+      "id": "workbookCellContract",
+      "label": "Workbook cell contract",
+      "idPrefix": "WCC",
+      "specJsonField": "workbook_cell_contracts",
+      "textField": "description",
+      "displayTone": "signed",
+      "description": "For VBA inside an Office document: the cells that are the routine's inputs and outputs, as a machine-readable contract the migrated application keeps and the workbook equivalence gate checks. Each input names a field, the sheet and cell it is read from, its type and its allowed values or range (from the workbook's input rules); each selection list (Yes/No rows such as coverages or perils) names its range, the marked value and how an item's id is formed (from its row, or from an id column); each output names the cell it is written to or computed in and whether the workbook computes it with a formula, the routine computes it, or an outside service returns it.",
+      "fields": [
+        {
+          "name": "id",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "description",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "inputs",
+          "kind": "object[]",
+          "required": true,
+          "doc": "Each: {field (snake_case name the application uses), label, sheet, cell, type: number|integer|text|choice|yes_no|date, allowed: [values] (choice), min, max}."
+        },
+        {
+          "name": "selections",
+          "kind": "object[]",
+          "required": false,
+          "doc": "Each Yes/No list: {field, label, sheet, range (e.g. D6:D58), marked ('Yes'), unmarked ('No'), id_from: 'row - 1' (an expression in row) or 'column B' (the id is that column's value), label_column, always_included: [ids the request carries whatever is marked]}."
+        },
+        {
+          "name": "outputs",
+          "kind": "object[]",
+          "required": true,
+          "doc": "Each: {field, label, sheet, cell, computed_by: formula|routine|service, compare_with ('Sheet!F15': the workbook cell whose formula the value must match when the routine only writes it), tolerance (absolute, default 0.005)}."
+        },
+        {
+          "name": "citations",
+          "kind": "citation[]",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "outsideRequest",
+      "label": "Outside request",
+      "idPrefix": "OSR",
+      "specJsonField": "outside_requests",
+      "textField": "description",
+      "displayTone": "signed",
+      "description": "The exact request the routine sends an outside service (an HTTP API through MSXML2/WinHttp, a web form, a queue) and what it reads back. The body is a template that reproduces the source key for key: nesting, order and constants as the code writes them, every variable part a placeholder naming a workbook_cell_contracts field. The migrated application must send exactly this; the workbook equivalence gate captures what it sends and compares.",
+      "fields": [
+        {
+          "name": "id",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "description",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "method",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "url",
+          "kind": "string",
+          "required": true
+        },
+        {
+          "name": "content_type",
+          "kind": "string",
+          "required": false
+        },
+        {
+          "name": "body",
+          "kind": "object",
+          "required": true,
+          "doc": "JSON template. A string leaf \"{field}\" is that field's value (a number stays a number); an array item \"...{field}\" spreads a selection's ids into the array; any other value is a constant written as the source writes it."
+        },
+        {
+          "name": "response",
+          "kind": "object[]",
+          "required": false,
+          "doc": "What is read back: {path (dotted, e.g. 'premium'), type: number|text|list, writes (Sheet!cell or output field)}."
+        },
+        {
+          "name": "success_when",
+          "kind": "string",
+          "required": false
+        },
+        {
+          "name": "citations",
+          "kind": "citation[]",
+          "required": true
+        }
+      ]
+    },
+    {
       "id": "openQuestion",
       "label": "Open question",
       "idPrefix": "Q",
@@ -189,6 +291,8 @@
       "lateBindingCall",
       "sideEffect",
       "edgeCase",
+      "workbookCellContract",
+      "outsideRequest",
       "openQuestion"
     ],
     "minimumClaimsPerKind": {
@@ -200,6 +304,8 @@
       "lateBindingCall": 0,
       "sideEffect": 0,
       "edgeCase": 0,
+      "workbookCellContract": 0,
+      "outsideRequest": 0,
       "openQuestion": 0
     },
     "emphasis": "Surface every CreateObject / GetObject call site as a comInteropContract claim — naming the ProgID and the exact methods called. Pair each late-bound dispatch (Variant or Object subject) with a lateBindingCall claim that references the comInteropContract id when one exists, or an Open Question when it doesn't. Flag every On Error Resume Next block; default to assuming the SME did NOT intend to silently swallow Err.Number 6 (overflow) or 11 (div-by-zero) and raise an Open Question. For `rs!FieldName` and `rs(\"col\")` patterns, raise a defaultPropertyUsage claim that names the implied COM member. Cite line ranges aggressively — VB6 line continuations (`_` at end of line) are handled by the production parser, not the v0 tokenizer, so cite the physical line ranges as written.",

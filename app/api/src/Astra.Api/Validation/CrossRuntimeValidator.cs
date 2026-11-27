@@ -75,10 +75,11 @@ public sealed class CrossRuntimeValidator
         Guid scaffoldId,
         DevPersonaContext? actor,
         CancellationToken ct,
-        IReadOnlyList<System.Text.Json.Nodes.JsonObject>? engineerVectors = null)
+        IReadOnlyList<System.Text.Json.Nodes.JsonObject>? engineerVectors = null,
+        bool liveServices = false)
     {
         var scaffold = await _db.Scaffolds
-            .Include(s => s.Spec).ThenInclude(s => s!.Subroutine)
+            .Include(s => s.Spec).ThenInclude(s => s!.Subroutine).ThenInclude(s => s!.SourceFile)
             .FirstOrDefaultAsync(s => s.Id == scaffoldId, ct)
             ?? throw new InvalidOperationException($"Scaffold {scaffoldId} not found.");
 
@@ -111,6 +112,12 @@ public sealed class CrossRuntimeValidator
             // unmapped languages (and any pre-Phase-5.2 ingest without a
             // SourceLanguage column) keep their historical behaviour.
             var sourceLanguage = scaffold.Spec?.Subroutine?.SourceLanguage ?? "";
+            // VBA inside a workbook converted to React + Python: the workbook and the package on the same cases,
+            // from the signed cell contract (WorkbookEquivalence). Other VB6 keeps the smoke check.
+            if (WorkbookEquivalence.WorkbookEquivalenceRunner.Applies(scaffold))
+            {
+                return await RunWorkbookEquivalenceAsync(scaffold, run, actor, liveServices, ct);
+            }
             if (string.Equals(sourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase))
             {
                 return await RunVb6SmokeAsync(scaffold, run, actor, ct);
@@ -643,6 +650,27 @@ public sealed class CrossRuntimeValidator
         _log.LogInformation(
             "Per-routine equivalence for scaffold {Scaffold} (DEPTPAY.AVERAGE-SALARY): {Status} ({Summary})",
             scaffold.Id, run.Status, run.Summary);
+        return run;
+    }
+
+    /// <summary>A workbook routine against its React + Python package — see <see cref="WorkbookEquivalence.WorkbookEquivalenceRunner"/>.</summary>
+    private async Task<ValidationRun> RunWorkbookEquivalenceAsync(
+        Scaffold scaffold, ValidationRun run, DevPersonaContext? actor, bool live, CancellationToken ct)
+    {
+        var outcome = await new WorkbookEquivalence.WorkbookEquivalenceRunner(_db, _blob, _log).RunAsync(scaffold, live, ct);
+        var logKey = $"validation/{run.Id:N}/equivalence.log";
+        run.LogBlobUri = await _blob.PutTextAsync(_storage.Buckets.Scaffolds, logKey, outcome.Transcript, "text/plain", ct);
+        run.MetricsJson = JsonSerializer.Serialize(outcome.Metrics);
+        run.Status = outcome.Status;
+        run.ErrorCode = outcome.ErrorCode;
+        run.Summary = outcome.Summary;
+        run.CompletedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "validation.completed", "scaffold", scaffold.Id, actor,
+            payload: new { runId = run.Id, stage = run.Stage, status = run.Status, summary = run.Summary, routine = scaffold.Spec?.Subroutine?.Name, live },
+            ct: ct);
+        _log.LogInformation("Workbook equivalence for scaffold {Scaffold}: {Status} ({Summary})", scaffold.Id, run.Status, run.Summary);
         return run;
     }
 

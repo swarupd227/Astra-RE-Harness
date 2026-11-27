@@ -227,6 +227,19 @@ Rules:
     5, not 6. A sheet's row number is never an id unless the code sends `r`.
     One test names an item by its label and asserts the id the source would
     send for it, worked out from the source's own expression.
+22. **The signed cell contract is the package's front door.** When the signed
+    spec has `workbook_cell_contracts`, add `backend/app/contract.py` with
+    `def run(inputs: dict) -> dict`. `inputs` is keyed by the contract's
+    `field` names exactly: each input as its typed value, each selection as
+    the list of ids that are marked (formed by its `id_from`, without the
+    `always_included` ids — the package adds those as the source does). It
+    builds the package's own input model from them, runs the same service the
+    routes use with its real port, and returns a dict keyed by the contract's
+    output `field` names. The workbook equivalence gate calls exactly this,
+    so the routes and the form must use the same field names and semantics.
+    When the spec has `outside_requests`, the port sends exactly that
+    claim's body: render its template for the inputs, key for key, and send
+    it to its `url` with its `method` (rule 17 still applies to the tests).
 Output schema — emit a single JSON object with no surrounding prose:
 ```json
 {
