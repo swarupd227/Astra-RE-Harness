@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Conversations;
 using Astra.Api.Copilot;
@@ -44,7 +45,7 @@ public static class ConversationEndpoints
         {
             var active = narrator.ActiveByAgent();
             var lastPosts = await db.ConversationMessages.AsNoTracking()
-                .Where(m => m.Role == "agent" && m.Agent != null)
+                .Where(m => m.Role == "agent" && m.Agent != null && m.HiddenAt == null)
                 .GroupBy(m => m.Agent!)
                 .Select(g => g.OrderByDescending(m => m.CreatedAt).Select(m => new { m.Agent, m.CreatedAt, m.Markdown, m.ConversationId }).First())
                 .ToListAsync(ct);
@@ -135,6 +136,15 @@ public static class ConversationEndpoints
             await StartSseAsync(ctx, ct);
             await orchestrator.HandleUserTurnAsync(conv, text, actor, evt => WriteEventAsync(ctx, evt.Type, evt.Data, ct), ct);
         });
+
+        // Archive / restore a message (Admin). Nothing is deleted: the row stays, the audit trail records who and why,
+        // and threads plus the model's context leave hidden messages out. Used to clear test traffic from a demo thread.
+        app.MapPost("/api/v1/conversations/{id:guid}/messages/{messageId:guid}/hide", async (
+            Guid id, Guid messageId, AppDbContext db, DevPersonaContext actor, IAuditLogger audit, HttpContext http, CancellationToken ct) =>
+            await SetHidden(id, messageId, true, db, actor, audit, http, ct));
+        app.MapPost("/api/v1/conversations/{id:guid}/messages/{messageId:guid}/unhide", async (
+            Guid id, Guid messageId, AppDbContext db, DevPersonaContext actor, IAuditLogger audit, HttpContext http, CancellationToken ct) =>
+            await SetHidden(id, messageId, false, db, actor, audit, http, ct));
 
         app.MapPost("/api/v1/conversations/{id:guid}/messages/{messageId:guid}/confirm", async (
             Guid id, Guid messageId, HttpContext ctx, ConversationService conversations,
@@ -269,5 +279,23 @@ public static class ConversationEndpoints
         var payload = JsonSerializer.Serialize(data, ConversationJson.Web);
         await ctx.Response.WriteAsync($"event: {type}\ndata: {payload}\n\n", ct);
         await ctx.Response.Body.FlushAsync(ct);
+    }
+
+    private static async Task<IResult> SetHidden(
+        Guid conversationId, Guid messageId, bool hide, AppDbContext db, DevPersonaContext actor, IAuditLogger audit,
+        HttpContext http, CancellationToken ct)
+    {
+        if (actor.Persona != Persona.Admin)
+            return Results.Json(
+                new { error = new { code = "auth.admin_required", message = "Only an Admin archives or restores messages." } },
+                statusCode: StatusCodes.Status403Forbidden);
+        var m = await db.ConversationMessages.FirstOrDefaultAsync(x => x.Id == messageId && x.ConversationId == conversationId, ct);
+        if (m is null) return Results.NotFound(new { error = new { code = "message.not_found" } });
+        m.HiddenAt = hide ? DateTimeOffset.UtcNow : null;
+        m.HiddenBy = hide ? actor.DisplayName : null;
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(hide ? "conversation.message_hidden" : "conversation.message_restored", "conversation", conversationId, actor,
+            new { messageId, role = m.Role, excerpt = m.Markdown.Length > 120 ? m.Markdown[..120] : m.Markdown }, http, ct);
+        return Results.Ok(new { id = m.Id, hidden = m.HiddenAt is not null });
     }
 }

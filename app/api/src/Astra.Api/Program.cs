@@ -1108,6 +1108,12 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ix_conversation_messages_conv_created ON conversation_messages (conversation_id, created_at);
             """);
 
+        // Archived (hidden) messages: kept, but left out of threads and model context.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS hidden_at timestamptz NULL;
+            ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS hidden_by varchar(160) NULL;
+            """);
+
         // WS2 Increment 2 — spec review threads reference their spec.
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ref_id uuid NULL;

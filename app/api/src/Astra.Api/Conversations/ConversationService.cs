@@ -156,7 +156,7 @@ public sealed class ConversationService
     public async Task<IReadOnlyList<MessageDto>> MessagesAsync(Guid conversationId, int take, CancellationToken ct)
     {
         var rows = await _db.ConversationMessages.AsNoTracking()
-            .Where(m => m.ConversationId == conversationId)
+            .Where(m => m.ConversationId == conversationId && m.HiddenAt == null)
             .OrderByDescending(m => m.CreatedAt)
             .Take(take)
             .ToListAsync(ct);
@@ -167,7 +167,7 @@ public sealed class ConversationService
     public async Task<IReadOnlyList<ConversationMessage>> RecentEntitiesAsync(Guid conversationId, int take, CancellationToken ct)
     {
         var rows = await _db.ConversationMessages.AsNoTracking()
-            .Where(m => m.ConversationId == conversationId)
+            .Where(m => m.ConversationId == conversationId && m.HiddenAt == null)
             .OrderByDescending(m => m.CreatedAt)
             .Take(take)
             .ToListAsync(ct);

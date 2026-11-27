@@ -76,5 +76,12 @@ public sealed class ConversationMessage
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// When an Admin archived this message (test traffic, a mistaken post). Hidden messages stay in the table and in the
+    /// audit trail; threads and the model's context leave them out. Null = shown.
+    /// </summary>
+    public DateTimeOffset? HiddenAt { get; set; }
+    public string? HiddenBy { get; set; }
+
     public Conversation? Conversation { get; set; }
 }

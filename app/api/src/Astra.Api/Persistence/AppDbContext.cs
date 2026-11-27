@@ -337,6 +337,8 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.LlmTurnsJson).HasColumnName("llm_turns_json").HasColumnType("jsonb");
             b.Property(x => x.RunId).HasColumnName("run_id");
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.HiddenAt).HasColumnName("hidden_at");
+            b.Property(x => x.HiddenBy).HasColumnName("hidden_by").HasMaxLength(160);
             b.HasOne(x => x.Conversation).WithMany().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => new { x.ConversationId, x.CreatedAt });
         });
