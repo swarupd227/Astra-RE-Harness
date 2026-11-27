@@ -86,6 +86,8 @@ public static class SchemaMerger
         public Dictionary<string, string> Columns { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, HashSet<string>> NotNullVotes { get; } = new(StringComparer.OrdinalIgnoreCase);   // column → units that say NOT NULL
         public List<string> Constraints { get; } = new();
+        public Dictionary<string, HashSet<string>> ConstraintVoters { get; } = new(StringComparer.Ordinal);       // tight text → units that declare it
+        public Dictionary<string, HashSet<string>> ReferenceVoters { get; } = new(StringComparer.OrdinalIgnoreCase); // column → units whose column REFERENCES another table
         public List<string> Units { get; } = new();
         public List<string> Added { get; } = new();
     }
@@ -139,6 +141,11 @@ public static class SchemaMerger
                     var notNull = Regex.IsMatch(def, @"\bNOT\s+NULL\b", RegexOptions.IgnoreCase) || Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
                     if (!t.NotNullVotes.TryGetValue(name, out var voters)) t.NotNullVotes[name] = voters = new HashSet<string>(StringComparer.Ordinal);
                     if (notNull) voters.Add(unit);   // per unit: a unit that declares the table twice still has one say
+                    if (References.IsMatch(def))
+                    {
+                        if (!t.ReferenceVoters.TryGetValue(name, out var refs)) t.ReferenceVoters[name] = refs = new HashSet<string>(StringComparer.Ordinal);
+                        refs.Add(unit);
+                    }
                     if (t.Columns.TryGetValue(name, out var existing))
                     {
                         if (TypeOf(existing) != TypeOf(def))
@@ -156,6 +163,11 @@ public static class SchemaMerger
                     if (isPk && (hadKey || HasPrimaryKey(t))) continue;
                     // Spacing is not a difference: "REFERENCES t (id)" and "REFERENCES t(id)" are one constraint.
                     if (!t.Constraints.Any(x => Tight(x) == Tight(c))) t.Constraints.Add(c);
+                    if (!isPk)
+                    {
+                        if (!t.ConstraintVoters.TryGetValue(Tight(c), out var cv)) t.ConstraintVoters[Tight(c)] = cv = new HashSet<string>(StringComparer.Ordinal);
+                        cv.Add(unit);
+                    }
                 }
             }
 
@@ -178,6 +190,7 @@ public static class SchemaMerger
         {
             var t = tables[key];
             var lines = new List<string>();
+            var dropped = new List<string>();
             foreach (var col in t.Order)
             {
                 var def = t.Columns[col];
@@ -186,10 +199,23 @@ public static class SchemaMerger
                     def = Regex.Replace(def, @"\s+NOT\s+NULL\b", "", RegexOptions.IgnoreCase);
                 // A column named like an H2 keyword (value, year …) is written "VALUE": the same column H2 makes of an
                 // unquoted value, but never read as the keyword — whichever way a test builds its database.
+                // A foreign key is kept only when every unit that declares the table declares it: a unit whose own table had
+                // no such key inserts rows that would break it, and passed its tests that way.
+                if (References.IsMatch(def) && t.Units.Count > 1 && !(t.ReferenceVoters.TryGetValue(col, out var rv) && t.Units.All(rv.Contains)))
+                {
+                    def = InlineReference.Replace(def, "");
+                    dropped.Add($"{col} REFERENCES …");
+                }
                 if (H2Keywords.IsReleasable(col)) def = Regex.Replace(def, @"^\w+", "\"" + col.ToUpperInvariant() + "\"");
                 lines.Add("    " + def);
             }
-            lines.AddRange(t.Constraints.Select(c => "    " + c));
+            foreach (var c in t.Constraints)
+            {
+                var all = IsKeyClause(c) || t.Units.Count < 2 || (t.ConstraintVoters.TryGetValue(Tight(c), out var cv) && t.Units.All(cv.Contains));
+                if (all) lines.Add("    " + c); else dropped.Add(c);
+            }
+            if (dropped.Count > 0)
+                notes.Add($"Table {t.DisplayName}: constraints only some of its {t.Units.Count} units declare are left out, so each unit's rows fit as they did alone: {string.Join("; ", dropped)}.");
             sb.AppendLine();
             sb.AppendLine($"CREATE TABLE IF NOT EXISTS {t.DisplayName} (");
             sb.AppendLine(string.Join(",\n", lines));
@@ -275,6 +301,10 @@ public static class SchemaMerger
 
     private static string Bare(string name) => name.Trim('`', '"', '[', ']').ToLowerInvariant();
     private static string Squash(string s) => Regex.Replace(s, @"\s+", " ").Trim().ToLowerInvariant();
+    private static readonly Regex InlineReference = new(
+        @"\s+REFERENCES\s+[`""\[]?[\w.]+[`""\]]?\s*(?:\([^)]*\))?(?:\s+ON\s+(?:DELETE|UPDATE)\s+(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))*",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static string Tight(string s) => Regex.Replace(s, @"\s+", "").ToLowerInvariant();
 
     /// <summary>The unquoted column names of every CREATE TABLE in a schema, in order.</summary>

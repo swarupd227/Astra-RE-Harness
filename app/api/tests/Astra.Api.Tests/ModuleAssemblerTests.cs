@@ -282,7 +282,7 @@ public class ModuleAssemblerTests
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(links, "PRIMARY KEY"));
         Assert.Contains("rowid BIGINT AUTO_INCREMENT PRIMARY KEY", links);                         // the first unit's key wins
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(links, "FOREIGN KEY"));          // spacing is not a difference
-        Assert.Contains("UNIQUE (fk_soc, fk_user)", links);                                       // other constraints still merge
+        Assert.DoesNotContain("UNIQUE", links);                                                   // only b declares it: left out, so a's rows still fit
         Assert.Contains(conflicts, x => x.Kind == "primary-key" && x.Name == "links");
 
         var other = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS other \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
@@ -300,6 +300,25 @@ public class ModuleAssemblerTests
         var schema = SchemaMerger.Merge(new[] { ("a", twice), ("b", without) }, new List<AssemblyConflict>(), new List<SharedItem>(), new List<string>());
         Assert.Contains("name VARCHAR(200),", schema.Replace("\r", ""));                          // b never fills it in
         Assert.Contains("login VARCHAR(100) NOT NULL", schema);                                   // both require it
+    }
+
+    [Fact]
+    public void A_foreign_key_stays_only_when_every_unit_that_declares_the_table_has_it()
+    {
+        // Seen on a real estate: one unit's llx_societe_rib referenced llx_societe; another unit's had no key and its
+        // tests insert rib rows for third parties they never create — they passed alone, and failed merged.
+        var keyed = "CREATE TABLE IF NOT EXISTS soc (\n rowid BIGINT PRIMARY KEY\n);\nCREATE TABLE IF NOT EXISTS rib (\n rowid BIGINT PRIMARY KEY,\n fk_soc BIGINT NOT NULL REFERENCES soc (rowid) ON DELETE CASCADE,\n fk_user BIGINT,\n FOREIGN KEY (fk_user) REFERENCES soc (rowid)\n);";
+        var loose = "CREATE TABLE IF NOT EXISTS rib (\n rowid BIGINT PRIMARY KEY,\n fk_soc BIGINT NOT NULL,\n fk_user BIGINT\n);";
+        var both = "CREATE TABLE IF NOT EXISTS rib2 (\n id BIGINT PRIMARY KEY,\n fk_soc BIGINT REFERENCES soc(rowid)\n);";
+        var notes = new List<string>();
+        var schema = SchemaMerger.Merge(new[] { ("a", keyed + "\n" + both), ("b", loose + "\n" + both) }, new List<AssemblyConflict>(), new List<SharedItem>(), notes);
+
+        var rib = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS rib \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.DoesNotContain("REFERENCES", rib);                                                 // inline and clause forms both left out
+        Assert.Contains("fk_soc BIGINT NOT NULL", rib);                                           // the column itself is kept, still required
+        Assert.Contains(notes, n => n.Contains("rib:") && n.Contains("REFERENCES"));
+        var rib2 = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS rib2 \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.Contains("REFERENCES soc(rowid)", rib2);                                           // both units declare it: kept
     }
 
     [Fact]
