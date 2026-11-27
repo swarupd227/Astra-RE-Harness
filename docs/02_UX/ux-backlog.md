@@ -11,7 +11,7 @@ commit.
 | 2 | Projects list | `/projects` | Live |
 | 3 | Project detail | `/projects/:id` | Live (tabs → section nav; virtualisation open) |
 | 4 | Routines | `/subroutines` | Live, incl. search over spec summaries |
-| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification open |
+| 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification live (78f1a93) |
 | 6 | Generated code | `/scaffolds` | Live (gates per package, live previews) |
 | 7 | My reviews | `/my-reviews` | Live; real assignment = separate feature |
 | 8 | Comments | `/comments` | Live; per-user read state + following open (API) |
@@ -80,6 +80,7 @@ commit.
 4. Target stack: chosen + eligible stacks; ineligible ones folded; consistent names.
 5. Claim outline chips cut at word boundaries, distinguishing near-duplicates.
 6. One stepper and "Next" logic shared by routine page and spec review; shorter breadcrumb; one status pill.
+   **Done (78f1a93):** `WorkflowStatus` — rail + the page's blocker or "Next: action · owner" (switch-persona hint) on both pages.
 
 ## 6 · Generated code (`/scaffolds`)
 1. Group by project with gate summary (build ✓ · tests ✓ · previews live); failing groups first.
