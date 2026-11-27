@@ -249,6 +249,11 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
 
 function EngineerHome({ stats }: { stats?: SystemStats }) {
   const corpora = useQuery({ queryKey: ['corpora'], queryFn: api.listCorpora });
+  const weekAgo = Date.now() - 7 * 24 * 3600_000;
+  const changedThisWeek = (corpora.data?.data ?? [])
+    .filter((c) => !c.isTest && new Date(c.updatedAt).getTime() >= weekAgo)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 5);
   const recentActivity = useQuery({
     queryKey: ['audit-global', 'recent'],
     queryFn: () => auditApi.global({ limit: 8 }),
@@ -295,15 +300,21 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
         <Card data-testid="home-corpora">
           <CardHeader
             titleAs="h2"
-            title={<span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Projects</span>}
-            description="Connect a Git repository or upload source files to begin."
+            // The full list lives on Projects; here, only what moved in the last 7 days (test projects left out).
+            title={<span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-ink-tertiary" aria-hidden="true" /> Projects changed this week</span>}
+            description={<Link to="/projects" className="text-ink-link hover:underline">All projects →</Link>}
             action={
-              <Link to="/projects/new"><Button variant="primary" size="sm"><Plus className="h-4 w-4" /> Add project</Button></Link>
+              <Link to="/projects/new" className="shrink-0"><Button variant="primary" size="sm" className="whitespace-nowrap"><Plus className="h-4 w-4" /> Add project</Button></Link>
             }
           />
           <CardBody className="p-0">
             {corpora.isPending ? (
               <div className="space-y-2 p-6"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
+            ) : changedThisWeek.length === 0 && (corpora.data?.data.length ?? 0) > 0 ? (
+              <p className="p-6 text-body text-ink-secondary" data-testid="home-corpora-quiet">
+                No project changed in the last 7 days.{' '}
+                <Link to="/projects" className="text-ink-link hover:underline">Open Projects</Link>
+              </p>
             ) : (corpora.data?.data.length ?? 0) === 0 ? (
               <p className="p-6 text-body text-ink-secondary">
                 No projects yet. Click <span className="font-medium text-ink-primary">Add project</span> to connect a Git
@@ -312,7 +323,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
               </p>
             ) : (
               <ul className="divide-y divide-line-subtle">
-                {corpora.data!.data.slice(0, 5).map((c) => (
+                {changedThisWeek.map((c) => (
                   <li key={c.id}>
                     <Link
                       to={`/projects/${c.id}`}
@@ -322,7 +333,7 @@ function EngineerHome({ stats }: { stats?: SystemStats }) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-body font-medium text-ink-primary">{c.name}</p>
                         <p className="font-mono text-caption text-ink-tertiary">
-                          {c.sourceType.toUpperCase()} · {c.fileCount} file{c.fileCount === 1 ? '' : 's'} · {c.totalLoc.toLocaleString()} LOC
+                          {c.fileCount.toLocaleString()} file{c.fileCount === 1 ? '' : 's'} · {c.totalLoc.toLocaleString()} LOC · changed {relativeTime(c.updatedAt)}
                         </p>
                       </div>
                       <Badge tone={c.state === 'PARSED' ? 'signed' : c.state === 'FAILED' ? 'failed' : 'draft'}>
