@@ -49,8 +49,7 @@ public sealed class QualityReportService
         .OrderByDescending(s => s.GeneratedAt).Select(s => s.Id).ToList();
 
     private static int ClaimCount(JsonDocument? spec) =>
-        spec is not null && spec.RootElement.ValueKind == JsonValueKind.Object
-        && spec.RootElement.TryGetProperty("claims", out var c) && c.ValueKind == JsonValueKind.Array ? c.GetArrayLength() : 0;
+        spec is null ? 0 : Astra.Api.Conversations.ConversationService.CountClaims(spec.RootElement);
 
     /// <summary>HTML → PDF with weasyprint (in the API image, as for the documentation export).</summary>
     public async Task<byte[]> RenderPdfAsync(string html, CancellationToken ct)

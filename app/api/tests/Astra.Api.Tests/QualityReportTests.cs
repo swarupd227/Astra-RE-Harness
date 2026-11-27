@@ -147,6 +147,18 @@ public class QualityReportTests
     }
 
     [Fact]
+    public void A_provider_error_is_reported_by_its_status_and_message_not_its_json()
+    {
+        var r = QualityReportBuilder.Build(Input("react-python", Run("QUALITY", "PASSED", 3, """
+            {"total":0,"blocking":0,"findings":[],"aiReview":{"status":"failed","kept":0,"proposed":0,"model":"claude-sonnet",
+             "note":"The AI review could not run: Anthropic returned 401: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_1\"}"}}
+            """)));
+        var ai = r.Checks.Single(c => c.Id == "ai-review");
+        Assert.Equal("failed-to-run", ai.Status);
+        Assert.Equal("The AI review could not run: Anthropic returned 401: invalid x-api-key", ai.Note);
+    }
+
+    [Fact]
     public void The_rule_set_fingerprint_is_stable() =>
         Assert.Matches("^[0-9a-f]{12}$", QualityRules.RuleSetFingerprint);
 

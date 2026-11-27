@@ -152,6 +152,11 @@ public static class LlmSettingsEndpoints
             if (!key.StartsWith("sk-ant-", StringComparison.Ordinal) || key.Length < 30)
                 return BadRequest("llm_key.invalid",
                     "That does not look like an Anthropic API key (expected to start with sk-ant-).");
+            // One key only: a value holding two keys (joined by a comma, say) reaches Anthropic as the x-api-key
+            // header sent twice with different values, which it rejects with 401 on every call.
+            if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^sk-ant-[A-Za-z0-9_-]+$") || key.IndexOf("sk-ant-", 7, StringComparison.Ordinal) >= 0)
+                return BadRequest("llm_key.invalid",
+                    "Paste exactly one Anthropic API key: letters, digits, '-' and '_' only, with no comma or second key.");
 
             var row = await db.PlatformConfigs.FirstOrDefaultAsync(c => c.Key == ConfigKey, ct);
             if (row is null)

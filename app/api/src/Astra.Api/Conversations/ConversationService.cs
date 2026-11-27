@@ -252,7 +252,8 @@ public sealed class ConversationService
         return conv;
     }
 
-    private static int CountClaims(System.Text.Json.JsonElement root)
+    /// <summary>The claims of a spec: every object with an id in its top-level lists (inputs and outputs are not claims).</summary>
+    internal static int CountClaims(System.Text.Json.JsonElement root)
     {
         if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
         var n = 0;

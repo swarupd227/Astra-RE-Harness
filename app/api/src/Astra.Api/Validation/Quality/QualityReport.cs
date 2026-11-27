@@ -241,7 +241,7 @@ public static class QualityReportBuilder
                         var note = $"{Int(r, "proposed") ?? 0} proposed, {Int(r, "kept") ?? 0} kept after checking against the code"
                             + (cost is { } cc ? $" · ${cc.ToString("0.000", CultureInfo.InvariantCulture)}" : "");
                         list.Add(new(d.Id, d.Name, d.Kind, Str(r, "model") ?? "", d.Covers, status == "reviewed" ? "ran" : "failed-to-run",
-                            status == "reviewed" ? Int(r, "kept") : null, null, status == "reviewed" ? note : Str(r, "note") ?? status));
+                            status == "reviewed" ? Int(r, "kept") : null, null, status == "reviewed" ? note : Trim(Str(r, "note")) ?? status));
                     }
                     break;
                 case "sbom":
@@ -302,7 +302,20 @@ public static class QualityReportBuilder
         e is { ValueKind: JsonValueKind.Object } o && o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
     private static bool Bool(JsonElement? e, string name) =>
         e is { ValueKind: JsonValueKind.Object } o && o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
-    private static string? Trim(string? s) => s is null ? null : s.Length > 300 ? s[..300] + "…" : s;
+    /// <summary>A note short enough for a report cell; a provider error keeps its status and message, not its JSON.</summary>
+    private static string? Trim(string? s)
+    {
+        if (s is null) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(s, "\"message\"\\s*:\\s*\"([^\"]{1,200})\"");
+        if (m.Success)
+        {
+            var status = System.Text.RegularExpressions.Regex.Match(s, @"returned (\d{3})");
+            s = s[..Math.Max(0, s.IndexOf('{'))].TrimEnd(' ', ':') is { Length: > 0 } head
+                ? $"{head}: {m.Groups[1].Value}"
+                : (status.Success ? $"HTTP {status.Groups[1].Value}: " : "") + m.Groups[1].Value;
+        }
+        return s.Length > 220 ? s[..220] + "…" : s;
+    }
 }
 
 /// <summary>The report as a printable HTML page (rendered to PDF by weasyprint). Every value is escaped.</summary>
@@ -359,7 +372,8 @@ public static class QualityReportHtml
              .Append(Dur(g.DurationMs)).Append("</td></tr>");
         h.Append("</tbody></table>");
 
-        h.Append("<h2>3. Checks inside the quality gate</h2><table><thead><tr><th>Check</th><th>Version</th><th>Covers</th><th>Result</th><th>Findings</th><th>Note</th></tr></thead><tbody>");
+        h.Append("<h2>3. Checks inside the quality gate</h2><table class=\"checks\"><colgroup><col style=\"width:15%\"><col style=\"width:13%\">")
+         .Append("<col style=\"width:24%\"><col style=\"width:13%\"><col style=\"width:8%\"><col style=\"width:27%\"></colgroup><thead><tr><th>Check</th><th>Version</th><th>Covers</th><th>Result</th><th>Found</th><th>Note</th></tr></thead><tbody>");
         foreach (var c in r.Checks)
             h.Append("<tr").Append(c.Status is "not-applicable" ? " class=\"dim\"" : "").Append("><td>").Append(E(c.Name)).Append("</td><td class=\"mono\">").Append(E(c.Version))
              .Append("</td><td>").Append(E(c.Covers)).Append("</td><td>").Append(Badge(c.Status)).Append("</td><td class=\"num\">")
@@ -458,7 +472,8 @@ public static class QualityReportHtml
         .v-failed { background: #fbecec; border-color: #d77a7a; }
         .v-incomplete { background: #fdf6e0; border-color: #d9b44a; }
         table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-        th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #e3e3e6; }
+        th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #e3e3e6; overflow-wrap: anywhere; }
+        table.checks { table-layout: fixed; } table.checks td { font-size: 8pt; }
         thead th { background: #f1f1f3; font-size: 8pt; text-transform: uppercase; letter-spacing: .03em; color: #4a4a50; }
         table.kv th { width: 30%; color: #4a4a50; font-weight: normal; }
         table.counts td { text-align: center; border: 1px solid #e3e3e6; font-size: 8pt; color: #4a4a50; }
