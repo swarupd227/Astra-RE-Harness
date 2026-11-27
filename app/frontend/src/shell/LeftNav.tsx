@@ -175,7 +175,9 @@ export function LeftNav() {
       data-testid="left-nav"
     >
       <nav
-        className={clsx('flex-1 overflow-y-auto overflow-x-hidden py-3', collapsed ? 'px-1.5' : 'px-2.5')}
+        // `relative` keeps absolutely-positioned children (the collapsed Agents list is `sr-only`, i.e. absolute) inside
+        // this scroll box; without it they hang off the document and give the page a second scrollbar.
+        className={clsx('relative flex-1 overflow-y-auto overflow-x-hidden py-3', collapsed ? 'px-1.5' : 'px-2.5')}
         aria-label="Primary"
       >
         {/* (a) Ask Astra — the conversation is the front door */}

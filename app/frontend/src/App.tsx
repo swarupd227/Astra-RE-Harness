@@ -104,7 +104,9 @@ export function App() {
 
   return (
     <EvidenceProvider>
-    <div className="flex h-screen flex-col bg-canvas text-ink-primary">
+    {/* The shell is exactly one screen and never scrolls itself: <main> (and the nav) are the only scroll boxes, so the
+        browser never shows a second scrollbar beside the app's. */}
+    <div className="flex h-screen flex-col overflow-hidden bg-canvas text-ink-primary">
       <a
         href="#main-content"
         className="sr-only z-50 rounded-md bg-volt px-4 py-2 text-body font-medium text-on-volt focus:not-sr-only focus:absolute focus:left-3 focus:top-2"
