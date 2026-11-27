@@ -49,7 +49,7 @@ public static class FaithfulConversion
     {
         "unitName", "unitPath", "className", "namespace", "anchorRoutine",
         "routineCount", "signedCount", "unitRoutinesJson", "unitSpecsJson",
-        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource",
+        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource", "partNote",
     };
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -61,8 +61,80 @@ public static class FaithfulConversion
     public static bool IsFaithful(string? targetStack) =>
         targetStack is not null && targetStack.StartsWith(Stack, StringComparison.OrdinalIgnoreCase);
 
-    public static bool IsExemplar(string path) =>
-        string.Equals(path.Replace('\\', '/'), ExemplarPath, StringComparison.OrdinalIgnoreCase);
+    /// <summary>Files under this folder show the model the target shape (an archetype may carry several: a module,
+    /// a form's logic, a form's page); like <see cref="ExemplarPath"/> they are never shipped.</summary>
+    public const string ExemplarFolder = "src/Exemplar/";
+
+    public static bool IsExemplar(string path)
+    {
+        var p = path.Replace('\\', '/');
+        return string.Equals(p, ExemplarPath, StringComparison.OrdinalIgnoreCase)
+            || p.StartsWith(ExemplarFolder, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// What the prompt shows as the shape exemplar: the single <see cref="ExemplarPath"/> file as plain text (its
+    /// prompt wraps it in a fence), or, when the archetype has an exemplar folder, each file under its own heading
+    /// and fence.
+    /// </summary>
+    public static string ExemplarSourceOf(IEnumerable<(string Path, string Language, string Content)> files)
+    {
+        var list = files.Where(f => IsExemplar(f.Path)).ToList();
+        var folder = list.Where(f => f.Path.Replace('\\', '/').StartsWith(ExemplarFolder, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (folder.Count == 0) return list.FirstOrDefault().Content ?? "";
+        var sb = new StringBuilder();
+        foreach (var f in folder)
+        {
+            var fence = f.Path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) ? "razor" : "csharp";
+            sb.Append("### ").Append(f.Path.Replace('\\', '/')).Append("\n```").Append(fence).Append('\n')
+              .Append(f.Content.TrimEnd()).Append("\n```\n\n");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // VB6: one project-wide namespace, classes named by VB_Name
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>Every VB6 unit converts into this namespace: VB6 has one project-wide scope, and a module's public
+    /// members are visible everywhere without its name.</summary>
+    public const string Vb6Namespace = "Faithful.Vb6App";
+
+    private static readonly System.Text.RegularExpressions.Regex VbNameAttribute = new(
+        @"^\s*Attribute\s+VB_Name\s*=\s*""([^""]+)""", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>A VB6 unit's own name (its <c>Attribute VB_Name</c>), which is what other code calls it by.</summary>
+    public static string? Vb6NameOf(string? sourceText)
+    {
+        if (string.IsNullOrEmpty(sourceText)) return null;
+        var m = VbNameAttribute.Match(sourceText);
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    /// <summary>
+    /// What a unit's conversion depends on: its source text, its signed specs and the target. Two routines of the same
+    /// unit with the same key get the same package, so the second one reuses the first instead of a new model call.
+    /// </summary>
+    public static string UnitKey(string sourceText, UnitContext unit, string targetStack)
+    {
+        var sb = new StringBuilder();
+        sb.Append(targetStack).Append('\n').Append(sourceText.Replace("\r\n", "\n")).Append('\n');
+        foreach (var s in unit.SignedSpecs.OrderBy(s => s.Routine, StringComparer.Ordinal).ThenBy(s => s.SpecJson, StringComparer.Ordinal))
+            sb.Append(s.Routine).Append('\u0001').Append(s.SpecJson).Append('\n');
+        return "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
+    }
+
+    /// <summary>The unit as the language names it: for VB6 the class is the VB_Name and the namespace is shared.</summary>
+    public static UnitContext ForLanguage(UnitContext unit, string? sourceSchema, string? sourceText)
+    {
+        if (!string.Equals(sourceSchema, "vb6", StringComparison.OrdinalIgnoreCase)) return unit;
+        var name = Vb6NameOf(sourceText);
+        return unit with
+        {
+            ClassName = name is null ? unit.ClassName : IdentifierOf(name),
+            Namespace = Vb6Namespace,
+        };
+    }
 
     // ────────────────────────────────────────────────────────────────────
     // Unit context — what the pipeline gathers, what the provider narrates
@@ -234,6 +306,142 @@ public static class FaithfulConversion
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // Units too large for one answer: converted in parts (partial classes)
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// One model call's share of a unit. Part 1 writes the declarations (and, for a form, its page); each later part
+    /// writes a run of routines into its own partial-class file. A unit that fits in one answer is one part with an
+    /// empty <see cref="Note"/>.
+    /// </summary>
+    public sealed record UnitPart(
+        int Number, int Count, string Note, string SourceText, string RoutinesJson,
+        IReadOnlyList<string> RoutineNames, string MainFile);
+
+    /// <summary>Languages whose unit is one class, so a part can be a partial-class file (VB6 today).</summary>
+    public static bool SupportsParts(string? sourceSchema) =>
+        string.Equals(sourceSchema, "vb6", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Splits a unit into parts of at most <paramref name="maxLines"/> source lines of routines each, in source order
+    /// (a routine is never split; one longer than the budget is a part of its own). Pure: the same unit always gives
+    /// the same parts, so a retry or a repair asks the same questions.
+    /// </summary>
+    public static IReadOnlyList<UnitPart> PlanParts(UnitContext unit, string sourceText, int maxLines = MaxUnitLines)
+    {
+        var lines = sourceText.Replace("\r\n", "\n").Split('\n');
+        var main = $"src/{unit.ClassName}.cs";
+        if (lines.Length <= maxLines || unit.Routines.Count == 0)
+            return [new UnitPart(1, 1, "", sourceText, unit.RoutinesJson(), unit.Routines.Select(r => r.Name).ToList(), main)];
+
+        var routines = unit.Routines.OrderBy(r => r.LineStart).ToList();
+        var firstStart = Math.Max(1, routines[0].LineStart);
+        var declarations = string.Join('\n', lines.Take(firstStart - 1));
+
+        var groups = new List<List<UnitRoutine>>();
+        var current = new List<UnitRoutine>();
+        var size = 0;
+        foreach (var r in routines)
+        {
+            var len = Math.Max(1, r.LineEnd - r.LineStart + 1);
+            if (current.Count > 0 && size + len > maxLines)
+            {
+                groups.Add(current);
+                current = new List<UnitRoutine>();
+                size = 0;
+            }
+            current.Add(r);
+            size += len;
+        }
+        if (current.Count > 0) groups.Add(current);
+
+        var count = groups.Count + 1;
+        var isModule = unit.UnitPath.EndsWith(".bas", StringComparison.OrdinalIgnoreCase);
+        var isForm = unit.UnitPath.EndsWith(".frm", StringComparison.OrdinalIgnoreCase);
+        var kind = isModule ? $"public static partial class {unit.ClassName}" : isForm ? $"public partial class {unit.ClassName} : VbForm" : $"public partial class {unit.ClassName}";
+        var partOf = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var g = 0; g < groups.Count; g++)
+            foreach (var r in groups[g]) partOf[$"{r.Name}@{r.LineStart}"] = g + 2;
+
+        string Inventory() => JsonSerializer.Serialize(
+            routines.Select(r => new
+            {
+                name = r.Name,
+                signature = r.Signature,
+                lines = $"{r.LineStart}-{r.LineEnd}",
+                calls = r.Calls.Count == 0 ? null : r.Calls,
+                spec = r.SpecState,
+                part = partOf[$"{r.Name}@{r.LineStart}"],
+            }),
+            JsonOpts);
+        var inventory = Inventory();
+
+        var parts = new List<UnitPart>
+        {
+            new(1, count,
+                $"\n**This unit is too large for one answer, so it is converted in {count} parts.** You are writing PART 1 of {count}: " +
+                $"the declarations only — {(isForm ? "the control fields, the constructor (Caption and size) and the page src/View_" + unit.ClassName + ".razor" : "module-level variables, constants, Types, Enums and Declares")} — " +
+                $"as `{main}` declaring `{kind}` with NO routines (parts 2–{count} write them, each in its own partial file; " +
+                "the inventory's `part` says which). Stub every other unit or library the declarations use. The source below is the unit's declarations section.",
+                declarations, inventory, Array.Empty<string>(), main),
+        };
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var number = g + 2;
+            var file = $"src/{unit.ClassName}.Part{number}.cs";
+            var names = groups[g].Select(r => r.Name).ToList();
+            var body = new StringBuilder(declarations);
+            body.Append("\n\n' ─── (routines of other parts omitted) ───\n");
+            foreach (var r in groups[g])
+            {
+                body.Append($"\n' ─── lines {r.LineStart}-{r.LineEnd} ───\n");
+                body.Append(string.Join('\n', lines.Skip(r.LineStart - 1).Take(Math.Max(1, r.LineEnd - r.LineStart + 1))));
+                body.Append('\n');
+            }
+            parts.Add(new UnitPart(number, count,
+                $"\n**This unit is too large for one answer, so it is converted in {count} parts.** You are writing PART {number} of {count}: " +
+                $"ONLY these routines, in source order: {string.Join(", ", names)} — as `{file}` declaring `{kind}` " +
+                "with those members only (same modifiers as part 1). The declarations are already written in part 1 (its C# is shown below " +
+                "with every stub written so far): use them, never redeclare them. Stub only members that are still missing, in NEW files named " +
+                $"`src/Stubs/…/<Name>.Part{number}.cs` that declare the same partial type with only the new members.",
+                body.ToString(), inventory, names, file));
+        }
+        return parts;
+    }
+
+    /// <summary>The C# earlier parts wrote (part 1's declarations and every stub), shown to a later part so it uses
+    /// the same names and never declares a member twice.</summary>
+    public static string EarlierPartsSection(IEnumerable<PackageFile> written, string mainFile)
+    {
+        var sb = new StringBuilder();
+        foreach (var f in written.Where(f => string.Equals(f.Path, mainFile, StringComparison.OrdinalIgnoreCase)
+                                             || f.Path.StartsWith("src/Stubs/", StringComparison.OrdinalIgnoreCase)))
+            sb.Append("\n### ").Append(f.Path).Append("\n```csharp\n").Append(f.Content.TrimEnd()).Append("\n```\n");
+        return sb.Length == 0 ? "" : "\n\n## Written by earlier parts (use these names; do not redeclare)\n" + sb;
+    }
+
+    /// <summary>Adds a part's files to the package: a path already written keeps its first content (a later part may
+    /// only add files), and its claim citations are merged.</summary>
+    public static List<PackageFile> MergeParts(IEnumerable<IReadOnlyList<PackageFile>> parts)
+    {
+        var result = new List<PackageFile>();
+        var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in parts)
+            foreach (var f in part)
+            {
+                if (index.TryGetValue(f.Path, out var i))
+                {
+                    var existing = result[i];
+                    result[i] = existing with { DerivedFromClaimIds = existing.DerivedFromClaimIds.Union(f.DerivedFromClaimIds).ToArray() };
+                    continue;
+                }
+                index[f.Path] = result.Count;
+                result.Add(f);
+            }
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // Prompt + tool
     // ────────────────────────────────────────────────────────────────────
 
@@ -250,9 +458,11 @@ public static class FaithfulConversion
     };
 
     public static Dictionary<string, string?> PromptVariablesFor(
-        ScaffoldRequest request, UnitContext unit, string exemplarSource, string provenanceSource, string? mappingTable) =>
+        ScaffoldRequest request, UnitContext unit, string exemplarSource, string provenanceSource, string? mappingTable,
+        UnitPart? part = null) =>
         new()
         {
+            ["partNote"] = part?.Note ?? "",
             ["unitName"] = unit.UnitName,
             ["unitPath"] = unit.UnitPath,
             ["className"] = unit.ClassName,
@@ -260,9 +470,9 @@ public static class FaithfulConversion
             ["anchorRoutine"] = request.SubroutineName,
             ["routineCount"] = unit.Routines.Count.ToString(),
             ["signedCount"] = unit.SignedCount.ToString(),
-            ["unitRoutinesJson"] = unit.RoutinesJson(),
+            ["unitRoutinesJson"] = part?.RoutinesJson ?? unit.RoutinesJson(),
             ["unitSpecsJson"] = unit.SpecsJson(),
-            ["unitSourceText"] = request.OriginalSourceText,
+            ["unitSourceText"] = part?.SourceText ?? request.OriginalSourceText,
             ["mappingTable"] = mappingTable ?? "(no curated mapping table is registered for this source language — map types and idioms using standard knowledge of the language and cite an open question for anything ambiguous)",
             ["exemplarSource"] = exemplarSource,
             ["provenanceSource"] = provenanceSource,

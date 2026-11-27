@@ -143,6 +143,7 @@ public class FaithfulConversionTests
     [InlineData("delphi")]
     [InlineData("cpp")]
     [InlineData("fortran-f77")]
+    [InlineData("vb6")]
     public void The_faithful_prompt_on_disk_uses_only_variables_the_provider_supplies(string sourceSchema)
     {
         var prompt = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Prompts", sourceSchema, "dotnet10-faithful", "faithful-transform.v1.md"));
@@ -168,11 +169,15 @@ public class FaithfulConversionTests
         Assert.Equal(expected, FaithfulConversion.MappingAssetFileName(sourceSchema));
 
     [Fact]
-    public void The_faithful_archetype_lists_every_language_with_a_faithful_prompt()
+    public void Some_faithful_archetype_lists_every_language_with_a_faithful_prompt()
     {
         var archetypeDir = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Archetypes", "dotnet10-faithful", "faithful-delphi-unit"));
-        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(archetypeDir, "archetype.json")));
-        var compatible = manifest.RootElement.GetProperty("compatibleSchemas").EnumerateArray().Select(e => e.GetString()).ToHashSet();
+        var compatible = new HashSet<string?>();
+        foreach (var dir in Directory.EnumerateDirectories(Directory.GetParent(archetypeDir)!.FullName))
+        {
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "archetype.json")));
+            compatible.UnionWith(manifest.RootElement.GetProperty("compatibleSchemas").EnumerateArray().Select(e => e.GetString()));
+        }
 
         // archetypeDir = .../Llm/Archetypes/dotnet10-faithful/faithful-delphi-unit — three levels up is .../Llm.
         var llmRoot = archetypeDir;
@@ -202,6 +207,114 @@ public class FaithfulConversionTests
         Assert.Contains(paths, p => p.StartsWith("tests/") && p.EndsWith(".cs"));
         foreach (var p in paths) Assert.True(File.Exists(Path.Combine(dir, p)), $"declared file missing: {p}");
         Assert.Contains("namespace Faithful.Tests;", File.ReadAllText(Path.Combine(dir, "tests", "UnitTests.cs")));
+    }
+
+    // ── VB6 ──────────────────────────────────────────────────────────────
+
+    private static FaithfulConversion.UnitContext Vb6Unit(string path, params (string Name, int Start, int End)[] routines) =>
+        new(FaithfulConversion.UnitNameOf(path), path, FaithfulConversion.ClassNameFor(FaithfulConversion.UnitNameOf(path)),
+            FaithfulConversion.NamespaceFor(FaithfulConversion.UnitNameOf(path)),
+            routines.Select(r => new FaithfulConversion.UnitRoutine(Guid.NewGuid(), r.Name, $"Sub {r.Name}()", r.Start, r.End, Array.Empty<string>(), "none", null)).ToList(),
+            Array.Empty<FaithfulConversion.UnitSpec>());
+
+    [Fact]
+    public void A_vb6_unit_is_named_by_its_vb_name_in_the_shared_namespace()
+    {
+        var unit = Vb6Unit("Class/ConflictMatrix.cls", ("Run", 20, 30));
+        var src = "VERSION 1.0 CLASS\nBEGIN\nEND\nAttribute VB_Name = \"clsConflictMatrix\"\nOption Explicit\n";
+        var named = FaithfulConversion.ForLanguage(unit, "vb6", src);
+        Assert.Equal("clsConflictMatrix", named.ClassName);
+        Assert.Equal(FaithfulConversion.Vb6Namespace, named.Namespace);
+        Assert.Same(unit, FaithfulConversion.ForLanguage(unit, "delphi", src));
+        Assert.Equal(unit.ClassName, FaithfulConversion.ForLanguage(unit, "vb6", "no attribute here").ClassName);
+    }
+
+    [Fact]
+    public void A_small_unit_is_one_part_and_a_large_one_is_split_by_routine_after_its_declarations()
+    {
+        var small = Vb6Unit("Modules/modA.bas", ("A", 3, 10));
+        Assert.Single(FaithfulConversion.PlanParts(small, string.Join('\n', Enumerable.Repeat("x", 20))));
+
+        // 2,500 lines: declarations on lines 1-99, then routines of 600, 700, 500 and 600 lines.
+        var unit = Vb6Unit("Modules/modBig.bas", ("A", 100, 699), ("B", 700, 1399), ("C", 1400, 1899), ("D", 1900, 2499));
+        unit = unit with { ClassName = "modBig" };
+        var text = string.Join('\n', Enumerable.Range(1, 2500).Select(i => $"' line {i}"));
+        var parts = FaithfulConversion.PlanParts(unit, text, maxLines: 1200);
+
+        Assert.Equal(4, parts.Count);   // declarations, A, B+C, D
+        Assert.All(parts, p => Assert.Equal(4, p.Count));
+        Assert.Empty(parts[0].RoutineNames);
+        Assert.Equal("src/modBig.cs", parts[0].MainFile);
+        Assert.Contains("PART 1 of 4", parts[0].Note);
+        Assert.Contains("public static partial class modBig", parts[0].Note);
+        Assert.Equal(99, parts[0].SourceText.Split('\n').Length);
+        Assert.Equal(["A"], parts[1].RoutineNames);
+        Assert.Equal(["B", "C"], parts[2].RoutineNames);
+        Assert.Equal(["D"], parts[3].RoutineNames);
+        Assert.Equal("src/modBig.Part3.cs", parts[2].MainFile);
+        Assert.Contains("' line 700", parts[2].SourceText);
+        Assert.Contains("' line 1899", parts[2].SourceText);
+        Assert.DoesNotContain("' line 1900", parts[2].SourceText);
+        Assert.Contains("' line 50", parts[2].SourceText);   // every part sees the declarations
+        Assert.Contains("\"part\":3", parts[2].RoutinesJson);
+
+        // A form's first part also writes its page.
+        var form = Vb6Unit("Form/frmBig.frm", ("Form_Load", 1500, 2600)) with { ClassName = "frmBig" };
+        var formParts = FaithfulConversion.PlanParts(form, string.Join('\n', Enumerable.Range(1, 2700).Select(i => "x")), 1200);
+        Assert.Contains("src/View_frmBig.razor", formParts[0].Note);
+        Assert.Contains("public partial class frmBig : VbForm", formParts[1].Note);
+        Assert.True(FaithfulConversion.SupportsParts("vb6"));
+        Assert.False(FaithfulConversion.SupportsParts("delphi"));
+    }
+
+    [Fact]
+    public void Later_parts_may_add_files_but_never_replace_one()
+    {
+        var p1 = new List<FaithfulConversion.PackageFile> { new("src/modBig.cs", "csharp", "decl", ["INV-1"]), new("src/Stubs/Units/Globals.cs", "csharp", "g1", []) };
+        var p2 = new List<FaithfulConversion.PackageFile> { new("src/modBig.Part2.cs", "csharp", "A", ["SE-1"]), new("src/modBig.cs", "csharp", "redeclared", ["INV-2"]) };
+        var merged = FaithfulConversion.MergeParts([p1, p2]);
+        Assert.Equal(["src/modBig.cs", "src/Stubs/Units/Globals.cs", "src/modBig.Part2.cs"], merged.Select(f => f.Path));
+        Assert.Equal("decl", merged[0].Content);
+        Assert.Equal(["INV-1", "INV-2"], merged[0].DerivedFromClaimIds);
+        var section = FaithfulConversion.EarlierPartsSection(merged, "src/modBig.cs");
+        Assert.Contains("src/Stubs/Units/Globals.cs", section);
+        Assert.DoesNotContain("src/modBig.Part2.cs", section);
+    }
+
+    [Fact]
+    public void The_unit_key_changes_with_the_source_the_signed_specs_or_the_target()
+    {
+        var unit = Vb6Unit("Modules/modA.bas", ("A", 3, 10));
+        var signed = unit with { SignedSpecs = [new FaithfulConversion.UnitSpec("A", "{\"invariants\":[{\"id\":\"INV-1\"}]}")] };
+        var k = FaithfulConversion.UnitKey("src", unit, "dotnet10-faithful");
+        Assert.Equal(k, FaithfulConversion.UnitKey("src", unit, "dotnet10-faithful"));
+        Assert.Equal(k, FaithfulConversion.UnitKey("src".Replace("\n", "\r\n"), unit, "dotnet10-faithful"));
+        Assert.NotEqual(k, FaithfulConversion.UnitKey("src2", unit, "dotnet10-faithful"));
+        Assert.NotEqual(k, FaithfulConversion.UnitKey("src", signed, "dotnet10-faithful"));
+        Assert.NotEqual(k, FaithfulConversion.UnitKey("src", unit, "dotnet10"));
+    }
+
+    [Fact]
+    public void The_vb6_archetype_ships_its_runtime_and_keeps_its_exemplars_out_of_packages()
+    {
+        var dir = FindInSourceTree(Path.Combine("src", "Astra.Api", "Llm", "Archetypes", "dotnet10-faithful", "faithful-vb6-unit"));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "archetype.json")));
+        var root = manifest.RootElement;
+        Assert.Equal(["vb6"], root.GetProperty("compatibleSchemas").EnumerateArray().Select(e => e.GetString()));
+        var files = root.GetProperty("files").EnumerateArray()
+            .Select(f => (Path: f.GetProperty("path").GetString()!, Language: f.GetProperty("language").GetString()!, Content: File.ReadAllText(Path.Combine(dir, f.GetProperty("path").GetString()!))))
+            .ToList();
+        Assert.Contains(files, f => f.Path == "src/Vb6Runtime/Controls.cs");
+        Assert.Contains(files, f => f.Path == "src/Vb6Runtime/Interaction.cs");
+        Assert.True(FaithfulConversion.IsExemplar("src/Exemplar/frmRates.cs"));
+        Assert.True(FaithfulConversion.IsExemplar("src/Exemplar/View_frmRates.razor"));
+        Assert.False(FaithfulConversion.IsExemplar("src/Vb6Runtime/Controls.cs"));
+
+        var shown = FaithfulConversion.ExemplarSourceOf(files);
+        Assert.Contains("### src/Exemplar/modRates.cs", shown);
+        Assert.Contains("```razor", shown);
+        Assert.DoesNotContain("namespace Faithful.Vb6;", shown);   // the runtime is not an exemplar
+        Assert.Contains("@inherits VbFormView<frmRates>", shown);
     }
 
     /// <summary>Walks up from the test assembly to the api folder that holds src/ and tests/.</summary>

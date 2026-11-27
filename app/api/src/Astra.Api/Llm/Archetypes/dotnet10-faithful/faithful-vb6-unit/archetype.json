@@ -1,0 +1,25 @@
+{
+  "$schema": "https://astra.nous.ai/archetype/v1",
+  "id": "faithful-vb6-unit",
+  "targetStack": "dotnet10-faithful",
+  "displayName": "Faithful 1:1 unit conversion (VB6 → .NET 10, forms as Blazor)",
+  "description": "Mode A for VB6: the routine's whole unit is converted 1:1. A standard module (.bas) becomes a static class and a class module (.cls) an instance class, one C# file each, with the same names, the same members in the same order and the same call graph. A form (.frm) keeps its logic in src/<VB_Name>.cs (its controls as state objects and its event handlers, 1:1, a plain class tests can drive) and gets a Blazor page src/View_<VB_Name>.razor drawn from its layout. Every unit of the project shares the namespace Faithful.Vb6App, as VB6 shares one project scope. src/Vb6Runtime is the reviewed compatibility layer (controls, MsgBox through a dialog service, App, Err, default form instances); VB6's string, conversion, date and file functions come from .NET's Microsoft.VisualBasic library. Other units of the project are stubbed under src/Stubs/Units/, referenced DLLs and OCXs under src/Stubs/<Library>/. Files under src/Exemplar/ only show the model the target shape and are never shipped.",
+  "compatibleSchemas": ["vb6"],
+  "matches": {
+    "anyOf": [],
+    "fallback": "Every VB6 routine: the module, class or form that contains it is converted as a whole, with the routine's signed spec (and the unit's other signed specs) as guardrails."
+  },
+  "owner": "Artizent · VB6 migration accelerator",
+  "status": "production",
+  "files": [
+    { "path": "Faithful.Unit.csproj",              "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "tests/Faithful.Unit.Tests.csproj",  "language": "xml",    "derivedFromClaimIds": [] },
+    { "path": "src/Provenance.cs",                 "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Vb6Runtime/Controls.cs",        "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Vb6Runtime/Interaction.cs",     "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Exemplar/modRates.cs",          "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "src/Exemplar/View_frmRates.razor",     "language": "razor",  "derivedFromClaimIds": [] },
+    { "path": "src/Exemplar/frmRates.cs",    "language": "csharp", "derivedFromClaimIds": [] },
+    { "path": "tests/UnitTests.cs",                "language": "csharp", "derivedFromClaimIds": [] }
+  ]
+}

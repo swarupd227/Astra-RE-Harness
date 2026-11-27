@@ -320,7 +320,7 @@ public sealed class EvidenceService
                     .Where(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code)
                     .Select(f => new { f.Id, f.RelativePath, f.BlobUri, f.FileHash })
                     .ToListAsync(ct))
-                .Where(f => CSharpFacts.IsCSharp(f.RelativePath) || (_parser is not null && HasSidecarFacts(f.RelativePath)))
+                .Where(f => CSharpFacts.IsCSharp(f.RelativePath) || Vb6Facts.IsVb6(f.RelativePath) || (_parser is not null && HasSidecarFacts(f.RelativePath)))
                 .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
                 .ToList();
             if (files.Count == 0) return new CodeFactsOutcome(0, 0, 0, Array.Empty<string>());
@@ -349,6 +349,12 @@ public sealed class EvidenceService
             var read = csharp.Count == 0
                 ? new Dictionary<string, CodeFileFacts>(StringComparer.Ordinal)
                 : new Dictionary<string, CodeFileFacts>(await Task.Run(() => CSharpFacts.Read(csharp, ct), ct), StringComparer.Ordinal);
+
+            // VB6 (forms, classes, modules): read here, by pattern — the screens, libraries, SQL, settings and files.
+            var vb6 = all.Where(s => Vb6Facts.IsVb6(s.Path)).ToList();
+            if (vb6.Count > 0)
+                foreach (var (path, facts) in await Task.Run(() => Vb6Facts.Read(vb6, ct), ct))
+                    read[path] = facts;
 
             // Languages the parser sidecar reads facts from (PHP): one call for all of them.
             var sidecar = all.Where(s => HasSidecarFacts(s.Path)).OrderBy(s => s.Path, StringComparer.Ordinal).ToList();
@@ -501,6 +507,8 @@ public sealed class EvidenceService
             // Code read before its facts could be stated (C# in K5, PHP in P2), or never read: read now, for the whole project at once.
             if (await _db.SourceFiles.AnyAsync(f => f.SourceVersionId == versionId && f.Kind == ArtefactKinds.Code
                     && (EF.Functions.ILike(f.RelativePath, "%.cs") || EF.Functions.ILike(f.RelativePath, "%.csx")
+                        || EF.Functions.ILike(f.RelativePath, "%.frm") || EF.Functions.ILike(f.RelativePath, "%.cls")
+                        || EF.Functions.ILike(f.RelativePath, "%.bas") || EF.Functions.ILike(f.RelativePath, "%.ctl")
                         || (_parser != null && EF.Functions.ILike(f.RelativePath, "%.php")))
                     && !_db.FileFacts.Any(x => x.SourceFileId == f.Id), ct))
             {

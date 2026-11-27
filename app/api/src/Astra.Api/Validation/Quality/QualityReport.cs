@@ -474,7 +474,7 @@ public static class QualityReportHtml
         table { width: 100%; border-collapse: collapse; margin: 4px 0; }
         th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #e3e3e6; overflow-wrap: anywhere; }
         table.checks { table-layout: fixed; } table.checks td { font-size: 8pt; }
-        thead th { background: #f1f1f3; font-size: 8pt; text-transform: uppercase; letter-spacing: .03em; color: #4a4a50; }
+        thead th { overflow-wrap: normal; background: #f1f1f3; font-size: 8pt; text-transform: uppercase; letter-spacing: .03em; color: #4a4a50; }
         table.kv th { width: 30%; color: #4a4a50; font-weight: normal; }
         table.counts td { text-align: center; border: 1px solid #e3e3e6; font-size: 8pt; color: #4a4a50; }
         table.counts td b { font-size: 12pt; color: #17171a; }

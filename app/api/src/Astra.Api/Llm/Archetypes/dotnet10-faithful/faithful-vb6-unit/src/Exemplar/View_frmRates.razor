@@ -1,0 +1,68 @@
+@*
+  SHAPE EXEMPLAR — never shipped in a generated package.
+
+  A VB6 form converts to two files named after its VB_Name: src/<VB_Name>.cs (its logic: the controls as state
+  objects and the event handlers, 1:1 — see frmRates.cs) and src/View_<VB_Name>.razor (this page: the form's layout,
+  from the .frm header). The VB6 form it mirrors (frmRates.frm):
+
+     Begin VB.Form frmRates
+        Caption = "Rates"   ClientWidth = 6000   ClientHeight = 4200
+        Begin VB.Label lblYear        Caption = "Year"   Left = 120  Top = 120  Width = 600  Height = 255
+        Begin VB.ComboBox cboYear     Style = 2          Left = 840  Top = 120  Width = 1200 Height = 315
+        Begin VB.TextBox txtFile                         Left = 2160 Top = 120  Width = 2000 Height = 315
+        Begin VSFlex8LCtl.VSFlexGrid grdRates            Left = 120  Top = 600  Width = 5760 Height = 2800
+        Begin VB.CommandButton cmdLoad  Caption = "&Load"  Left = 3480 Top = 3600 Width = 1200 Height = 375
+        Begin VB.CommandButton cmdClose Caption = "Close"  Left = 4680 Top = 3600 Width = 1200 Height = 375
+
+  Conventions:
+    1. `@page "/forms/<VB_Name>"`, `@namespace Faithful.Vb6App`, `@inherits VbFormView<VB_Name>`. The page holds no
+       logic: it draws Form (the default instance of the form class) and calls its handlers. One element per control,
+       in the .frm's order, each positioned with Layout.Style(Form.<control>) so the page keeps the VB6 layout.
+    2. Every control binds to its state object (Form.txtFile.Text, Form.cboYear.ListIndex, Form.chkX.Value,
+       Form.optX.Value); a Click/Change/DblClick event calls Form.<control>_<Event>().
+    3. Captions come from the state objects (the .frm's "&Load" is shown as "Load"; the & marks accesskey="L").
+    4. A grid renders its cells; the fixed rows are the header. Frames are fieldsets; pictures, timers and
+       controls with no web counterpart are an empty positioned <div> with a comment naming the control.
+*@
+@page "/forms/frmRates"
+@namespace Faithful.Vb6App
+@using Faithful.Vb6
+@inherits VbFormView<frmRates>
+
+<div class="vb-form" style="@Layout.FormStyle(Form)">
+    <h2 class="vb-caption">@Form.Caption</h2>
+
+    <label style="@Layout.Style(Form.lblYear)">@Form.lblYear.Caption</label>
+
+    <select style="@Layout.Style(Form.cboYear)" disabled="@(!Form.cboYear.Enabled)"
+            value="@Form.cboYear.ListIndex" @onchange="e => { Form.cboYear.ListIndex = int.Parse((string)e.Value!); Form.cboYear_Click(); }">
+        @for (var i = 0; i < Form.cboYear.ListCount; i++)
+        {
+            <option value="@i">@Form.cboYear.List[i]</option>
+        }
+    </select>
+
+    <input style="@Layout.Style(Form.txtFile)" @bind="Form.txtFile.Text" disabled="@(!Form.txtFile.Enabled)" readonly="@Form.txtFile.Locked" />
+
+    <table class="vb-grid" style="@Layout.Style(Form.grdRates)">
+        <thead>
+            @for (var r = 0; r < Form.grdRates.FixedRows && r < Form.grdRates.Rows; r++)
+            {
+                var row = r;
+                <tr>@for (var c = 0; c < Form.grdRates.Cols; c++) { <th>@Form.grdRates.TextMatrix[row, c]</th> }</tr>
+            }
+        </thead>
+        <tbody>
+            @for (var r = Form.grdRates.FixedRows; r < Form.grdRates.Rows; r++)
+            {
+                var row = r;
+                <tr @onclick="() => { Form.grdRates.Row = row; Form.grdRates_Click(); }">
+                    @for (var c = 0; c < Form.grdRates.Cols; c++) { <td>@Form.grdRates.TextMatrix[row, c]</td> }
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <button style="@Layout.Style(Form.cmdLoad)" disabled="@(!Form.cmdLoad.Enabled)" accesskey="L" @onclick="Form.cmdLoad_Click">Load</button>
+    <button style="@Layout.Style(Form.cmdClose)" disabled="@(!Form.cmdClose.Enabled)" @onclick="Form.cmdClose_Click">Close</button>
+</div>

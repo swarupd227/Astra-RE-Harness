@@ -188,12 +188,37 @@ public sealed class ScaffoldPipeline
 
         object? finalPayload = null;
         var providerReportedError = false;
-        await foreach (var evt in _provider.GenerateAsync(req, ct))
+
+        // A faithful conversion is of the whole unit: when a sibling routine's package was made from the same unit
+        // text, with the same signed specs, for the same target, it is this routine's package too — copy it instead of
+        // asking the model to convert the same unit again. A repair always regenerates.
+        var unitKey = unit is null ? null : FaithfulConversion.UnitKey(originalSourceText, unit, targetStack);
+        var reused = unit is not null && unitKey is not null && string.IsNullOrWhiteSpace(repairHint)
+            ? await FindReusableUnitPackageAsync(unit, spec.Id, targetStack, unitKey, ct)
+            : null;
+        if (reused is { } r)
         {
-            ct.ThrowIfCancellationRequested();
-            if (evt.Type == "__final__") { finalPayload = evt.Data; continue; }
-            if (evt.Type == "error") providerReportedError = true;
-            yield return evt;
+            yield return new("stage", new { stage = "reusing", step = 2, of = 4,
+                label = $"Reusing the conversion of {unit!.UnitName} already made for {r.Routine}: same unit source, same signed specs" });
+            finalPayload = new Dictionary<string, object?>
+            {
+                ["files"] = JsonDocument.Parse(r.FilesJson).RootElement.Clone(),
+                ["inputTokens"] = 0,
+                ["outputTokens"] = 0,
+                ["latencyMs"] = 0L,
+                ["promptTemplateId"] = FaithfulConversion.PromptKind,
+                ["promptTemplateVersion"] = "reused",
+            };
+        }
+        else
+        {
+            await foreach (var evt in _provider.GenerateAsync(req, ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (evt.Type == "__final__") { finalPayload = evt.Data; continue; }
+                if (evt.Type == "error") providerReportedError = true;
+                yield return evt;
+            }
         }
 
         if (finalPayload is null)
@@ -269,7 +294,7 @@ public sealed class ScaffoldPipeline
             OutputTokens = outputTokens,
             LatencyMs = latencyMs,
             CostUsd = ModelPricing.Estimate(_provider.Info.Name, _provider.Info.Model, inputTokens, outputTokens),
-            Status = "success",
+            Status = reused is null ? "success" : "reused",
             CalledAt = DateTimeOffset.UtcNow,
         };
         await _db.LlmCalls.AddAsync(llmCall, ct);
@@ -294,6 +319,8 @@ public sealed class ScaffoldPipeline
                 path = unit.UnitPath,
                 routineCount = unit.Routines.Count,
                 signedSpecCount = unit.SignedCount,
+                key = unitKey,
+                reusedFrom = reused?.ScaffoldId,
             },
             generatedAt = DateTimeOffset.UtcNow,
             generatedBy = _persona.DisplayName,
@@ -379,6 +406,38 @@ public sealed class ScaffoldPipeline
         _logger.LogInformation(
             "Scaffold complete: spec={Spec} scaffold={Scaffold} {Files} files {TodoCount} TODOs in {Ms}ms",
             spec.Id, scaffold.Id, fileCount, todoCount, latencyMs);
+    }
+
+    private sealed record ReusableUnit(Guid ScaffoldId, string Routine, string FilesJson);
+
+    /// <summary>The newest package of a sibling routine (same unit, same target) whose unit key matches, if any.</summary>
+    private async Task<ReusableUnit?> FindReusableUnitPackageAsync(
+        FaithfulConversion.UnitContext unit, Guid specId, string targetStack, string unitKey, CancellationToken ct)
+    {
+        var siblingSpecIds = unit.Routines.Where(r => r.SpecId is { } id && id != specId).Select(r => r.SpecId!.Value).ToList();
+        if (siblingSpecIds.Count == 0) return null;
+        var candidates = await _db.Scaffolds.AsNoTracking()
+            .Where(s => siblingSpecIds.Contains(s.SpecId) && s.TargetPlatform == targetStack && s.PackageBlobUri != "")
+            .OrderByDescending(s => s.GeneratedAt)
+            .Select(s => new { s.Id, s.PackageBlobUri, Routine = s.Spec!.Subroutine!.Name })
+            .Take(5)
+            .ToListAsync(ct);
+        foreach (var c in candidates)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(await _blob.GetTextAsync(c.PackageBlobUri, ct));
+                if (doc.RootElement.TryGetProperty("unit", out var u) && u.ValueKind == JsonValueKind.Object
+                    && u.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.String && k.GetString() == unitKey
+                    && doc.RootElement.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+                    return new ReusableUnit(c.Id, c.Routine, files.GetRawText());
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Sibling package {Scaffold} could not be read for reuse", c.Id);
+            }
+        }
+        return null;
     }
 
     /// <summary>The routine's code and that of the project routines it calls (see <see cref="CallTreeSource"/>); null on none or on any read problem.</summary>

@@ -33,6 +33,8 @@ public static class InventoryRules
         ("endpoints", "Web endpoints called", EntityVocabulary.Endpoint),
         ("routes", "HTTP routes served", EntityVocabulary.Route),
         ("queues", "Message queues and exchanges", EntityVocabulary.Queue),
+        ("screens", "Screens (forms)", Vb6Facts.ScreenType),
+        ("libraries", "External libraries and controls", Vb6Facts.LibraryType),
     };
 
     public const string RoutinesKey = "routines";

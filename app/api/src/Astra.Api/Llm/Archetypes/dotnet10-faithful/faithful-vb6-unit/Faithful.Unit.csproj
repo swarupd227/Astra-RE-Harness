@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Faithful</RootNamespace>
+    <AssemblyName>Faithful.Unit</AssemblyName>
+    <!-- VB6 code is full of late-bound and loosely typed values; nullable warnings are reported, never fatal. -->
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8625;CS0162;CS0168;CS0219</NoWarn>
+    <Description>
+      Faithful 1:1 conversion of one VB6 unit (module, class or form) to .NET 10. Modules and classes become one
+      C# file each with the same names and call graph; a form becomes a Blazor component (.razor markup from its
+      layout, .razor.cs with its event handlers). src/Vb6Runtime is the reviewed compatibility layer the converted
+      code is written against; src/Provenance.cs ties every member back to the VB6 lines it came from.
+    </Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Blazor components (converted forms) and the VB6 runtime's control state live in this one project. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- tests/ has its own project — keep its sources out of this one. -->
+    <Compile Remove="tests/**/*.cs" />
+    <Content Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
+</Project>

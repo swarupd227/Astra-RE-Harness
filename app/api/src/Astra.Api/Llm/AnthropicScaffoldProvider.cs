@@ -537,8 +537,11 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             yield break;
         }
 
+        // VB6 names a class by its VB_Name and shares one namespace across the project.
+        unit = FaithfulConversion.ForLanguage(unit, request.SourceSchema, request.OriginalSourceText);
         var unitLines = request.OriginalSourceText.Count(c => c == '\n') + 1;
-        if (unitLines > FaithfulConversion.MaxUnitLines)
+        var parts = FaithfulConversion.PlanParts(unit, request.OriginalSourceText);
+        if (parts.Count > 1 && !FaithfulConversion.SupportsParts(request.SourceSchema))
         {
             yield return new("error", new
             {
@@ -567,151 +570,93 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
             mode = FaithfulConversion.Mode,
         });
 
-        yield return Stage("streaming", 2,
-            $"Converting {unit.UnitName} 1:1 to C# ({unit.Routines.Count} routines, {unitLines:N0} lines)");
-
         var loaded = _prompts.GetLatest(request.SourceSchema, request.TargetPlatform, FaithfulConversion.PromptKind)
             ?? _prompts.GetLatest("common", request.TargetPlatform, FaithfulConversion.PromptKind)
             ?? throw new InvalidOperationException(
                 $"No {FaithfulConversion.PromptKind} prompt registered ({request.SourceSchema}/{request.TargetPlatform}/{FaithfulConversion.PromptKind}).");
 
-        var exemplar = archetype.Files.FirstOrDefault(f => FaithfulConversion.IsExemplar(f.Path))?.Content ?? "";
+        var exemplar = FaithfulConversion.ExemplarSourceOf(archetype.Files.Select(f => (f.Path, f.Language, f.Content)));
         var provenance = archetype.Files.FirstOrDefault(f => f.Path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase))?.Content ?? "";
         var mappingAsset = FaithfulConversion.MappingAssetFileName(request.SourceSchema);
         var mappingTable = mappingAsset is null ? null : _prompts.TryReadAsset(request.SourceSchema, mappingAsset);
-        var rendered = _prompts.Render(loaded, FaithfulConversion.PromptVariablesFor(
-            request, unit, exemplar, provenance, mappingTable));
+        var system = CodingStandards.AppendTo(
+            _prompts.Render(loaded, FaithfulConversion.PromptVariablesFor(request, unit, exemplar, provenance, mappingTable)).System,
+            CodingStandards.SectionFor(request.TargetPlatform, _prompts));
 
-        var userPrompt = string.IsNullOrWhiteSpace(request.RepairHint)
-            ? rendered.User
-            : rendered.User + "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
-              FaithfulConversion.PreviousPackageSection(request.PreviousPackageFilesJson) +
-              "\n\nReturn the complete corrected package through the tool; every file, not only the changed ones.";
-
-        // The whole unit comes back in one answer, so the call streams: the
-        // run narrates progress while the model writes, nothing waits on a
-        // single response, and the output budget is raised above the
-        // routine-scale default because a unit is many routines.
+        // The whole unit (or each part of one too large for a single answer) comes back in one streamed answer: the
+        // run narrates progress while the model writes, and the output budget is raised above the routine-scale default.
         var maxOutput = Math.Max(_opts.MaxOutputTokens, FaithfulConversion.MaxOutputTokens);
-        var body = JsonSerializer.Serialize(BuildToolRequest(CodingStandards.AppendTo(rendered.System, CodingStandards.SectionFor(request.TargetPlatform, _prompts)), userPrompt, FaithfulConversion.EmitPackageTool(), maxOutput));
         var cacheKey = $"scaffold:faithful:{request.SourceSchema}:{loaded.Version}";
-
-        HttpResponseMessage? resp = null;
-        string? failure = null;
-        using var lease = await _limiter.AcquireAsync(cacheKey, ct);
-        try
-        {
-            resp = await _http.SendAsync(AnthropicHttp.BuildMessagesRequest(_opts, body), HttpCompletionOption.ResponseHeadersRead, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Faithful conversion transport failure for spec {Spec} ({Unit})", request.SpecId, unit.UnitPath);
-            failure = ex.Message;
-        }
-        if (failure is not null || resp is null)
-        {
-            yield return new("error", new { code = "provider.transport", message = $"Could not reach Anthropic: {failure ?? "no response"}", retryable = true });
-            yield break;
-        }
-        _limiter.Observe(resp);
-        if (!resp.IsSuccessStatusCode)
-        {
-            var upstream = await resp.Content.ReadAsStringAsync(ct);
-            var status = (int)resp.StatusCode;
-            resp.Dispose();
-            yield return new("error", new
-            {
-                code = status == 429 ? "provider.rate_limited" : status >= 500 ? "provider.unavailable" : "provider.rejected",
-                message = $"Anthropic returned {status}: {Truncate(upstream, 400)}",
-                retryable = status == 429 || status >= 500,
-            });
-            yield break;
-        }
-
-        var buffer = new StringBuilder(64 * 1024);
+        var claimIds = unit.ClaimIds();
+        var written = new List<IReadOnlyList<FaithfulConversion.PackageFile>>();
         int inputTokens = 0, outputTokens = 0;
-        string? stopReason = null;
-        string? streamError = null;
-        await using (var stream = await resp.Content.ReadAsStreamAsync(ct))
-        using (var reader = new StreamReader(stream, Encoding.UTF8))
-        {
-            string? eventType = null;
-            while (!reader.EndOfStream)
-            {
-                ct.ThrowIfCancellationRequested();
-                var line = await reader.ReadLineAsync(ct);
-                if (line is null) break;
-                if (line.Length == 0) { eventType = null; continue; }
-                if (line.StartsWith("event:", StringComparison.Ordinal)) { eventType = line[6..].Trim(); continue; }
-                if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
-                var json = line[5..].Trim();
-                if (json.Length == 0) continue;
-                JsonElement ev;
-                try { using var doc = JsonDocument.Parse(json); ev = doc.RootElement.Clone(); }
-                catch (JsonException) { continue; }
-                var type = ev.TryGetProperty("type", out var tEl) ? tEl.GetString() : eventType;
-                switch (type)
-                {
-                    case "message_start":
-                        if (ev.TryGetProperty("message", out var msg) && msg.TryGetProperty("usage", out var u0)
-                            && u0.TryGetProperty("input_tokens", out var inT))
-                            inputTokens = inT.GetInt32();
-                        break;
-                    case "content_block_delta":
-                        if (ev.TryGetProperty("delta", out var delta) && AnthropicLlmProvider.DeltaText(delta) is { Length: > 0 } chunk)
-                        {
-                            buffer.Append(chunk);
-                            yield return new("token", new { path = $"src/{unit.ClassName}.cs", text = chunk });
-                        }
-                        break;
-                    case "message_delta":
-                        if (ev.TryGetProperty("delta", out var md) && md.TryGetProperty("stop_reason", out var sr) && sr.ValueKind == JsonValueKind.String)
-                            stopReason = sr.GetString();
-                        if (ev.TryGetProperty("usage", out var u1) && u1.TryGetProperty("output_tokens", out var outT))
-                            outputTokens = outT.GetInt32();
-                        break;
-                    case "error":
-                        streamError = ev.TryGetProperty("error", out var e) && e.TryGetProperty("message", out var em)
-                            ? em.GetString() ?? "Anthropic emitted an error event."
-                            : "Anthropic emitted an error event.";
-                        break;
-                }
-                if (streamError is not null) break;
-            }
-        }
-        resp.Dispose();
 
-        if (streamError is not null)
+        foreach (var part in parts)
         {
-            yield return new("error", new { code = "provider.stream_error", message = streamError, retryable = true });
-            yield break;
-        }
-        var toolJson = buffer.Length > 0 ? buffer.ToString() : null;
-        if (string.Equals(stopReason, "max_tokens", StringComparison.OrdinalIgnoreCase))
-        {
-            yield return new("error", new
+            yield return Stage("streaming", 2, parts.Count == 1
+                ? $"Converting {unit.UnitName} 1:1 to C# ({unit.Routines.Count} routines, {unitLines:N0} lines)"
+                : $"Converting {unit.UnitName} 1:1 to C#, part {part.Number} of {parts.Count} " +
+                  (part.Number == 1 ? "(declarations)" : $"({part.RoutineNames.Count} routines: {string.Join(", ", part.RoutineNames.Take(4))}{(part.RoutineNames.Count > 4 ? ", …" : "")})"));
+
+            var rendered = _prompts.Render(loaded, FaithfulConversion.PromptVariablesFor(request, unit, exemplar, provenance, mappingTable, part));
+            var userPrompt = rendered.User;
+            if (part.Number > 1)
+                userPrompt += FaithfulConversion.EarlierPartsSection(FaithfulConversion.MergeParts(written), parts[0].MainFile);
+            if (!string.IsNullOrWhiteSpace(request.RepairHint))
+                userPrompt += "\n\n## Previous attempt — fix these before anything else\n\n" + request.RepairHint.Trim() +
+                              FaithfulConversion.PreviousPackageSection(request.PreviousPackageFilesJson) +
+                              (parts.Count == 1
+                                  ? "\n\nReturn the complete corrected package through the tool; every file, not only the changed ones."
+                                  : $"\n\nReturn the corrected files of THIS part ({part.MainFile} and its stub files) through the tool.");
+            var body = JsonSerializer.Serialize(BuildToolRequest(system, userPrompt, FaithfulConversion.EmitPackageTool(), maxOutput));
+
+            // Tokens are forwarded to the page while the call runs; the call itself runs off this iterator.
+            var tokens = System.Threading.Channels.Channel.CreateUnbounded<string>();
+            var call = Task.Run(async () =>
             {
-                code = "provider.output_truncated",
-                message = $"The model ran out of output ({maxOutput:N0} tokens, {outputTokens:N0} written) before finishing {unit.UnitName} " +
-                          $"({unit.Routines.Count} routines, {unitLines:N0} lines). Convert a smaller unit, or raise Llm:Anthropic:MaxOutputTokens.",
-                retryable = false,
-            });
-            yield break;
+                try { return await StreamToolCallAsync(body, cacheKey, chunk => tokens.Writer.TryWrite(chunk), request, unit, ct); }
+                finally { tokens.Writer.TryComplete(); }
+            }, ct);
+            await foreach (var chunk in tokens.Reader.ReadAllAsync(ct))
+                yield return new("token", new { path = part.MainFile, text = chunk });
+            var result = await call;
+
+            if (result.Error is { } err)
+            {
+                yield return new("error", new { code = err.Code, message = parts.Count == 1 ? err.Message : $"Part {part.Number} of {parts.Count}: {err.Message}", retryable = err.Retryable });
+                yield break;
+            }
+            inputTokens += result.InputTokens;
+            outputTokens += result.OutputTokens;
+            if (string.Equals(result.StopReason, "max_tokens", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new("error", new
+                {
+                    code = "provider.output_truncated",
+                    message = $"The model ran out of output ({maxOutput:N0} tokens, {result.OutputTokens:N0} written) before finishing {unit.UnitName}" +
+                              (parts.Count == 1 ? $" ({unit.Routines.Count} routines, {unitLines:N0} lines)." : $", part {part.Number} of {parts.Count}.") +
+                              " Convert a smaller unit, or raise Llm:Anthropic:MaxOutputTokens.",
+                    retryable = false,
+                });
+                yield break;
+            }
+            var partFiles = FaithfulConversion.ParseToolFiles(result.ToolJson, claimIds);
+            if (partFiles.Count == 0)
+            {
+                yield return new("error", new
+                {
+                    code = "provider.no_files_generated",
+                    message = parts.Count == 1 ? "The model's answer did not contain a files array." : $"Part {part.Number} of {parts.Count}: the model's answer did not contain a files array.",
+                    retryable = true,
+                });
+                yield break;
+            }
+            written.Add(partFiles);
         }
 
         yield return Stage("validating", 3, "Parsing the converted unit");
 
-        var files = FaithfulConversion.ParseToolFiles(toolJson, unit.ClaimIds());
-        if (files.Count == 0)
-        {
-            yield return new("error", new
-            {
-                code = "provider.no_files_generated",
-                message = "The model's answer did not contain a files array.",
-                retryable = true,
-            });
-            yield break;
-        }
+        var files = FaithfulConversion.MergeParts(written);
         var package = FaithfulConversion.MergeWithArchetype(files, archetype)
             .Select(f => new GeneratedFile(f.Path, f.Language, f.Content, f.DerivedFromClaimIds))
             .ToList();
@@ -759,6 +704,93 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
         _logger.LogInformation(
             "Faithful conversion for spec {Spec}: unit {Unit} ({Routines} routines) → {Files} files, {In}/{Out} tokens",
             request.SpecId, unit.UnitPath, unit.Routines.Count, package.Count, inputTokens, outputTokens);
+    }
+
+    private sealed record CallError(string Code, string Message, bool Retryable);
+
+    private sealed record ToolCallResult(string? ToolJson, int InputTokens, int OutputTokens, string? StopReason, CallError? Error);
+
+    /// <summary>
+    /// One streamed forced-tool call: sends <paramref name="body"/>, hands every chunk of the tool's input to
+    /// <paramref name="onToken"/> as it arrives, and returns the assembled input, the token counts and the stop reason,
+    /// or the provider's reason for failing (never thrown, so the caller can report it).
+    /// </summary>
+    private async Task<ToolCallResult> StreamToolCallAsync(
+        string body, string cacheKey, Action<string> onToken, ScaffoldRequest request, FaithfulConversion.UnitContext unit, CancellationToken ct)
+    {
+        HttpResponseMessage resp;
+        using var lease = await _limiter.AcquireAsync(cacheKey, ct);
+        try
+        {
+            resp = await _http.SendAsync(AnthropicHttp.BuildMessagesRequest(_opts, body), HttpCompletionOption.ResponseHeadersRead, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Faithful conversion transport failure for spec {Spec} ({Unit})", request.SpecId, unit.UnitPath);
+            return new(null, 0, 0, null, new("provider.transport", $"Could not reach Anthropic: {ex.Message}", true));
+        }
+        using (resp)
+        {
+            _limiter.Observe(resp);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var upstream = await resp.Content.ReadAsStringAsync(ct);
+                var status = (int)resp.StatusCode;
+                return new(null, 0, 0, null, new(
+                    status == 429 ? "provider.rate_limited" : status >= 500 ? "provider.unavailable" : "provider.rejected",
+                    $"Anthropic returned {status}: {Truncate(upstream, 400)}",
+                    status == 429 || status >= 500));
+            }
+
+            var buffer = new StringBuilder(64 * 1024);
+            int inputTokens = 0, outputTokens = 0;
+            string? stopReason = null;
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            string? eventType = null;
+            while (!reader.EndOfStream)
+            {
+                ct.ThrowIfCancellationRequested();
+                var line = await reader.ReadLineAsync(ct);
+                if (line is null) break;
+                if (line.Length == 0) { eventType = null; continue; }
+                if (line.StartsWith("event:", StringComparison.Ordinal)) { eventType = line[6..].Trim(); continue; }
+                if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
+                var json = line[5..].Trim();
+                if (json.Length == 0) continue;
+                JsonElement ev;
+                try { using var doc = JsonDocument.Parse(json); ev = doc.RootElement.Clone(); }
+                catch (JsonException) { continue; }
+                var type = ev.TryGetProperty("type", out var tEl) ? tEl.GetString() : eventType;
+                switch (type)
+                {
+                    case "message_start":
+                        if (ev.TryGetProperty("message", out var msg) && msg.TryGetProperty("usage", out var u0)
+                            && u0.TryGetProperty("input_tokens", out var inT))
+                            inputTokens = inT.GetInt32();
+                        break;
+                    case "content_block_delta":
+                        if (ev.TryGetProperty("delta", out var delta) && AnthropicLlmProvider.DeltaText(delta) is { Length: > 0 } chunk)
+                        {
+                            buffer.Append(chunk);
+                            onToken(chunk);
+                        }
+                        break;
+                    case "message_delta":
+                        if (ev.TryGetProperty("delta", out var md) && md.TryGetProperty("stop_reason", out var sr) && sr.ValueKind == JsonValueKind.String)
+                            stopReason = sr.GetString();
+                        if (ev.TryGetProperty("usage", out var u1) && u1.TryGetProperty("output_tokens", out var outT))
+                            outputTokens = outT.GetInt32();
+                        break;
+                    case "error":
+                        var message = ev.TryGetProperty("error", out var e) && e.TryGetProperty("message", out var em)
+                            ? em.GetString() ?? "Anthropic emitted an error event."
+                            : "Anthropic emitted an error event.";
+                        return new(null, inputTokens, outputTokens, stopReason, new("provider.stream_error", message, true));
+                }
+            }
+            return new(buffer.Length > 0 ? buffer.ToString() : null, inputTokens, outputTokens, stopReason, null);
+        }
     }
 
     /// <summary>A streamed Messages request with one forced tool and a

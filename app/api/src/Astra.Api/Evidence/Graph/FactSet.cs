@@ -59,6 +59,9 @@ public static class EntityVocabulary
         [WorkbookAdapter.ModuleType] = "VBA module",
         [WorkbookAdapter.DataSourceType] = "Data connection",
         [WorkbookAdapter.UserFormType] = "UserForm (dialog)",
+        [Vb6Facts.ScreenType] = "Screen (form)",
+        [Vb6Facts.LibraryType] = "External library or control",
+        [Vb6Facts.ModuleType] = "Code module",
     };
 
     public static readonly IReadOnlyDictionary<string, string> Relations = new Dictionary<string, string>
@@ -72,6 +75,7 @@ public static class EntityVocabulary
         [Triggers] = "triggers",
         [Configures] = "configures",
         [References] = "references",
+        [Vb6Facts.Opens] = "opens",
     };
 
     public const string High = "high";
