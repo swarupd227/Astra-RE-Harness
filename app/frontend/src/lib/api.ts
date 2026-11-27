@@ -2039,6 +2039,10 @@ export type AuditEventRow = {
   actorDisplay: string;
   targetType: string;
   targetId: string | null;
+  /** The target in words (a code unit or project name); absent on older APIs or a removed target. */
+  targetName?: string | null;
+  /** The code unit a spec / generated-package event is about, for a link. */
+  subroutineId?: string | null;
   occurredAt: string;
   payload: Record<string, unknown>;
 };
@@ -2069,6 +2073,9 @@ export type SystemProblem = {
   startedAt: string;
   routineName: string;
   subroutineId: string;
+  /** The project the run belongs to; absent on older APIs. */
+  corpusId?: string | null;
+  corpusName?: string | null;
 };
 export const systemApi = {
   problems: () => apiFetch<{ stuck: SystemProblem[]; failed: SystemProblem[] }>('/api/v1/system/problems'),

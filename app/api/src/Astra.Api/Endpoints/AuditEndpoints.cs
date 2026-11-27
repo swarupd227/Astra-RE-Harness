@@ -83,22 +83,83 @@ public static class AuditEndpoints
                 .Take(Math.Clamp(limit ?? 200, 1, 1000))
                 .ToListAsync(ct);
 
+            // Names are a convenience: if looking them up fails, the feed is still served, just without them.
+            Dictionary<Guid, TargetName> names;
+            try { names = await ResolveTargetsAsync(db, rows, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Serilog.Log.Warning(ex, "Audit feed: naming targets failed; serving ids only");
+                names = new();
+            }
             return Results.Ok(new
             {
-                data = rows.Select(e => new
+                data = rows.Select(e =>
                 {
-                    id = e.Id,
-                    eventType = e.EventType,
-                    actorPersona = e.ActorPersona,
-                    actorDisplay = e.ActorDisplay,
-                    targetType = e.TargetType,
-                    targetId = e.TargetId,
-                    occurredAt = e.OccurredAt,
-                    payload = e.Payload.RootElement.Clone(),
+                    var t = e.TargetId is { } id && names.TryGetValue(id, out var n) ? n : null;
+                    return new
+                    {
+                        id = e.Id,
+                        eventType = e.EventType,
+                        actorPersona = e.ActorPersona,
+                        actorDisplay = e.ActorDisplay,
+                        targetType = e.TargetType,
+                        targetId = e.TargetId,
+                        // What the event was about, in words ("ProcessClaim", a project name) and where to open it;
+                        // null when the target no longer exists or is of a kind not named here.
+                        targetName = t?.Name,
+                        subroutineId = t?.SubroutineId,
+                        occurredAt = e.OccurredAt,
+                        payload = e.Payload.RootElement.Clone(),
+                    };
                 }),
             });
         });
 
         return app;
+    }
+
+    private sealed record TargetName(string Name, Guid? SubroutineId);
+
+    /// <summary>
+    /// Names the targets of a page of audit rows in four set queries: a spec or a generated package is named by its
+    /// code unit, a project by its name. Ids of other kinds, or of rows since removed, are simply absent.
+    /// </summary>
+    private static async Task<Dictionary<Guid, TargetName>> ResolveTargetsAsync(
+        AppDbContext db, IReadOnlyList<Persistence.Entities.AuditEvent> rows, CancellationToken ct)
+    {
+        Guid[] Ids(string type) => rows.Where(r => r.TargetType == type && r.TargetId is not null)
+            .Select(r => r.TargetId!.Value).Distinct().ToArray();
+        var specIds = Ids("spec");
+        var scaffoldIds = Ids("scaffold");
+        var corpusIds = Ids("corpus");
+        var directSubIds = Ids("subroutine");
+
+        var scaffoldSpec = scaffoldIds.Length == 0 ? new Dictionary<Guid, Guid>()
+            : await db.Scaffolds.AsNoTracking().Where(s => scaffoldIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.SpecId, ct);
+        var allSpecIds = specIds.Concat(scaffoldSpec.Values).Distinct().ToArray();
+        var specSub = allSpecIds.Length == 0 ? new Dictionary<Guid, Guid>()
+            : await db.Specs.AsNoTracking().Where(s => allSpecIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.SubroutineId, ct);
+        var subIds = specSub.Values.Concat(directSubIds).Distinct().ToArray();
+        var subName = subIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Subroutines.AsNoTracking().Where(s => subIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        var corpusName = corpusIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Corpora.AsNoTracking().Where(c => corpusIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+
+        var result = new Dictionary<Guid, TargetName>();
+        void FromSpec(Guid target, Guid specId)
+        {
+            if (specSub.TryGetValue(specId, out var sub) && subName.TryGetValue(sub, out var name))
+                result[target] = new TargetName(name, sub);
+        }
+        foreach (var id in specIds) FromSpec(id, id);
+        foreach (var (id, spec) in scaffoldSpec) FromSpec(id, spec);
+        foreach (var id in directSubIds)
+            if (subName.TryGetValue(id, out var name)) result[id] = new TargetName(name, id);
+        foreach (var (id, name) in corpusName) result[id] = new TargetName(name, null);
+        return result;
     }
 }

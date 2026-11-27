@@ -369,3 +369,12 @@ screen. Review it on the next spec an SME signs.
 3. **Generated code** — a dozen rows read "__construct" with nothing to tell them apart. **Done:** file name under the name.
 4. **Model provider** — Test connection beside the key status (page 21 item 2). **Done.**
 5. My reviews — fine as is.
+6. **Project detail** — the funnel said "Parsed / Scaffolded / Committed" beside chips saying "Not started / With code".
+   **Done:** the shared funnel uses Not started · … · With code · Committed to Git everywhere.
+7. **Compliance** — the "On" column read "scaffold" / "spec" with no name. **Done:** `/api/v1/audit` names each target
+   (spec / generated package → its code unit, project → its name, code unit) in four set queries; the column shows the
+   kind in words and the name, linked to the code unit.
+8. **System health** — "Recent problems" was a flat list of 50 runs named "get", "index", "__construct", mostly one
+   project's repair loop. **Done:** stuck runs listed first; failed runs grouped by project with counts per check
+   (Build 6 · Tests 32), folded; the API returns the project and up to 300 rows.
+9. Comments — fine ("Mark all read" already disabled when nothing is unread).

@@ -33,7 +33,9 @@ public static class SystemStatsEndpoint
                 .Where(v => (v.Status == "RUNNING" && v.StartedAt < stuckBefore)
                          || ((v.Status == "FAILED" || v.Status == "ERRORED") && v.StartedAt >= since))
                 .OrderByDescending(v => v.StartedAt)
-                .Take(50)
+                // Enough for the page to group a busy day's failures by project (a repair loop can fail dozens of
+                // runs in one project) without one project crowding out the rest.
+                .Take(300)
                 .Select(v => new
                 {
                     id = v.Id,
@@ -44,6 +46,8 @@ public static class SystemStatsEndpoint
                     startedAt = v.StartedAt,
                     routineName = v.Spec!.Subroutine!.Name,
                     subroutineId = v.Spec!.SubroutineId,
+                    corpusId = (Guid?)v.Spec!.Subroutine!.SourceFile!.SourceVersion!.CorpusId,
+                    corpusName = v.Spec!.Subroutine!.SourceFile!.SourceVersion!.Corpus!.Name,
                 })
                 .ToListAsync(ct);
             return Results.Ok(new

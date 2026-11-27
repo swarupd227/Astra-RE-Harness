@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Download, FileSpreadsheet, FileText, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Link } from 'react-router-dom';
 import { api, complianceApi, type ComplianceFormat } from '@/lib/api';
 import { absoluteTime, formatInt, relativeTime } from '@/workspace/format';
 import { Badge } from '@/components/Badge';
@@ -55,6 +56,16 @@ function tzLabel(): string {
 }
 
 /** "spec.signed" → "Spec signed"; "compliance.feed_exported" → "Compliance feed exported". */
+/** The kind of thing an event was about, in words. */
+const TARGET_KIND: Record<string, string> = {
+  spec: 'Spec',
+  scaffold: 'Generated code',
+  corpus: 'Project',
+  subroutine: 'Code unit',
+  conversation: 'Conversation',
+  settings: 'Settings',
+};
+
 function eventLabel(t: string): string {
   const s = t.replace(/[._]/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -285,11 +296,29 @@ export function CompliancePage() {
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-ink-secondary">{e.actorDisplay}</td>
-                    <td className="max-w-[320px] truncate px-3 py-1.5 text-ink-secondary">
-                      {e.targetType}
-                      {typeof (e.payload as { subroutineName?: string })?.subroutineName === 'string'
-                        ? ` · ${(e.payload as { subroutineName: string }).subroutineName}`
-                        : ''}
+                    <td className="max-w-[320px] truncate px-3 py-1.5 text-ink-secondary" data-testid="audit-target">
+                      {/* What it was about, in words, linked to the code unit when there is one. */}
+                      <span className="text-ink-tertiary">{TARGET_KIND[e.targetType] ?? e.targetType}</span>
+                      {(() => {
+                        const name =
+                          e.targetName ??
+                          (typeof (e.payload as { subroutineName?: string })?.subroutineName === 'string'
+                            ? (e.payload as { subroutineName: string }).subroutineName
+                            : null);
+                        if (!name) return null;
+                        return (
+                          <>
+                            {' · '}
+                            {e.subroutineId ? (
+                              <Link to={`/subroutines/${e.subroutineId}`} className="font-mono text-ink-primary hover:underline" title={name}>
+                                {name}
+                              </Link>
+                            ) : (
+                              <span className="text-ink-primary" title={name}>{name}</span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

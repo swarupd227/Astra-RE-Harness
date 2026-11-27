@@ -3,7 +3,7 @@ import { CheckCircle2, CircleSlash } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { conversationsApi } from '@/lib/conversations';
-import { systemApi } from '@/lib/api';
+import { systemApi, type SystemProblem } from '@/lib/api';
 import { formatInt, formatMoney, formatPercent, relativeTime } from '@/workspace/format';
 import { api, type ReadinessDep } from '@/lib/api';
 import { buildInfo } from '@/lib/version';
@@ -236,6 +236,35 @@ function DependencyRow({ dep, pulsing }: { dep: ReadinessDep; pulsing: boolean }
 
 const STAGE_WORD: Record<string, string> = { COMPILE: 'Build', TEST_PACK: 'Tests', QUALITY: 'Quality', EQUIVALENCE: 'Equivalence' };
 
+function ProblemRow({ r }: { r: SystemProblem }) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2.5 text-caption">
+      <span className={clsx('font-medium', r.status === 'RUNNING' ? 'text-status-warn' : 'text-status-failed')}>
+        {r.status === 'RUNNING' ? 'Stuck' : 'Failed'}
+      </span>
+      <span className="text-ink-primary">{STAGE_WORD[r.stage] ?? r.stage}</span>
+      <Link to={`/scaffolds/${r.scaffoldId}/validation`} className="font-mono text-ink-link hover:underline">
+        {r.routineName}
+      </Link>
+      <span className="min-w-0 flex-1 truncate text-ink-secondary" title={r.summary}>{r.summary}</span>
+      <span className="text-ink-tertiary">{relativeTime(r.startedAt)}</span>
+    </li>
+  );
+}
+
+/** Failed runs per project, the project with the most recent failure first; rows stay newest first. */
+function groupByProject(rows: SystemProblem[]) {
+  const groups = new Map<string, { key: string; name: string; rows: SystemProblem[]; byStage: Record<string, number> }>();
+  for (const r of rows) {
+    const key = r.corpusId ?? 'other';
+    const g = groups.get(key) ?? { key, name: r.corpusName ?? 'Other', rows: [], byStage: {} };
+    g.rows.push(r);
+    g.byStage[r.stage] = (g.byStage[r.stage] ?? 0) + 1;
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
+
 /** Validation runs stuck in "running" (a restart leaves them so) and the ones that failed in the last day. */
 function ProblemsCard() {
   const q = useQuery({ queryKey: ['system-problems'], queryFn: systemApi.problems, refetchInterval: 60_000, retry: 0 });
@@ -255,21 +284,35 @@ function ProblemsCard() {
         ) : stuck.length + failed.length === 0 ? (
           <p className="px-6 py-4 text-caption text-ink-secondary">Nothing stuck or failing.</p>
         ) : (
-          <ul className="divide-y divide-line-subtle" data-testid="system-problems">
-            {[...stuck, ...failed].map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2.5 text-caption">
-                <span className={clsx('font-medium', r.status === 'RUNNING' ? 'text-status-warn' : 'text-status-failed')}>
-                  {r.status === 'RUNNING' ? 'Stuck' : 'Failed'}
-                </span>
-                <span className="text-ink-primary">{STAGE_WORD[r.stage] ?? r.stage}</span>
-                <Link to={`/scaffolds/${r.scaffoldId}/validation`} className="font-mono text-ink-link hover:underline">
-                  {r.routineName}
-                </Link>
-                <span className="min-w-0 flex-1 truncate text-ink-secondary" title={r.summary}>{r.summary}</span>
-                <span className="text-ink-tertiary">{relativeTime(r.startedAt)}</span>
-              </li>
-            ))}
-          </ul>
+          <div data-testid="system-problems">
+            {/* Stuck runs are the system's own problem: always listed. */}
+            {stuck.length > 0 && (
+              <ul className="divide-y divide-line-subtle border-b border-line-subtle">
+                {stuck.map((r) => <ProblemRow key={r.id} r={r} />)}
+              </ul>
+            )}
+            {/* Failed runs are mostly work in progress (a repair loop fails many runs in one project), so they are
+                grouped by project with counts per check, and folded. */}
+            <ul className="divide-y divide-line-subtle">
+              {groupByProject(failed).map((g) => (
+                <li key={g.key}>
+                  <details data-testid="system-problems-project">
+                    <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2.5 text-caption hover:bg-sunken">
+                      <span className="font-medium text-ink-primary">{g.name}</span>
+                      <span className="text-status-failed">{g.rows.length} failed</span>
+                      <span className="text-ink-secondary">
+                        {Object.entries(g.byStage).map(([stage, n]) => `${STAGE_WORD[stage] ?? stage} ${n}`).join(' · ')}
+                      </span>
+                      <span className="ml-auto text-ink-tertiary">latest {relativeTime(g.rows[0].startedAt)}</span>
+                    </summary>
+                    <ul className="divide-y divide-line-subtle border-t border-line-subtle bg-sunken/40">
+                      {g.rows.map((r) => <ProblemRow key={r.id} r={r} />)}
+                    </ul>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardBody>
     </Card>

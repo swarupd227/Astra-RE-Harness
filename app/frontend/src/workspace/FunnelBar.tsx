@@ -2,14 +2,15 @@ import { clsx } from 'clsx';
 import type { FunnelCounts } from '@/lib/conversations';
 import { formatInt, num, obj } from './format';
 
+// The same words as the project page's filter chips and Home ("Not started", "With code"), not engine states.
 export const FUNNEL_STAGES: Array<{ key: keyof Omit<FunnelCounts, 'total'>; label: string; swatch: string }> = [
-  { key: 'parsed', label: 'Parsed', swatch: 'bg-sand-500' },
+  { key: 'parsed', label: 'Not started', swatch: 'bg-sand-500' },
   { key: 'extracting', label: 'Extracting', swatch: 'bg-status-info/70' },
   { key: 'draft', label: 'Draft', swatch: 'bg-status-warn/60' },
   { key: 'inReview', label: 'In review', swatch: 'bg-status-warn' },
   { key: 'signed', label: 'Signed', swatch: 'bg-status-info' },
-  { key: 'scaffolded', label: 'Scaffolded', swatch: 'bg-status-ok/70' },
-  { key: 'committed', label: 'Committed', swatch: 'bg-status-ok' },
+  { key: 'scaffolded', label: 'With code', swatch: 'bg-status-ok/70' },
+  { key: 'committed', label: 'Committed to Git', swatch: 'bg-status-ok' },
 ];
 
 export function normaliseCounts(v: unknown): FunnelCounts {
