@@ -27,7 +27,7 @@ commit.
 | 18 | New project | `/projects/new` | Live (name check; Git branch/folder fields already present) |
 | 19 | Assessment | `/corpora/:id/assessment` | Live (UI + prompt v1.2) |
 | 20 | Evidence | `/corpora/:id/evidence` | Live (rows, file headings, workbook sub-filters) |
-| 21 | LLM Provider | `/platform/llm` | Live; per-pipeline model list open |
+| 21 | Model provider | `/platform/llm` | Live: models in use (needs API b5bcf76), one name, same shape for non-Admins |
 | 22 | Project settings | `/corpora/:id/settings` | Live (sticky save, unsaved-changes guard, rename) |
 | 23 | Prompt Catalog | `/platform/prompts` | Live (grouped by purpose) |
 | 24 | Languages | `/platform/languages` | Live (targets from archetypes) |
@@ -35,7 +35,7 @@ commit.
 | 26 | Validation policy | `/platform/validation` | Live (UI + API text) |
 | 27 | Harmonisation | `/platform/harmonisation` | Live |
 | 28 | Generated package | `/scaffolds/:id` | Live (gate strip) |
-| 29 | Extract spec (live) | `/subroutines/:id/extract` | Reviewed 2026-11-27 (one approved run on StartAgain); fixes below |
+| 29 | Extract spec (live) | `/subroutines/:id/extract` | Live: finished heading + next-step button, plain stages, raw stream folded; readable claim rows while streaming open |
 | 30 | Live code generation | `/specs/:id/scaffold` | Not reviewed — needs a signed spec, and signing is an SME's decision |
 
 ## 1 · Home (`/`)

@@ -65,7 +65,7 @@ export function LlmSettingsPage() {
   if (settings.isError || !settings.data) {
     return (
       <div className="mx-auto max-w-[900px] p-4 lg:p-6">
-        <ErrorBlock title="Could not load LLM settings" message={String(settings.error)} />
+        <ErrorBlock title="Could not load the model provider settings" message={String(settings.error)} />
       </div>
     );
   }
@@ -82,7 +82,7 @@ export function LlmSettingsPage() {
         <p className="label">
           Platform · Admin
         </p>
-        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">LLM Provider</h1>
+        <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Model provider</h1>
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           The Anthropic API key used for extraction, generation, and documentation.
           The key is write-only — once saved, the platform only ever shows a masked hint.
@@ -214,11 +214,8 @@ export function LlmSettingsPage() {
       <Card>
         <CardHeader title={<span className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-ink-tertiary" />Set API key</span>} />
         <CardBody>
-          {!isAdmin ? (
-            <p className="text-sm text-ink-tertiary">
-              Only the Admin persona can change the API key. Switch persona to make changes.
-            </p>
-          ) : (
+          {/* Same shape for everyone: a non-Admin sees the field disabled, with who can change it as its hint. */}
+          {(
             <div className="space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
@@ -226,14 +223,15 @@ export function LlmSettingsPage() {
                   autoComplete="off"
                   value={draftKey}
                   onChange={(e) => setDraftKey(e.target.value)}
-                  placeholder="sk-ant-…"
+                  disabled={!isAdmin}
+                  placeholder={isAdmin ? 'sk-ant-…' : 'Admin only'}
                   aria-label="Anthropic API key"
-                  className="min-w-0 flex-1 rounded border border-line-subtle bg-raised px-3 py-2 font-mono text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+                  className="min-w-0 flex-1 rounded border border-line-subtle bg-raised px-3 py-2 font-mono text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <Button
                   variant="primary"
                   onClick={() => saveKey.mutate(draftKey)}
-                  disabled={draftKey.trim().length === 0 || saveKey.isPending}
+                  disabled={!isAdmin || draftKey.trim().length === 0 || saveKey.isPending}
                 >
                   {saveKey.isPending
                     ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -242,10 +240,11 @@ export function LlmSettingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-ink-tertiary">
-                Paste a key from the Anthropic Console. It is stored server-side and never
-                displayed again — only the masked hint above.
+                {isAdmin
+                  ? 'Paste a key from the Anthropic Console. It is stored server-side and never displayed again — only the masked hint above.'
+                  : 'Only an Admin can change the API key — switch persona in the menu at the top right.'}
               </p>
-              {s.keySource === 'database' && (
+              {isAdmin && s.keySource === 'database' && (
                 <Button
                   variant="secondary"
                   onClick={() => clearKey.mutate()}

@@ -134,7 +134,7 @@ export function PlatformStatus() {
               System health
             </Link>
             <Link to="/platform/llm" onClick={() => setOpen(false)} className="text-ink-link hover:underline">
-              Model settings
+              Model provider
             </Link>
           </div>
         </div>
@@ -161,7 +161,7 @@ export function LlmKeyBanner() {
         Extraction, documents and code generation will fail until an Admin saves a working key.
       </span>
       <Link to="/platform/llm" className="font-medium text-ink-link hover:underline">
-        Open model settings
+        Open model provider
       </Link>
     </div>
   );

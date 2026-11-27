@@ -96,7 +96,7 @@ export function SystemPage() {
             </dl>
             {(keyRejected || (llm.data && !llm.data.keyConfigured)) && (
               <Link to="/platform/llm" className="mt-2 inline-block text-caption text-ink-link hover:underline">
-                Open model settings
+                Open model provider
               </Link>
             )}
           </CardBody>

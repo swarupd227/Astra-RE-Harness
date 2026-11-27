@@ -96,7 +96,7 @@ export const SECTIONS: Section[] = [
     items: [
       { to: '/platform/validation',     label: 'Validation Policy',    icon: SlidersHorizontal },
       { to: '/platform/roles',          label: 'Roles & Permissions',  icon: Users },
-      { to: '/platform/llm',            label: 'LLM Provider',         icon: KeyRound },
+      { to: '/platform/llm',            label: 'Model provider',       icon: KeyRound },
     ],
   },
 ];

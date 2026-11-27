@@ -74,7 +74,7 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: '/platform/signatures', title: 'Signature Health', crumbs: [PLATFORM, { label: 'Signature Health' }] },
   { pattern: '/platform/validation', title: 'Validation Policy', crumbs: [PLATFORM, { label: 'Validation Policy' }] },
   { pattern: '/platform/roles', title: 'Roles & Permissions', crumbs: [PLATFORM, { label: 'Roles & Permissions' }] },
-  { pattern: '/platform/llm', title: 'LLM Provider', crumbs: [PLATFORM, { label: 'LLM Provider' }] },
+  { pattern: '/platform/llm', title: 'Model provider', crumbs: [PLATFORM, { label: 'Model provider' }] },
 ];
 
 const NOT_FOUND: { title: string; crumbs: Crumb[] } = { title: 'Not found', crumbs: [{ label: 'Not found' }] };
