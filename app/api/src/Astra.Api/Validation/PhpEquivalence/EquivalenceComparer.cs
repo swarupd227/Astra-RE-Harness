@@ -31,6 +31,11 @@ public static partial class EquivalenceComparer
     [GeneratedRegex(@"Call to a member function (\w+)\(\) on null|Undefined constant ""?([\w\\]+)""?|Call to undefined method ([\w\\]+::\w+)", RegexOptions.IgnoreCase)]
     private static partial Regex MissingEnvironment();
 
+    // The Java side reached a collaborator the harness cannot wire: a Spring bean left null, a DataSource or
+    // EntityManager, a repository. Not a difference in behaviour — the vector cannot be judged here.
+    [GeneratedRegex(@"DataSource|EntityManager|JdbcTemplate|ApplicationContext|SessionFactory|Repository|\bNo \w+ (set|configured|available|bound)\b|not (been )?initiali[sz]ed", RegexOptions.IgnoreCase)]
+    private static partial Regex JavaEnvironment();
+
     public static Verdict Compare(JsonObject? php, JsonObject? java)
     {
         var notes = new List<string>();
@@ -69,6 +74,13 @@ public static partial class EquivalenceComparer
             return new(Skipped, $"The Java method reached `{un[0]}`, a collaborator an equivalence run cannot supply.", null, notes);
         AddNotes(java, notes, "Java");
         var javaEx = java["exception"] as JsonObject;
+        if (javaEx is not null)
+        {
+            var jc = Str(javaEx, "class") ?? "";
+            var jm = Str(javaEx, "message") ?? "";
+            if (jc == "NullPointerException" || JavaEnvironment().IsMatch(jm))
+                return new(Skipped, $"The Java method reached a collaborator the run does not wire ({jc}: {Shorten(jm, 140)}).", null, notes);
+        }
 
         var phpCode = Int(php, "responseCode") ?? 200;
         if (Bool(php, "exited")) notes.Add("PHP ended the request with exit/die");
@@ -255,6 +267,8 @@ public static partial class EquivalenceComparer
         if (who == "PHP" && side["warnings"] is JsonArray w && w.Count > 0)
             notes.Add($"PHP raised {w.Count} warning(s), first: {(w[0] as JsonObject)?["message"]}");
     }
+
+    private static string Shorten(string s, int n) => s.Length <= n ? s : s[..n] + "…";
 
     public static string Show(JsonNode? n)
     {

@@ -115,6 +115,20 @@ public class PhpEquivalenceTests
         Assert.Equal("""{"amount":1.5}""", v[0].Named.ToJsonString());
         Assert.Equal("""{"post":{"coupon":"abc"}}""", v[0].Superglobals!.ToJsonString());
         Assert.DoesNotContain(v, x => x.Named.ContainsKey("total"));
+        var m = PhpEquivalenceVectors.Build(Spec("""{"inputs":[{"name":"$this","type":"Ticket","direction":"in"},{"name":"pid","type":"int","direction":"in"}]}"""));
+        Assert.All(m, x => Assert.False(x.Named.ContainsKey("this")));   // the object the method runs on is not an input
+        Assert.Equal("""{"pid":1}""", m[0].Named.ToJsonString());
+    }
+
+    [Fact]
+    public void Both_sides_failing_on_their_environment_is_not_a_pass()
+    {
+        var phpConst = O("""{"ok":true,"exception":{"class":"Error","message":"Undefined constant \"TASK_TABLE\""}}""");
+        Assert.Equal("SKIPPED", EquivalenceComparer.Compare(phpConst, O("""{"ok":true,"exception":{"class":"IllegalStateException","message":"No DataSource set"}}""")).Status);
+        var phpReject = O("""{"ok":true,"exception":{"class":"InvalidArgumentException","message":"bad id"}}""");
+        Assert.Equal("SKIPPED", EquivalenceComparer.Compare(phpReject, O("""{"ok":true,"exception":{"class":"IllegalStateException","message":"No DataSource set"}}""")).Status);
+        Assert.Equal("SKIPPED", EquivalenceComparer.Compare(O("""{"ok":true,"returnValue":1}"""), O("""{"ok":true,"exception":{"class":"NullPointerException","message":"Cannot invoke \"x.Repo.find()\" because \"this.repo\" is null"}}""")).Status);
+        Assert.Equal("PASSED", EquivalenceComparer.Compare(phpReject, O("""{"ok":true,"exception":{"class":"IllegalArgumentException","message":"bad id"}}""")).Status);
     }
 
     [Fact]

@@ -105,7 +105,7 @@ public static class PhpEquivalenceVectors
             if (e[k] is JsonObject inner) return (JsonObject)inner.DeepClone();
         var o = new JsonObject();
         foreach (var (k, v) in e)
-            if (k is not ("expected" or "output" or "outputs" or "result" or "note" or "label")) o[k] = v?.DeepClone();
+            if (k is not ("expected" or "output" or "outputs" or "result" or "note" or "label" or "this" or "$this")) o[k] = v?.DeepClone();
         return o;
     }
 
@@ -292,6 +292,8 @@ public static class PhpEquivalenceVectors
             }
             else if (dir == "superglobal") area = "form";
             name = name!.TrimStart('$', '&');
+            // $this (and its properties) is the object the method runs on, not an argument: never a vector input.
+            if (name.Equals("this", StringComparison.OrdinalIgnoreCase) || name.StartsWith("this->", StringComparison.OrdinalIgnoreCase)) continue;
             var kind = Kind(type);
             var values = area is null ? TypedValues(kind) : TypedValues(kind).Select(v => v is JsonValue jv && kind is "int" or "float" or "bool" ? JsonValue.Create(Show(jv).Trim('"')) : v).ToList();
             specs.Add((name, area, values));
