@@ -237,9 +237,13 @@ public sealed class WorkbookEquivalenceRunner
     {
         var checks = new List<Check>();
         if (pkg is null) { checks.Add(new("package", "run", false, "the package returned no result for this case")); return checks; }
-        if (pkg["error"]?.ToString() is { } err) { checks.Add(new("package", "run", false, $"the package raised {err}")); return checks; }
-        var outputs = pkg["outputs"] as JsonObject;
         var sent = (pkg["requests"] as JsonArray ?? new()).OfType<JsonObject>().ToList();
+        // Live, the real service may refuse a case (HTTP 400 for an empty list it requires). The macro gets the same
+        // answer and shows it as an error, so that is the source's behaviour, not a difference: what can still be checked
+        // is that the request was the source's, key for key. Offline the gate's own answer never refuses.
+        var refused = live && sent.Count > 0 && pkg["error"]?.ToString() is { } se && ServiceRefusal.IsMatch(se) ? se : null;
+        if (pkg["error"]?.ToString() is { } err && refused is null) { checks.Add(new("package", "run", false, $"the package raised {err}")); return checks; }
+        var outputs = pkg["outputs"] as JsonObject;
 
         // Outside requests: what was sent against the signed template for this case.
         foreach (var r in c.Requests)
@@ -268,6 +272,13 @@ public sealed class WorkbookEquivalenceRunner
             }
             var diff = RequestTemplate.FirstDifference(expected, match["body"]);
             checks.Add(new("request", r.Id, diff is null, diff ?? "the body is the source's, key for key"));
+        }
+
+        if (refused is not null)
+        {
+            checks.Add(new("service", "answer", true,
+                $"the outside service refused this case ({refused}); the source sends the same request and shows the same error, so there is no premium to compare"));
+            return checks;
         }
 
         // Outputs.
@@ -336,6 +347,10 @@ public sealed class WorkbookEquivalenceRunner
         }
         return body;
     }
+
+    /// <summary>An error that carries the outside service's own HTTP refusal (4xx), as the package reports it.</summary>
+    private static readonly System.Text.RegularExpressions.Regex ServiceRefusal =
+        new(@"\b(HTTP|status)\s*:?\s*4\d\d\b|\b4\d\d\s+(Bad Request|Unprocessable|Not Found|Conflict)", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static bool SameUrl(string? a, string b)
     {

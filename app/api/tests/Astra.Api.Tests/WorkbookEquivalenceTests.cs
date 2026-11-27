@@ -221,6 +221,25 @@ public class WorkbookEquivalenceTests
     }
 
     [Fact]
+    public void Live_a_case_the_real_service_refuses_is_the_sources_behaviour_when_the_request_was_the_sources()
+    {
+        var c = Contract();
+        var saved = WorkbookEquivalenceVectors.Build(c, Sheets())[0];
+        const string sentOk = """{"method":"POST","url":"https://rater.example/api/v1/travel/rate","body":{"tripCost":6666,"age":26,"month":"July","selected":[4,5,6,8],"advanced":{"perils":[1,2]}}}""";
+        var refused = Pkg($$"""{"error":"RaterError: HTTP 400: Invalid rating request.","requests":[{{sentOk}}]}""");
+
+        var live = WorkbookEquivalenceRunner.Compare(c, saved, refused, null, (_, _) => null, live: true);
+        Assert.All(live, x => Assert.True(x.Passed, x.Detail));
+        Assert.Contains(live, x => x.Kind == "request");
+        Assert.Contains(live, x => x.Kind == "service" && x.Detail.Contains("refused"));
+
+        // offline the gate's own answer never refuses, and an error that is not the service's is still a failure
+        Assert.Contains(WorkbookEquivalenceRunner.Compare(c, saved, refused, null, (_, _) => null, live: false), x => !x.Passed);
+        var crash = Pkg($$"""{"error":"KeyError: 'perils'","requests":[{{sentOk}}]}""");
+        Assert.Contains(WorkbookEquivalenceRunner.Compare(c, saved, crash, null, (_, _) => null, live: true), x => !x.Passed);
+    }
+
+    [Fact]
     public void The_canned_answer_has_every_response_field()
     {
         var canned = WorkbookEquivalenceRunner.Canned(Contract().Requests[0]);
