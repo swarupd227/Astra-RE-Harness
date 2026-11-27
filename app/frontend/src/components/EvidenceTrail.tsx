@@ -109,7 +109,7 @@ function SourceBlock({ e }: { e: EvidenceResponse }) {
   const linesSpan = `L${e.subroutine.lineStart}–L${e.subroutine.lineEnd}`;
   return (
     <Block icon={FileCode} label="Source" tone="neutral">
-      <Row label="Routine" mono value={e.subroutine.name} />
+      <Row label="Code unit" mono value={e.subroutine.name} />
       <Row label="Signature" value={e.subroutine.signature} />
       <Row label="File" mono value={`${file.relativePath} · ${file.lineCount} LOC`} />
       <Row label="Span" mono value={linesSpan} />

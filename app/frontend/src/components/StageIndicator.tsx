@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 const STAGES = [
   // What the user would call each step (the keys are the engine's stage ids and stay as they are).
   { key: 'priming', label: 'Preparing' },
-  { key: 'loading_source', label: 'Reading the routine' },
+  { key: 'loading_source', label: 'Reading the code unit' },
   { key: 'streaming', label: 'Writing the spec' },
   { key: 'validating', label: 'Checking it' },
   { key: 'persisting', label: 'Saving' },

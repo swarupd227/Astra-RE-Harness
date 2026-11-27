@@ -64,6 +64,12 @@ sign-off** and **Cutover sign-off**. Agents never cross a gate on their own.
 10. **Nothing breaks what exists.** Routes stay, `data-testid`s stay, demo-spec button labels stay
     verbatim inside artifact views. New surfaces add test ids; they do not rename old ones.
 
+**Words.** What the parser reads out of a file — a PHP page or method, a VBA macro, a COBOL paragraph, a Fortran
+subroutine — is a **code unit** on every screen and in every message, with its own kind shown beside the name
+(`lib/unitKind.ts`). "Routine"/"subroutine" survive only where renaming would break something: routes
+(`/subroutines`), test ids, API fields, tool names, artifact kind keys and the spec schema. The agents understand all
+three words.
+
 ## The surfaces (three, not thirty)
 
 - **Workspace** (`/`, `/w/:conversationId`): left rail — *Ask Astra*, programme threads, the agents (live),

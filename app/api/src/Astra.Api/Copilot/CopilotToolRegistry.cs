@@ -199,7 +199,7 @@ public sealed partial class CopilotToolRegistry
             AllowedPersonas = new[] { Persona.Engineer, Persona.Admin },
             Description = "Draft the behavioural spec for one routine (Claude reads the source and writes claims). Allowed from PARSED or DRAFT. Runs in the background; the Spec agent posts when it's done.",
             InputSchema = Obj(("subroutineId", Str("Routine id or exact name."))),
-            Describe = async (input, ctx) => $"draft the spec for `{(await ResolveRoutineAsync(input, ctx))?.Name ?? "the routine"}`",
+            Describe = async (input, ctx) => $"draft the spec for `{(await ResolveRoutineAsync(input, ctx))?.Name ?? "the code unit"}`",
             Execute = ExtractSpecAsync,
         });
         _tools.Add(new CopilotTool
@@ -213,7 +213,7 @@ public sealed partial class CopilotToolRegistry
                 ("subroutineId", Str("Routine id or exact name.")),
                 ("specId", Str("Spec id (alternative).")),
                 ("note", Str("Optional routing note for the reviewer."))),
-            Describe = async (input, ctx) => $"route the spec for `{(await ResolveSpecAsync(input, ctx))?.Subroutine?.Name ?? "the routine"}` for SME review",
+            Describe = async (input, ctx) => $"route the spec for `{(await ResolveSpecAsync(input, ctx))?.Subroutine?.Name ?? "the code unit"}` for SME review",
             Execute = RouteForReviewAsync,
         });
         _tools.Add(new CopilotTool
@@ -250,7 +250,7 @@ public sealed partial class CopilotToolRegistry
             {
                 var spec = await ResolveSpecAsync(input, ctx);
                 var except = ReadArray(input, "except");
-                return $"accept every remaining claim in the spec for `{spec?.Subroutine?.Name ?? "the routine"}`" +
+                return $"accept every remaining claim in the spec for `{spec?.Subroutine?.Name ?? "the code unit"}`" +
                        (except.Count > 0 ? $" except {string.Join(", ", except.Select(e => $"`{e}`"))}" : "");
             },
             Execute = ReviewAllClaimsAsync,
@@ -265,7 +265,7 @@ public sealed partial class CopilotToolRegistry
             InputSchema = Obj(
                 ("specId", Str("Spec id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative)."))),
-            Describe = async (input, ctx) => $"sign the spec for `{(await ResolveSpecAsync(input, ctx))?.Subroutine?.Name ?? "the routine"}` as SME (this is the authoritative sign-off)",
+            Describe = async (input, ctx) => $"sign the spec for `{(await ResolveSpecAsync(input, ctx))?.Subroutine?.Name ?? "the code unit"}` as SME (this is the authoritative sign-off)",
             Execute = SignSpecAsync,
         });
         _tools.Add(new CopilotTool
@@ -285,7 +285,7 @@ public sealed partial class CopilotToolRegistry
                 var spec = await ResolveSpecAsync(input, ctx);
                 var target = Read(input, "targetStack");
                 var repair = ReadBool(input, "repairFromLatestFailure") ? " with the last gate's errors fixed" : "";
-                return $"{(repair.Length > 0 ? "regenerate" : "generate")} {(string.IsNullOrWhiteSpace(target) ? "the default target's" : target)} code for `{spec?.Subroutine?.Name ?? "the routine"}`{repair}";
+                return $"{(repair.Length > 0 ? "regenerate" : "generate")} {(string.IsNullOrWhiteSpace(target) ? "the default target's" : target)} code for `{spec?.Subroutine?.Name ?? "the code unit"}`{repair}";
             },
             Execute = GenerateScaffoldAsync,
         });
@@ -300,7 +300,7 @@ public sealed partial class CopilotToolRegistry
                 ("scaffoldId", Str("Scaffold id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative; uses the latest scaffold).")),
                 ("gate", Enum("compile", "test-pack", "quality", "equivalence"))),
-            Describe = async (input, ctx) => $"run the {Read(input, "gate") ?? "compile"} gate for `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the routine"}`",
+            Describe = async (input, ctx) => $"run the {Read(input, "gate") ?? "compile"} gate for `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the code unit"}`",
             Execute = RunGateAsync,
         });
         _tools.Add(new CopilotTool
@@ -314,7 +314,7 @@ public sealed partial class CopilotToolRegistry
                 ("scaffoldId", Str("Scaffold id.")),
                 ("subroutineId", Str("Routine id or exact name (alternative; uses the latest scaffold).")),
                 ("rounds", Int("Optional: regenerations allowed, 1–5."))),
-            Describe = async (input, ctx) => $"fix `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the routine"}` until compile, tests and quality are green (each round regenerates the code)",
+            Describe = async (input, ctx) => $"fix `{(await ResolveScaffoldAsync(input, ctx))?.Spec?.Subroutine?.Name ?? "the code unit"}` until compile, tests and quality are green (each round regenerates the code)",
             Execute = FixUntilGreenAsync,
         });
         _tools.Add(new CopilotTool
@@ -442,7 +442,7 @@ public sealed partial class CopilotToolRegistry
             corpusName = x.c.Name,
         }).ToList();
 
-        var label = string.IsNullOrEmpty(query) ? "routines" : $"routines matching \"{query}\"";
+        var label = string.IsNullOrEmpty(query) ? "code units" : $"code units matching \"{query}\"";
         return ToolResult.Success(new { query, state, total, returned = items.Count, items }, $"{total} {label}",
             ToolResult.Artifact("routineList", null, new { query, total, items }));
     }
@@ -549,7 +549,7 @@ public sealed partial class CopilotToolRegistry
         var board = await FlowBoardEndpoints.BuildAsync(ctx.Db, corpus.Id, ArtifactBuilders.FlowBoardCardCap, ctx.Ct);
         if (board is null) return NoCorpus(input);
         var (artifact, payload) = ArtifactBuilders.FlowBoard(board);
-        return ToolResult.Success(payload, $"flow board: {board.TotalRoutines} routines", artifact);
+        return ToolResult.Success(payload, $"flow board: {board.TotalRoutines} code units", artifact);
     }
 
     // ═══ NL querying (Increment 2) ═══════════════════════════════════════
@@ -564,7 +564,7 @@ public sealed partial class CopilotToolRegistry
         var graphs = ctx.Services.GetRequiredService<DependencyGraphBuilder>();
         var graph = await graphs.BuildAsync(corpus.Id, ctx.Ct);
         if (graph is null || graph.Nodes.Count == 0)
-            return ToolResult.Failure("graph.empty", $"No dependency graph for {corpus.Name} yet (no ingested version or no routines).");
+            return ToolResult.Failure("graph.empty", $"No dependency graph for {corpus.Name} yet (no ingested version or no code units).");
 
         var hotspots = Astra.Api.Assessment.AssessmentService.Hotspots(graph, graph.Nodes.Count)
             .ToDictionary(h => h.Id);
@@ -643,8 +643,8 @@ public sealed partial class CopilotToolRegistry
         var label = by switch { "fan_in" => "most-called", "size" => "largest", "cycles" => "cycle-bound", _ => "riskiest" };
         return ToolResult.Success(
             new { by, corpusId = corpus.Id, corpusName = corpus.Name, graph = new { graph.Stats.NodeCount, graph.Stats.CyclicSccCount, graph.Stats.SharedStorageEdgeCount }, rows },
-            $"{rows.Count} {label} routines in {corpus.Name}",
-            ToolResult.Artifact("routineList", null, new { query = $"{label} routines", total = rows.Count, items, ranked = true, by }));
+            $"{rows.Count} {label} code units in {corpus.Name}",
+            ToolResult.Artifact("routineList", null, new { query = $"{label} code units", total = rows.Count, items, ranked = true, by }));
     }
 
     private static async Task<ToolResult> SearchDocsAsync(JsonElement input, ToolContext ctx)
@@ -672,7 +672,7 @@ public sealed partial class CopilotToolRegistry
             var start = Math.Max(0, idx - 200);
             var snippet = md.Substring(start, Math.Min(md.Length - start, 400)).Replace("\n", " ");
             var title = s.ModuleName is { Length: > 0 } m ? $"{Pretty(s.SectionKind)} · {m}"
-                      : s.SubroutineId is not null ? $"{Pretty(s.SectionKind)} · routine"
+                      : s.SubroutineId is not null ? $"{Pretty(s.SectionKind)} · code unit"
                       : Pretty(s.SectionKind);
             var href = s.SectionKind == Astra.Api.Assessment.AssessmentService.SectionKind
                 ? $"/projects/{s.CorpusId}/assessment"
@@ -704,7 +704,7 @@ public sealed partial class CopilotToolRegistry
                 parsed = g.Count(x => x.State == "PARSED"),
             }).OrderByDescending(x => x.routines).Take(limit).ToListAsync(ctx.Ct);
 
-        var md = $"**Modules in {corpus.Name}** (top {rows.Count} by routine count)\n\n| Module | Routines | Lines | Signed+ | Untouched |\n|---|---:|---:|---:|---:|\n" +
+        var md = $"**Modules in {corpus.Name}** (top {rows.Count} by code unit count)\n\n| Module | Code units | Lines | Signed+ | Untouched |\n|---|---:|---:|---:|---:|\n" +
                  string.Join("\n", rows.Select(r => $"| `{r.path}` | {r.routines} | {r.lines} | {r.signed} | {r.parsed} |"));
         return ToolResult.Success(new { corpusId = corpus.Id, modules = rows }, $"{rows.Count} modules",
             ToolResult.Artifact("text", corpus.Id.ToString(), new { title = "Modules", markdown = md, href = $"/projects/{corpus.Id}" }));
@@ -807,7 +807,7 @@ public sealed partial class CopilotToolRegistry
 
     private static string Pretty(string kind) => kind switch
     {
-        "routine-summary" => "Routine summary",
+        "routine-summary" => "Code unit summary",
         "business-rule" => "Business rule",
         "data-dictionary" => "Data dictionary",
         "assessment" => "Assessment",
@@ -817,7 +817,7 @@ public sealed partial class CopilotToolRegistry
     private static async Task<ToolResult> GetValidationResultsAsync(JsonElement input, ToolContext ctx)
     {
         var scaffold = await ResolveScaffoldAsync(input, ctx);
-        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
+        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that code unit — generate it first (generate_scaffold).");
         var gates = await ArtifactBuilders.GateResultsAsync(ctx.Db, scaffold.Id, ctx.Ct);
         return gates is null
             ? ToolResult.Failure("scaffold.not_found", "Scaffold not found.")
@@ -1061,7 +1061,7 @@ public sealed partial class CopilotToolRegistry
     private static async Task<ToolResult> FixUntilGreenAsync(JsonElement input, ToolContext ctx)
     {
         var scaffold = await ResolveScaffoldAsync(input, ctx);
-        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
+        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that code unit — generate it first (generate_scaffold).");
         if (scaffold.Spec?.State != "SIGNED")
             return ToolResult.Failure("spec.not_signed", "The loop regenerates from the signed spec and runs its claim tests, so the spec must be signed first.");
         var rounds = ReadInt(input, "rounds")
@@ -1092,7 +1092,7 @@ public sealed partial class CopilotToolRegistry
     private static async Task<ToolResult> RunGateAsync(JsonElement input, ToolContext ctx)
     {
         var scaffold = await ResolveScaffoldAsync(input, ctx);
-        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that routine — generate it first (generate_scaffold).");
+        if (scaffold is null) return ToolResult.Failure("scaffold.not_found", "No generated code found for that code unit — generate it first (generate_scaffold).");
         var gate = (Read(input, "gate") ?? "compile").Trim().ToLowerInvariant();
         if (gate is not ("compile" or "test-pack" or "quality" or "equivalence")) return ToolResult.Failure("gate.unknown", "gate must be compile, test-pack, quality or equivalence.");
 
@@ -1264,12 +1264,12 @@ public sealed partial class CopilotToolRegistry
     private static ToolResult NoRoutine(JsonElement input) =>
         ToolResult.Failure("routine.not_found",
             Read(input, "subroutineId") is { Length: > 0 } r
-                ? $"No routine matches \"{r}\" in this programme. Try search_routines with a shorter substring."
-                : "Which routine? Give its id or exact name (search_routines finds it).");
+                ? $"No code unit matches \"{r}\" in this programme. Try search_routines with a shorter substring."
+                : "Which code unit? Give its id or exact name (search_routines finds it).");
 
     private static ToolResult NoSpec(JsonElement input) =>
         ToolResult.Failure("spec.not_found",
-            "No spec exists for that routine yet — offer to draft one (extract_spec).");
+            "No spec exists for that code unit yet — offer to draft one (extract_spec).");
 
     // ═══ JSON helpers ════════════════════════════════════════════════════
 

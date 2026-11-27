@@ -37,7 +37,7 @@ public static class WorkEndpoints
             {
                 routines = body.RoutineIds.Distinct().Select(id => (id, 0)).ToList();
                 kind = "routines";
-                label = $"{routines.Count} routine(s) · {corpus.Name}";
+                label = $"{routines.Count} code unit(s) · {corpus.Name}";
             }
             else
             {

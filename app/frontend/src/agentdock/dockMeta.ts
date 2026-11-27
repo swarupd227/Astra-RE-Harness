@@ -59,21 +59,21 @@ const specPage = (
 export const DOCK_META: DockMeta[] = [
   ...corpusPage('', 'programme', 'Programme', 'this project', [
     s("What's the status of this programme?"),
-    s('Which routines are still unsigned?'),
-    s('Show me the riskiest routines'),
+    s('Which code units are still unsigned?'),
+    s('Show me the riskiest code units'),
   ]),
   ...corpusPage('/board', 'programme', 'Programme', 'the flow board', [
     s("What's stuck, and where?"),
     s("What's built but not verified yet?"),
-    s('Sign every routine still in review'),
+    s('Sign every code unit still in review'),
   ]),
   ...corpusPage('/migration-plan', 'planning', 'Planning', 'the migration plan', [
     s('Explain the migration plan wave by wave'),
     s('What should we migrate first, and why?'),
-    s('Which routines block the later waves?'),
+    s('Which code units block the later waves?'),
   ]),
   ...corpusPage('/dependency-graph', 'discovery', 'Discovery', 'the dependency graph', [
-    s('Which routines are called the most?'),
+    s('Which code units are called the most?'),
     s('Are there dependency cycles?'),
     s('Which modules are the most tangled?'),
   ]),
@@ -97,11 +97,11 @@ export const DOCK_META: DockMeta[] = [
     scope: 'routine' as const,
     agent: 'spec' as AgentId,
     agentName: 'Spec',
-    about: 'this routine',
+    about: 'this code unit',
     starters: ({ routine }: { routine?: string }) => [
-      s(routine ? `What does ${routine} do?` : 'What does this routine do?'),
-      s(routine ? `Who calls ${routine}?` : 'Who calls this routine?'),
-      s(routine ? `Extract a spec for ${routine}` : 'Extract a spec for this routine'),
+      s(routine ? `What does ${routine} do?` : 'What does this code unit do?'),
+      s(routine ? `Who calls ${routine}?` : 'Who calls this code unit?'),
+      s(routine ? `Extract a spec for ${routine}` : 'Extract a spec for this code unit'),
     ],
   })),
   ...specPage('/scaffolds/:id', 'scaffold', 'migration', 'Migration', 'this generated code', [
@@ -130,7 +130,7 @@ export const DOCK_META: DockMeta[] = [
     starters: () => [
       s("What's the status of every programme?"),
       s('Which programme has the most unsigned specs?'),
-      s('Show me the riskiest routines'),
+      s('Show me the riskiest code units'),
     ],
   },
 ];

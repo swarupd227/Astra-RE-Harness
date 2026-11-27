@@ -44,7 +44,7 @@ public sealed class PhpEquivalenceRunner
         var sub = scaffold.Spec?.Subroutine ?? throw new InvalidOperationException("Scaffold has no routine.");
         var routine = sub.Name;
         var t = new StringBuilder();
-        t.AppendLine($"=== Per-routine equivalence: PHP `{routine}` against the {scaffold.TargetPlatform} package ===");
+        t.AppendLine($"=== Per-unit equivalence: PHP `{routine}` against the {scaffold.TargetPlatform} package ===");
 
         Outcome Skip(string code, string why, object? extra = null)
         {
@@ -56,7 +56,7 @@ public sealed class PhpEquivalenceRunner
         var backendPrefix = target == "angular-java" ? "backend/" : target == "java-spring" ? "" : null;
         if (backendPrefix is null)
             return Skip("equivalence.target_not_java",
-                $"PHP equivalence compares the PHP routine with a Java package; this one targets {scaffold.TargetPlatform}.");
+                $"PHP equivalence compares the PHP code unit with a Java package; this one targets {scaffold.TargetPlatform}.");
 
         using var specDoc = JsonDocument.Parse(scaffold.Spec!.SpecJson.RootElement.GetRawText());
         var spec = specDoc.RootElement;

@@ -203,7 +203,7 @@ public sealed class MigrationContextService
         if (hasSharedBlocks)
         {
             classification = "coordinated-only";
-            reasons.Add($"References shared storage block(s) {string.Join(", ", sharedBlockNames.Select(b => $"/{b}/"))} also touched by other routines in this corpus. Migration must co-locate or replicate the shared-state contract.");
+            reasons.Add($"References shared storage block(s) {string.Join(", ", sharedBlockNames.Select(b => $"/{b}/"))} also touched by other code units in this project. Migration must co-locate or replicate the shared-state contract.");
         }
         else
         {

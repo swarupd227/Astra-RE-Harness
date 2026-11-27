@@ -39,11 +39,11 @@ public static class BatchSentence
             .Select(k => $"{Math.Min(preview.Caps[k], plan.Count(k))} {k}")
             .ToList();
 
-        var sentence = $"queue \"{request.Label}\" ({Count(plan.RoutineCount, "routine")}): {string.Join(", then ", steps)}; " +
+        var sentence = $"queue \"{request.Label}\" ({Count(plan.RoutineCount, "code unit")}): {string.Join(", then ", steps)}; " +
                        $"working in parallel ({string.Join(", ", widths)} at a time)";
         sentence += request.BudgetUsd is { } budget ? $", pausing at a ${budget:0.00} cost ceiling" : ", with no cost ceiling";
         if (waits > 0) sentence += "; agents never sign";
-        if (plan.Skipped.Count > 0) sentence += $"; {Count(plan.Skipped.Count, "routine")} skipped";
+        if (plan.Skipped.Count > 0) sentence += $"; {Count(plan.Skipped.Count, "code unit")} skipped";
         if (preview.Warnings.Count > 0) sentence += $"; note: {string.Join(" ", preview.Warnings)}";
         return sentence;
     }
@@ -51,7 +51,7 @@ public static class BatchSentence
     /// <summary>A routine-list run's name; when it takes only part of what matches, the name says so.</summary>
     public static string ListLabel(string title, int taken, int matching, string programme)
     {
-        var how = matching > taken ? $"{taken} of {matching} routines" : Count(taken, "routine");
+        var how = matching > taken ? $"{taken} of {matching} code units" : Count(taken, "code unit");
         return $"{title} · {how} · {programme}";
     }
 

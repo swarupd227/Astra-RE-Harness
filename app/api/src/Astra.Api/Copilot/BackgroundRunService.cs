@@ -248,7 +248,7 @@ public sealed class BackgroundRunService
                 // A faithful 1:1 run converted the whole unit, so the sentence
                 // names the unit; the routine only anchored it.
                 var summary = unitPath is { Length: > 0 }
-                    ? $"Converted `{unitPath}` 1:1 to .NET 10 ({unitRoutines} routines, {files} files, {lines:N0} lines, {todos} TODOs), anchored on `{routineName}`."
+                    ? $"Converted `{unitPath}` 1:1 to .NET 10 ({unitRoutines} code units, {files} files, {lines:N0} lines, {todos} TODOs), anchored on `{routineName}`."
                     : $"Generated {files} files ({lines:N0} lines, {todos} TODOs) for `{routineName}` on {targetStack}.";
                 _bus.State(runId, "migration", "SUCCEEDED", summary);
             }

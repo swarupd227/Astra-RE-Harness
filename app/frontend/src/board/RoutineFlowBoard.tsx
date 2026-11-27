@@ -68,8 +68,8 @@ export function RoutineFlowBoard() {
     <div className="mx-auto max-w-[1900px] space-y-6 p-4 lg:p-6 fadeup" data-testid="flow-board-page">
       <PageHero
         eyebrow={b.corpusName}
-        title="Routine flow board"
-        lead={`${b.totalRoutines.toLocaleString()} routines · ${b.columns
+        title="Code unit flow board"
+        lead={`${b.totalRoutines.toLocaleString()} code units · ${b.columns
           .filter((c) => c.total > 0)
           .map((c) => `${c.total.toLocaleString()} ${columnLabel(c).toLowerCase()}`)
           .join(' · ')}`}

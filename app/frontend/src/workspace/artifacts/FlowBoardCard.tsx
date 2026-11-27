@@ -34,14 +34,14 @@ export function FlowBoardCard({ artifact, size }: ArtifactRenderProps) {
   const total = num(p.totalRoutines, list.reduce((n, s) => n + s.total, 0));
 
   if (list.length === 0) {
-    return <p className="text-caption text-ink-tertiary">No routines to show yet.</p>;
+    return <p className="text-caption text-ink-tertiary">No code units to show yet.</p>;
   }
 
   return (
     <div className="space-y-3" data-testid="flow-board-card">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-caption">
         <span className="font-medium text-ink-primary">{str(p.corpusName, 'Programme')}</span>
-        <span className="ml-auto font-mono tabular-nums text-ink-secondary">{formatInt(total)} routines</span>
+        <span className="ml-auto font-mono tabular-nums text-ink-secondary">{formatInt(total)} code units</span>
       </div>
 
       <ol className="space-y-2.5" aria-label="Pipeline stages">
@@ -89,7 +89,7 @@ export function FlowBoardCard({ artifact, size }: ArtifactRenderProps) {
         })}
       </ol>
 
-      {!pane && <p className="text-micro text-ink-tertiary">Expand the card for the routines in each stage.</p>}
+      {!pane && <p className="text-micro text-ink-tertiary">Expand the card for the code units in each stage.</p>}
     </div>
   );
 }

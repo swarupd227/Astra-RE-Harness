@@ -520,6 +520,7 @@ public sealed class CopilotOrchestrator
     private static string FallbackSystem(Dictionary<string, string?> v) =>
         $"You are Astra, the orchestrator of a legacy-modernization programme at Artizent. Acting persona: {v["persona"]}.\n" +
         "Use tools for every fact; never assert status you didn't read. State-changing tools pause for user confirmation automatically. " +
+        "Each function, method, page or subroutine is a \"code unit\" (tools and fields still say \"routine\"); say \"code unit\" to the user. " +
         "Answer briefly in markdown and end by calling finish_turn with 2–4 suggestions.\n\n" + v["programmeContext"];
 
     /// <summary>
@@ -781,7 +782,7 @@ public sealed class CopilotOrchestrator
     {
         "list_programmes" => "Listing the programmes",
         "get_programme_status" => "Reading the programme status",
-        "search_routines" => CopilotToolRegistry.Read(input, "query") is { Length: > 0 } q ? $"Searching routines for “{q}”" : "Listing routines",
+        "search_routines" => CopilotToolRegistry.Read(input, "query") is { Length: > 0 } q ? $"Searching code units for “{q}”" : "Listing code units",
         "read_routine" => $"Reading `{CopilotToolRegistry.Read(input, "subroutineId")}`",
         "get_spec" => "Loading the spec",
         "get_pattern_clusters" => "Loading the pattern clusters",

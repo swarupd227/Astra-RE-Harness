@@ -241,7 +241,7 @@ public sealed class IngestRunService
             {
                 var ok = r.State == "PARSED";
                 var summary = ok
-                    ? $"Ingest done for **{label}**: {r.FileCount:N0} files, {r.TotalLoc:N0} lines, {r.SubroutineCount:N0} routines."
+                    ? $"Ingest done for **{label}**: {r.FileCount:N0} files, {r.TotalLoc:N0} lines, {r.SubroutineCount:N0} code units."
                     : $"Ingest of **{label}** ended in {r.State}: {r.ErrorMessage ?? "see the corpus warnings"}.";
                 return (ok ? "SUCCEEDED" : "FAILED", summary, new
                 {
@@ -254,7 +254,7 @@ public sealed class IngestRunService
             {
                 var ok = r.State == "PARSED";
                 var summary = ok
-                    ? $"Re-sync done for **{label}**: {r.FileCount:N0} files, {r.SubroutineCount:N0} routines, {r.CarriedForwardCount:N0} specs carried forward, {r.SupersededCount:N0} superseded."
+                    ? $"Re-sync done for **{label}**: {r.FileCount:N0} files, {r.SubroutineCount:N0} code units, {r.CarriedForwardCount:N0} specs carried forward, {r.SupersededCount:N0} superseded."
                     : $"Re-sync of **{label}** ended in {r.State}: {r.ErrorMessage ?? "see the corpus warnings"}.";
                 return (ok ? "SUCCEEDED" : "FAILED", summary, new
                 {

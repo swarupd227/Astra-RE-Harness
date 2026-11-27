@@ -190,7 +190,7 @@ export function EvidencePage() {
           <Card className="p-8 text-center" data-testid="evidence-empty">
             <p className="text-body font-medium text-ink-primary">This project has no evidence yet.</p>
             <p className="mt-1 text-body text-ink-secondary">
-              Evidence is built from the routines of the source code and from the artefacts you add on the project page.
+              Evidence is built from the code units of the source code and from the artefacts you add on the project page.
             </p>
             <Link
               to={`/corpora/${id}`}

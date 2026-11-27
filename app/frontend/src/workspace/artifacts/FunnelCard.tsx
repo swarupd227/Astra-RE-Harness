@@ -24,7 +24,7 @@ export function FunnelCard({ artifact, size }: ArtifactRenderProps) {
         </span>
         <span className="text-caption text-ink-tertiary">{formatLanguage(str(p.sourceLanguage) || null)}</span>
         <span className="ml-auto font-mono text-caption tabular-nums text-ink-secondary">
-          {formatInt(counts.total)} routines
+          {formatInt(counts.total)} code units
         </span>
       </div>
 

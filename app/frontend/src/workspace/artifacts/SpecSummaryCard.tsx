@@ -140,7 +140,7 @@ export function SpecSummaryCard({ artifact, size, onIntent }: ArtifactRenderProp
 
   const specId = artifact.refId;
   const subroutineId = str(p.subroutineId) || null;
-  const routineName = str(p.routineName, 'Routine');
+  const routineName = str(p.routineName, 'Code unit');
   const pane = size === 'pane';
   const persona = getPersona();
 
@@ -418,7 +418,7 @@ export function SpecSummaryCard({ artifact, size, onIntent }: ArtifactRenderProp
                                   data-testid="claim-citation"
                                   data-lines={c.citationLines}
                                   className="rounded border border-line-subtle bg-sunken px-1 py-px font-mono text-micro text-ink-secondary transition-colors hover:border-line hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
-                                  title={`Source lines ${c.citationLines} — open the routine`}
+                                  title={`Source lines ${c.citationLines} — open the code unit`}
                                 >
                                   {citationChip(c.citationLines)}
                                 </Link>

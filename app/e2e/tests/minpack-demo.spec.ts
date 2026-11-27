@@ -369,7 +369,7 @@ test.describe('MINPACK · real-GitHub demo', () => {
       // ── Progress view — SIGNED-state filter on the cross-corpus surface ──
       await test.step('progress view — six signed', async () => {
         await page.goto('/subroutines?state=SIGNED');
-        await expect(page.getByRole('heading', { name: 'Subroutines', level: 1 })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Code units', level: 1 })).toBeVisible();
         // Hold so the viewer can count the rows: HYBRD1 + LMDIF1 + LMDER1 +
         // HYBRJ1 + FDJAC1 + R1UPDT = six signed entries.
         await page.waitForTimeout(4_000);

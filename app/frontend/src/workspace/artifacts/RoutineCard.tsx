@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { StatePill } from '../StatePill';
 import { arr, formatInt, formatLanguage, num, str } from '../format';
 import type { ArtifactRenderProps } from './registry';
+import { unitKind } from '@/lib/unitKind';
 
 /**
  * `routine` — one routine's metadata; in the pane, its own source slice with
@@ -13,7 +14,7 @@ import type { ArtifactRenderProps } from './registry';
 export function RoutineCard({ artifact, size }: ArtifactRenderProps) {
   const p = artifact.props;
   const pane = size === 'pane';
-  const name = str(p.name, 'Routine');
+  const name = str(p.name, 'Code unit');
   const signature = str(p.signature);
   const path = str(p.path);
   const lineStart = num(p.lineStart);
@@ -32,6 +33,9 @@ export function RoutineCard({ artifact, size }: ArtifactRenderProps) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-body font-medium text-ink-primary">{name}</span>
         <StatePill state={str(p.state)} size="xs" />
+        <span className="rounded-sm bg-sunken px-1 py-px text-micro text-ink-secondary" data-testid="unit-kind">
+          {unitKind(str(p.sourceLanguage) || null, signature, name, path)}
+        </span>
         <span className="text-caption text-ink-tertiary">{formatLanguage(str(p.sourceLanguage) || null)}</span>
       </div>
 
@@ -98,7 +102,7 @@ export function RoutineCard({ artifact, size }: ArtifactRenderProps) {
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1 rounded-md border border-line-subtle bg-sunken px-2 py-1 text-micro text-ink-secondary hover:border-line hover:text-ink-primary"
           >
-            Routine detail
+            Code unit detail
             <ArrowUpRight size={11} aria-hidden="true" />
           </Link>
         )}

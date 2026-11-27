@@ -25,7 +25,7 @@ type Status = 'idle' | 'streaming' | 'success' | 'error';
 
 // The server refuses a second extraction while one is running (another tab, or an earlier visit to this page whose
 // stream is still going). That is not a failure: say so, and the page follows the run instead.
-const ALREADY_RUNNING = 'An extraction of this routine is already running (started from another tab or an earlier visit). It finishes on its own; this page opens the routine when it does.';
+const ALREADY_RUNNING = 'An extraction of this code unit is already running (started from another tab or an earlier visit). It finishes on its own; this page opens the code unit when it does.';
 function friendlyExtractError(message: string): string {
   return /state EXTRACTING/i.test(message) ? ALREADY_RUNNING : message;
 }
@@ -191,7 +191,7 @@ export function LiveExtractionPage() {
   if (sub.isError || source.isError) {
     return (
       <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
-        <ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} />
+        <ErrorBlock title="Could not load code unit" message={String(sub.error ?? source.error)} />
       </div>
     );
   }
@@ -275,7 +275,7 @@ export function LiveExtractionPage() {
           <div className="flex items-center justify-between gap-3 text-caption text-ink-secondary">
             <span className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-volt motion-safe:animate-pulse" aria-hidden="true" />
-              <span>Claude is writing the spec — usually about a minute for a routine this size</span>
+              <span>Claude is writing the spec — usually about a minute for a code unit this size</span>
             </span>
             <span className="font-mono">{streamedText.length.toLocaleString()} characters so far</span>
           </div>

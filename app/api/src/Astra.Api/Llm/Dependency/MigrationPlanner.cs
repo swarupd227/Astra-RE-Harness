@@ -199,10 +199,10 @@ public sealed class MigrationPlanner
         // Generic naming — strategies that need a fancier label (e.g.
         // "Wave 1 · pilot" for pilot-then-scale) can override later.
         var qualifier = isFirst
-            ? "leaf routines (no in-corpus callees)"
+            ? "leaf code units (no in-project callees)"
             : isLast
                 ? "top-level orchestration"
-                : "routines";
+                : "code units";
         return $"Wave {waveNumber} · {routineCount} {qualifier}";
     }
 
@@ -211,6 +211,6 @@ public sealed class MigrationPlanner
         var cycles = cycleCount > 0
             ? $", {cycleCount} cycle{(cycleCount == 1 ? "" : "s")} treated as super-node"
             : "";
-        return $"{waveCount} wave{(waveCount == 1 ? "" : "s")}, {routineCount} routine{(routineCount == 1 ? "" : "s")}{cycles}. Strategy: {strategyName}.";
+        return $"{waveCount} wave{(waveCount == 1 ? "" : "s")}, {routineCount} code unit{(routineCount == 1 ? "" : "s")}{cycles}. Strategy: {strategyName}.";
     }
 }

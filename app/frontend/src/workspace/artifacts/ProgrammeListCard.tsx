@@ -60,7 +60,7 @@ export function ProgrammeListCard({ artifact, size }: ArtifactRenderProps) {
                 {p.state && <StatePill state={p.state} size="xs" />}
               </div>
               <div className="truncate text-micro text-ink-tertiary">
-                {formatLanguage(p.sourceLanguage || null)} · {formatInt(p.routineCount)} routines · {formatInt(p.fileCount)} files
+                {formatLanguage(p.sourceLanguage || null)} · {formatInt(p.routineCount)} code units · {formatInt(p.fileCount)} files
                 {p.createdAt && <> · added {relativeTime(p.createdAt)}</>}
               </div>
             </div>

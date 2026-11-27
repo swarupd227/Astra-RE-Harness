@@ -49,7 +49,7 @@ public sealed class WorkNarration
             if (s.FailedCount > 0) chips.Add(new("Retry failed", "Retry the failed steps of the wave run"));
             chips.Add(new("Pause", "Pause the wave run"));
             return new($"**{s.Label}** — {s.Summary}. Agents are idle until an SME signs: " +
-                       $"{n} {(n == 1 ? "spec is" : "specs are")} in the review queue. Sign in any order; each routine carries on as soon as its spec is signed.",
+                       $"{n} {(n == 1 ? "spec is" : "specs are")} in the review queue. Sign in any order; each code unit carries on as soon as its spec is signed.",
                 chips, ShowRun: true, ShowReviewQueue: true);
         }
 

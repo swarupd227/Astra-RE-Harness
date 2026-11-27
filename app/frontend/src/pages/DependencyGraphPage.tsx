@@ -327,7 +327,7 @@ export function DependencyGraphPage() {
             <EmptyState
               illustration={<AwaitingDataIllustration size={140} />}
               title="No call graph yet"
-              description="No dependencies found between routines in this project. Parsing may still be in progress."
+              description="No dependencies found between code units in this project. Parsing may still be in progress."
             />
           </CardBody>
         </Card>
@@ -344,7 +344,7 @@ export function DependencyGraphPage() {
         tone="violet"
         eyebrow={corpus.data?.name ?? corpusId}
         title="Dependency graph"
-        lead="Which routines call which, coloured by migration wave."
+        lead="Which code units call which, coloured by migration wave."
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
@@ -411,7 +411,7 @@ export function DependencyGraphPage() {
               <span>
                 {focused
                   ? <>Focused on <span className="font-semibold text-ink-primary">{focused.name}</span> · click background to clear · double-click to drill in</>
-                  : <>Drag to pan · scroll to zoom · click a routine to focus its path · double-click to drill in</>
+                  : <>Drag to pan · scroll to zoom · click a code unit to focus its path · double-click to drill in</>
                 }
               </span>
             </div>
@@ -423,7 +423,7 @@ export function DependencyGraphPage() {
             <p className="label mb-2">In this graph</p>
             <ul className="space-y-1.5 text-caption text-ink-secondary" data-testid="dep-graph-stats">
               <li>
-                <strong className="text-ink-primary">{g.stats.nodeCount}</strong> routines,{' '}
+                <strong className="text-ink-primary">{g.stats.nodeCount}</strong> code units,{' '}
                 <strong className="text-ink-primary">{g.stats.callEdgeCount}</strong> calls between them
               </li>
               <li>
@@ -481,7 +481,7 @@ export function DependencyGraphPage() {
 
           {focused && (
             <div className="card p-4">
-              <p className="label mb-2">Focused routine</p>
+              <p className="label mb-2">Focused code unit</p>
               <p className="font-mono text-[13px] font-semibold text-ink-primary">{focused.name}</p>
               <div className="mt-2 flex items-center gap-2">
                 <StateBadge state={focused.state} />
@@ -499,7 +499,7 @@ export function DependencyGraphPage() {
                 to={`/subroutines/${selected}`}
                 className="mt-2 inline-block text-[12px] font-semibold text-volt-ink hover:underline hover:underline"
               >
-                Open routine →
+                Open code unit →
               </Link>
             </div>
           )}
@@ -508,7 +508,7 @@ export function DependencyGraphPage() {
             <div className="card p-4">
               <p className="label mb-2">External callees ({g.externalCallees.length})</p>
               <p className="mb-2 text-[12px] text-ink-secondary">
-                Names called by in-corpus routines but not resolved here. Typically system / OS / library calls.
+                Names called by code units in this project but not resolved here. Typically system / OS / library calls.
               </p>
               <ul className="space-y-0.5 font-mono text-[11px] text-ink-secondary">
                 {g.externalCallees.slice(0, 16).map((n) => <li key={n}>{n}</li>)}

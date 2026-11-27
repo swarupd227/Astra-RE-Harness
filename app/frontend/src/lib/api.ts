@@ -1031,6 +1031,8 @@ export type CorpusDetail = {
       subroutines: {
         id: string;
         name: string;
+        signature?: string;
+        sourceLanguage?: string;
         lineStart: number;
         lineEnd: number;
         state: string;

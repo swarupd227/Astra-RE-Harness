@@ -27,7 +27,7 @@ const KIND_ORDER = [
 const KIND_LABELS: Record<string, string> = {
   'overview':           'Overview',
   'module':             'Modules',
-  'routine-summary':    'Routines',
+  'routine-summary':    'Code units',
   'data-dictionary':    'Data Dictionary',
   'glossary':           'Glossary',
   'interface':          'Interfaces',
@@ -50,7 +50,7 @@ const DELIVERY_LABELS: Record<string, string> = {
   specified: 'specified',
   parsed: 'not started',
   failed: 'failing',
-  untraceable: 'no traceable routine',
+  untraceable: 'no traceable code unit',
 };
 
 function deliveryTone(status: string): string {
@@ -557,10 +557,10 @@ export function DocsPage() {
             {(del.requirementsWithoutTraceableRoutine > 0 || del.routineNamesUnresolved > 0) && (
               <p className="mt-2 text-xs text-status-warn">
                 {del.requirementsWithoutTraceableRoutine > 0 && (
-                  <>{del.requirementsWithoutTraceableRoutine} requirement(s) trace to no routine in this project. </>
+                  <>{del.requirementsWithoutTraceableRoutine} requirement(s) trace to no code unit in this project. </>
                 )}
                 {del.routineNamesUnresolved > 0 && (
-                  <>{del.routineNamesUnresolved} cited name(s) did not match a routine — usually a type or table rather than a routine.</>
+                  <>{del.routineNamesUnresolved} cited name(s) did not match a code unit — usually a type or table rather than code.</>
                 )}
               </p>
             )}
@@ -577,7 +577,7 @@ export function DocsPage() {
                       <th className="py-1 pr-3 font-medium">Requirement</th>
                       <th className="py-1 pr-3 font-medium">Status</th>
                       <th className="py-1 pr-3 font-medium">Wave</th>
-                      <th className="py-1 font-medium">Routines</th>
+                      <th className="py-1 font-medium">Code units</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -910,7 +910,7 @@ export function DocsPage() {
                     {detail.subroutineId && (
                       <span className="flex items-center gap-2 text-xs">
                         <Link to={`/subroutines/${detail.subroutineId}`} className="text-ink-link underline-offset-2 hover:underline" data-testid="doc-link-routine">
-                          Open routine
+                          Open code unit
                         </Link>
                         <Link to={`/subroutines/${detail.subroutineId}/spec`} className="text-ink-link underline-offset-2 hover:underline" data-testid="doc-link-spec">
                           Spec
@@ -923,7 +923,7 @@ export function DocsPage() {
                         className="text-xs text-ink-link underline-offset-2 hover:underline"
                         data-testid="doc-link-module"
                       >
-                        Routines in this module
+                        Code units in this module
                       </Link>
                     )}
                   </div>

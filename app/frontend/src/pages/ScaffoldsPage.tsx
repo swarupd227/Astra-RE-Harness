@@ -124,7 +124,7 @@ export function ScaffoldsPage() {
           <EmptyState
             illustration={<Cog className="h-12 w-12 text-ink-tertiary" aria-hidden="true" />}
             title="Nothing generated yet"
-            description="Sign off a spec, pick a target stack on the routine page, and generate — the package will show up here."
+            description="Sign off a spec, pick a target stack on the code unit page, and generate — the package will show up here."
           />
         </div>
       ) : (
@@ -132,13 +132,13 @@ export function ScaffoldsPage() {
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <label className="relative min-w-[240px] flex-1">
-                <span className="sr-only">Filter by routine, project or path</span>
+                <span className="sr-only">Filter by code unit, project or path</span>
                 <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
                 <input
                   type="search"
                   value={params.get('q') ?? ''}
                   onChange={(e) => set('q', e.target.value || null)}
-                  placeholder="Filter by routine, project, or path…"
+                  placeholder="Filter by code unit, project, or path…"
                   className="h-9 w-full rounded-md border border-line-subtle bg-raised pl-8 pr-3 text-body text-ink-primary placeholder:text-ink-tertiary focus:border-line-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-volt"
                   data-testid="scaffolds-search"
                 />
@@ -254,7 +254,7 @@ function ProjectGroup({ id, name, rows }: { id: string; name: string; rows: Scaf
           <table className="w-full min-w-[760px] border-collapse text-caption">
             <thead>
               <tr className="text-micro uppercase tracking-wide text-ink-secondary">
-                <th scope="col" className="px-4 py-2 text-left font-semibold">Routine</th>
+                <th scope="col" className="px-4 py-2 text-left font-semibold">Code unit</th>
                 <th scope="col" className="px-3 py-2 text-left font-semibold">Stack</th>
                 <th scope="col" className="px-3 py-2 text-left font-semibold">Build</th>
                 <th scope="col" className="px-3 py-2 text-left font-semibold">Tests</th>

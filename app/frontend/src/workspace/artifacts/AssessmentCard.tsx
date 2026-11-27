@@ -82,7 +82,7 @@ export function AssessmentCard({ artifact, size }: ArtifactRenderProps) {
   const href = str(p.href) || (artifact.refId ? `/projects/${artifact.refId}/assessment` : '');
 
   const kpis: Array<{ label: string; value: string }> = [
-    { label: 'Routines', value: formatInt(num(inventory.routines)) },
+    { label: 'Code units', value: formatInt(num(inventory.routines)) },
     { label: 'Files', value: formatInt(num(inventory.files)) },
     { label: 'Lines of code', value: formatInt(num(inventory.loc)) },
     { label: 'Hotspots', value: formatInt(spots.length) },
@@ -166,7 +166,7 @@ export function AssessmentCard({ artifact, size }: ArtifactRenderProps) {
               <span className="font-mono normal-case tracking-normal">{spots.length}</span>
             </h4>
             {spots.length === 0 ? (
-              <p className="text-caption text-ink-secondary">No hotspots — no routine is depended on by a fifth or more of the estate.</p>
+              <p className="text-caption text-ink-secondary">No hotspots — no code unit is depended on by a fifth or more of the estate.</p>
             ) : (
               <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
                 {spots.map((h, i) => (

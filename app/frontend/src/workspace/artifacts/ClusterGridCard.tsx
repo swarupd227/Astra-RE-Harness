@@ -49,7 +49,7 @@ export function ClusterGridCard({ artifact, size }: ArtifactRenderProps) {
         {routineCount > 0 && (
           <>
             {' across '}
-            <span className="font-mono tabular-nums text-ink-primary">{formatInt(routineCount)}</span> routines
+            <span className="font-mono tabular-nums text-ink-primary">{formatInt(routineCount)}</span> code units
           </>
         )}
       </div>

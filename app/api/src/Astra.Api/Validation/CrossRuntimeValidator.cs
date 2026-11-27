@@ -177,7 +177,7 @@ public sealed class CrossRuntimeValidator
 
                 run.Status = "SKIPPED";
                 run.ErrorCode = "equivalence.not_wired_for_routine";
-                run.Summary = $"No per-routine equivalence harness exists yet for '{cobolRoutine}' — only " +
+                run.Summary = $"No per-unit equivalence harness exists yet for '{cobolRoutine}' — only " +
                               "DEPTPAY's AVERAGE-SALARY paragraph has one today (PayrollEquivalence.cs). " +
                               "Reporting that honestly rather than running the unrelated gfortran smoke check.";
                 run.CompletedAt = DateTimeOffset.UtcNow;
@@ -190,7 +190,7 @@ public sealed class CrossRuntimeValidator
             }
 
             // ─── Phase 15.1.b — delphi source → fpc sidecar smoke ──────────
-            // No per-routine Delphi equivalence harness exists yet (unlike
+            // No per-unit Delphi equivalence harness exists yet (unlike
             // COBOL's PayrollEquivalence) — this is a SMOKE check only,
             // same honesty level already established for vb6/csharp above:
             // proves the fpc sidecar is reachable and a trivial Pascal
@@ -328,7 +328,7 @@ public sealed class CrossRuntimeValidator
             {
                 run.Status = "PASSED";
                 run.Summary = "Smoke equivalence: gfortran and C# agree on canonical input. " +
-                              "Per-routine equivalence runs through the same loop when ISAM " +
+                              "Per-unit equivalence runs through the same loop when ISAM " +
                               "shims + C# implementation land.";
             }
             else
@@ -456,7 +456,7 @@ public sealed class CrossRuntimeValidator
 
         // ─── Transcript log ─────────────────────────────────────────────
         var transcript = new System.Text.StringBuilder();
-        transcript.AppendLine("=== Per-routine equivalence: CONSUME_ROLL ===");
+        transcript.AppendLine("=== Per-unit equivalence: CONSUME_ROLL ===");
         transcript.AppendLine();
         transcript.AppendLine("=== gfortran sidecar — compile ===");
         transcript.AppendLine($"exit {fortran.Compile.ExitCode} · {fortran.Compile.DurationMs}ms · {fortran.Compile.ErrorCount} errors · {fortran.Compile.WarningCount} warnings");
@@ -496,14 +496,14 @@ public sealed class CrossRuntimeValidator
         if (allMatch)
         {
             run.Status = "PASSED";
-            run.Summary = $"Per-routine equivalence: CONSUME_ROLL on {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs · gfortran and C# agree row-for-row (result_cd, new_lf, status, grade, event payload).";
+            run.Summary = $"Per-unit equivalence: CONSUME_ROLL on {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs · gfortran and C# agree row-for-row (result_cd, new_lf, status, grade, event payload).";
         }
         else
         {
             run.Status = "FAILED";
             run.ErrorCode = "equivalence.outputs_differ";
             var diffs = rowResults.Count(r => !(bool)((dynamic)r).match);
-            run.Summary = $"Per-routine equivalence: CONSUME_ROLL · {diffs} of {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs diverged between gfortran and C#. See log for the row diffs.";
+            run.Summary = $"Per-unit equivalence: CONSUME_ROLL · {diffs} of {ConsumeRollEquivalence.CanonicalInputs.Length} canonical inputs diverged between gfortran and C#. See log for the row diffs.";
         }
 
         await _db.SaveChangesAsync(ct);
@@ -586,7 +586,7 @@ public sealed class CrossRuntimeValidator
         }
 
         var transcript = new System.Text.StringBuilder();
-        transcript.AppendLine("=== Per-routine equivalence: DEPTPAY.AVERAGE-SALARY ===");
+        transcript.AppendLine("=== Per-unit equivalence: DEPTPAY.AVERAGE-SALARY ===");
         transcript.AppendLine();
         transcript.AppendLine("=== gnucobol sidecar — compile ===");
         transcript.AppendLine($"exit {cobol.Compile.ExitCode} · {cobol.Compile.DurationMs}ms · {cobol.Compile.ErrorCount} errors · {cobol.Compile.WarningCount} warnings");
@@ -624,14 +624,14 @@ public sealed class CrossRuntimeValidator
         if (allMatch)
         {
             run.Status = "PASSED";
-            run.Summary = $"Per-routine equivalence: DEPTPAY.AVERAGE-SALARY on {PayrollEquivalence.CanonicalInputs.Length} canonical inputs · GnuCOBOL and the modernized implementation agree row-for-row.";
+            run.Summary = $"Per-unit equivalence: DEPTPAY.AVERAGE-SALARY on {PayrollEquivalence.CanonicalInputs.Length} canonical inputs · GnuCOBOL and the modernized implementation agree row-for-row.";
         }
         else
         {
             run.Status = "FAILED";
             run.ErrorCode = "equivalence.outputs_differ";
             var diffs = rowResults.Count(r => !(bool)((dynamic)r).match);
-            run.Summary = $"Per-routine equivalence: DEPTPAY.AVERAGE-SALARY · {diffs} of {PayrollEquivalence.CanonicalInputs.Length} canonical inputs diverged. See log for the row diffs.";
+            run.Summary = $"Per-unit equivalence: DEPTPAY.AVERAGE-SALARY · {diffs} of {PayrollEquivalence.CanonicalInputs.Length} canonical inputs diverged. See log for the row diffs.";
         }
 
         await _db.SaveChangesAsync(ct);
@@ -1027,7 +1027,7 @@ public sealed class CrossRuntimeValidator
         {
             run.Status = "PASSED";
             run.Summary = "Smoke equivalence: Free Pascal (fpc sidecar) and C# reference agree on canonical " +
-                          "input. No per-routine Delphi equivalence harness exists yet — this proves the " +
+                          "input. No per-unit Delphi equivalence harness exists yet — this proves the " +
                           "cross-runtime loop is wired, not full behavioral equivalence of this scaffold.";
         }
         else
@@ -1141,7 +1141,7 @@ public sealed class CrossRuntimeValidator
         {
             run.Status = "PASSED";
             run.Summary = "Smoke equivalence: g++ (gpp sidecar) and C# reference agree on canonical input. " +
-                          "No per-routine C++ equivalence harness exists yet — this proves the cross-runtime " +
+                          "No per-unit C++ equivalence harness exists yet — this proves the cross-runtime " +
                           "loop is wired, not full behavioral equivalence of this scaffold.";
         }
         else

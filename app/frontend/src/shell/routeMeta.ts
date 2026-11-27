@@ -12,11 +12,11 @@ export type RouteMeta = { pattern: string; title: string; crumbs: Crumb[] };
 
 const ASK = { label: 'Ask Astra', href: '/' };
 const PROJECTS = { label: 'Projects', href: '/projects' };
-const ROUTINES = { label: 'Routines', href: '/subroutines' };
+const ROUTINES = { label: 'Code units', href: '/subroutines' };
 const SCAFFOLDS = { label: 'Generated code', href: '/scaffolds' };
 const PLATFORM = { label: 'Platform', href: '/platform' };
 const PROJECT = { label: 'Project', href: '/projects/:id' };
-const ROUTINE = { label: 'Routine', href: '/subroutines/:id' };
+const ROUTINE = { label: 'Code unit', href: '/subroutines/:id' };
 const SCAFFOLD = { label: 'Scaffold artifact', href: '/scaffolds/:id' };
 
 // Order matters only where patterns overlap; matchPath is exact (end: true)
@@ -41,15 +41,15 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: '/corpora/:id/pattern-analysis', title: 'Pattern analysis', crumbs: [PROJECTS, PROJECT, { label: 'Pattern analysis' }] },
   { pattern: '/corpora/:id/dependency-graph', title: 'Dependency graph', crumbs: [PROJECTS, PROJECT, { label: 'Dependency graph' }] },
   { pattern: '/corpora/:id/migration-plan', title: 'Migration plan', crumbs: [PROJECTS, PROJECT, { label: 'Migration plan' }] },
-  { pattern: '/corpora/:id/board', title: 'Routine flow board', crumbs: [PROJECTS, PROJECT, { label: 'Routine flow board' }] },
+  { pattern: '/corpora/:id/board', title: 'Code unit flow board', crumbs: [PROJECTS, PROJECT, { label: 'Flow board' }] },
   { pattern: '/corpora/:id/settings', title: 'Project settings', crumbs: [PROJECTS, PROJECT, { label: 'Settings' }] },
   { pattern: '/projects/:id/evidence', title: 'Evidence', crumbs: [PROJECTS, PROJECT, { label: 'Evidence' }] },
   { pattern: '/corpora/:id/evidence', title: 'Evidence', crumbs: [PROJECTS, PROJECT, { label: 'Evidence' }] },
   { pattern: '/projects/:id/assessment', title: 'Assessment', crumbs: [PROJECTS, PROJECT, { label: 'Assessment' }] },
   { pattern: '/corpora/:id/assessment', title: 'Assessment', crumbs: [PROJECTS, PROJECT, { label: 'Assessment' }] },
 
-  { pattern: '/subroutines', title: 'Routines', crumbs: [{ label: 'Routines' }] },
-  { pattern: '/subroutines/:id', title: 'Routine', crumbs: [ROUTINES, { label: 'Routine' }] },
+  { pattern: '/subroutines', title: 'Code units', crumbs: [{ label: 'Code units' }] },
+  { pattern: '/subroutines/:id', title: 'Code unit', crumbs: [ROUTINES, { label: 'Code unit' }] },
   { pattern: '/subroutines/:id/extract', title: 'Extract spec', crumbs: [ROUTINES, ROUTINE, { label: 'Extract' }] },
   { pattern: '/subroutines/:id/spec', title: 'Draft spec', crumbs: [ROUTINES, ROUTINE, { label: 'Draft spec' }] },
   { pattern: '/subroutines/:id/review', title: 'Spec review', crumbs: [ROUTINES, ROUTINE, { label: 'Spec review' }] },

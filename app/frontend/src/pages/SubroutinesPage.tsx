@@ -9,6 +9,7 @@ import { ErrorBlock } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { PageHero } from '@/components/PageHero';
 import { formatInt, formatLanguage } from '@/workspace/format';
+import { unitKind } from '@/lib/unitKind';
 
 /** The states a person can act on — the default view when nothing is searched. */
 const NEEDS_ACTION = 'IN_REVIEW,DRAFT,EXTRACTING';
@@ -116,14 +117,14 @@ export function SubroutinesPage() {
     <div className="mx-auto max-w-[1280px] space-y-5 p-4 lg:p-6 fadeup">
       <PageHero
         eyebrow="Work"
-        title="Routines"
-        lead={chipId === 'action' && !urlQ ? 'Routines waiting on a person — drafts to send for review and specs to sign.' : 'Every routine across your projects.'}
+        title="Code units"
+        lead={chipId === 'action' && !urlQ ? 'Code units waiting on a person — drafts to send for review and specs to sign.' : 'Every code unit across your projects: functions, methods, pages, paragraphs, macros.'}
       />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2" role="search">
           <label className="relative min-w-[260px] flex-1">
-            <span className="sr-only">Search routines by name, file or what their spec says they do</span>
+            <span className="sr-only">Search code units by name, file or what their spec says they do</span>
             <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
             <input
               type="search"
@@ -220,18 +221,18 @@ export function SubroutinesPage() {
           ))}
         </div>
       ) : search.isError ? (
-        <ErrorBlock title="Could not search routines" message={search.error.message} onRetry={() => search.refetch()} />
+        <ErrorBlock title="Could not search code units" message={search.error.message} onRetry={() => search.refetch()} />
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center">
           <p className="text-body font-medium text-ink-primary">
-            {chipId === 'action' && !urlQ ? 'Nothing is waiting on anyone' : 'No routines match'}
+            {chipId === 'action' && !urlQ ? 'Nothing is waiting on anyone' : 'No code units match'}
           </p>
           <p className="mt-1 text-caption text-ink-secondary">
             {chipId === 'action' && !urlQ ? (
               <>
                 Every draft has been sent and every spec in review is signed.{' '}
                 <button type="button" className="text-ink-link hover:underline" onClick={() => update({ view: 'all' })}>
-                  Show all routines
+                  Show all code units
                 </button>
               </>
             ) : (
@@ -245,7 +246,7 @@ export function SubroutinesPage() {
             <table className="w-full min-w-[820px] border-collapse text-caption">
               <thead className="border-b border-line-subtle">
                 <tr>
-                  <Th k="name" sort={sort} dir={dir} onSort={onSort}>Routine</Th>
+                  <Th k="name" sort={sort} dir={dir} onSort={onSort}>Code unit</Th>
                   <Th k="project" sort={sort} dir={dir} onSort={onSort}>Project</Th>
                   <Th>Language</Th>
                   <Th k="state" sort={sort} dir={dir} onSort={onSort}>State</Th>
@@ -300,6 +301,9 @@ function HitRow({ hit, q }: { hit: SubroutineSearchHit & { sourceLanguage?: stri
           </span>
           <span className="block truncate font-mono text-micro text-ink-tertiary" title={hit.file.relativePath}>
             {' '}
+            <span className="mr-1 rounded-sm bg-sunken px-1 py-px font-sans text-ink-secondary" data-testid={`unit-kind-${hit.id}`}>
+              {unitKind(office ? 'vba' : hit.sourceLanguage, hit.signature, hit.name, hit.file.relativePath)}
+            </span>
             {file} · L{hit.lineStart}–{hit.lineEnd}
             {inPath && <span className="ml-1 text-ink-secondary">· matched in file path</span>}
             {inSpec && <span className="ml-1 text-ink-secondary">· matched in what the spec says it does</span>}

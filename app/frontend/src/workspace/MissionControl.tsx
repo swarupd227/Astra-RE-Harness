@@ -19,14 +19,14 @@ const ACTIVE_RUN = new Set(['RUNNING', 'QUEUED', 'PENDING', 'IN_PROGRESS']);
 export function nextStep(c: FunnelCounts | undefined): string {
   if (!c || !c.total) return 'Nothing ingested yet — add source to begin';
   const done = c.scaffolded + c.committed;
-  if (c.extracting > 0) return `Extracting specs for ${formatInt(c.extracting)} routine${c.extracting === 1 ? '' : 's'}`;
+  if (c.extracting > 0) return `Extracting specs for ${formatInt(c.extracting)} code unit${c.extracting === 1 ? '' : 's'}`;
   if (c.inReview > 0) return `${formatInt(c.inReview)} spec${c.inReview === 1 ? '' : 's'} waiting for review`;
   if (c.draft > 0) return `${formatInt(c.draft)} draft spec${c.draft === 1 ? '' : 's'} to send for review`;
   if (c.signed > 0) return `${formatInt(c.signed)} signed spec${c.signed === 1 ? '' : 's'} ready to generate code`;
   if (c.parsed === c.total) return 'Survey the patterns, then extract specs';
-  if (c.parsed > 0) return `${formatInt(c.parsed)} routine${c.parsed === 1 ? '' : 's'} still to extract`;
-  if (done === c.total) return 'Every routine has generated code';
-  return `${formatInt(done)} of ${formatInt(c.total)} routines have code`;
+  if (c.parsed > 0) return `${formatInt(c.parsed)} code unit${c.parsed === 1 ? '' : 's'} still to extract`;
+  if (done === c.total) return 'Every code unit has generated code';
+  return `${formatInt(done)} of ${formatInt(c.total)} code units have code`;
 }
 
 /**
@@ -92,15 +92,15 @@ export function MissionControl({
           icon={Layers}
           label="Programmes"
           value={formatInt(overview.programmes.length)}
-          sub={`${formatInt(t?.total)} routines`}
+          sub={`${formatInt(t?.total)} code units`}
           to="/projects"
           testid="home-kpi-programmes"
         />
         <Kpi
           icon={Code2}
-          label="Routines with code"
+          label="Code units with code"
           value={formatInt(verified)}
-          sub={t?.total ? `${pct(verified, t.total)} of all routines` : '—'}
+          sub={t?.total ? `${pct(verified, t.total)} of all code units` : '—'}
           to="/scaffolds"
           testid="home-kpi-code"
         />
@@ -171,7 +171,7 @@ export function MissionControl({
                 <div className="px-2 py-3">
                   <div className="mb-2 flex items-baseline justify-between text-caption">
                     <span className="text-ink-secondary">Across all programmes</span>
-                    <span className="font-mono tabular-nums text-ink-primary">{formatInt(t?.total)} routines</span>
+                    <span className="font-mono tabular-nums text-ink-primary">{formatInt(t?.total)} code units</span>
                   </div>
                   <FunnelBar counts={overview.totals} />
                 </div>
@@ -283,7 +283,7 @@ function RecentCard({ p }: { p: OverviewProgramme }) {
               {p.name}
             </p>
             <p className="text-caption text-ink-secondary">
-              {formatLanguage(p.sourceLanguage)} · {formatInt(p.counts?.total)} routines
+              {formatLanguage(p.sourceLanguage)} · {formatInt(p.counts?.total)} code units
               {p.latestRun ? ` · ${relativeTime(p.latestRun.startedAt)}` : ''}
             </p>
           </div>
@@ -320,7 +320,7 @@ function ProgrammeRow({ p }: { p: OverviewProgramme }) {
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-ink-secondary">
             <span className="font-mono tabular-nums">
-              {formatInt(p.counts?.total)} routines · {formatInt(p.counts?.signed)} signed ·{' '}
+              {formatInt(p.counts?.total)} code units · {formatInt(p.counts?.signed)} signed ·{' '}
               {formatInt((p.counts?.scaffolded ?? 0) + (p.counts?.committed ?? 0))} with code
             </span>
             <span className="truncate">· {nextStep(p.counts)}</span>

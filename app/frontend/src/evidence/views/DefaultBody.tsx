@@ -44,7 +44,7 @@ export function DefaultEvidenceBody({ detail }: EvidenceBodyProps) {
           className="inline-flex items-center gap-1 text-caption text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline focus-visible:outline-2 focus-visible:outline-volt"
           data-testid="evidence-open-routine"
         >
-          Open this routine
+          Open this code unit
         </Link>
       )}
     </div>

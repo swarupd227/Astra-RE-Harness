@@ -48,7 +48,7 @@ export function PlanWavesCard({ artifact, size }: ArtifactRenderProps) {
         <span className="font-medium text-ink-primary">{str(p.strategyName, 'Migration plan')}</span>
         {str(p.status) && <StatePill state={str(p.status)} size="xs" />}
         <span className="ml-auto font-mono tabular-nums text-ink-secondary">
-          {formatInt(totalWaves)} wave{totalWaves === 1 ? '' : 's'} · {formatInt(totalRoutines)} routines
+          {formatInt(totalWaves)} wave{totalWaves === 1 ? '' : 's'} · {formatInt(totalRoutines)} code units
           {completed > 0 && <> · {formatInt(completed)} done</>}
         </span>
       </div>
@@ -77,7 +77,7 @@ export function PlanWavesCard({ artifact, size }: ArtifactRenderProps) {
                   <div className="flex items-baseline gap-2">
                     <span className="min-w-0 truncate text-caption text-ink-primary">{w.name}</span>
                     <span className="ml-auto shrink-0 font-mono text-micro tabular-nums text-ink-secondary">
-                      {formatInt(w.routineCount)} routine{w.routineCount === 1 ? '' : 's'}
+                      {formatInt(w.routineCount)} code unit{w.routineCount === 1 ? '' : 's'}
                     </span>
                   </div>
                   <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-sunken ring-1 ring-inset ring-line-subtle" aria-hidden="true">

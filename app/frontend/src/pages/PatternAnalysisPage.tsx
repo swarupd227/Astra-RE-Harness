@@ -374,7 +374,7 @@ export function PatternAnalysisPage() {
           </span>
         }
         title={c.name}
-        lead="How many distinct things this project's code does, and which routines do the same thing — so one migration pattern can serve all of them."
+        lead="How many distinct things this project's code does, and which code units do the same thing — so one migration pattern can serve all of them."
         actions={persona === 'admin' && (
           <>
             <Button
@@ -382,7 +382,7 @@ export function PatternAnalysisPage() {
               onClick={() => runMutation.mutate(false)}
               disabled={isRunning}
               data-testid="run-pattern-analysis"
-              title="Surveys any routine not yet covered (minutes, not hours), then regroups the project. Existing digests and specs are reused."
+              title="Surveys any code unit not yet covered (minutes, not hours), then regroups the project. Existing digests and specs are reused."
             >
               {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {lastRun ? 'Re-run analysis' : 'Run analysis'}
@@ -394,10 +394,10 @@ export function PatternAnalysisPage() {
                 onBlur={() => setConfirmForce(false)}
                 disabled={isRunning}
                 data-testid="force-pattern-analysis"
-                title="Discards this project's survey digests and re-surveys every routine. A few minutes on a large project; signed specs are never touched."
+                title="Discards this project's survey digests and re-surveys every code unit. A few minutes on a large project; signed specs are never touched."
                 className="rounded-lg border border-line-subtle px-2.5 py-1.5 font-mono text-caption text-ink-tertiary transition-colors hover:border-status-fail hover:text-status-fail disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {confirmForce ? 'Confirm full re-survey' : 'Re-survey all routines…'}
+                {confirmForce ? 'Confirm full re-survey' : 'Re-survey all code units…'}
               </button>
             )}
           </>
@@ -459,11 +459,11 @@ export function PatternAnalysisPage() {
               <div className="flex-1">
                 <p className="text-body font-medium text-ink-primary">
                   {stopRequested
-                    ? 'Stopping after the current routines…'
+                    ? 'Stopping after the current code units…'
                     : liveState === 'RUNNING' ? liveSummary ?? 'Running…' : 'Queued…'}
                 </p>
                 <p className="mt-0.5 font-mono text-caption text-ink-tertiary">
-                  {stageLabel ?? 'Surveying each routine, then grouping them into shared patterns.'}
+                  {stageLabel ?? 'Surveying each code unit, then grouping them into shared patterns.'}
                   {progress && percent != null && (
                     <>
                       {' · '}{progress.done}/{progress.total}
@@ -537,7 +537,7 @@ export function PatternAnalysisPage() {
           <CardBody>
             <p className="text-body text-ink-secondary">
               No pattern analysis has run for this corpus yet. Run it to survey every
-              routine (minutes, not hours) and see how many distinct patterns this
+              code unit (minutes, not hours) and see how many distinct patterns this
               codebase actually contains.
             </p>
           </CardBody>
@@ -549,7 +549,7 @@ export function PatternAnalysisPage() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardBody>
-                <p className="label">Routines → patterns</p>
+                <p className="label">Code units → patterns</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">
                   {totalRoutines} → {coreClusters + singletons}
                 </p>
@@ -557,7 +557,7 @@ export function PatternAnalysisPage() {
             </Card>
             <Card>
               <CardBody>
-                <p className="label">Shared by 2+ routines</p>
+                <p className="label">Shared by 2+ code units</p>
                 <p className="mt-1 text-h-lg font-semibold text-ink-primary">{coreClusters}</p>
               </CardBody>
             </Card>
@@ -572,7 +572,7 @@ export function PatternAnalysisPage() {
           <Card>
             <CardBody className="text-caption text-ink-secondary">
               <p>
-                Grouped {totalRoutines} routine{totalRoutines === 1 ? '' : 's'} into {coreClusters + singletons} pattern
+                Grouped {totalRoutines} code unit{totalRoutines === 1 ? '' : 's'} into {coreClusters + singletons} pattern
                 {coreClusters + singletons === 1 ? '' : 's'}
                 {lastRun.completedAt && (
                   <span title={new Date(lastRun.completedAt).toLocaleString()}> · {relativeTime(lastRun.completedAt)}</span>
@@ -602,7 +602,7 @@ export function PatternAnalysisPage() {
                   description={undefined}
                   action={
                     <Badge tone={clusterTone(cluster.memberCount)}>
-                      {cluster.memberCount} routine{cluster.memberCount === 1 ? '' : 's'}
+                      {cluster.memberCount} code unit{cluster.memberCount === 1 ? '' : 's'}
                     </Badge>
                   }
                 />

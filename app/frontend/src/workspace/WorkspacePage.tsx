@@ -30,15 +30,15 @@ const GLOBAL_STARTERS = (firstProgramme: string | null): Suggestion[] => {
   if (firstProgramme) {
     s.push({ label: `Survey the patterns in ${firstProgramme}`, intent: `Survey the patterns in ${firstProgramme}` });
   }
-  s.push({ label: 'Show me the riskiest routines', intent: 'Show me the riskiest routines' });
+  s.push({ label: 'Show me the riskiest code units', intent: 'Show me the riskiest code units' });
   return s;
 };
 
 const PROGRAMME_STARTERS: Suggestion[] = [
   { label: "What's the status of this programme?", intent: "What's the status of this programme?" },
   { label: 'Survey the patterns in this programme', intent: 'Survey the patterns in this programme' },
-  { label: 'Which routines are still unsigned?', intent: 'Which routines are still unsigned?' },
-  { label: 'Show me the riskiest routines', intent: 'Show me the riskiest routines' },
+  { label: 'Which code units are still unsigned?', intent: 'Which code units are still unsigned?' },
+  { label: 'Show me the riskiest code units', intent: 'Show me the riskiest code units' },
 ];
 
 export function WorkspacePage() {
@@ -208,7 +208,7 @@ export function WorkspacePage() {
               </h1>
               {programme && (
                 <span className="hidden truncate text-caption text-ink-tertiary sm:inline">
-                  {formatLanguage(programme.sourceLanguage)} · {formatInt(programme.routineCount)} routines ·{' '}
+                  {formatLanguage(programme.sourceLanguage)} · {formatInt(programme.routineCount)} code units ·{' '}
                   {formatInt(programme.fileCount)} files
                 </span>
               )}

@@ -175,7 +175,7 @@ public sealed class WorkRunService
                 .Select(g => (Count: g.Count(), Target: ScaffoldTargetResolver.Resolve(_archetypes, g.Key, g.First().Name, request.TargetStack, projectTarget)))
                 .Where(x => !x.Target.Ok).ToList();
             foreach (var (count, target) in blocked)
-                warnings.Add($"{count} routine(s) cannot be generated: {target.Error}");
+                warnings.Add($"{count} code unit(s) cannot be generated: {target.Error}");
         }
         return new WorkRunPreview(plan, caps, warnings);
     }
@@ -185,7 +185,7 @@ public sealed class WorkRunService
         if (!MayRun(actor.Persona, request.Stages))
             return (null, null, new(403, "persona.forbidden", "Queueing agent work needs the engineer persona (admin may queue spec drafting only)."));
         if (request.Routines.Count > MaxRoutinesPerRun)
-            return (null, null, new(400, "work.too_large", $"A run takes at most {MaxRoutinesPerRun} routines; this one has {request.Routines.Count}. Run it wave by wave."));
+            return (null, null, new(400, "work.too_large", $"A run takes at most {MaxRoutinesPerRun} code units; this one has {request.Routines.Count}. Run it wave by wave."));
         if (request.BudgetUsd is <= 0)
             return (null, null, new(400, "work.invalid_budget", "The cost ceiling must be more than zero."));
 

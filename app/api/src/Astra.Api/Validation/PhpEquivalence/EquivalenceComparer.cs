@@ -41,8 +41,8 @@ public static partial class EquivalenceComparer
         var notes = new List<string>();
         if (php is null) return new(Errored, "The PHP run returned nothing for this vector.", null, notes);
         if (Bool(php, "timedOut")) return new(Errored, "The PHP run was stopped at its time limit.", null, notes);
-        if (Str(php, "loadError") is { } le) return new(Skipped, $"The PHP routine could not be loaded: {le}", null, notes);
-        if (Str(php, "missingInput") is { } mi) return new(Skipped, $"This vector gives no value for {mi}, which the PHP routine requires.", null, notes);
+        if (Str(php, "loadError") is { } le) return new(Skipped, $"The PHP code unit could not be loaded: {le}", null, notes);
+        if (Str(php, "missingInput") is { } mi) return new(Skipped, $"This vector gives no value for {mi}, which the PHP code unit requires.", null, notes);
         if (php["fatal"] is JsonObject fatal) return new(Errored, $"PHP stopped with a fatal error: {Str(fatal, "message")}", null, notes);
         if (!Bool(php, "ok") && Str(php, "error") is { } pe) return new(Errored, $"The PHP run failed: {pe}", null, notes);
         AddNotes(php, notes, "PHP");
@@ -59,12 +59,12 @@ public static partial class EquivalenceComparer
                 var what = me.Groups[1].Success ? $"`{me.Groups[1].Value}()` on an object it does not have here (a global or an injected collaborator)"
                     : me.Groups[2].Success ? $"the constant `{me.Groups[2].Value}`, which the application defines when it boots"
                     : $"`{me.Groups[3].Value}()`, which a base class outside the supplied files would provide";
-                return new(Skipped, $"The PHP routine reaches {what}; the run cannot supply it.", null, notes);
+                return new(Skipped, $"The PHP code unit reaches {what}; the run cannot supply it.", null, notes);
             }
             if (MissingSymbol().Match(msg) is { Success: true } ms)
             {
                 var sym = ms.Groups.Cast<Group>().Skip(1).FirstOrDefault(g => g.Success)?.Value ?? "a symbol";
-                return new(Skipped, $"The PHP routine needs `{sym}`, which is not in the supplied files or is not allowed in the sandbox.", null, notes);
+                return new(Skipped, $"The PHP code unit needs `{sym}`, which is not in the supplied files or is not allowed in the sandbox.", null, notes);
             }
         }
 

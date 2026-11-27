@@ -159,7 +159,7 @@ function KPIStrip({ stats, loading }: { stats?: SystemStats; loading: boolean })
       href: '/projects',
     },
     {
-      label: 'Routines',
+      label: 'Code units',
       value: stats.subroutines.total.toLocaleString(),
       sub: subroutineStateSummary(stats.subroutines.byState),
       icon: FileSearch,
@@ -393,7 +393,7 @@ function buildNextSteps(stats?: SystemStats): { label: string; sub: string; href
   const parsedSubs = by['PARSED'] ?? 0;
   if (parsedSubs > 0) {
     out.push({
-      label: `${parsedSubs.toLocaleString()} routine${parsedSubs === 1 ? '' : 's'} not started`,
+      label: `${parsedSubs.toLocaleString()} code unit${parsedSubs === 1 ? '' : 's'} not started`,
       sub: 'Extract specs, a project at a time',
       href: '/subroutines?view=parsed',
       icon: Sparkles,
@@ -434,7 +434,7 @@ function SmeHome() {
             <div className="space-y-2 p-6"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div>
           ) : (reviews.data?.awaiting.length ?? 0) === 0 ? (
             <p className="p-6 text-body text-ink-secondary">
-              Nothing awaiting you. Engineers route draft specs here for sign-off — each row will show the routine name,
+              Nothing awaiting you. Engineers route draft specs here for sign-off — each row will show the code unit name,
               estimated review time, and the routing note.
             </p>
           ) : (

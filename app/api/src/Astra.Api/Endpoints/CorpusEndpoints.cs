@@ -149,6 +149,9 @@ public static class CorpusEndpoints
                         {
                             id = s.Id,
                             name = s.Name,
+                            // Signature and language let the page say what kind of code unit this is (method, page, macro …).
+                            signature = s.Signature,
+                            sourceLanguage = s.SourceLanguage,
                             lineStart = s.LineStart,
                             lineEnd = s.LineEnd,
                             state = s.State,

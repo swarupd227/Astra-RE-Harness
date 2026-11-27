@@ -71,7 +71,7 @@ public sealed partial class CopilotToolRegistry
             new { targetStack = target, previousTargetStack = before.TargetStack, via = "copilot" }, ct: ctx.Ct);
 
         var summary = target is null
-            ? $"{corpus.Name} now migrates each routine to its language's default target."
+            ? $"{corpus.Name} now migrates each code unit to its language's default target."
             : $"{corpus.Name} now migrates to {target}: new specs are written for it and code is generated for it.";
         return ToolResult.Success(new
         {

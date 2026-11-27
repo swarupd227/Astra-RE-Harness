@@ -16,6 +16,7 @@ import { PageHero } from '@/components/PageHero';
 import { useTargetStack } from '@/hooks/useTargetStack';
 import { isOfficeDocumentPath, prettySchema, prettyStack } from '@/lib/targetStacks';
 import { formatState } from '@/lib/labels';
+import { unitKind } from '@/lib/unitKind';
 
 export function SubroutineDetailPage() {
   const { id = '' } = useParams();
@@ -45,7 +46,7 @@ export function SubroutineDetailPage() {
       return (
         <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
           <ErrorBlock
-            title="Could not load routine"
+            title="Could not load code unit"
             message="Couldn't reach the server — check your connection and retry."
             onRetry={() => { sub.refetch(); source.refetch(); }}
           />
@@ -63,7 +64,7 @@ export function SubroutineDetailPage() {
     return (
       <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
         <ErrorBlock
-          title="Could not load routine"
+          title="Could not load code unit"
           message={(sub.error ?? source.error)!.message}
           onRetry={() => { sub.refetch(); source.refetch(); }}
         />
@@ -97,6 +98,7 @@ export function SubroutineDetailPage() {
         title={<span className="font-mono">{s.name}</span>}
         lead={<span className="font-mono text-caption text-ink-tertiary">{s.signature}</span>}
         actions={<>
+          <Badge data-testid="unit-kind">{unitKind(officeVba ? 'vba' : s.sourceLanguage, s.signature, s.name, s.file.relativePath)}</Badge>
           <Badge tone={badgeToneForState(s.state)}>{formatState(s.state)}</Badge>
           {hasExistingSpec && (
             <Link to={s.state === 'DRAFT' ? `/subroutines/${s.id}/spec` : `/subroutines/${s.id}/review`} data-testid="view-spec">
@@ -194,7 +196,7 @@ export function SubroutineDetailPage() {
           'Every claim decision taken on the current draft is discarded.',
           s.state === 'SIGNED' || s.state === 'SCAFFOLDED'
             ? 'This spec is signed — the signature covers the current claims, not the new ones.'
-            : 'The routine returns to DRAFT and must be routed to the SME again.',
+            : 'The code unit returns to DRAFT and must be routed to the SME again.',
           'The new extraction is billed as a fresh model call.',
         ]}
         confirmLabel="Re-extract"
@@ -226,7 +228,7 @@ function TargetStackCard({ sourceLanguage, preferred }: { sourceLanguage: string
             Target stack
           </span>
         }
-        description={`Generated code for this routine will be ${prettyStack(targetStack)}.`}
+        description={`Generated code for this code unit will be ${prettyStack(targetStack)}.`}
       />
       <CardBody className="space-y-2">
         <TargetSelector
@@ -429,7 +431,7 @@ function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<type
 function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getMigrationReadiness>>>> }) {
   return (
     <Card data-testid="migration-readiness-card">
-      <CardHeader title="Migration readiness" description="Based on this routine's dependencies." />
+      <CardHeader title="Migration readiness" description="Based on this code unit's dependencies." />
       <CardBody className="space-y-2">
         {q.isPending && <Skeleton className="h-5 w-40" />}
         {q.isError && (
@@ -449,7 +451,7 @@ function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType
             </p>
             {q.data.blockingRoutineIds.length > 0 && (
               <p className="font-mono text-caption text-status-warn">
-                Blocked by {q.data.blockingRoutineIds.length} routine{q.data.blockingRoutineIds.length === 1 ? '' : 's'}
+                Blocked by {q.data.blockingRoutineIds.length} code unit{q.data.blockingRoutineIds.length === 1 ? '' : 's'}
               </p>
             )}
           </>
@@ -472,7 +474,7 @@ function readinessTone(c: string): 'success' | 'review' | 'failed' | 'neutral' {
 function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.getBlastRadius>>>> }) {
   return (
     <Card data-testid="blast-radius-card">
-      <CardHeader title="Blast radius" description="Routines that depend on this one." />
+      <CardHeader title="Blast radius" description="Code units that depend on this one." />
       <CardBody className="space-y-2">
         {q.isPending && <Skeleton className="h-5 w-32" />}
         {q.isError && (
@@ -491,13 +493,13 @@ function BlastRadiusCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnTy
             </p>
             {q.data.affected.length === 0 && (
               <p className="text-caption text-ink-secondary">
-                Nothing in this corpus depends on this routine.
+                Nothing in this project depends on this code unit.
               </p>
             )}
             {q.data.affected.length > 0 && (
               <details>
                 <summary className="cursor-pointer text-caption text-volt-ink hover:underline">
-                  Show {q.data.affected.length} affected routine{q.data.affected.length === 1 ? '' : 's'}
+                  Show {q.data.affected.length} affected code unit{q.data.affected.length === 1 ? '' : 's'}
                 </summary>
                 <ul className="mt-2 space-y-1 font-mono text-caption">
                   {q.data.affected.map((a) => (
@@ -542,7 +544,7 @@ type ExtractionHelp = {
 const HELP_FORTRAN: ExtractionHelp = {
   id: 'fortran-f77',
   label: 'Fortran extraction',
-  body: 'The extractor will look for invariants, section contracts, I/O side effects, and edge cases. COMMON-block reads, IMPLICIT typing surprises, and BLOCK DATA initialisers are first-class concerns; expect 3–6 invariants and 1–3 open questions on a typical routine.',
+  body: 'The extractor will look for invariants, section contracts, I/O side effects, and edge cases. COMMON-block reads, IMPLICIT typing surprises, and BLOCK DATA initialisers are first-class concerns; expect 3–6 invariants and 1–3 open questions on a typical subroutine.',
   borderClass: 'border-l-status-info',
   labelTextClass: 'text-status-info',
 };
@@ -563,7 +565,7 @@ const HELP_DELPHI: ExtractionHelp = {
 const HELP_CPP: ExtractionHelp = {
   id: 'cpp',
   label: 'C++ extraction — expect more open questions',
-  body: 'Templates, ownership models, undefined behaviour, and noexcept contracts each get their own claim kind. Many routines surface 2–3 open questions per extraction because the source under-specifies ownership or relies on UB that does not map cleanly. Per ADR-027, the Java target may suggest a JNA fallback when template constraints exceed what generics can express.',
+  body: 'Templates, ownership models, undefined behaviour, and noexcept contracts each get their own claim kind. Many functions surface 2–3 open questions per extraction because the source under-specifies ownership or relies on UB that does not map cleanly. Per ADR-027, the Java target may suggest a JNA fallback when template constraints exceed what generics can express.',
   borderClass: 'border-l-status-warn',
   labelTextClass: 'text-status-warn',
 };

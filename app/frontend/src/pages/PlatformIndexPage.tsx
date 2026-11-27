@@ -66,7 +66,7 @@ const tiles: Tile[] = [
     to: '/platform/signatures',
     title: 'Signature Health',
     description:
-      'Cross-project health board: every signed routine, green if source unchanged since signing, drift-aged if a newer ingest exists.',
+      'Cross-project health board: every signed code unit, green if source unchanged since signing, drift-aged if a newer ingest exists.',
     icon: ShieldCheck,
     status: 'live',
   },
@@ -90,7 +90,7 @@ const tiles: Tile[] = [
     to: '/platform/harmonisation',
     title: 'Harmonisation',
     description:
-      'Cross-routine consistency pass. Sends every signed spec to the LLM in one call; surfaces inconsistent claims, COMMON-layout drift, terminology drift, missing invariants.',
+      'Cross-unit consistency pass. Sends every signed spec to the LLM in one call; surfaces inconsistent claims, COMMON-layout drift, terminology drift, missing invariants.',
     icon: GitMerge,
     status: 'live',
   },
@@ -98,7 +98,7 @@ const tiles: Tile[] = [
     to: '/platform/portfolio',
     title: 'Portfolio Dashboard',
     description:
-      'Cross-corpus program-manager view: routine counts, signature progress, LLM spend, recent activity. Aggregates every corpus, plan, and audit event in one place.',
+      'Cross-corpus program-manager view: code unit counts, signature progress, LLM spend, recent activity. Aggregates every corpus, plan, and audit event in one place.',
     icon: BarChart3,
     status: 'live',
   },

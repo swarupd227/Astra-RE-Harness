@@ -135,7 +135,7 @@ test.describe.serial('Wave run: parallel agents, restart, sign-off wait', () => 
 
     await say(page, 'Run wave 1');
     const card = page.getByTestId('confirm-card').last();
-    await expect(card.getByTestId('confirm-summary')).toContainText(`${LEAVES} routines`, { timeout: 30_000 });
+    await expect(card.getByTestId('confirm-summary')).toContainText(`${LEAVES} code units`, { timeout: 30_000 });
     await expect(card.getByTestId('confirm-summary')).toContainText(`draft ${LEAVES} specs`);
     await expect(card.getByTestId('confirm-summary')).toContainText('wait for an SME to sign');
     await expect(card.getByTestId('confirm-summary')).toContainText('agents never sign');

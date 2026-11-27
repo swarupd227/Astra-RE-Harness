@@ -15,6 +15,9 @@ import { ReingestModal } from '@/components/ReingestModal';
 import { ArtefactSources } from '@/components/ArtefactSources';
 import { PageHero } from '@/components/PageHero';
 import { formatState } from '@/lib/labels';
+import { unitKind } from '@/lib/unitKind';
+
+const OFFICE_DOC = /\.(xlsm|xls|xlsb|xlam|docm|dotm|pptm|accdb|mdb)\//i;
 
 export function CorpusDetailPage() {
   const navigate = useNavigate();
@@ -113,7 +116,7 @@ export function CorpusDetailPage() {
           <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Views">
             <ViewLink onClick={() => navigate(`/corpora/${id}/docs`)} testid="open-docs" icon={BookOpen} label="Docs" />
             <ViewLink onClick={() => navigate(`/corpora/${id}/migration-plan`)} testid="open-migration-plan" icon={Layers} label="Migration plan" />
-            <ViewLink onClick={() => navigate(`/corpora/${id}/board`)} testid="open-flow-board" icon={Kanban} label="Routine board" />
+            <ViewLink onClick={() => navigate(`/corpora/${id}/board`)} testid="open-flow-board" icon={Kanban} label="Flow board" />
             <ViewLink onClick={() => navigate(`/corpora/${id}/pattern-analysis`)} testid="open-pattern-analysis" icon={Boxes} label="Pattern analysis" />
             <ViewLink onClick={() => navigate(`/corpora/${id}/dependency-graph`)} testid="open-dependency-graph" icon={GitBranch} label="Dependency graph" />
           </div>
@@ -172,7 +175,7 @@ export function CorpusDetailPage() {
             <>
               <div className="mb-2 flex items-baseline justify-between text-caption">
                 <span className="text-ink-secondary">
-                  {formatInt(programme.counts.scaffolded + programme.counts.committed)} of {formatInt(programme.counts.total)} routines have generated code
+                  {formatInt(programme.counts.scaffolded + programme.counts.committed)} of {formatInt(programme.counts.total)} code units have generated code
                 </span>
               </div>
               <FunnelBar counts={programme.counts} dense />
@@ -204,7 +207,7 @@ export function CorpusDetailPage() {
       {/* Jump between the page's two halves */}
       <nav aria-label="On this page" className="flex gap-1 text-caption">
         <a href="#routines" className="rounded-md px-2.5 py-1 text-ink-secondary hover:bg-raised hover:text-ink-primary">
-          Routines ({formatInt(routineCount)})
+          Code units ({formatInt(routineCount)})
         </a>
         <a href="#sources" className="rounded-md px-2.5 py-1 text-ink-secondary hover:bg-raised hover:text-ink-primary">
           Sources &amp; evidence
@@ -344,14 +347,14 @@ function RoutineBrowser({ files }: { files: Files }) {
     <div className="rounded-xl border border-line-subtle bg-raised" data-testid="project-routines">
       <div className="flex flex-wrap items-center gap-3 border-b border-line-subtle px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-body font-semibold text-ink-primary">Routines</h2>
+          <h2 className="text-body font-semibold text-ink-primary">Code units</h2>
           <p className="truncate text-caption text-ink-secondary" title={prefix || undefined}>
-            {formatInt(counts[''])} routines in {formatInt(files.length)} file{files.length === 1 ? '' : 's'}
+            {formatInt(counts[''])} code units in {formatInt(files.length)} file{files.length === 1 ? '' : 's'}
             {prefix && <> · under <span className="font-mono">{shortPath(prefix, 60)}</span></>}
           </p>
         </div>
         <label className="relative w-64 max-w-full">
-          <span className="sr-only">Search routines and files</span>
+          <span className="sr-only">Search code units and files</span>
           <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
           <input
             type="search"
@@ -360,7 +363,7 @@ function RoutineBrowser({ files }: { files: Files }) {
               setLimit(PAGE);
               set('rq', e.target.value);
             }}
-            placeholder="Search routines or files"
+            placeholder="Search code units or files"
             className="h-8 w-full rounded-md border border-line-subtle bg-canvas pl-7 pr-2 text-caption text-ink-primary placeholder:text-ink-tertiary focus:border-line-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-volt"
             data-testid="project-routine-search"
           />
@@ -391,7 +394,7 @@ function RoutineBrowser({ files }: { files: Files }) {
       </div>
 
       {page.length === 0 ? (
-        <p className="px-5 py-8 text-center text-caption text-ink-secondary">No routines match.</p>
+        <p className="px-5 py-8 text-center text-caption text-ink-secondary">No code units match.</p>
       ) : (
         <ul className="divide-y divide-line-subtle">
           {page.map(({ file, subs }) => (
@@ -440,8 +443,11 @@ function FileBlock({ file, subs, prefix }: { file: FileRow; subs: FileRow['subro
                 to={`/subroutines/${sub.id}`}
                 className="group flex min-w-0 items-center gap-3 rounded-md px-2.5 py-1.5 text-caption transition-colors duration-fast hover:bg-sunken focus-visible:outline-2 focus-visible:outline-ink-primary"
               >
-                <span className="min-w-0 truncate font-mono font-semibold text-ink-primary" title={sub.name}>
+                <span className="min-w-0 truncate font-mono font-semibold text-ink-primary" title={sub.signature || sub.name}>
                   {sub.name}
+                </span>
+                <span className="shrink-0 rounded-sm bg-sunken px-1 py-px text-micro text-ink-secondary" data-testid={`unit-kind-${sub.id}`}>
+                  {unitKind(OFFICE_DOC.test(file.relativePath) ? 'vba' : sub.sourceLanguage, sub.signature, sub.name, file.relativePath)}
                 </span>
                 <Badge tone={subBadgeTone(sub.state)} className="shrink-0 text-[10px]">
                   {stateLabel(sub.state)}

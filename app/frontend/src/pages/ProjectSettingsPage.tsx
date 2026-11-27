@@ -151,7 +151,7 @@ export function ProjectSettingsPage() {
       <Card>
         <CardHeader
           title="Migration target"
-          description="The stack this project's code is migrated to. Specs are extracted for it, and code is generated for it unless a routine asks for another."
+          description="The stack this project's code is migrated to. Specs are extracted for it, and code is generated for it unless a code unit asks for another."
         />
         <CardBody>
           <label htmlFor="settings-target-stack" className="text-body font-medium text-ink-primary">Target stack</label>

@@ -133,7 +133,7 @@ export function ScaffoldArtifactPage() {
               </h1>
               {sc.unit && (
                 <p className="text-caption text-ink-secondary" data-testid="scaffold-unit">
-                  Faithful 1:1 conversion of <span className="font-mono">{sc.unit.path}</span> · {sc.unit.routineCount} routines, {sc.unit.signedSpecCount} with a signed spec
+                  Faithful 1:1 conversion of <span className="font-mono">{sc.unit.path}</span> · {sc.unit.routineCount} code units, {sc.unit.signedSpecCount} with a signed spec
                 </p>
               )}
             </div>

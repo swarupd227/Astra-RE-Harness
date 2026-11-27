@@ -145,7 +145,7 @@ export function NewCorpusPage() {
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">
           Upload source files (or a <span className="font-mono">.zip</span> archive) or
           point at a Git repository. Every file is parsed to build an inventory of
-          its routines. Pick a source language to narrow the file filter, or
+          its code units. Pick a source language to narrow the file filter, or
           leave <em>auto-detect</em> on.
         </p>
       </header>
@@ -379,7 +379,7 @@ export function NewCorpusPage() {
           {/* Always reachable: the evidence list above is long, the action should not be 1 800 px down. */}
           <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-end gap-3 border-t border-line-subtle bg-raised/95 px-6 py-3 backdrop-blur">
             <span className="mr-auto text-caption text-ink-secondary">
-              Astra reads every file and lists its routines — usually under a minute; large repositories carry on in the background.
+              Astra reads every file and lists its code units — usually under a minute; large repositories carry on in the background.
             </span>
             <Button
               variant="ghost"
@@ -508,7 +508,7 @@ function ResultCard({ result, onOpen }: { result: IngestResult; onOpen: () => vo
         <dl className="mt-4 grid grid-cols-3 gap-4 text-body">
           <Stat label="Files" value={result.fileCount.toString()} />
           <Stat label="Lines of code" value={result.totalLoc.toLocaleString()} />
-          <Stat label="Routines" value={result.subroutineCount.toString()} />
+          <Stat label="Code units" value={result.subroutineCount.toString()} />
         </dl>
         {result.warnings.length > 0 && (
           <details className="mt-4 rounded-md border border-line-subtle bg-sunken p-3">

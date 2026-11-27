@@ -29,11 +29,11 @@ type KindMeta = { label: string; icon: LucideIcon };
 const KINDS: Record<string, KindMeta> = {
   funnel: { label: 'Programme funnel', icon: BarChart3 },
   runProgress: { label: 'Run', icon: Gauge },
-  routineList: { label: 'Routines', icon: ListTree },
+  routineList: { label: 'Code units', icon: ListTree },
   clusterGrid: { label: 'Pattern clusters', icon: LayoutGrid },
   specSummary: { label: 'Spec', icon: FileCheck2 },
   programmeList: { label: 'Programmes', icon: Boxes },
-  routine: { label: 'Routine', icon: Braces },
+  routine: { label: 'Code unit', icon: Braces },
   gateResults: { label: 'Validation gates', icon: ShieldCheck },
   scaffoldTree: { label: 'Generated code', icon: FolderTree },
   text: { label: 'Note', icon: FileText },
@@ -63,7 +63,7 @@ export function artifactTitle(artifact: Artifact): string {
       return str(p.label, 'Run');
     case 'routineList': {
       const q = str(p.query);
-      return q ? `Routines matching “${q}”` : 'Routines';
+      return q ? `Code units matching “${q}”` : 'Code units';
     }
     case 'clusterGrid':
       return 'Pattern clusters';
@@ -72,7 +72,7 @@ export function artifactTitle(artifact: Artifact): string {
     case 'programmeList':
       return 'Programmes';
     case 'routine':
-      return str(p.name, 'Routine');
+      return str(p.name, 'Code unit');
     case 'gateResults':
       return str(p.routineName) ? `Gates · ${str(p.routineName)}` : 'Validation gates';
     case 'scaffoldTree':
@@ -104,7 +104,7 @@ export function artifactLink(artifact: Artifact): { label: string; href: string 
     case 'funnel':
       return ref ? { label: 'Open project', href: `/projects/${ref}` } : null;
     case 'routine':
-      return ref ? { label: 'Open routine', href: `/subroutines/${ref}` } : null;
+      return ref ? { label: 'Open code unit', href: `/subroutines/${ref}` } : null;
     case 'specSummary': {
       const sid = str(p.subroutineId);
       return sid ? { label: 'Open spec review', href: `/subroutines/${sid}/review` } : null;

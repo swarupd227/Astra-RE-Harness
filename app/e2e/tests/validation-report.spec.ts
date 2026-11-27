@@ -68,7 +68,7 @@ test.describe('Phase #2d · Validation report card', () => {
     await triggerStage('validation-card-equivalence', /Run equivalence/, '/validate/equivalence');
     const equivalenceCard = page.getByTestId('validation-card-equivalence');
     // CONSUME_ROLL has a per-routine harness: gfortran runs the original beside the C# on the same inputs.
-    await expect(equivalenceCard.getByText(/Per-routine equivalence: CONSUME_ROLL .* agree row-for-row/))
+    await expect(equivalenceCard.getByText(/Per-unit equivalence: CONSUME_ROLL .* agree row-for-row/))
       .toBeVisible({ timeout: 60_000 });
 
     // The overall verdict needs all four gates, so run the property-based one too.

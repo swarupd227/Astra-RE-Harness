@@ -23,7 +23,7 @@ export function ScaffoldTreeCard({ artifact, size }: ArtifactRenderProps) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-caption">
-        <span className="font-mono text-body text-ink-primary">{str(p.routineName, 'Routine')}</span>
+        <span className="font-mono text-body text-ink-primary">{str(p.routineName, 'Code unit')}</span>
         {str(p.targetPlatform) && <span className="text-ink-tertiary">→ {prettyStack(str(p.targetPlatform))}</span>}
       </div>
 

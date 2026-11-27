@@ -42,7 +42,7 @@ export const AGENTS: Record<AgentId, AgentMeta> = {
   discovery: {
     id: 'discovery',
     name: 'Discovery',
-    tagline: 'Parses the estate, surveys every routine, finds the patterns.',
+    tagline: 'Parses the estate, surveys every code unit, finds the patterns.',
     icon: Compass,
     tone: 'text-status-info',
     disc: 'bg-status-info/15',
@@ -66,7 +66,7 @@ export const AGENTS: Record<AgentId, AgentMeta> = {
   spec: {
     id: 'spec',
     name: 'Spec',
-    tagline: 'Reads a routine and writes the behavioural claims an SME signs.',
+    tagline: 'Reads a code unit and writes the behavioural claims an SME signs.',
     icon: FileCheck2,
     tone: 'text-status-ok',
     disc: 'bg-status-ok/15',

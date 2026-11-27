@@ -51,7 +51,7 @@ export function DraftSpecPage() {
   if (sub.isError || source.isError) {
     return (
       <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
-        <ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} />
+        <ErrorBlock title="Could not load code unit" message={String(sub.error ?? source.error)} />
       </div>
     );
   }
@@ -60,7 +60,7 @@ export function DraftSpecPage() {
       <div className="mx-auto max-w-[1700px] p-4 lg:p-6">
         <ErrorBlock
           title="No spec yet"
-          message="This subroutine has not been extracted. Click 'Extract spec' on the subroutine surface."
+          message="This code unit has not been extracted yet. Click 'Extract spec' on the code unit's page."
         />
       </div>
     );
@@ -101,7 +101,7 @@ export function DraftSpecPage() {
             <Link
               to={`/subroutines/${s.id}`}
               className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary"
-              aria-label="Back to routine"
+              aria-label="Back to code unit"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -202,7 +202,7 @@ function SpecHeader({ spec }: { spec: DraftSpec }) {
   return (
     <div className="border-b border-line-subtle bg-canvas/40 px-6 py-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 font-mono text-caption text-ink-tertiary">
-        <span><Sparkles className="mr-1 inline h-3 w-3" aria-hidden="true" />routine <span className="text-ink-primary">{spec.routine}</span></span>
+        <span><Sparkles className="mr-1 inline h-3 w-3" aria-hidden="true" />code unit <span className="text-ink-primary">{spec.routine}</span></span>
         <span>source <span className="text-ink-secondary">{spec.source_path}</span></span>
         <span>lines <span className="text-ink-secondary">{spec.source_lines}</span></span>
       </div>

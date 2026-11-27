@@ -61,7 +61,7 @@ export const SECTIONS: Section[] = [
     items: [
       { to: '/home',        label: 'Dashboard',      icon: Home, testId: 'nav-home' },
       { to: '/projects',    label: 'Projects',       icon: Layers },
-      { to: '/subroutines', label: 'Routines',       icon: FileSearch },
+      { to: '/subroutines', label: 'Code units',     icon: FileSearch },
       { to: '/scaffolds',   label: 'Generated code', icon: Cog },
       { to: '/my-reviews',  label: 'My reviews',     icon: ClipboardList },
       { to: '/comments',    label: 'Comments',       icon: MessageSquare },

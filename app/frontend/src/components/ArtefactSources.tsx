@@ -127,7 +127,7 @@ export function ArtefactSources({ corpusId, canWrite }: { corpusId: string; canW
     <Card data-testid="artefact-sources">
       <CardHeader
         title="Sources"
-        description="The evidence this project holds. Source code is read into routines; everything else is kept as evidence to cite."
+        description="The evidence this project holds. Source code is read into code units; everything else is kept as evidence to cite."
         action={
           <div className="flex items-center gap-4">
             <Link

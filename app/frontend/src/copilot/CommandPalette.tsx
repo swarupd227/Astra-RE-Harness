@@ -32,7 +32,7 @@ type NavItem = { label: string; href: string; icon: LucideIcon; keywords?: strin
 const GO_TO: NavItem[] = [
   { label: 'Home', href: '/home', icon: Home, keywords: 'start dashboard' },
   { label: 'Projects', href: '/projects', icon: FolderGit2, keywords: 'programmes corpora' },
-  { label: 'Routines', href: '/subroutines', icon: Braces, keywords: 'subroutines functions' },
+  { label: 'Code units', href: '/subroutines', icon: Braces, keywords: 'code units routines subroutines functions methods pages' },
   { label: 'Generated code', href: '/scaffolds', icon: LayoutGrid, keywords: 'scaffolds output' },
   { label: 'My reviews', href: '/my-reviews', icon: FileCheck2, keywords: 'specs sign review queue' },
   { label: 'Compliance', href: '/compliance', icon: ScrollText, keywords: 'audit evidence sox hipaa pci' },

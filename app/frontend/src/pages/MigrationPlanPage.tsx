@@ -120,7 +120,7 @@ export function MigrationPlanPage() {
         tone="indigo"
         eyebrow={corpus.data?.name ?? corpusId}
         title="Migration plan"
-        lead="The order to migrate this project's routines in. Each wave only depends on routines in earlier waves, so you can finish one wave before starting the next."
+        lead="The order to migrate this project's code units in. Each wave only depends on code units in earlier waves, so you can finish one wave before starting the next."
       />
 
       {isAdmin && (
@@ -221,7 +221,7 @@ export function MigrationPlanPage() {
             <Layers className="mx-auto h-8 w-8 text-ink-tertiary" />
             <p className="text-body text-ink-primary">No migration plan yet for this corpus.</p>
             <p className="text-caption text-ink-secondary">
-              The planner reads the dependency graph and assigns every routine to a wave based
+              The planner reads the dependency graph and assigns every code unit to a wave based
               on what it CALLs. Same graph in → same plan out, every time.
             </p>
             {isAdmin && (
@@ -259,7 +259,7 @@ export function MigrationPlanPage() {
                     {plan.data.plan.strategyName}
                   </span>
                   <span className="font-mono text-caption text-ink-tertiary">
-                    {plan.data.plan.totalWaves} waves · {plan.data.plan.totalRoutines} routines
+                    {plan.data.plan.totalWaves} waves · {plan.data.plan.totalRoutines} code units
                   </span>
                 </div>
                 <p className="text-body text-ink-primary">{plan.data.plan.summary}</p>
@@ -420,7 +420,7 @@ function WaveCard({
             <p className={clsx('font-mono text-caption font-semibold uppercase tracking-wider', eyebrow[waveBucket])}>
               wave {wave.waveNumber}
             </p>
-            <h3 className="text-body-lg font-semibold text-ink-primary">{wave.name.replace(/\b1 routines\b/, '1 routine')}</h3>
+            <h3 className="text-body-lg font-semibold text-ink-primary">{wave.name.replace(/\b1 (routines|code units)\b/, '1 code unit').replace(/\broutines\b/g, 'code units')}</h3>
           </div>
           <div className="min-w-[180px] text-right text-caption text-ink-secondary">
             {(() => {
@@ -429,7 +429,7 @@ function WaveCard({
               return (
                 <>
                   <div>
-                    <span className="font-mono text-ink-primary">{done}</span> of {wave.routineCount} routine
+                    <span className="font-mono text-ink-primary">{done}</span> of {wave.routineCount} code unit
                     {wave.routineCount === 1 ? '' : 's'} have code
                     {lc.signed > 0 && ` · ${lc.signed} signed`}
                   </div>

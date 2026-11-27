@@ -208,9 +208,9 @@ public class BatchToolTests
     [Fact]
     public void ABatchThatTakesOnlyPartOfWhatMatches_SaysSoInItsName()
     {
-        Assert.Equal("Spec drafts · 500 of 900 routines · demo", Astra.Api.Work.BatchSentence.ListLabel("Spec drafts", 500, 900, "demo"));
-        Assert.Equal("Spec drafts · 80 routines · demo", Astra.Api.Work.BatchSentence.ListLabel("Spec drafts", 80, 80, "demo"));
-        Assert.Equal("Gates · 1 routine · demo", Astra.Api.Work.BatchSentence.ListLabel("Gates", 1, 0, "demo"));
+        Assert.Equal("Spec drafts · 500 of 900 code units · demo", Astra.Api.Work.BatchSentence.ListLabel("Spec drafts", 500, 900, "demo"));
+        Assert.Equal("Spec drafts · 80 code units · demo", Astra.Api.Work.BatchSentence.ListLabel("Spec drafts", 80, 80, "demo"));
+        Assert.Equal("Gates · 1 code unit · demo", Astra.Api.Work.BatchSentence.ListLabel("Gates", 1, 0, "demo"));
     }
 
     [Theory]

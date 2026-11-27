@@ -122,8 +122,8 @@ export function ValidationReportPage() {
   const sourceLanguage = spec.data?.subroutine?.sourceLanguage?.toLowerCase() ?? null;
   const equivalenceDisabledReason = sourceLanguage && EQUIVALENCE_SMOKE_ONLY_LANGUAGES.has(sourceLanguage)
     ? `For ${prettySchema(sourceLanguage)} sources this only smoke-tests that the reference ` +
-      `sidecar is reachable (a hardcoded example, unrelated to this routine) — not real ` +
-      `equivalence against this scaffold's generated code. No per-routine ${prettySchema(sourceLanguage)} ` +
+      `sidecar is reachable (a hardcoded example, unrelated to this code unit) — not real ` +
+      `equivalence against this scaffold's generated code. No per-unit ${prettySchema(sourceLanguage)} ` +
       `equivalence harness exists yet.`
     : undefined;
 

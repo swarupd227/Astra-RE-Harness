@@ -233,7 +233,7 @@ export function SpecReviewPage() {
     );
   }
   if (sub.isError || source.isError) {
-    return <div data-theme={theme} className="mx-auto max-w-[1700px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="Could not load routine" message={String(sub.error ?? source.error)} /></div>;
+    return <div data-theme={theme} className="mx-auto max-w-[1700px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="Could not load code unit" message={String(sub.error ?? source.error)} /></div>;
   }
   if (spec.isError) {
     return <div data-theme={theme} className="mx-auto max-w-[1700px] bg-canvas p-6 text-ink-primary lg:p-10"><ErrorBlock title="No spec yet" message="Extract a spec first." /></div>;
@@ -324,7 +324,7 @@ export function SpecReviewPage() {
       <header className="border-b border-line-subtle bg-raised px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt" aria-label="Back to routine">
+            <Link to={`/subroutines/${s.id}`} className="rounded-md p-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt" aria-label="Back to code unit">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
@@ -408,7 +408,7 @@ export function SpecReviewPage() {
               <p className="text-caption text-ink-tertiary" data-testid="sign-blocked-reason">
                 {NO_CLAIMS_REASON}{' '}
                 <Link to={`/subroutines/${s.id}`} className="text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
-                  Open the routine
+                  Open the code unit
                 </Link>
               </p>
             ) : inReview && !isSme ? (

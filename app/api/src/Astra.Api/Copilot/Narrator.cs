@@ -125,7 +125,7 @@ public sealed class Narrator
                                     // duplicates decided up front, not a share of `done`
                                     // — dividing the two printed "137%" on oatpp.
                                     var dup = propagated > 0 ? $" — {propagated:N0} more are structural duplicates I won't need to read" : "";
-                                    await PostAsync(t, $"Halfway: {done:N0} / {total:N0} routines surveyed{dup}.", null, null, ct);
+                                    await PostAsync(t, $"Halfway: {done:N0} / {total:N0} code units surveyed{dup}.", null, null, ct);
                                 }
                             }
                             break;
@@ -192,7 +192,7 @@ public sealed class Narrator
                 {
                     int N(string name) => item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
                     var (_, _, language) = await conversations.ProgrammeStatsAsync(corpus, ct);
-                    var bits = new List<string> { $"{N("fileCount"):N0} files", $"{N("totalLoc"):N0} lines", $"{N("subroutineCount"):N0} routines" };
+                    var bits = new List<string> { $"{N("fileCount"):N0} files", $"{N("totalLoc"):N0} lines", $"{N("subroutineCount"):N0} code units" };
                     if (N("carriedForwardCount") > 0) bits.Add($"{N("carriedForwardCount"):N0} specs carried forward");
                     if (N("supersededCount") > 0) bits.Add($"{N("supersededCount"):N0} superseded");
                     markdown = $"{verb} done for **{corpus.Name}**" + (string.IsNullOrWhiteSpace(language) ? "" : $" ({ConversationService.LanguageLabel(language)})") +
@@ -202,7 +202,7 @@ public sealed class Narrator
                     var (funnel, _) = await ArtifactBuilders.FunnelAsync(db, conversations, corpus, ct);
                     artifacts.Add(funnel);
                     suggestions.Add(new("Survey the programme", $"Survey the {corpus.Name} programme"));
-                    suggestions.Add(new("Riskiest routines", $"Show me the riskiest routines in {corpus.Name}"));
+                    suggestions.Add(new("Riskiest code units", $"Show me the riskiest code units in {corpus.Name}"));
                     suggestions.Add(new("Run an assessment", $"Run an assessment for {corpus.Name}"));
                     var programme = await conversations.EnsureProgrammeAsync(corpus.Id, ct);
                     if (programme.Id != t.ConversationId) alsoTo = programme.Id;
@@ -232,8 +232,8 @@ public sealed class Narrator
                     var grid = await ArtifactBuilders.ClusterGridAsync(db, cid, ct);
                     if (grid is { } g) artifacts.Add(g.Artifact);
                     suggestions.Add(new("Show the clusters", "Show me the pattern clusters"));
-                    suggestions.Add(new("Biggest pattern first", "Which pattern has the most routines, and what would one archetype for it look like?"));
-                    suggestions.Add(new("What's trivial?", "How many routines are trivial accessors, and can we skip them?"));
+                    suggestions.Add(new("Biggest pattern first", "Which pattern has the most code units, and what would one archetype for it look like?"));
+                    suggestions.Add(new("What's trivial?", "How many code units are trivial accessors, and can we skip them?"));
                 }
                 else if (state == "RESUMABLE")
                 {
@@ -364,7 +364,7 @@ public sealed class Narrator
                     markdown = $"Assessment ready for **{t.Label}**: effort **{effortBand}**, risk **{riskBand}** — I recommend **{mode}** on **{target}**. " +
                                Str("recommendation", "summary") + " The full write-up is in the card; open it for the fact sheet.";
                     suggestions.Add(new("Why that mode?", $"Why do you recommend {mode} for {t.Label}, and what would change the answer?"));
-                    suggestions.Add(new("Riskiest routines", $"Show me the riskiest routines in {t.Label}"));
+                    suggestions.Add(new("Riskiest code units", $"Show me the riskiest code units in {t.Label}"));
                     suggestions.Add(new("Draft the waves", $"Draft a migration plan for {t.Label}"));
                 }
                 else
@@ -451,11 +451,11 @@ public sealed class Narrator
             if (total > 0)
             {
                 var read = surveyed + fromSpec;
-                parts.Add($"{total:N0} routines: I read {read:N0}, propagated {propagated:N0} from structural duplicates and skipped {trivial:N0} trivial accessors" +
+                parts.Add($"{total:N0} code units: I read {read:N0}, propagated {propagated:N0} from structural duplicates and skipped {trivial:N0} trivial accessors" +
                           (cost > 0 ? $" (≈ ${cost:0.00})." : "."));
             }
             if (multiMember > 0 || singletons > 0)
-                parts.Add($"**{multiMember:N0} shared patterns** (2+ routines each — the archetype candidates) and {singletons:N0} one-off routines to handle case by case.");
+                parts.Add($"**{multiMember:N0} shared patterns** (2+ code units each — the archetype candidates) and {singletons:N0} one-off code units to handle case by case.");
             else if (clusters > 0) parts.Add($"**{clusters:N0} distinct patterns** — each is a candidate archetype for the migration.");
             else if (!string.IsNullOrWhiteSpace(summary)) parts.Add(summary);
             return string.Join(" ", parts);

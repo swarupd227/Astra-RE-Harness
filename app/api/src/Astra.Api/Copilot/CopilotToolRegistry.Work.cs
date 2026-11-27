@@ -136,7 +136,7 @@ public sealed partial class CopilotToolRegistry
     private static async Task<ToolResult> GetWorkRunAsync(JsonElement input, ToolContext ctx)
     {
         var run = await ResolveWorkRunAsync(input, ctx);
-        if (run is null) return ToolResult.Failure("work.run_not_found", "No multi-routine run yet. Start one with run_wave or extract_many.");
+        if (run is null) return ToolResult.Failure("work.run_not_found", "No multi-unit run yet. Start one with run_wave or extract_many.");
         var snapshot = await ctx.Services.GetRequiredService<WorkQueue>().SnapshotAsync(run.Id, ctx.Ct);
         return ToolResult.Success(RunPayload(snapshot!), $"{snapshot!.Label}: {snapshot.State.ToLowerInvariant()}",
             WorkRunArtifact(snapshot));
@@ -193,7 +193,7 @@ public sealed partial class CopilotToolRegistry
                 warnings = preview.Warnings,
                 note = "Runs in the background; progress and the sign-off wait are posted to this thread.",
             },
-            $"queued {preview.Plan.RoutineCount} routine(s): {run.Label}",
+            $"queued {preview.Plan.RoutineCount} code unit(s): {run.Label}",
             new[] { WorkRunArtifact(snapshot) },
             run.Id);
     }
@@ -215,14 +215,14 @@ public sealed partial class CopilotToolRegistry
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildExtractRequestAsync(JsonElement input, ToolContext ctx) =>
         BuildListRequestAsync(input, ctx, "extract-many", "Spec drafts", new[] { "PARSED" },
-            new[] { WorkStages.Extract, WorkStages.Signoff }, "no un-specified routine");
+            new[] { WorkStages.Extract, WorkStages.Signoff }, "no un-specified code unit");
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildGenerateRequestAsync(JsonElement input, ToolContext ctx) =>
         BuildListRequestAsync(input, ctx, "generate-many", "Code generation", new[] { "SIGNED" },
             ReadBool(input, "thenGates")
                 ? new[] { WorkStages.Scaffold, WorkStages.Compile, WorkStages.TestPack }
                 : new[] { WorkStages.Scaffold },
-            "no routine with a signed spec waiting for code");
+            "no code unit with a signed spec waiting for code");
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildGatesRequestAsync(JsonElement input, ToolContext ctx)
     {
@@ -231,7 +231,7 @@ public sealed partial class CopilotToolRegistry
         if (stages.Length == 0)
             return Task.FromResult<(WorkRunRequest?, ToolResult?)>((null, ToolResult.Failure("gate.unknown", "gates must be compile and/or test-pack.")));
         return BuildListRequestAsync(input, ctx, "gates-many", "Gates", new[] { "SCAFFOLDED" }, stages,
-            "no routine with uncommitted generated code");
+            "no code unit with uncommitted generated code");
     }
 
     private static async Task<(WorkRunRequest?, ToolResult?)> BuildListRequestAsync(
@@ -267,7 +267,7 @@ public sealed partial class CopilotToolRegistry
                 ids.AddRange(matches);
             }
             if (unknown.Count > 0)
-                return (null, ToolResult.Failure("routine.not_found", $"No routine matches: {string.Join(", ", unknown.Take(10))}. Try search_routines."));
+                return (null, ToolResult.Failure("routine.not_found", $"No code unit matches: {string.Join(", ", unknown.Take(10))}. Try search_routines."));
         }
         else
         {
@@ -287,7 +287,7 @@ public sealed partial class CopilotToolRegistry
     private static async Task<ToolResult> ControlWorkRunAsync(JsonElement input, ToolContext ctx)
     {
         var run = await ResolveWorkRunAsync(input, ctx);
-        if (run is null) return ToolResult.Failure("work.run_not_found", "No multi-routine run to control.");
+        if (run is null) return ToolResult.Failure("work.run_not_found", "No multi-unit run to control.");
         var action = (Read(input, "action") ?? "").Trim().ToLowerInvariant().Replace('_', '-');
         var (message, error) = await ctx.Services.GetRequiredService<WorkRunService>()
             .ControlAsync(run.Id, action, ReadMoney(input, "budgetUsd"), ctx.Actor, ctx.Ct);

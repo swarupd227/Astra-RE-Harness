@@ -73,7 +73,7 @@ export function HarmonisationPage() {
     <div className="mx-auto max-w-[1200px] space-y-6 p-4 lg:p-6 fadeup" data-testid="harmonisation-page">
       <header>
         <p className="label">
-          Cross-routine consistency
+          Cross-unit consistency
         </p>
         <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Harmonisation</h1>
         <p className="mt-2 max-w-2xl text-body text-ink-secondary">

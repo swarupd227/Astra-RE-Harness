@@ -136,7 +136,7 @@ export function SignatureHealthPage() {
             <table className="w-full text-body">
               <thead className="bg-sunken/60 text-caption text-ink-tertiary">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Routine</th>
+                  <th className="px-4 py-2 text-left font-medium">Code unit</th>
                   <th className="px-4 py-2 text-left font-medium">Project</th>
                   <th className="px-4 py-2 text-left font-medium">Signer</th>
                   <th className="px-4 py-2 text-left font-medium">Signed at</th>

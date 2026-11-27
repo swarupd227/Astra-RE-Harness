@@ -20,7 +20,7 @@ const DEP_LABEL: Record<string, { label: string; what: string }> = {
   postgres: { label: 'Database', what: 'Projects, specs, reviews and the audit log' },
   minio: { label: 'File storage', what: 'Uploaded source, generated packages and logs' },
   blob: { label: 'File storage', what: 'Uploaded source, generated packages and logs' },
-  parser: { label: 'Code parser', what: 'Reads source into routines and call graphs' },
+  parser: { label: 'Code parser', what: 'Reads source into code units and call graphs' },
 };
 
 /**

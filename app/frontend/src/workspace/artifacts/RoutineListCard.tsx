@@ -41,13 +41,13 @@ export function RoutineListCard({ artifact, size }: ArtifactRenderProps) {
   const more = items.length - shown.length + Math.max(0, total - items.length);
 
   if (items.length === 0) {
-    return <p className="text-caption text-ink-tertiary">No routines matched{str(p.query) ? ` “${str(p.query)}”` : ''}.</p>;
+    return <p className="text-caption text-ink-tertiary">No code units matched{str(p.query) ? ` “${str(p.query)}”` : ''}.</p>;
   }
 
   return (
     <div className="space-y-2">
       <div className="text-caption text-ink-secondary">
-        <span className="font-mono tabular-nums text-ink-primary">{formatInt(total)}</span> routine{total === 1 ? '' : 's'}
+        <span className="font-mono tabular-nums text-ink-primary">{formatInt(total)}</span> code unit{total === 1 ? '' : 's'}
         {str(p.query) && (
           <>
             {' '}matching <span className="font-mono text-ink-primary">“{str(p.query)}”</span>
@@ -58,7 +58,7 @@ export function RoutineListCard({ artifact, size }: ArtifactRenderProps) {
         <table className="w-full min-w-[420px] border-collapse text-caption">
           <thead className="text-micro uppercase tracking-wide text-ink-tertiary">
             <tr>
-              <th className="px-1 pb-1.5 text-left font-medium">Routine</th>
+              <th className="px-1 pb-1.5 text-left font-medium">Code unit</th>
               <th className="px-1 pb-1.5 text-left font-medium">State</th>
               <th className="px-1 pb-1.5 text-left font-medium">Language</th>
               <th className="px-1 pb-1.5 text-left font-medium">Location</th>

@@ -65,7 +65,7 @@ export function PortfolioDashboardPage() {
       <PageHero
         tone="teal"
         title="Portfolio dashboard"
-        lead="Routines, signature progress, spend, and recent activity across all projects."
+        lead="Code units, signature progress, spend, and recent activity across all projects."
       />
 
       {summary.isPending && <Skeleton className="h-40" />}
@@ -113,7 +113,7 @@ function TotalsRow({
       </Card>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard label="Corpora"    value={t.corpusCount}     icon={Package}   accent="indigo" />
-        <KpiCard label="Routines"   value={t.totalRoutines}   icon={Layers}    accent="teal" />
+        <KpiCard label="Code units"   value={t.totalRoutines}   icon={Layers}    accent="teal" />
         <KpiCard label="Signed"     value={`${t.signedCount} (${pct(t.signedCount)}%)`}     icon={BarChart3} accent="emerald" />
         <KpiCard label="Scaffolded" value={`${t.scaffoldedCount} (${pct(t.scaffoldedCount)}%)`} icon={BarChart3} accent="amber" />
         <KpiCard label="Committed"  value={`${t.committedCount} (${pct(t.committedCount)}%)`}  icon={BarChart3} accent="orange" />
@@ -139,7 +139,7 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
                 <tr className="text-left label">
                   <th className="py-2">Name</th>
                   <th className="py-2">Plan</th>
-                  <th className="py-2 text-right">Routines</th>
+                  <th className="py-2 text-right">Code units</th>
                   <th className="py-2 text-right">Signed</th>
                   <th className="py-2 text-right">Scaffolded</th>
                   <th className="py-2 text-right">Committed</th>
@@ -279,15 +279,15 @@ function StateDistributionChart({
   ].filter((d) => d.value > 0);
 
   // Non-visual equivalent — the SVG pie is opaque to assistive tech.
-  const chartLabel = `Routine state distribution across every corpus: ${data
+  const chartLabel = `Code unit state distribution across every project: ${data
     .map((d) => `${d.value} ${d.name.toLowerCase()}`)
     .join(', ')}.`;
 
   return (
     <div className="card p-5">
-      <h2 className="label mb-3">Routine state distribution</h2>
+      <h2 className="label mb-3">Code unit state distribution</h2>
       {data.length === 0 ? (
-        <p className="text-[12px] text-ink-secondary">No routines yet.</p>
+        <p className="text-[12px] text-ink-secondary">No code units yet.</p>
       ) : (
         <div style={{ width: '100%', height: 220 }} role="img" aria-label={chartLabel}>
           <ResponsiveContainer>
@@ -311,7 +311,7 @@ function StateDistributionChart({
         </div>
       )}
       <p className="mt-1 text-[11px] text-ink-tertiary">
-        Aggregate across every corpus. Each routine is bucketed by its furthest-along state.
+        Aggregate across every corpus. Each code unit is bucketed by its furthest-along state.
       </p>
     </div>
   );

@@ -149,7 +149,7 @@ export function CorporaPage() {
         title="Projects"
         lead={
           corpora.data
-            ? `${formatInt(shownCount)} project${shownCount === 1 ? '' : 's'}${totalRoutines != null ? ` · ${formatInt(totalRoutines)} routines` : ''}`
+            ? `${formatInt(shownCount)} project${shownCount === 1 ? '' : 's'}${totalRoutines != null ? ` · ${formatInt(totalRoutines)} code units` : ''}`
             : 'Your source, versioned and parsed.'
         }
         actions={
@@ -387,7 +387,7 @@ function LangPill({ row }: { row: Row }) {
         id ? 'bg-sand-300/15 text-ink-secondary' : 'border border-dashed border-line text-ink-tertiary',
       )}
       data-testid={id ? `corpus-language-${id}` : 'corpus-language-unknown'}
-      title={id ? `Source language: ${row.langLabel}` : 'No routines parsed yet, or several languages tie — open the project to see its files'}
+      title={id ? `Source language: ${row.langLabel}` : 'No code units parsed yet, or several languages tie — open the project to see its files'}
     >
       {row.langLabel}
     </span>
@@ -468,7 +468,7 @@ function ProjectsTable({
           <tr>
             <Th k="name">Project</Th>
             <Th>Language</Th>
-            <Th k="size" className="text-right">Routines</Th>
+            <Th k="size" className="text-right">Code units</Th>
             <Th k="progress">Progress</Th>
             <Th>Next step</Th>
             <Th k="activity">Last activity</Th>
@@ -535,7 +535,7 @@ function ProjectCard({ row: r }: { row: Row }) {
       <p className="flex items-center gap-2 text-caption text-ink-secondary">
         <SourceIcon type={r.sourceType} />
         <span>
-          {r.counts ? `${formatInt(r.counts.total)} routines` : `${formatInt(r.fileCount)} files`} ·{' '}
+          {r.counts ? `${formatInt(r.counts.total)} code units` : `${formatInt(r.fileCount)} files`} ·{' '}
           <span title={absoluteTime(r.updatedAt)}>{relativeTime(r.updatedAt)}</span>
         </span>
         {r.isTestish && <span className="text-micro text-ink-tertiary">· test</span>}

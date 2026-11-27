@@ -56,7 +56,7 @@ public sealed class WorkStepExecutor
 
         var routine = await db.Subroutines.AsNoTracking().Include(s => s.SourceFile)
             .FirstOrDefaultAsync(s => s.Id == item.SubjectId, ct);
-        if (routine is null) return StepOutcome.Fail("The routine no longer exists (the programme was re-synced).");
+        if (routine is null) return StepOutcome.Fail("The code unit no longer exists (the programme was re-synced).");
 
         return item.Kind switch
         {
@@ -75,7 +75,7 @@ public sealed class WorkStepExecutor
         {
             // A first attempt that finds the routine busy was started elsewhere; a later one
             // is cleaning up after the process that held it.
-            if (item.Attempts <= 1) return new StepOutcome(StepVerdict.Busy, "A spec for this routine is being drafted elsewhere.");
+            if (item.Attempts <= 1) return new StepOutcome(StepVerdict.Busy, "A spec for this code unit is being drafted elsewhere.");
             await RevertExtractingAsync(routine.Id);
             routine.State = await db.Subroutines.AsNoTracking().Where(s => s.Id == routine.Id).Select(s => s.State).FirstAsync(ct);
         }
@@ -162,7 +162,7 @@ public sealed class WorkStepExecutor
 
         if (routine.State == "SCAFFOLDING")
         {
-            if (item.Attempts <= 1) return new StepOutcome(StepVerdict.Busy, "Code for this routine is being generated elsewhere.");
+            if (item.Attempts <= 1) return new StepOutcome(StepVerdict.Busy, "Code for this code unit is being generated elsewhere.");
             await Copilot.BackgroundRunService.RevertScaffoldingAsync(_scopes, spec.Id, _logger);
         }
 

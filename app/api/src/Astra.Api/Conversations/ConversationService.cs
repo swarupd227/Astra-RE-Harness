@@ -206,7 +206,7 @@ public sealed class ConversationService
             .FirstOrDefaultAsync(s => s.Id == specId, ct)
             ?? throw new InvalidOperationException($"Spec {specId} not found.");
         var version = await _db.SourceVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == spec.SourceVersionId, ct);
-        var routineName = spec.Subroutine?.Name ?? "routine";
+        var routineName = spec.Subroutine?.Name ?? "code unit";
 
         var now = DateTimeOffset.UtcNow;
         var conv = new Conversation
@@ -357,20 +357,20 @@ public sealed class ConversationService
 
         var lines = new List<string>
         {
-            $"I've parsed **{corpus.Name}** — {routines:N0} routines across {files:N0} files ({lang}).",
+            $"I've parsed **{corpus.Name}** — {routines:N0} code units across {files:N0} files ({lang}).",
         };
         if (funnel.Signed + funnel.Scaffolded + funnel.Committed > 0)
-            lines.Add($"So far: {funnel.Signed:N0} signed, {funnel.Scaffolded:N0} built, {funnel.Committed:N0} committed; {funnel.Parsed:N0} routines haven't been looked at yet.");
+            lines.Add($"So far: {funnel.Signed:N0} signed, {funnel.Scaffolded:N0} built, {funnel.Committed:N0} committed; {funnel.Parsed:N0} code units haven't been looked at yet.");
         else
             lines.Add("Nothing has been specified yet.");
-        lines.Add("Want me to survey the patterns first, or shall we start with the riskiest routines?");
+        lines.Add("Want me to survey the patterns first, or shall we start with the riskiest code units?");
 
         var suggestions = new List<SuggestionDto>
         {
             new("Survey the patterns", $"Survey the patterns in {corpus.Name}"),
             new("What's the status?", $"What's the status of {corpus.Name}?"),
-            new("Riskiest routines", $"Which routines in {corpus.Name} are the riskiest to migrate and why?"),
-            new("Search routines", "Find routines named "),
+            new("Riskiest code units", $"Which code units in {corpus.Name} are the riskiest to migrate and why?"),
+            new("Search code units", "Find code units named "),
         };
         var artifact = new ArtifactDto("funnel", corpus.Id.ToString(), ConversationJson.ToElement(new
         {

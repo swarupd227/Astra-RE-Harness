@@ -170,7 +170,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
                     suggestions = new object[]
                     {
                         new { label = "What's the status?", intent = "What's the status of this programme?" },
-                        new { label = "Search routines", intent = "Find routines named " },
+                        new { label = "Search code units", intent = "Find code units named " },
                     },
                 })),
             };
@@ -231,7 +231,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
     {
         "get_programme_status" => "checking the programme status",
         "get_flow_board" => "reading the flow board",
-        "search_routines" => "searching the routines",
+        "search_routines" => "searching the code units",
         "survey_corpus" => "starting the pattern survey",
         "get_pattern_clusters" => "loading the pattern clusters",
         "extract_spec" => "drafting the spec",
@@ -240,9 +240,9 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "generate_scaffold" => "generating the code",
         "run_gate" => "running the gate",
         "list_programmes" => "listing the programmes",
-        "read_routine" => "reading the routine",
+        "read_routine" => "reading the code unit",
         "get_spec" => "loading the spec",
-        "rank_routines" => "ranking the routines",
+        "rank_routines" => "ranking the code units",
         "run_assessment" => "starting the assessment",
         "explain_claim" => "pulling up the claim and its source",
         "search_docs" => "searching the documentation",
@@ -319,7 +319,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         if (Regex.IsMatch(t, @"\bcompile\b|\bgate\b|\btest[- ]pack\b")) return ("run_gate", new { subroutineId = name ?? "", gate = t.Contains("test") ? "test-pack" : "compile" });
         if (Regex.IsMatch(t, @"\bexplain\b|\bclaims\b|\bspec for\b|\bthe spec\b")) return ("get_spec", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\bsource\b|\bread\b|\bshow me\b") && name is not null) return ("read_routine", new { subroutineId = name });
-        if (Regex.IsMatch(t, @"\b(find|search|which routines|routines named|look for|riskiest)\b"))
+        if (Regex.IsMatch(t, @"\b(find|search|which routines|routines named|which (?:code )?units|(?:code )?units named|look for|riskiest)\b"))
         {
             var query = quoted ?? Regex.Match(text, @"(?:named|called|for|matching)\s+([A-Za-z0-9_.]+)").Groups[1].Value;
             return ("search_routines", new { query = string.IsNullOrWhiteSpace(query) ? "" : query, limit = 20 });
@@ -351,7 +351,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         var money = budget.Length > 0 ? budget : null;
         var parallel = Regex.Match(t, @"\b(\d+)\s+(?:at a time|at once|in parallel|agents)\b").Groups[1].Value;
         int? maxParallel = parallel.Length > 0 ? int.Parse(parallel) : null;
-        var countMatch = Regex.Match(t, @"\b(\d+)\s+(?:routines|specs|packages)\b").Groups[1].Value;
+        var countMatch = Regex.Match(t, @"\b(\d+)\s+(?:routines|(?:code )?units|specs|packages)\b").Groups[1].Value;
         int? limit = countMatch.Length > 0 ? int.Parse(countMatch) : null;
         var path = Regex.Match(text, @"\b(?:in|under|from)\s+[`""']([^`""']+)[`""']").Groups[1].Value;
         var names = Regex.Matches(text, "`([^`]+)`").Select(m => m.Groups[1].Value).Where(n => n != path).ToArray();
@@ -374,7 +374,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         if (Regex.IsMatch(t, @"\b(wave|batch) run\b|\bhow is (the )?(wave|batch)\b|\brun progress\b"))
             return ("get_work_run", new { runId });
 
-        var many = Regex.IsMatch(t, @"\b(all|every|many)\b|\b\d+\s+(routines|specs|packages)\b|\bthese routines\b") || names.Length > 1;
+        var many = Regex.IsMatch(t, @"\b(all|every|many)\b|\b\d+\s+(routines|(?:code )?units|specs|packages)\b|\bthese (?:routines|(?:code )?units)\b") || names.Length > 1;
 
         if (Regex.IsMatch(t, @"\b(run|execute|start|kick off)\b.*\bwaves?\b") && !t.Contains("plan the"))
         {

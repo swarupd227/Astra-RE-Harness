@@ -102,7 +102,7 @@ export function WorkRunCard({ artifact, size, onIntent }: ArtifactRenderProps) {
         <span className="font-medium text-ink-primary">{str(p.label, 'Run')}</span>
         <StatePill state={state} size="xs" label={idle ? 'Waiting for sign-off' : undefined} tone={idle ? 'warn' : undefined} />
         <span className="ml-auto font-mono tabular-nums text-ink-secondary">
-          {formatInt(num(p.routines))} routine{num(p.routines) === 1 ? '' : 's'} · {formatMoney(num(p.costUsd))}
+          {formatInt(num(p.routines))} code unit{num(p.routines) === 1 ? '' : 's'} · {formatMoney(num(p.costUsd))}
           {budget !== null && <> of {formatMoney(budget)}</>}
         </span>
       </div>
