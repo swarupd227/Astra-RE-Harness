@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Astra.Api.Audit;
 using Astra.Api.Auth;
 using Astra.Api.Llm;
 using Astra.Api.Persistence;
@@ -75,6 +76,59 @@ public static class LlmSettingsEndpoints
             return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
 
+        // Every model in use and where: what each job is configured to call, and what was actually called (last N days,
+        // from the llm_calls ledger — the same rows the cost figures come from).
+        app.MapGet("/api/v1/settings/llm/models", async (int? days, AppDbContext db, IConfiguration config, CancellationToken ct) =>
+        {
+            var window = Math.Clamp(days ?? 30, 1, 365);
+            var since = DateTimeOffset.UtcNow.AddDays(-window);
+            var anthropic = config.GetSection("Llm:Anthropic").Get<AnthropicOptions>() ?? new AnthropicOptions();
+            var docs = config.GetSection("Docs:Generator").Get<Astra.Api.Docs.DocsOptions>() ?? new Astra.Api.Docs.DocsOptions();
+            var survey = config.GetSection("Llm:Survey").Get<Astra.Api.Llm.PatternAnalysis.SurveyOptions>()
+                         ?? new Astra.Api.Llm.PatternAnalysis.SurveyOptions();
+            var knowledge = config.GetSection("Knowledge").Get<Astra.Api.Knowledge.KnowledgeOptions>()
+                            ?? new Astra.Api.Knowledge.KnowledgeOptions();
+            var configured = new[]
+            {
+                new { purpose = "Conversation, spec extraction, code generation", model = anthropic.Model },
+                new { purpose = "Pattern analysis survey", model = survey.Model },
+                new { purpose = "Pattern analysis (trivial routines)", model = config.GetValue<string>("Llm:Anthropic:TrivialModel") ?? "claude-haiku-4-5-20251001" },
+                new { purpose = "Documents (standard tier)", model = docs.SonnetModel },
+                new { purpose = "Documents (headline tier)", model = docs.OpusModel },
+                new { purpose = "Knowledge capture (writer)", model = string.IsNullOrWhiteSpace(knowledge.WriterModel) ? docs.SonnetModel : knowledge.WriterModel! },
+                new { purpose = "Knowledge capture (evidence check)", model = knowledge.SupportModel },
+            };
+
+            var raw = await db.LlmCalls.AsNoTracking()
+                .Where(c => c.CalledAt >= since && c.Provider != "mock")
+                .GroupBy(c => new { c.Model, c.PromptTemplateId })
+                .Select(g => new
+                {
+                    g.Key.Model,
+                    g.Key.PromptTemplateId,
+                    Calls = g.Count(),
+                    Failures = g.Count(c => c.Status == "failure"),
+                    Cost = g.Sum(c => c.CostUsd),
+                    Last = g.Max(c => c.CalledAt),
+                })
+                .ToListAsync(ct);
+            var used = raw
+                .GroupBy(r => new { r.Model, Purpose = ModelUse.PurposeOf(r.PromptTemplateId) })
+                .Select(g => new
+                {
+                    model = g.Key.Model,
+                    purpose = g.Key.Purpose,
+                    calls = g.Sum(r => r.Calls),
+                    failures = g.Sum(r => r.Failures),
+                    costUsd = Math.Round(g.Sum(r => r.Cost), 2),
+                    lastUsedAt = g.Max(r => r.Last),
+                    prompts = g.Select(r => r.PromptTemplateId).Distinct().OrderBy(x => x).Take(12).ToArray(),
+                })
+                .OrderByDescending(x => x.calls)
+                .ToList();
+            return Results.Ok(new { days = window, configured, used });
+        });
+
         app.MapPut("/api/v1/settings/llm/key", async (
             LlmKeyRequest body,
             AppDbContext db,
@@ -84,6 +138,8 @@ public static class LlmSettingsEndpoints
             IConfiguration config,
             AnthropicRateLimiter limiter,
             DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (actor.Persona != Persona.Admin) return Forbid();
@@ -113,6 +169,9 @@ public static class LlmSettingsEndpoints
             state.OverrideActive = true;
             limiter.ClearAuthFailure();
             Log.Information("LLM API key updated via settings UI by {Actor} (value not logged).", actor.DisplayName);
+            // Who replaced the key, from where (the audit row carries IP and user agent): a shared live key that keeps
+            // changing must be traceable from the app, not only from server logs. Only the last four characters are kept.
+            await audit.LogAsync("llm.key_set", "platform_config", null, actor, new { keyEndsWith = key[^4..] }, http, ct);
 
             return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
@@ -125,6 +184,8 @@ public static class LlmSettingsEndpoints
             IConfiguration config,
             AnthropicRateLimiter limiter,
             DevPersonaContext actor,
+            IAuditLogger audit,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (actor.Persona != Persona.Admin) return Forbid();
@@ -139,6 +200,7 @@ public static class LlmSettingsEndpoints
             state.OverrideActive = false;
             limiter.ClearAuthFailure();
             Log.Warning("LLM API key override cleared by {Actor}; reverted to environment key.", actor.DisplayName);
+            await audit.LogAsync("llm.key_cleared", "platform_config", null, actor, null, http, ct);
 
             return Results.Ok(BuildStatus(opts.Value, state, provider, config, limiter));
         });
