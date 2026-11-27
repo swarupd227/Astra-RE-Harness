@@ -48,6 +48,26 @@ internal static class PropertiesMerger
 /// that has the table declares it so — otherwise one unit's inserts would break another's. Tables are ordered so a
 /// foreign key never points at a table created later; other statements are kept once each, in order.
 /// </summary>
+/// <summary>
+/// H2 2.x keywords that legacy schemas use as column names and that H2's NON_KEYWORDS setting can release.
+/// Structural words (SELECT, FROM, PRIMARY …) are not here: a column with such a name needs quoting, not this.
+/// </summary>
+public static class H2Keywords
+{
+    private static readonly HashSet<string> Releasable = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "VALUE", "KEY", "USER", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "ROW", "ROWNUM", "TOP",
+        "LIMIT", "OFFSET", "END", "MINUS", "INTERVAL", "UNKNOWN", "QUALIFY", "REGEXP", "GROUPS", "WINDOW",
+    };
+
+    public static bool IsReleasable(string name) => Releasable.Contains(name);
+
+    /// <summary>The releasable keywords a schema uses as unquoted column names, upper case, sorted, once each.</summary>
+    public static List<string> UsedAsNames(string schema) =>
+        SchemaMerger.ColumnNames(schema).Where(Releasable.Contains).Select(n => n.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
+}
+
 public static class SchemaMerger
 {
     private static readonly Regex CreateTable = new(
@@ -64,7 +84,7 @@ public static class SchemaMerger
         public string Tail { get; set; } = "";
         public List<string> Order { get; } = new();
         public Dictionary<string, string> Columns { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, int> NotNullVotes { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, HashSet<string>> NotNullVotes { get; } = new(StringComparer.OrdinalIgnoreCase);   // column → units that say NOT NULL
         public List<string> Constraints { get; } = new();
         public List<string> Units { get; } = new();
         public List<string> Added { get; } = new();
@@ -117,7 +137,8 @@ public static class SchemaMerger
                     if ((hadKey || HasPrimaryKey(t)) && Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase))
                         def = Regex.Replace(def, @"\s+PRIMARY\s+KEY\b", " NOT NULL", RegexOptions.IgnoreCase);
                     var notNull = Regex.IsMatch(def, @"\bNOT\s+NULL\b", RegexOptions.IgnoreCase) || Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
-                    t.NotNullVotes[name] = t.NotNullVotes.GetValueOrDefault(name) + (notNull ? 1 : 0);
+                    if (!t.NotNullVotes.TryGetValue(name, out var voters)) t.NotNullVotes[name] = voters = new HashSet<string>(StringComparer.Ordinal);
+                    if (notNull) voters.Add(unit);   // per unit: a unit that declares the table twice still has one say
                     if (t.Columns.TryGetValue(name, out var existing))
                     {
                         if (TypeOf(existing) != TypeOf(def))
@@ -160,9 +181,12 @@ public static class SchemaMerger
             foreach (var col in t.Order)
             {
                 var def = t.Columns[col];
-                var everyone = t.NotNullVotes.GetValueOrDefault(col) == t.Units.Count;
+                var everyone = t.NotNullVotes.TryGetValue(col, out var said) && t.Units.All(said.Contains);
                 if (!everyone && t.Units.Count > 1 && !Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase))
                     def = Regex.Replace(def, @"\s+NOT\s+NULL\b", "", RegexOptions.IgnoreCase);
+                // A column named like an H2 keyword (value, year …) is written "VALUE": the same column H2 makes of an
+                // unquoted value, but never read as the keyword — whichever way a test builds its database.
+                if (H2Keywords.IsReleasable(col)) def = Regex.Replace(def, @"^\w+", "\"" + col.ToUpperInvariant() + "\"");
                 lines.Add("    " + def);
             }
             lines.AddRange(t.Constraints.Select(c => "    " + c));
@@ -252,6 +276,21 @@ public static class SchemaMerger
     private static string Bare(string name) => name.Trim('`', '"', '[', ']').ToLowerInvariant();
     private static string Squash(string s) => Regex.Replace(s, @"\s+", " ").Trim().ToLowerInvariant();
     private static string Tight(string s) => Regex.Replace(s, @"\s+", "").ToLowerInvariant();
+
+    /// <summary>The unquoted column names of every CREATE TABLE in a schema, in order.</summary>
+    public static IEnumerable<string> ColumnNames(string schema)
+    {
+        foreach (var stmt in Statements(schema))
+        {
+            var m = CreateTable.Match(stmt);
+            if (!m.Success) continue;
+            foreach (var p in SplitTopLevel(m.Groups[2].Value))
+            {
+                var name = Regex.Match(p.Trim(), @"^(\w+)\b").Groups[1].Value;   // quoted names are already safe
+                if (name.Length > 0 && !ConstraintWords.Contains(name)) yield return name;
+            }
+        }
+    }
 
     /// <summary>A table-level key clause: PRIMARY KEY (...) or CONSTRAINT name PRIMARY KEY (...).</summary>
     private static bool IsKeyClause(string c) =>

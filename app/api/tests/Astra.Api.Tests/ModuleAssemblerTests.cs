@@ -229,7 +229,7 @@ public class ModuleAssemblerTests
     }
 
     [Fact]
-    public void Unit_applications_become_configurations_and_tests_point_at_the_module_application()
+    public void Unit_applications_become_configurations_and_tests_point_at_their_own_unit()
     {
         var m = Build();
         var cfg = m.Files["src/main/java/com/astra/third_parties/societerib/SocieteRibApplication.java"];
@@ -239,8 +239,10 @@ public class ModuleAssemblerTests
         Assert.Contains("public String tablePrefix()", cfg);                                      // its beans survive
 
         var test = m.Files["src/test/java/com/astra/third_parties/societerib/SocieteRibServiceTests.java"];
-        Assert.Contains("@SpringBootTest(classes = ThirdPartiesApplication.class)", test);
-        Assert.Contains("import com.astra.third_parties.ThirdPartiesApplication;", test);
+        // Same package as the unit's test application, so no import is needed; the module application is not booted.
+        Assert.Contains("@SpringBootTest(classes = UnitTestApplication.class)", test);
+        Assert.DoesNotContain("ThirdPartiesApplication", test);
+        Assert.True(m.Files.ContainsKey("src/test/java/com/astra/third_parties/societerib/UnitTestApplication.java"));
 
         // Two units declaring the same @Bean method: reported, and overriding switched on so the context starts.
         Assert.Contains(m.Report.Conflicts, c => c.Kind == "bean" && c.Name == "tablePrefix");
@@ -286,6 +288,48 @@ public class ModuleAssemblerTests
         var other = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS other \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(other, "PRIMARY KEY"));          // same key, two spellings
         Assert.DoesNotContain(conflicts, x => x.Kind == "primary-key" && x.Name == "other");
+    }
+
+    [Fact]
+    public void A_column_stays_required_only_when_every_unit_requires_it_however_often_one_unit_declares_the_table()
+    {
+        // Seen on a real estate: one unit declared users twice (name NOT NULL), another had no name column at all and
+        // its test inserts users without one. Counting statements kept NOT NULL; counting units relaxes it.
+        var twice = "CREATE TABLE IF NOT EXISTS users (\n id BIGINT PRIMARY KEY,\n name VARCHAR(200) NOT NULL,\n login VARCHAR(100) NOT NULL\n);\nCREATE TABLE IF NOT EXISTS users (\n id BIGINT PRIMARY KEY,\n name VARCHAR(200) NOT NULL,\n login VARCHAR(100) NOT NULL\n);";
+        var without = "CREATE TABLE IF NOT EXISTS users (\n id BIGINT PRIMARY KEY,\n login VARCHAR(100) NOT NULL,\n rights VARCHAR(2000)\n);";
+        var schema = SchemaMerger.Merge(new[] { ("a", twice), ("b", without) }, new List<AssemblyConflict>(), new List<SharedItem>(), new List<string>());
+        Assert.Contains("name VARCHAR(200),", schema.Replace("\r", ""));                          // b never fills it in
+        Assert.Contains("login VARCHAR(100) NOT NULL", schema);                                   // both require it
+    }
+
+    [Fact]
+    public void Columns_named_like_h2_keywords_are_found_so_the_database_can_accept_them()
+    {
+        var schema = "CREATE TABLE IF NOT EXISTS llx_const (\n rowid BIGINT AUTO_INCREMENT PRIMARY KEY,\n name VARCHAR(180) NOT NULL UNIQUE,\n value TEXT,\n \"key\" VARCHAR(10),\n year INT,\n PRIMARY KEY (rowid)\n);\nINSERT INTO llx_const (name, value) VALUES ('a', 'b');";
+        Assert.Equal(new[] { "VALUE", "YEAR" }, H2Keywords.UsedAsNames(schema));   // quoted "key" is already safe; PRIMARY is a clause
+
+        var merged = SchemaMerger.Merge(new[] { ("a", schema) }, new List<AssemblyConflict>(), new List<SharedItem>(), new List<string>());
+        Assert.Contains("\"VALUE\" TEXT", merged);                                                // written so H2 never reads it as the keyword
+        Assert.Contains("\"YEAR\" INT", merged);
+        Assert.Contains("name VARCHAR(180)", merged);                                             // ordinary names untouched
+    }
+
+    [Fact]
+    public void Each_unit_gets_a_test_application_that_starts_only_that_unit()
+    {
+        var m = Build();
+        var testApps = m.Files.Where(f => f.Key.StartsWith("src/test/java/", StringComparison.Ordinal) && f.Key.EndsWith("/" + JavaSpringAssembler.UnitTestAppName + ".java", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(testApps);
+        foreach (var (path, text) in testApps)
+        {
+            var pkg = System.Text.RegularExpressions.Regex.Match(text, @"^package ([\w.]+);", System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value;
+            Assert.Contains($"scanBasePackages = {{ \"{pkg}\"", text);                          // its own package first, nothing of the other units
+            Assert.Contains("FullyQualifiedAnnotationBeanNameGenerator", text);
+        }
+        // No test still boots the whole module.
+        var app = m.Files.Single(f => f.Key.StartsWith("src/main/java/", StringComparison.Ordinal) && f.Value.Contains("@SpringBootApplication(")).Key;
+        var appClass = Path.GetFileNameWithoutExtension(app);
+        Assert.DoesNotContain(m.Files.Where(f => f.Key.StartsWith("src/test/java/", StringComparison.Ordinal)), f => f.Value.Contains(appClass + ".class"));
     }
 
     [Fact]

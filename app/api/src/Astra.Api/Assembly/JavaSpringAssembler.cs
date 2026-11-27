@@ -20,6 +20,8 @@ public sealed class JavaSpringAssembler : IModuleAssembler
     private const string TestJava = "src/test/java/";
     private const string MainRes = "src/main/resources/";
     private const string TestRes = "src/test/resources/";
+    /// <summary>Test-only application each unit gets, so its tests start that unit alone.</summary>
+    public const string UnitTestAppName = "UnitTestApplication";
 
     private static readonly Regex PackageDecl = new(@"^\s*package\s+([\w.]+)\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
     private static readonly Regex TypeDecl = new(@"\b(class|interface|enum|record|@interface)\s+([A-Z]\w*)", RegexOptions.Compiled);
@@ -187,9 +189,12 @@ public sealed class JavaSpringAssembler : IModuleAssembler
                     }
                 if (isTest && u.AppSimpleName is { } app)
                 {
+                    // A unit's tests start only that unit (its own test application below), as they did when they
+                    // passed alone — not the whole module, where another unit's beans, settings or tables can break them.
+                    var unitTestApp = u.NewRoot + "." + UnitTestAppName;
                     var before = text;
-                    text = Regex.Replace(text, $@"\b{Regex.Escape(app)}\.class\b", appSimple + ".class");
-                    if (before != text) text = AddImports(text, new[] { appFqn });
+                    text = Regex.Replace(text, $@"\b{Regex.Escape(app)}\.class\b", UnitTestAppName + ".class");
+                    if (before != text && PackageOf(text) != u.NewRoot) text = AddImports(text, new[] { unitTestApp });
                 }
 
                 var target = (isTest ? TestJava : MainJava) + newPkg.Replace('.', '/') + "/" + name + ".java";
@@ -225,6 +230,27 @@ public sealed class JavaSpringAssembler : IModuleAssembler
             }
             """);
 
+        // ── 4b. One test application per unit: Spring finds the nearest @SpringBootConfiguration above a test's
+        //        package, so each unit's tests (full contexts and slices alike) see that unit plus the shared classes.
+        foreach (var u in parsed)
+        {
+            var scan = new[] { u.NewRoot, commonPkg }.Distinct(StringComparer.Ordinal).Select(p => $"\"{p}\"");
+            output[TestJava + u.NewRoot.Replace('.', '/') + "/" + UnitTestAppName + ".java"] = Normalise($$"""
+                package {{u.NewRoot}};
+
+                import org.springframework.boot.autoconfigure.SpringBootApplication;
+                import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
+
+                /**
+                 * Test-only: starts the code unit {{u.Source.UnitName}} on its own inside the assembled module, the way its tests ran
+                 * when it passed alone. The module's application ({{appFqn}}) still holds every unit.
+                 */
+                @SpringBootApplication(scanBasePackages = { {{string.Join(", ", scan)}} }, nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class)
+                public class {{UnitTestAppName}} {
+                }
+                """);
+        }
+
         // ── 5. Resources: properties, schema and data merged; anything else kept once per path ──
         foreach (var root in new[] { MainRes, TestRes })
         {
@@ -246,13 +272,26 @@ public sealed class JavaSpringAssembler : IModuleAssembler
                     }
                     else others[rel] = (u.Source.UnitName, text);
                 }
+            string? mergedSchema = schemas.Count > 0 ? SchemaMerger.Merge(schemas, conflicts, shared, notes) : null;
             if (props.Count > 0 || (root == MainRes))
             {
                 var extra = new List<KeyValuePair<string, string>> { new("spring.application.name", artifactId) };
                 if (root == MainRes && clashingBeans.Count > 0) extra.Add(new("spring.main.allow-bean-definition-overriding", "true"));
+                // A unit whose own tests never started the database could pass alone with a column named like an H2
+                // keyword (value, key, user …); merged, every context runs the whole schema. When no unit chose its
+                // own datasource, the embedded database is told to accept exactly those words — still one fresh
+                // database per test context (random name), as Spring gives each context without a url.
+                // From the units' own schemas: the merged one already writes these names quoted.
+                var reserved = H2Keywords.UsedAsNames(string.Join(";\n", schemas.Select(s => s.Text)));
+                var unitsSetUrl = props.Any(p => Regex.IsMatch(p.Text, @"^\s*spring\.datasource\.url\s*[=:]", RegexOptions.Multiline));
+                if (root == MainRes && reserved.Count > 0 && !unitsSetUrl)
+                {
+                    extra.Add(new("spring.datasource.url", $"jdbc:h2:mem:${{random.uuid}};NON_KEYWORDS={string.Join(",", reserved)}"));
+                    notes.Add($"Columns named {string.Join(", ", reserved.Select(r => r.ToLowerInvariant()))} are H2 keywords; the embedded database is told to accept them as names (NON_KEYWORDS).");
+                }
                 output[root + "application.properties"] = PropertiesMerger.Merge(props, extra, conflicts);
             }
-            if (schemas.Count > 0) output[root + "schema.sql"] = SchemaMerger.Merge(schemas, conflicts, shared, notes);
+            if (mergedSchema is not null) output[root + "schema.sql"] = mergedSchema;
             if (data.Count > 0) output[root + "data.sql"] = SchemaMerger.MergeStatements(data, "data.sql");
             foreach (var (rel, v) in others) output[root + rel] = v.Text;
         }

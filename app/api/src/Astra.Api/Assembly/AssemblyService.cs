@@ -222,46 +222,77 @@ public sealed class AssemblyService
             await FinishAsync(db, row, "ERRORED", "Assembled, but the Java build service is unreachable, so it was not built or tested. Download it, or try again later.", ct);
             return;
         }
-        _bus.Publish(row.Id, Agent, "compile", "stage", null, "Building and testing the assembled application…");
+        _bus.Publish(row.Id, Agent, "compile", "stage", null, "Building the assembled application…");
         var sources = module.Files.Where(f => !f.Key.StartsWith("units/", StringComparison.Ordinal) && f.Key != "ASSEMBLY.md")
             .Select(f => new MavenClient.JavaSource(f.Key, f.Value)).ToList();
-        var result = await maven.CompileAndTestAsync(new MavenClient.CompileAndTestRequest(sources, TimeoutMs: 240_000), ct);
+        var compile = await maven.CompileAsync(new MavenClient.CompileRequest(sources), ct);
+        slot.Dispose();   // tests take a slot per batch below, so a long module does not hold other gates for its whole run
 
         var log = new StringBuilder();
-        log.AppendLine("=== mvn compile ===").AppendLine(result.Compile.Log)
-            .AppendLine($"=== compile exit {result.Compile.ExitCode} · {result.Compile.ErrorCount} error(s) · {result.Compile.DurationMs} ms ===");
-        if (result.Test is { } t)
-        {
-            log.AppendLine().AppendLine("=== mvn test ===").AppendLine(t.Stdout);
-            if (!string.IsNullOrWhiteSpace(t.Stderr)) log.AppendLine("--- stderr ---").AppendLine(t.Stderr);
-            log.AppendLine($"=== test exit {t.ExitCode} · {t.DurationMs} ms{(t.TimedOut ? " · timed out" : "")} ===");
-        }
-        else log.AppendLine().AppendLine($"=== tests not run: {result.SkippedTestReason ?? "the build failed"} ===");
-        row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
-
-        row.CompileStatus = result.Compile.ExitCode == 0 ? "PASSED" : "FAILED";
+        log.AppendLine("=== mvn compile ===").AppendLine(compile.Log)
+            .AppendLine($"=== compile exit {compile.ExitCode} · {compile.ErrorCount} error(s) · {compile.DurationMs} ms ===");
+        row.CompileStatus = compile.ExitCode == 0 ? "PASSED" : "FAILED";
         if (row.CompileStatus == "FAILED")
         {
-            await FinishAsync(db, row, "FAILED", $"Assembled {row.UnitCount} code units, but the application does not build ({result.Compile.ErrorCount} compile error(s)). The log says where.", ct);
+            row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
+            await FinishAsync(db, row, "FAILED", $"Assembled {row.UnitCount} code units, but the application does not build ({compile.ErrorCount} compile error(s)). The log says where.", ct);
             return;
         }
-        _bus.Publish(row.Id, Agent, "test", "stage", null, "Tests ran.");
-        if (result.Test is not { } test)
+
+        // Tests run a few units at a time: one request per batch stays well inside the build service's request limit
+        // (App Service cuts a request at ~230 s), however many units the module has. Each unit's tests start only that
+        // unit (see JavaSpringAssembler's UnitTestApplication), so batching changes nothing about what they test.
+        var batches = TestBatches(module.Report.Units.Select(u => u.Package).ToList(), UnitsPerTestBatch);
+        int total = 0, failed = 0, timedOutBatches = 0, done = 0;
+        var failingBatches = new List<string>();
+        foreach (var batch in batches)
         {
-            row.TestStatus = "ERRORED";
-            await FinishAsync(db, row, "FAILED", $"The application builds, but its tests did not run: {result.SkippedTestReason ?? "unknown reason"}.", ct);
-            return;
+            ct.ThrowIfCancellationRequested();
+            _bus.Progress(row.Id, Agent, "test", done, module.Report.Units.Count, failingBatches.Count);
+            _bus.Log(row.Id, Agent, "test", $"Testing code units {done + 1}–{done + batch.Count} of {module.Report.Units.Count}…");
+            using var testSlot = await GateExecutorPool.Shared.AcquireAsync(ct, _ => Task.CompletedTask);
+            var args = new List<string>
+            {
+                "-Dtest=" + string.Join(",", batch.Select(p => p.Replace('.', '/') + "/**/*")),
+                "-Dsurefire.failIfNoSpecifiedTests=false", "-DfailIfNoTests=false",
+            };
+            var t = await maven.TestAsync(new MavenClient.TestRequest(compile.ArtifactId, args, TimeoutMs: BatchTimeoutMs), ct);
+            total += t.Tests;
+            failed += t.Failures + t.Errors;
+            if (t.TimedOut) timedOutBatches++;
+            if (t.TimedOut || t.Failures + t.Errors > 0 || (t.ExitCode != 0 && t.Tests == 0))
+                failingBatches.Add(string.Join(", ", batch.Select(p => p[(p.LastIndexOf('.') + 1)..])));
+            log.AppendLine().AppendLine($"=== mvn test · units {done + 1}–{done + batch.Count}: {string.Join(", ", batch)} ===")
+                .AppendLine(Tail(t.Stdout, 60_000));
+            if (!string.IsNullOrWhiteSpace(t.Stderr)) log.AppendLine("--- stderr ---").AppendLine(Tail(t.Stderr, 10_000));
+            log.AppendLine($"=== batch: {t.Tests} test(s), {t.Failures} failure(s), {t.Errors} error(s) · exit {t.ExitCode} · {t.DurationMs} ms{(t.TimedOut ? " · timed out" : "")} ===");
+            done += batch.Count;
+            row.TestsTotal = total;
+            row.TestsFailed = failed;
+            await db.SaveChangesAsync(ct);
         }
-        row.TestsTotal = test.Tests;
-        row.TestsFailed = test.Failures + test.Errors;
-        row.TestStatus = test.TimedOut ? "ERRORED" : row.TestsFailed == 0 && test.ExitCode == 0 ? "PASSED" : "FAILED";
+        log.AppendLine().AppendLine($"=== all batches: {total} test(s), {failed} failing; batches with failures: {(failingBatches.Count == 0 ? "none" : string.Join(" | ", failingBatches))} ===");
+        row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
+
+        _bus.Publish(row.Id, Agent, "test", "stage", null, "Tests ran.");
+        row.TestStatus = timedOutBatches > 0 ? "ERRORED" : failed == 0 && failingBatches.Count == 0 ? "PASSED" : "FAILED";
         if (row.TestStatus == "PASSED")
-            await FinishAsync(db, row, "PASSED", $"One application from {row.UnitCount} code units: it builds and all {row.TestsTotal} tests pass.", ct);
-        else if (test.TimedOut)
-            await FinishAsync(db, row, "FAILED", $"The application builds, but its tests did not finish within the time allowed ({row.TestsTotal} ran).", ct);
+            await FinishAsync(db, row, "PASSED", $"One application from {row.UnitCount} code units: it builds and all {total} tests pass.", ct);
+        else if (timedOutBatches > 0)
+            await FinishAsync(db, row, "FAILED", $"The application builds; {failed} of {total} tests fail and {timedOutBatches} batch(es) of units did not finish in time. The log names them.", ct);
         else
-            await FinishAsync(db, row, "FAILED", $"The application builds; {row.TestsFailed} of {row.TestsTotal} tests fail together that passed unit by unit. The log names them.", ct);
+            await FinishAsync(db, row, "FAILED", $"The application builds; {failed} of {total} tests fail together that passed unit by unit. The log names them.", ct);
     }
+
+    /// <summary>Units tested per request: small enough that a batch of Spring contexts finishes well inside the limit.</summary>
+    public const int UnitsPerTestBatch = 6;
+    private const int BatchTimeoutMs = 200_000;
+
+    /// <summary>The units' packages in batches of <paramref name="size"/>, in order.</summary>
+    public static List<List<string>> TestBatches(IReadOnlyList<string> packages, int size) =>
+        packages.Select((p, i) => (p, i)).GroupBy(x => x.i / Math.Max(1, size)).Select(g => g.Select(x => x.p).ToList()).ToList();
+
+    private static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
 
     private async Task FinishAsync(AppDbContext db, ModuleAssembly row, string state, string summary, CancellationToken ct)
     {
