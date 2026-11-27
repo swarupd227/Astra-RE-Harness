@@ -414,6 +414,8 @@ function StageCard({
             ? <FalsifyingDetail metrics={run.metrics as unknown as FalsifyingMetrics} />
             : (run.metrics as { mode?: string }).mode === 'per-vector' && Array.isArray((run.metrics as { vectors?: unknown }).vectors)
             ? <EquivalenceVectorsDetail metrics={run.metrics as unknown as EquivalenceVectorMetrics} />
+            : (run.metrics as { mode?: string }).mode === 'workbook' && Array.isArray((run.metrics as { vectors?: unknown }).vectors)
+            ? <WorkbookEquivalenceDetail metrics={run.metrics as unknown as WorkbookEquivalenceMetrics} />
             : (
               <pre className="overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-caption text-ink-secondary">
                 {JSON.stringify(run.metrics, null, 2)}
@@ -509,6 +511,63 @@ function EquivalenceVectorsDetail({ metrics }: { metrics: EquivalenceVectorMetri
             {(v.notes ?? []).map((n, i) => (
               <p key={i} className="mt-0.5 text-caption text-ink-tertiary">{n}</p>
             ))}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Workbook EQUIVALENCE drilldown: the workbook and its React + Python package, case by case
+// ────────────────────────────────────────────────────────────────────────
+
+type WorkbookCheck = { kind: string; what: string; passed: boolean; detail: string };
+
+type WorkbookEquivalenceMetrics = {
+  routine: string;
+  workbook?: string;
+  live?: boolean;
+  vectorCount: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  vectors: { id: string; label: string; asSaved?: boolean; inputs: unknown; status: string; reason: string; checks: WorkbookCheck[] }[];
+};
+
+/** Each case the workbook and the package were run on: what changed, the verdict, and every check with its numbers. */
+function WorkbookEquivalenceDetail({ metrics }: { metrics: WorkbookEquivalenceMetrics }) {
+  const tone = (s: string) =>
+    s === 'PASSED' ? 'text-status-passed' : s === 'FAILED' || s === 'ERRORED' ? 'text-status-failed' : 'text-ink-tertiary';
+  return (
+    <div className="space-y-3 rounded-sm bg-sunken px-3 py-3" data-testid="workbook-equivalence">
+      <p className="text-caption text-ink-secondary">
+        <span className="font-mono">{metrics.routine}</span>
+        {metrics.workbook ? <> in <span className="font-mono">{metrics.workbook}</span></> : null} against its React + Python package
+        {' · '}
+        {metrics.live ? 'outside calls sent to the real service' : 'outside calls answered by the gate'}
+        {' · '}
+        {metrics.passed} passed · {metrics.failed} failed · {metrics.skipped} skipped
+      </p>
+      <ul className="space-y-2">
+        {metrics.vectors.map((v) => (
+          <li key={v.id} className="rounded-sm border border-line px-2 py-1.5" data-testid={`workbook-case-${v.id}`}>
+            <div className="flex flex-wrap items-baseline gap-2 text-caption">
+              <span className={`font-mono font-semibold ${tone(v.status)}`}>{v.status}</span>
+              <span className="font-mono text-ink-secondary">{v.id}</span>
+              <span className="text-ink-primary">{v.label}</span>
+            </div>
+            <ul className="mt-1 space-y-0.5">
+              {v.checks.map((c, i) => (
+                <li key={i} className="text-caption">
+                  <span className={`font-mono ${c.passed ? 'text-status-passed' : 'text-status-failed'}`}>{c.passed ? 'agrees' : 'differs'}</span>
+                  <span className="text-ink-tertiary"> {c.kind} </span>
+                  <span className="font-mono text-ink-secondary">{c.what}</span>
+                  <span className="text-ink-secondary">: {c.detail}</span>
+                </li>
+              ))}
+              {v.checks.length === 0 && <li className="text-caption text-ink-tertiary">{v.reason}</li>}
+            </ul>
           </li>
         ))}
       </ul>
