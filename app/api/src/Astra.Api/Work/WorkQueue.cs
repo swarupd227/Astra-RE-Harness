@@ -221,10 +221,12 @@ public sealed class WorkQueue
         await _db.WorkRuns.Where(r => r.Id == runId && r.State == "RUNNING")
             .ExecuteUpdateAsync(u => u.SetProperty(r => r.State, "PAUSED").SetProperty(r => r.Summary, reason), ct) == 1;
 
-    public async Task<bool> ResumeAsync(Guid runId, decimal? newBudgetUsd, CancellationToken ct)
+    public async Task<bool> ResumeAsync(Guid runId, decimal? newBudgetUsd, CancellationToken ct, string? newCapsJson = null)
     {
         if (newBudgetUsd is { } budget)
             await _db.WorkRuns.Where(r => r.Id == runId).ExecuteUpdateAsync(u => u.SetProperty(r => r.BudgetUsd, budget), ct);
+        if (newCapsJson is not null)
+            await _db.WorkRuns.Where(r => r.Id == runId).ExecuteUpdateAsync(u => u.SetProperty(r => r.CapsJson, newCapsJson), ct);
         return await _db.WorkRuns.Where(r => r.Id == runId && r.State == "PAUSED")
             .ExecuteUpdateAsync(u => u.SetProperty(r => r.State, "RUNNING").SetProperty(r => r.Summary, ""), ct) == 1;
     }

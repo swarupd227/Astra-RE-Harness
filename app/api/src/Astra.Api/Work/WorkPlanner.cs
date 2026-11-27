@@ -44,6 +44,22 @@ public static class WorkStages
         [TestPack] = 2,
     };
 
+    /// <summary>The most agents a stage may run at once, whatever is asked.</summary>
+    public const int MaxCap = 32;
+
+    /// <summary>
+    /// <paramref name="current"/> with each requested cap applied: only the known machine stages, only positive values,
+    /// at most <see cref="MaxCap"/>. The same rule when a run starts and when it is resumed with new caps.
+    /// </summary>
+    public static Dictionary<string, int> MergeCaps(IReadOnlyDictionary<string, int> current, IReadOnlyDictionary<string, int>? requested)
+    {
+        var caps = DefaultCaps.ToDictionary(kv => kv.Key, kv => current.TryGetValue(kv.Key, out var c) && c > 0 ? c : kv.Value);
+        if (requested is not null)
+            foreach (var (kind, cap) in requested)
+                if (caps.ContainsKey(kind) && cap > 0) caps[kind] = Math.Min(cap, MaxCap);
+        return caps;
+    }
+
     /// <summary>Requested stage names in pipeline order, unknown ones dropped.
     /// Asking for a machine stage on both sides of the sign-off keeps the wait
     /// between them: it can never be left out to get unsigned code generated.</summary>

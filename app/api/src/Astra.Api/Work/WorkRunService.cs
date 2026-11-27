@@ -161,10 +161,7 @@ public sealed class WorkRunService
             .Select(s => new SkippedRoutine(s.Id, s.Name, $"already queued in \"{busyById[s.Id]}\""))).ToList();
         plan = plan with { Skipped = skipped };
 
-        var caps = WorkStages.DefaultCaps.ToDictionary(kv => kv.Key, kv => kv.Value);
-        if (request.Caps is not null)
-            foreach (var (kind, cap) in request.Caps)
-                if (caps.ContainsKey(kind) && cap > 0) caps[kind] = Math.Min(cap, 32);
+        var caps = WorkStages.MergeCaps(WorkStages.DefaultCaps, request.Caps);
 
         var warnings = new List<string>();
         if (plan.Count(WorkStages.Scaffold) > 0)
@@ -248,7 +245,8 @@ public sealed class WorkRunService
     // ── control ──────────────────────────────────────────────────────────
 
     /// <summary>action: pause | resume | cancel | retry-failed.</summary>
-    public async Task<(string? Message, WorkError? Error)> ControlAsync(Guid runId, string action, decimal? budgetUsd, DevPersonaContext actor, CancellationToken ct)
+    public async Task<(string? Message, WorkError? Error)> ControlAsync(Guid runId, string action, decimal? budgetUsd, DevPersonaContext actor, CancellationToken ct,
+        IReadOnlyDictionary<string, int>? caps = null)
     {
         if (!MayControl(actor.Persona))
             return (null, new(403, "persona.forbidden", "Pausing, resuming, cancelling or retrying a run needs the engineer or admin persona."));
@@ -268,9 +266,16 @@ public sealed class WorkRunService
                     return (null, new(400, "work.invalid_budget", $"The run has already spent ${run.CostUsd:0.00}; the new ceiling must be higher."));
                 if (budgetUsd is null && run.BudgetUsd is { } ceiling && run.CostUsd >= ceiling)
                     return (null, new(409, "work.budget_reached", $"The run spent ${run.CostUsd:0.00} of its ${ceiling:0.00} ceiling. Resume it with a higher ceiling."));
-                if (!await _queue.ResumeAsync(runId, budgetUsd, ct))
+                // New caps (more agents per stage, or fewer to spare a shared sidecar) take effect from the resume.
+                string? capsJson = null;
+                if (caps is { Count: > 0 })
+                {
+                    var current = JsonSerializer.Deserialize<Dictionary<string, int>>(run.CapsJson ?? "{}") ?? new();
+                    capsJson = JsonSerializer.Serialize(WorkStages.MergeCaps(current, caps));
+                }
+                if (!await _queue.ResumeAsync(runId, budgetUsd, ct, capsJson))
                     return (null, new(409, "work.invalid_state", $"The run is {run.State}; only a paused one can be resumed."));
-                message = "Resumed.";
+                message = capsJson is null ? "Resumed." : $"Resumed with {capsJson}.";
                 break;
             case "cancel":
                 if (!await _queue.CancelAsync(runId, ct))

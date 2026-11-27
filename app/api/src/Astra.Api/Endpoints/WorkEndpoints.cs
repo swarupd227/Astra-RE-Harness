@@ -90,7 +90,7 @@ public static class WorkEndpoints
         app.MapPost("/api/v1/work-runs/{id:guid}/{action}", async (
             Guid id, string action, WorkControlBody? body, WorkRunService work, WorkQueue queue, DevPersonaContext actor, CancellationToken ct) =>
         {
-            var (message, error) = await work.ControlAsync(id, action, body?.BudgetUsd, actor, ct);
+            var (message, error) = await work.ControlAsync(id, action, body?.BudgetUsd, actor, ct, body?.Caps);
             if (error is not null) return Error(error);
             return Results.Ok(new { message, run = await queue.SnapshotAsync(id, ct) });
         });
@@ -116,4 +116,5 @@ public sealed record WorkRunBody(
     Dictionary<string, int>? Caps = null,
     Guid? ConversationId = null);
 
-public sealed record WorkControlBody(decimal? BudgetUsd = null);
+/// <param name="Caps">On resume: new per-stage concurrency (extract, scaffold, compile, test-pack), merged into the run's own.</param>
+public sealed record WorkControlBody(decimal? BudgetUsd = null, Dictionary<string, int>? Caps = null);
