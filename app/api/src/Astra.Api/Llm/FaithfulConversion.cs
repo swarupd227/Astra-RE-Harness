@@ -49,7 +49,7 @@ public static class FaithfulConversion
     {
         "unitName", "unitPath", "className", "namespace", "anchorRoutine",
         "routineCount", "signedCount", "unitRoutinesJson", "unitSpecsJson",
-        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource", "partNote",
+        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource", "partNote", "partSuffix",
     };
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -463,6 +463,7 @@ public static class FaithfulConversion
         new()
         {
             ["partNote"] = part?.Note ?? "",
+            ["partSuffix"] = part is { Count: > 1, Number: > 1 } ? $"Part{part.Number}" : "",
             ["unitName"] = unit.UnitName,
             ["unitPath"] = unit.UnitPath,
             ["className"] = unit.ClassName,

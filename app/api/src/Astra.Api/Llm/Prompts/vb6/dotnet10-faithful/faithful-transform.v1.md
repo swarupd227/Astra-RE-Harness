@@ -125,14 +125,24 @@ Rules:
     `PlatformNotSupportedException` with the Declare kept in a comment (Win32 calls do not exist on .NET).
     `CreateObject("ProgID")` → the replacement the COM MAPPING TABLE names, or a stub when it names none.
 13. **It must compile.** Nullable and implicit usings are on (nullable warnings are not errors). No `async`, no
-    dependency injection, no logging frameworks, no new NuGet packages. Do not emit project files, tests, or anything
+    dependency injection, no logging frameworks, no new NuGet packages. Do not emit project files or anything
     under src/Vb6Runtime/, src/Provenance.cs or src/Exemplar/.
-14. **Complete, never abbreviated.** Every routine in your part in full. Never "// ... rest unchanged". A routine that is
+14. **Every signed claim gets a real test.** For each claim of a signed spec covering a routine in your part, write an
+    xUnit test in `tests/{{className}}ClaimTests{{partSuffix}}.cs` (`namespace Faithful.Tests;`, `using Faithful.Vb6App;
+    using Faithful.Vb6; using Xunit;`, class `{{className}}ClaimTests{{partSuffix}}`), named `<ClaimId>_<what it checks>`
+    with `[Trait("claim", "<ClaimId>")]`. Arrange real inputs (module globals, a form's controls, a temporary data file
+    under `Path.GetTempPath()` with `App.Path` pointed at it), call the converted routine, and assert what the claim
+    says — values, side effects on globals/controls/files, messages recorded by a `RecordingDialogs` set as
+    `App.Dialogs`. Never `Assert.True(true)`. When the behaviour can only be reached through a stub (another unit not
+    converted here, or a library whose source is not in the project), keep the test but mark it
+    `[Fact(Skip = "needs <stub> — <why>")]` and still write the assertions, so it runs once the stub is replaced. A
+    part with no signed claims writes no test file.
+15. **Complete, never abbreviated.** Every routine in your part in full. Never "// ... rest unchanged". A routine that is
     empty in VB6 is empty in C#.
 
 Emit through the `emit_package` tool: the unit's files first (`src/{{className}}.cs`, and for a form
 `src/View_{{className}}.razor`), each with `derivedFromClaimIds` = the spec ids it cites, then one entry per stub file
-(`derivedFromClaimIds` empty). Nothing else.
+(`derivedFromClaimIds` empty), then the claim tests file (`derivedFromClaimIds` = the claims it tests). Nothing else.
 
 # User
 

@@ -738,7 +738,7 @@ public sealed class CompileValidator
             scaffold.Id, run.Status, run.Summary);
     }
 
-    private static async Task<(int ExitCode, string Log)> RunDotnetBuildAsync(
+    internal static async Task<(int ExitCode, string Log)> RunDotnetBuildAsync(
         string workDir, CancellationToken ct)
     {
         var psi = new ProcessStartInfo

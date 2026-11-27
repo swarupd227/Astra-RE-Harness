@@ -912,7 +912,7 @@ public sealed class TestPackValidator
             scaffold.Id, run.Status, run.Summary);
     }
 
-    private static async Task<(int ExitCode, string Log)> RunDotnetTestAsync(
+    internal static async Task<(int ExitCode, string Log)> RunDotnetTestAsync(
         string workDir, CancellationToken ct)
     {
         // `dotnet test` without a project arg walks the cwd for the FIRST

@@ -134,7 +134,10 @@ public sealed class AssemblyService
                 $"{module.Report.Shared.Count} item(s) held once, {module.Report.Conflicts.Count} disagreement(s) recorded.");
 
             // ── compile + test, one gate slot ──
-            await GateAsync(db, sp.GetRequiredService<MavenClient>(), blob, storage, row, module, ct);
+            if (string.Equals(row.TargetStack, Astra.Api.Llm.FaithfulConversion.Stack, StringComparison.OrdinalIgnoreCase))
+                await DotnetGateAsync(db, blob, storage, row, module, ct);
+            else
+                await GateAsync(db, sp.GetRequiredService<MavenClient>(), blob, storage, row, module, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -185,6 +188,7 @@ public sealed class AssemblyService
             .Select(s => new { s.Id, s.Spec!.SubroutineId, s.GeneratedAt })
             .ToListAsync(ct);
         var latest = scaffolds.GroupBy(s => s.SubroutineId).ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.GeneratedAt).First().Id);
+        var generatedAt = scaffolds.ToDictionary(s => s.Id, s => s.GeneratedAt);
         var scaffoldIds = latest.Values.ToList();
         var runs = await db.ValidationRuns.AsNoTracking()
             .Where(v => scaffoldIds.Contains(v.ScaffoldId) && (v.Stage == "COMPILE" || v.Stage == "TEST_PACK"))
@@ -203,7 +207,7 @@ public sealed class AssemblyService
             if (request.RequireTests && tests != "PASSED") { excluded.Add(new(u.Id, u.Name, u.Path, tests is null ? "its test pack has not run yet" : $"its tests do not pass (latest test pack: {tests.ToLowerInvariant()})")); continue; }
             var files = await RepairHints.ReadPackageAsync(db, blob, sid, ct);
             if (files.Count == 0) { excluded.Add(new(u.Id, u.Name, u.Path, "its package could not be read")); continue; }
-            included.Add(new UnitPackage(u.Id, u.Name, u.Path, sid, files));
+            included.Add(new UnitPackage(u.Id, u.Name, u.Path, sid, files, generatedAt.GetValueOrDefault(sid)));
         }
         return (included, excluded);
     }
@@ -282,6 +286,78 @@ public sealed class AssemblyService
             await FinishAsync(db, row, "FAILED", $"The application builds; {failed} of {total} tests fail and {timedOutBatches} batch(es) of units did not finish in time. The log names them.", ct);
         else
             await FinishAsync(db, row, "FAILED", $"The application builds; {failed} of {total} tests fail together that passed unit by unit. The log names them.", ct);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex DotnetSummary = new(
+        @"(?<verdict>Passed|Failed)!\s*-\s*Failed:\s*(?<failed>\d+),\s*Passed:\s*(?<passed>\d+),\s*Skipped:\s*(?<skipped>\d+),\s*Total:\s*(?<total>\d+)",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// The .NET gate for an assembled application: `dotnet build` of the application, then `dotnet test` of every unit's
+    /// tests together, in this container (the .NET SDK is in the API image), holding one gate slot for both.
+    /// </summary>
+    private async Task DotnetGateAsync(AppDbContext db, IBlobClient blob, StorageOptions storage, ModuleAssembly row, AssembledModule module, CancellationToken ct)
+    {
+        _bus.Publish(row.Id, Agent, "compile", "stage", null, "Waiting for a build slot…");
+        using var slot = await GateExecutorPool.Shared.AcquireAsync(ct, ahead =>
+        {
+            _bus.Log(row.Id, Agent, "compile", $"Waiting for a build slot ({ahead} queued).");
+            return Task.CompletedTask;
+        });
+        var dir = Path.Combine(Path.GetTempPath(), $"astra-assembly-{row.Id:N}");
+        var log = new StringBuilder();
+        try
+        {
+            foreach (var (path, content) in module.Files)
+            {
+                var abs = Path.Combine(dir, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                await File.WriteAllTextAsync(abs, content, ct);
+            }
+            _bus.Publish(row.Id, Agent, "compile", "stage", null, "Building the assembled application…");
+            var (buildExit, buildLog) = await Astra.Api.Validation.CompileValidator.RunDotnetBuildAsync(dir, ct);
+            log.AppendLine(Tail(buildLog, 120_000));
+            row.CompileStatus = buildExit == 0 ? "PASSED" : "FAILED";
+            if (buildExit != 0)
+            {
+                var errors = System.Text.RegularExpressions.Regex.Matches(buildLog, @": error [A-Z]+\d+").Count;
+                row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
+                await FinishAsync(db, row, "FAILED", $"Assembled {row.UnitCount} code units, but the application does not build ({errors} compile error line(s)). The log says where.", ct);
+                return;
+            }
+            if (!Directory.Exists(Path.Combine(dir, "tests")))
+            {
+                row.TestStatus = "PASSED";
+                row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
+                await FinishAsync(db, row, "PASSED", $"One application from {row.UnitCount} code units: it builds (no tests were carried).", ct);
+                return;
+            }
+            _bus.Publish(row.Id, Agent, "test", "stage", null, "Running every unit's tests together…");
+            var (testExit, testLog) = await Astra.Api.Validation.TestPackValidator.RunDotnetTestAsync(dir, ct);
+            log.AppendLine(Tail(testLog, 200_000));
+            int total = 0, failed = 0, skipped = 0;
+            foreach (System.Text.RegularExpressions.Match m in DotnetSummary.Matches(testLog))
+            {
+                total += int.Parse(m.Groups["total"].Value);
+                failed += int.Parse(m.Groups["failed"].Value);
+                skipped += int.Parse(m.Groups["skipped"].Value);
+            }
+            row.TestsTotal = total;
+            row.TestsFailed = failed;
+            row.GateLogBlobUri = await blob.PutTextAsync(storage.Buckets.Scaffolds, $"assemblies/{row.Id:N}/gate.log", log.ToString(), "text/plain", ct);
+            row.TestStatus = total == 0 && testExit != 0 ? "ERRORED" : failed == 0 && testExit == 0 ? "PASSED" : "FAILED";
+            var skippedNote = skipped > 0 ? $" ({skipped} skipped: they need code whose source is not in the project)" : "";
+            if (row.TestStatus == "PASSED")
+                await FinishAsync(db, row, "PASSED", $"One application from {row.UnitCount} code units: it builds and all {total - skipped} runnable tests pass{skippedNote}.", ct);
+            else if (row.TestStatus == "ERRORED")
+                await FinishAsync(db, row, "FAILED", "The application builds, but its tests did not run (the tests project does not build). The log says why.", ct);
+            else
+                await FinishAsync(db, row, "FAILED", $"The application builds; {failed} of {total} tests fail together{skippedNote}. The log names them.", ct);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
     }
 
     /// <summary>Units tested per request: small enough that a batch of Spring contexts finishes well inside the limit.</summary>

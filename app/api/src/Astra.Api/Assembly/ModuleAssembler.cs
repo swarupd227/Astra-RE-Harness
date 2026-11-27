@@ -8,7 +8,8 @@ public sealed record UnitPackage(
     string UnitName,
     string SourcePath,
     Guid ScaffoldId,
-    IReadOnlyDictionary<string, string> Files);
+    IReadOnlyDictionary<string, string> Files,
+    DateTimeOffset? GeneratedAt = null);
 
 /// <summary>What to call the assembled application.</summary>
 public sealed record AssemblyOptions(string ModuleName, string? BasePackage = null);
@@ -47,7 +48,7 @@ public interface IModuleAssembler
 
 public static class ModuleAssemblers
 {
-    private static readonly IModuleAssembler[] All = { new JavaSpringAssembler() };
+    private static readonly IModuleAssembler[] All = { new JavaSpringAssembler(), new DotnetFaithfulAssembler() };
 
     /// <summary>The assembler for a target stack, or null when that stack cannot be assembled yet.</summary>
     public static IModuleAssembler? For(string targetStack) =>

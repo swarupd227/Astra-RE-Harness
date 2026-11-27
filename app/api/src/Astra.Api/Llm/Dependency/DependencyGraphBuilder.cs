@@ -104,6 +104,7 @@ public sealed class DependencyGraphBuilder
         var externalCallees = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var calleeCount = new Dictionary<Guid, int>();
         var callerCount = new Dictionary<Guid, int>();
+        var vb6 = new Vb6Scope(subs.Where(s => string.Equals(s.SourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase)));
         foreach (var sub in subs)
         {
             var calls = ReadNameList(sub.CalledSubroutines);
@@ -111,9 +112,13 @@ public sealed class DependencyGraphBuilder
             // Two raw spellings can resolve to one target ("Save" and
             // "OrderService.Save") — dedupe per caller so counts stay honest.
             var resolvedTargets = new HashSet<Guid>();
+            var isVb6 = string.Equals(sub.SourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase);
             foreach (var rawCall in calls.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!byName.TryGetValue(rawCall.ToUpperInvariant(), out var target)
+                Subroutine? target = null;
+                if (isVb6)
+                    target = vb6.Resolve(sub, rawCall);   // VB6 scoping only: never a same-named routine of another form
+                else if (!byName.TryGetValue(rawCall.ToUpperInvariant(), out target)
                     && !byTypeAndName.TryGetValue(rawCall, out target))
                 {
                     // Fall back through the name-format mismatches: a
@@ -316,6 +321,47 @@ public sealed class DependencyGraphBuilder
     /// State classification — most-progressed wins. Order:
     /// COMMITTED > SCAFFOLDED > SIGNED > DRAFT > EXTRACTING > PARSED.
     /// </summary>
+    /// <summary>
+    /// How VB6 resolves a call written without an object: to a routine of the caller's own module first, then to a
+    /// public routine of a standard module (.bas), which VB6 makes visible project-wide. A form's or class's members are
+    /// reachable only through an object (<c>frmX.Refresh</c>, <c>moTallies.Run</c>); the parser records those calls by
+    /// the member's name, so a name that exactly one class module defines is taken to be that class's method. A form's
+    /// routine is never the target of a call from another file: <c>cmdDone_Click</c> in one form is not the
+    /// <c>cmdDone_Click</c> of the other twenty-one. A name that stays ambiguous is left unresolved, never guessed.
+    /// </summary>
+    internal sealed class Vb6Scope
+    {
+        private readonly Dictionary<(Guid File, string Name), Subroutine> _inFile = new();
+        private readonly Dictionary<string, Subroutine?> _modules = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Subroutine?> _classes = new(StringComparer.OrdinalIgnoreCase);
+
+        public Vb6Scope(IEnumerable<Subroutine> subs)
+        {
+            foreach (var s in subs)
+            {
+                var name = BareName(s.Name);
+                _inFile.TryAdd((s.SourceFileId, name.ToUpperInvariant()), s);
+                var path = s.SourceFile?.RelativePath ?? "";
+                var isPrivate = (s.Signature ?? "").TrimStart().StartsWith("Private", StringComparison.OrdinalIgnoreCase);
+                if (isPrivate) continue;
+                var index = path.EndsWith(".bas", StringComparison.OrdinalIgnoreCase) ? _modules
+                    : path.EndsWith(".cls", StringComparison.OrdinalIgnoreCase) ? _classes : null;
+                if (index is null) continue;
+                // A second definition makes the name ambiguous (null): it is then never resolved by that index.
+                index[name] = index.ContainsKey(name) && index[name]?.Id != s.Id ? null : s;
+            }
+        }
+
+        public Subroutine? Resolve(Subroutine caller, string rawCall)
+        {
+            var name = BareName(rawCall);
+            if (_inFile.TryGetValue((caller.SourceFileId, name.ToUpperInvariant()), out var own)) return own;
+            if (_modules.TryGetValue(name, out var module)) return module;
+            if (_classes.TryGetValue(name, out var cls)) return cls;
+            return null;
+        }
+    }
+
     private static string ClassifyState(Subroutine sub, Spec? spec, Scaffold? scaffold)
     {
         if (scaffold is not null && scaffold.State == "COMMITTED") return "COMMITTED";
