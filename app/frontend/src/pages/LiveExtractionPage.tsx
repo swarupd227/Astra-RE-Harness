@@ -220,7 +220,7 @@ export function LiveExtractionPage() {
             </span>
             <div>
               <p className="label">
-                Extraction in progress
+                {status === 'success' ? 'Spec extracted' : status === 'error' ? 'Extraction failed' : 'Extraction in progress'}
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
                 {s.name}
@@ -275,12 +275,13 @@ export function LiveExtractionPage() {
           <div className="flex items-center justify-between gap-3 text-caption text-ink-secondary">
             <span className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-volt motion-safe:animate-pulse" aria-hidden="true" />
-              <span className="font-mono uppercase tracking-wider">Claude is writing</span>
+              <span>Claude is writing the spec — usually about a minute for a routine this size</span>
             </span>
-            <span className="font-mono">
-              {tokenChunkCount.toLocaleString()} chunks · {streamedText.length.toLocaleString()} chars
-            </span>
+            <span className="font-mono">{streamedText.length.toLocaleString()} characters so far</span>
           </div>
+          {/* The raw stream is machine JSON (schema URLs, field ids): available, not in front of the user. */}
+          <details className="mt-1 text-caption">
+            <summary className="cursor-pointer text-ink-tertiary hover:text-ink-primary">Show raw output</summary>
           <pre
             ref={(el) => {
               streamPreviewRef.current = el;
@@ -292,6 +293,7 @@ export function LiveExtractionPage() {
           >
             {streamedText.length > 1200 ? '…' + streamedText.slice(-1200) : streamedText}
           </pre>
+          </details>
         </div>
       )}
 

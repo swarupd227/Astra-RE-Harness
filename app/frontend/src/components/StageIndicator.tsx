@@ -1,11 +1,12 @@
 import { clsx } from 'clsx';
 
 const STAGES = [
-  { key: 'priming', label: 'Priming context' },
-  { key: 'loading_source', label: 'Loading source' },
-  { key: 'streaming', label: 'Streaming response' },
-  { key: 'validating', label: 'Validating' },
-  { key: 'persisting', label: 'Persisting' },
+  // What the user would call each step (the keys are the engine's stage ids and stay as they are).
+  { key: 'priming', label: 'Preparing' },
+  { key: 'loading_source', label: 'Reading the routine' },
+  { key: 'streaming', label: 'Writing the spec' },
+  { key: 'validating', label: 'Checking it' },
+  { key: 'persisting', label: 'Saving' },
 ];
 
 export function StageIndicator({ currentStage }: { currentStage: string | null }) {

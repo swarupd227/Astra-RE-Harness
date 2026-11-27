@@ -25,14 +25,19 @@ export function ProviderStrip({ info, latencyMs, tokens }: {
       <span>
         prompt <span className="text-ink-secondary">{info.promptTemplateId}@{info.promptTemplateVersion}</span>
       </span>
-      <span title={info.configVersion}>config <span className="text-ink-secondary">{info.configVersion}</span></span>
+      {/* The provider config is an internal string ("anthropic:zdr=true:no-train:…"); say what it means. */}
+      <span title={info.configVersion}>
+        {/zdr=true/.test(info.configVersion ?? '') || /no-train/.test(info.configVersion ?? '')
+          ? <span className="text-ink-secondary">zero data retention · not used for training</span>
+          : <>config <span className="text-ink-secondary">{info.configVersion}</span></>}
+      </span>
       {tokens && (
         <span>
           tokens <span className="text-ink-secondary">{tokens.in} in / {tokens.out} out</span>
         </span>
       )}
       {latencyMs !== undefined && (
-        <span>latency <span className="text-ink-secondary">{latencyMs} ms</span></span>
+        <span>took <span className="text-ink-secondary">{latencyMs < 1000 ? `${latencyMs} ms` : latencyMs < 60_000 ? `${(latencyMs / 1000).toFixed(1)} s` : `${Math.floor(latencyMs / 60_000)} min ${Math.round((latencyMs % 60_000) / 1000)} s`}</span></span>
       )}
     </div>
   );

@@ -35,7 +35,8 @@ commit.
 | 26 | Validation policy | `/platform/validation` | Live (UI + API text) |
 | 27 | Harmonisation | `/platform/harmonisation` | Live |
 | 28 | Generated package | `/scaffolds/:id` | Live (gate strip) |
-| 29+ | Extract & live-generation screens | | Not reviewed live — opening them starts a paid model run |
+| 29 | Extract spec (live) | `/subroutines/:id/extract` | Reviewed 2026-11-27 (one approved run on StartAgain); fixes below |
+| 30 | Live code generation | `/specs/:id/scaffold` | Not reviewed — needs a signed spec, and signing is an SME's decision |
 
 ## 1 · Home (`/`)
 1. Estate summary on top: 4 KPI cards (Programmes · Routines with code · Waiting for review · Runs in progress).
@@ -334,3 +335,24 @@ commit.
 4. "SCAFFOLDED" raw state pill and "Scaffolded package" → "Generated package · Ready" / "Tests failing" from the gates.
 5. The preview ("It closes itself at 9:27:48 PM") is good — say how long is left ("closes in 23 min") and offer
    "Keep it running".
+
+## 29 · Extract spec, live (`/subroutines/:id/extract`)
+Reviewed on one user-approved run: `StartAgain` (27 lines, Actuarial sample - auto insurance premium), 77 s,
+5 464 tokens in / 5 121 out.
+1. **The heading still says "Extraction in progress" after it finished** ("Extraction complete." is a line below it) —
+   the heading should change to "Spec extracted" with the next step as the primary button ("View draft spec").
+2. **Raw JSON streams on screen** while Claude writes ("{\"$schema\": \"https://nous.dev/schemas/…\", …") — a third-party
+   brand URL and machine field names in front of the user. Show the claims appearing as readable rows (summary first,
+   then each invariant / edge case as it completes) and keep the raw stream behind "Show raw output".
+3. Internal provider string on screen: "config anthropic:zdr=true:no-train:no-retention:enterprise-endpoint" — say
+   "Zero data retention · not used for training" in words, or put it in a details popover.
+4. No sense of time: give an expected duration from past runs of similar size ("usually about a minute") and a
+   progress line based on the stages; "latency 76526 ms" → "took 1 min 17 s".
+5. The stage list (Priming context → Loading source → Streaming response → Validating → Persisting) is engine
+   vocabulary — "Reading the routine → Writing the spec → Checking it → Saving".
+6. Routine page, seen on the way in: the target-stack panel still lists 7 stacks, 5 of them "No VB6 archetype for this
+   stack yet" (page 5, item 4 — still open).
+
+## 30 · Live code generation (`/specs/:id/scaffold`)
+Not reviewed: it needs a signed spec, and signing is a human SME decision — the agent does not sign specs to reach a
+screen. Review it on the next spec an SME signs.
