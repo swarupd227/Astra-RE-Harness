@@ -424,6 +424,11 @@ public sealed class ScaffoldPipeline
             .ToListAsync(ct);
         foreach (var c in candidates)
         {
+            // A package whose latest build failed is not worth copying: this routine is converted afresh instead.
+            var lastCompile = await _db.ValidationRuns.AsNoTracking()
+                .Where(v => v.ScaffoldId == c.Id && v.Stage == "COMPILE")
+                .OrderByDescending(v => v.StartedAt).Select(v => v.Status).FirstOrDefaultAsync(ct);
+            if (lastCompile is "FAILED" or "ERRORED") continue;
             try
             {
                 using var doc = JsonDocument.Parse(await _blob.GetTextAsync(c.PackageBlobUri, ct));

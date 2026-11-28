@@ -120,6 +120,16 @@ public static class App
     public static int Major { get; set; } = 1;
     public static int Minor { get; set; }
     public static int Revision { get; set; }
+    public static bool PrevInstance { get; set; }
+    public static string HelpFile { get; set; } = "";
+    public static string CompanyName { get; set; } = "";
+    public static string ProductName { get; set; } = "";
+    public static string FileDescription { get; set; } = "";
+    public static string Comments { get; set; } = "";
+    public static int hInstance => 0;
+    public static int LogMode => 0;
+    /// <summary>VB6 <c>App.LogEvent</c>: written to the process log (standard error).</summary>
+    public static void LogEvent(string message, int eventType = 0) => Console.Error.WriteLine($"[{eventType}] {message}");
     public static IVbDialogs Dialogs { get; set; } = new RecordingDialogs();
     /// <summary>Raised when code shows a form (name, modal). The web host navigates or opens a dialog.</summary>
     public static event Action<string, bool>? FormShown;
@@ -172,6 +182,36 @@ public abstract class VbForm
     public int Width { get; set; }
     public int Height { get; set; }
     public string Tag { get; set; } = "";
+    public bool KeyPreview { get; set; }
+    public int BackColor { get; set; } = VbColor.vbButtonFace;
+    public int ForeColor { get; set; } = VbColor.vbButtonText;
+    public int BorderStyle { get; set; } = 2;
+    public bool ControlBox { get; set; } = true;
+    public bool MinButton { get; set; } = true;
+    public bool MaxButton { get; set; } = true;
+    public bool Moveable { get; set; } = true;
+    public bool ShowInTaskbar { get; set; } = true;
+    public int StartUpPosition { get; set; }
+    public int ScaleMode { get; set; } = 1;
+    public int ScaleWidth { get; set; }
+    public int ScaleHeight { get; set; }
+    public int MousePointer { get; set; }
+    public string FontName { get; set; } = "MS Sans Serif";
+    public float FontSize { get; set; } = 8.25f;
+    public bool FontBold { get; set; }
+    public string Icon { get; set; } = "";
+    public int HelpContextID { get; set; }
+    /// <summary>The control that has the focus (the page sets it; VB6 code reads it, e.g. in Form_KeyDown).</summary>
+    public VbControl? ActiveControl { get; set; }
+
+    /// <summary>VB6 <c>Me.Controls</c>: every control field of the form, found by reflection, in declaration order.</summary>
+    public IReadOnlyList<VbControl> Controls =>
+        GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            .Select(f => f.GetValue(this)).OfType<VbControl>().ToList();
+
+    public void SetFocus() { }
+    public void Cls() { }
+    public void PrintForm() { }
 
     /// <summary>The form's VB_Name, which is also its route segment (<c>/forms/frmName</c>).</summary>
     public virtual string FormName => GetType().Name;
@@ -225,6 +265,65 @@ public abstract class VbFormView<TForm> : ComponentBase, IDisposable where TForm
     private void Redraw() => InvokeAsync(StateHasChanged);
 
     public void Dispose() => Form.Changed -= Redraw;
+}
+
+/// <summary>VB6's built-in constants that .NET's Microsoft.VisualBasic does not define, with VB6's values. Plain
+/// int constants, so they assign to int properties and compare with ints exactly as in VB6.</summary>
+public static class VbMousePointer
+{
+    public const int vbDefault = 0, vbNormal = 0, vbArrow = 1, vbCrosshair = 2, vbIbeam = 3, vbIconPointer = 4,
+        vbSizePointer = 5, vbSizeNESW = 6, vbSizeNS = 7, vbSizeNWSE = 8, vbSizeWE = 9, vbUpArrow = 10,
+        vbHourglass = 11, vbNoDrop = 12, vbArrowHourglass = 13, vbArrowQuestion = 14, vbSizeAll = 15, vbCustom = 99;
+}
+
+public static class VbKey
+{
+    public const int vbKeyBack = 8, vbKeyTab = 9, vbKeyReturn = 13, vbKeyShift = 16, vbKeyControl = 17, vbKeyMenu = 18,
+        vbKeyPause = 19, vbKeyEscape = 27, vbKeySpace = 32, vbKeyPageUp = 33, vbKeyPageDown = 34, vbKeyEnd = 35,
+        vbKeyHome = 36, vbKeyLeft = 37, vbKeyUp = 38, vbKeyRight = 39, vbKeyDown = 40, vbKeyInsert = 45, vbKeyDelete = 46,
+        vbKey0 = 48, vbKey1 = 49, vbKey2 = 50, vbKey3 = 51, vbKey4 = 52, vbKey5 = 53, vbKey6 = 54, vbKey7 = 55, vbKey8 = 56, vbKey9 = 57,
+        vbKeyA = 65, vbKeyB = 66, vbKeyC = 67, vbKeyD = 68, vbKeyE = 69, vbKeyF = 70, vbKeyG = 71, vbKeyH = 72, vbKeyI = 73,
+        vbKeyJ = 74, vbKeyK = 75, vbKeyL = 76, vbKeyM = 77, vbKeyN = 78, vbKeyO = 79, vbKeyP = 80, vbKeyQ = 81, vbKeyR = 82,
+        vbKeyS = 83, vbKeyT = 84, vbKeyU = 85, vbKeyV = 86, vbKeyW = 87, vbKeyX = 88, vbKeyY = 89, vbKeyZ = 90,
+        vbKeyF1 = 112, vbKeyF2 = 113, vbKeyF3 = 114, vbKeyF4 = 115, vbKeyF5 = 116, vbKeyF6 = 117, vbKeyF7 = 118,
+        vbKeyF8 = 119, vbKeyF9 = 120, vbKeyF10 = 121, vbKeyF11 = 122, vbKeyF12 = 123;
+    public const int vbShiftMask = 1, vbCtrlMask = 2, vbAltMask = 4;
+    public const int vbLeftButton = 1, vbRightButton = 2, vbMiddleButton = 4;
+}
+
+public static class VbColor
+{
+    public const int vbBlack = 0x0, vbRed = 0xFF, vbGreen = 0xFF00, vbYellow = 0xFFFF, vbBlue = 0xFF0000,
+        vbMagenta = 0xFF00FF, vbCyan = 0xFFFF00, vbWhite = 0xFFFFFF;
+    // System colours (VB6 stores them as 0x80000000 | index).
+    public const int vbButtonFace = unchecked((int)0x8000000F), vbButtonText = unchecked((int)0x80000012),
+        vbWindowBackground = unchecked((int)0x80000005), vbWindowText = unchecked((int)0x80000008),
+        vbHighlight = unchecked((int)0x8000000D), vbHighlightText = unchecked((int)0x8000000E),
+        vbGrayText = unchecked((int)0x80000011), vbInfoBackground = unchecked((int)0x80000018);
+}
+
+/// <summary>Other VB6 constants: form/window states, check box values, alignment, query-unload reasons, drag.</summary>
+public static class VbConst
+{
+    public const int vbNormal = 0, vbMinimized = 1, vbMaximized = 2;
+    public const int vbUnchecked = 0, vbChecked = 1, vbGrayed = 2;
+    public const int vbLeftJustify = 0, vbRightJustify = 1, vbCenter = 2;
+    public const int vbFormControlMenu = 0, vbFormCode = 1, vbAppWindows = 2, vbAppTaskManager = 3, vbFormMDIForm = 4;
+    public const int vbTwips = 1, vbPoints = 2, vbPixels = 3;
+    public const int vbBeginDrag = 1, vbEndDrag = 2, vbCancel = 0;
+    public const int vbModal = 1, vbModeless = 0;
+}
+
+/// <summary>VB6's <c>Screen</c> object: the mouse pointer and what is active, as the host reports them.</summary>
+public static class Screen
+{
+    public static int MousePointer { get => Vb.MousePointer; set => Vb.MousePointer = value; }
+    public static VbForm? ActiveForm { get; set; }
+    public static VbControl? ActiveControl { get; set; }
+    public static int Width { get; set; } = 1920 * 15;
+    public static int Height { get; set; } = 1080 * 15;
+    public static int TwipsPerPixelX => 15;
+    public static int TwipsPerPixelY => 15;
 }
 
 /// <summary>A control's place on the page: VB6 twips (15 per pixel) as absolute CSS, so the form keeps its layout.</summary>

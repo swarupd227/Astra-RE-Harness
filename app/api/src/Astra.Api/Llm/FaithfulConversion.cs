@@ -115,10 +115,14 @@ public static class FaithfulConversion
     /// What a unit's conversion depends on: its source text, its signed specs and the target. Two routines of the same
     /// unit with the same key get the same package, so the second one reuses the first instead of a new model call.
     /// </summary>
+    /// <summary>Bumped whenever the faithful prompts or a faithful archetype's runtime change, so a package made
+    /// before the change is never reused for a sibling routine after it.</summary>
+    public const int UnitKeyVersion = 2;
+
     public static string UnitKey(string sourceText, UnitContext unit, string targetStack)
     {
         var sb = new StringBuilder();
-        sb.Append(targetStack).Append('\n').Append(sourceText.Replace("\r\n", "\n")).Append('\n');
+        sb.Append("v").Append(UnitKeyVersion).Append('\n').Append(targetStack).Append('\n').Append(sourceText.Replace("\r\n", "\n")).Append('\n');
         foreach (var s in unit.SignedSpecs.OrderBy(s => s.Routine, StringComparer.Ordinal).ThenBy(s => s.SpecJson, StringComparer.Ordinal))
             sb.Append(s.Routine).Append('\u0001').Append(s.SpecJson).Append('\n');
         return "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();

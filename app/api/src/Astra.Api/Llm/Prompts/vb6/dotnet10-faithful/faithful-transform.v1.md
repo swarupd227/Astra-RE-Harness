@@ -1,6 +1,6 @@
 ---
 id: vb6-faithful-transform
-version: v1.0
+version: v1.1
 schemaId: vb6
 targetStack: dotnet10-faithful
 kind: faithful-transform
@@ -86,7 +86,13 @@ Rules:
    FileOpen with OpenMode/OpenAccess, LineInput, Input, Print, PrintLine, Write, WriteLine, FileGet, FilePut, Seek,
    LOF, EOF, FileClose, Kill, Dir, FileCopy, MkDir, FileLen, FileDateTime, Rename) — `Open f For Random As #n Len = L`
    → `FileSystem.FileOpen(n, f, OpenMode.Random, RecordLength: L)`, `Get #n, r, rec` → `FileSystem.FileGet(n, ref rec, r)`.
-   Never re-implement them. What .NET lacks off Windows comes from Faithful.Vb6: `MsgBox` → `Vb.MsgBox`, `InputBox` →
+   `FileSystem.FileOpen`'s parameters are (FileNumber, FileName, Mode, Access, Share, RecordLength): pass Access and
+   Share by name (`Share: OpenShare.Shared`, `Access: OpenAccess.Read`), never positionally out of order. VB6's own
+   constants that .NET lacks come from Faithful.Vb6, always written with their class: `VbKey.vbKeyReturn`,
+   `VbKey.vbShiftMask`, `VbColor.vbRed`, `VbMousePointer.vbHourglass`, `VbConst.vbChecked`, `VbConst.vbMaximized`;
+   `vbCrLf`, `vbTab`, `vbNullString` and the MsgBox constants are `Constants.vbCrLf` (Microsoft.VisualBasic) and
+   `VbMsgBoxStyle`/`VbMsgBoxResult`. A Long passed where the callee takes an Integer is cast explicitly
+   (`(short)Err.Number`): C# never narrows implicitly. Never re-implement them. What .NET lacks off Windows comes from Faithful.Vb6: `MsgBox` → `Vb.MsgBox`, `InputBox` →
    `Vb.InputBox`, `App.Path` → `App.Path`, `DoEvents` → `Vb.DoEvents()`, `Screen.MousePointer = x` →
    `Vb.MousePointer = x`, `Err` → `Err`.
 8. **Error handling.** `On Error GoTo L` → `try { … } catch (Exception ex) { Err.Set(ex); <handler> }`; a handler's
@@ -100,7 +106,13 @@ Rules:
    `ref`; others may be by value. Optional parameters keep their defaults (last in the list); `IsMissing(p)` → a
    nullable parameter and `p is null`. `ParamArray` → `params object[]`.
 10. **Forms and controls.** A control's type follows the runtime (VSFlexGrid/MSFlexGrid → VbFlexGrid; ListBox →
-    VbListBox; ComboBox → VbComboBox; …; any other ActiveX control → VbControl with a comment naming its ProgID). A
+    VbListBox; ComboBox → VbComboBox; CommonDialog → VbCommonDialog; …; any other ActiveX control (spin boxes, custom
+    labels, date pickers) → VbActiveXControl, which has Caption, Text, Value, Min, Max, Locked, ListIndex and an indexer
+    for anything else, with a comment naming its ProgID). Every control and form property you set must exist on the
+    runtime type (VbControl has Enabled, Visible, TabStop, Tag, ToolTipText, Left/Top/Width/Height, Font*,
+    ForeColor/BackColor, BorderStyle, MousePointer, Index; VbForm has Caption, KeyPreview, BackColor, ForeColor,
+    BorderStyle, ControlBox, Min/MaxButton, StartUpPosition, WindowState, ActiveControl, Controls, Font*); a design-time
+    property the runtime does not model goes in a comment, not in code. A
     control array (several `Begin` blocks with the same name and an `Index`) → `VbControlArray<T>`. VB6 indexed
     properties become indexers (`List(i)` → `List[i]`, `TextMatrix(r, c)` → `TextMatrix[r, c]`). `Me.` → `this.`;
     `Unload Me` → `Unload()`; `frmX.Show vbModal` (from anywhere) → `Forms.Get<frmX>().Show(Vb.vbModal);` followed by
@@ -114,12 +126,17 @@ Rules:
     <VB_Name> : VbForm` for a form), members limited to what this unit uses (fields with defaults; methods whose bodies
     `throw new NotImplementedException();`), first line
     `// TODO(faithful): stub for <VB_Name> — replaced by the real conversion in the assembled application.`
-    Global variables of another module are stubbed as `public static` fields of the right type. If the inventory or
+    Global variables of another module are stubbed as `public static` fields of the right type. A name the code uses
+    as a variable — `moBuild.Run`, `Set goX = …`, `gsPath = …` (VB6 prefixes such as mo/go/g/gs/gl/m mark variables) — is
+    a FIELD, never a class: declare it in the module stub that owns it (or in Globals) with the type it holds, and
+    stub that type (e.g. `public static clsBuildMasterSchedule moBuildMasterSchedule = new();` plus a stub of
+    clsBuildMasterSchedule). If the inventory or
     source does not tell you which module declares a global, put it in `src/Stubs/Units/Globals.cs`
     (`public static partial class Globals`) and `using static Faithful.Vb6App.Globals;`.
 12. **Referenced DLLs, OCXs and COM objects.** A type or object from a referenced library (not VB/VBA/stdole and not
     covered by Microsoft.VisualBasic) → a stub under `src/Stubs/<Library>/<Type>.cs`, namespace
-    `Faithful.External.<Library>`, members limited to what this unit uses, bodies throwing
+    `Faithful.External.<Library>` (`public partial class`), and `using Faithful.External.<Library>;` in every file that
+    uses it — never name a library type that has no stub file in the package. Members limited to what this unit uses, bodies throwing
     `NotImplementedException`, first line `// TODO(faithful): stub for <Library>.<Type> — the library's source is not
     part of this project.` `Declare Function … Lib "x"` → a `private static` method throwing
     `PlatformNotSupportedException` with the Declare kept in a comment (Win32 calls do not exist on .NET).

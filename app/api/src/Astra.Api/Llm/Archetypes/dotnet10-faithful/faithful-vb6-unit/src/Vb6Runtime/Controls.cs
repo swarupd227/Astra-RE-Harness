@@ -35,6 +35,24 @@ public class VbControl
     public int ForeColor { get; set; }
     public int BackColor { get; set; }
     public int Index { get; set; } = -1;
+    public bool TabStop { get; set; } = true;
+    public int Appearance { get; set; } = 1;
+    public int BorderStyle { get; set; }
+    public int MousePointer { get; set; }
+    public int DragMode { get; set; }
+    public int HelpContextID { get; set; }
+    public int WhatsThisHelpID { get; set; }
+    public bool CausesValidation { get; set; } = true;
+    public string FontName { get; set; } = "MS Sans Serif";
+    public float FontSize { get; set; } = 8.25f;
+    public bool FontBold { get; set; }
+    public bool FontItalic { get; set; }
+    public bool FontUnderline { get; set; }
+    public bool FontStrikethru { get; set; }
+    /// <summary>VB6 <c>ctl.Font.Name</c> / <c>ctl.Font.Size</c> … — the same values as the Font* properties.</summary>
+    public VbFont Font => new(this);
+    public object? Container { get; set; }
+    public object? Parent { get; set; }
     /// <summary>The UI asks for focus here; the markup moves it. A no-op outside a page.</summary>
     public bool FocusRequested { get; private set; }
     public void SetFocus() => FocusRequested = true;
@@ -47,6 +65,56 @@ public class VbControl
         if (width >= 0) Width = width;
         if (height >= 0) Height = height;
     }
+}
+
+/// <summary>A control's font as VB6 code addresses it (<c>lbl.Font.Bold = True</c>).</summary>
+public sealed class VbFont(VbControl owner)
+{
+    public string Name { get => owner.FontName; set => owner.FontName = value; }
+    public float Size { get => owner.FontSize; set => owner.FontSize = value; }
+    public bool Bold { get => owner.FontBold; set => owner.FontBold = value; }
+    public bool Italic { get => owner.FontItalic; set => owner.FontItalic = value; }
+    public bool Underline { get => owner.FontUnderline; set => owner.FontUnderline = value; }
+    public bool Strikethrough { get => owner.FontStrikethru; set => owner.FontStrikethru = value; }
+}
+
+/// <summary>
+/// A third-party ActiveX control the runtime has no specific type for (a spin box, a custom label, a date picker …):
+/// the properties VB6 code commonly sets on such controls, plus a bag for anything else
+/// (<c>ctl["SpecialProperty"] = x</c>). Name the ProgID in a comment where it is declared.
+/// </summary>
+public class VbActiveXControl : VbControl
+{
+    private readonly Dictionary<string, object?> _bag = new(StringComparer.OrdinalIgnoreCase);
+    public string Caption { get; set; } = "";
+    public string Text { get; set; } = "";
+    public object? Value { get; set; }
+    public double Min { get; set; }
+    public double Max { get; set; }
+    public bool Locked { get; set; }
+    public int ListIndex { get; set; } = -1;
+    public object? this[string property] { get => _bag.GetValueOrDefault(property); set => _bag[property] = value; }
+}
+
+/// <summary>VB6 CommonDialog (comdlg32.ocx): the dialogs are answered by the host; the properties keep their VB6 names.</summary>
+public class VbCommonDialog : VbControl
+{
+    public string FileName { get; set; } = "";
+    public string FileTitle { get; set; } = "";
+    public string Filter { get; set; } = "";
+    public int FilterIndex { get; set; }
+    public string InitDir { get; set; } = "";
+    public string DialogTitle { get; set; } = "";
+    public string DefaultExt { get; set; } = "";
+    public int Flags { get; set; }
+    public bool CancelError { get; set; }
+    public int Color { get; set; }
+    public int Copies { get; set; } = 1;
+    public void ShowOpen() { }
+    public void ShowSave() { }
+    public void ShowPrinter() { }
+    public void ShowColor() { }
+    public void ShowFont() { }
 }
 
 public class VbLabel : VbControl
@@ -290,12 +358,31 @@ public sealed class VbControlArray<T> where T : VbControl, new()
 {
     private readonly SortedDictionary<int, T> _items = new();
 
+    public VbControlArray() { }
+
+    /// <summary>A control array whose elements 0..count-1 exist at design time.</summary>
+    public VbControlArray(int count)
+    {
+        for (var i = 0; i < count; i++) _ = this[i];
+    }
+
+    /// <summary>A control array built from its design-time elements (each with its Index set).</summary>
+    public VbControlArray(params T[] elements)
+    {
+        foreach (var e in elements) _items[e.Index >= 0 ? e.Index : _items.Count] = e;
+    }
+
     public T this[int index]
     {
         get
         {
             if (!_items.TryGetValue(index, out var c)) _items[index] = c = new T { Index = index };
             return c;
+        }
+        set
+        {
+            value.Index = index;
+            _items[index] = value;
         }
     }
 
