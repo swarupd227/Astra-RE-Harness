@@ -55,7 +55,7 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: '/subroutines/:id/review', title: 'Spec review', crumbs: [ROUTINES, ROUTINE, { label: 'Spec review' }] },
 
   { pattern: '/specs/:id/audit', title: 'Audit trail', crumbs: [ROUTINES, { label: 'Spec' }, { label: 'Audit trail' }] },
-  { pattern: '/specs/:id/scaffold', title: 'Generate scaffold', crumbs: [ROUTINES, { label: 'Spec' }, { label: 'Generate scaffold' }] },
+  { pattern: '/specs/:id/scaffold', title: 'Generate code', crumbs: [ROUTINES, { label: 'Spec' }, { label: 'Generate code' }] },
 
   { pattern: '/scaffolds', title: 'Generated code', crumbs: [{ label: 'Generated code' }] },
   { pattern: '/scaffolds/:id', title: 'Generated package', crumbs: [SCAFFOLDS, { label: 'Generated package' }] },

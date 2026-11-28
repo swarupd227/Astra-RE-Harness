@@ -333,13 +333,19 @@ export function LiveExtractionPage() {
           {status !== 'idle' && (
             <>
               {warnings.length > 0 && (
-                <div className="border-b border-status-scaffolded/40 bg-status-warn/10 px-6 py-3">
-                  {warnings.map((w, i) => (
-                    <p key={i} className="flex items-start gap-2 text-caption text-status-scaffolded">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5" aria-hidden="true" />
-                      <span className="font-mono uppercase">{w.code}</span>
-                      <span className="text-ink-primary">{w.message}</span>
-                    </p>
+                // One line per kind of warning, in words, with the individual messages folded: nine
+                // "CITATION_UNRESOLVED …" rows used to push the spec below the fold.
+                <div className="space-y-1 border-b border-status-scaffolded/40 bg-status-warn/10 px-6 py-3" data-testid="extract-warnings">
+                  {groupWarnings(warnings).map((g) => (
+                    <details key={g.code} className="text-caption">
+                      <summary className="flex cursor-pointer items-start gap-2 text-ink-primary">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-scaffolded" aria-hidden="true" />
+                        <span>{warningSentence(g.code, g.items.length)}</span>
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 pl-6 text-ink-secondary">
+                        {g.items.map((w, i) => <li key={i}>{w.message}</li>)}
+                      </ul>
+                    </details>
                   ))}
                 </div>
               )}
@@ -376,6 +382,27 @@ export function LiveExtractionPage() {
       </div>
     </div>
   );
+}
+
+function groupWarnings(ws: { code: string; message: string }[]) {
+  const by = new Map<string, { code: string; items: { code: string; message: string }[] }>();
+  for (const w of ws) {
+    const g = by.get(w.code) ?? { code: w.code, items: [] };
+    g.items.push(w);
+    by.set(w.code, g);
+  }
+  return [...by.values()];
+}
+
+/** A warning kind in words; unknown codes fall back to the code, lower-cased. */
+function warningSentence(code: string, n: number): string {
+  const s = n === 1 ? '' : 's';
+  switch (code) {
+    case 'CITATION_UNRESOLVED':
+      return `${n} citation${s} point${n === 1 ? 's' : ''} at lines outside this code unit — check those claims in review.`;
+    default:
+      return `${n} warning${s}: ${code.toLowerCase().replace(/_/g, ' ')}.`;
+  }
 }
 
 function parseRange(s: string): [number, number] | null {

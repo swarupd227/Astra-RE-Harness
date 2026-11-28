@@ -432,3 +432,10 @@ screen. Review it on the next spec an SME signs.
 28. **Dependency graph** — a Fortran project read "15 shared worksheet / variable links". **Done:** "shared-state
     links" with a tooltip naming what that is per language (COMMON blocks, worksheet cells, globals / class fields).
 29. **Pattern analysis** — "Run it" with no button for non-Admins. **Done:** says an Admin runs it, and how to ask.
+30. **Extract (live) and code generation (live)** — reviewed on a local stack with the mock provider (a fixture spec signed
+    there, as the e2e seed does). Extract: nine "CITATION_UNRESOLVED Citation '66-68' is outside source range 1-66" rows
+    pushed the spec below the fold. Generation: "Scaffold generation", "8 files streaming" after it finished, engine
+    stages (Priming … Persisting), "prompt @" with no prompt, "config mock:offline:no-network". **Done:** warnings grouped
+    per kind in one plain sentence ("9 citations point at lines outside this code unit — check those claims in review"),
+    details folded; "Generating code" → "Code generated · 8 files", Preparing · Writing the code · Checking it · Saving,
+    the prompt shown only when there is one, "offline · nothing leaves the platform". "Open scaffold" kept (demo specs).

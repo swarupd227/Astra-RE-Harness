@@ -22,14 +22,18 @@ export function ProviderStrip({ info, latencyMs, tokens }: {
         <span className="text-ink-tertiary/60">·</span>
         <span>{info.model}</span>
       </span>
-      <span>
-        prompt <span className="text-ink-secondary">{info.promptTemplateId}@{info.promptTemplateVersion}</span>
-      </span>
+      {info.promptTemplateId && (
+        <span>
+          prompt <span className="text-ink-secondary">{info.promptTemplateId}@{info.promptTemplateVersion}</span>
+        </span>
+      )}
       {/* The provider config is an internal string ("anthropic:zdr=true:no-train:…"); say what it means. */}
       <span title={info.configVersion}>
         {/zdr=true/.test(info.configVersion ?? '') || /no-train/.test(info.configVersion ?? '')
           ? <span className="text-ink-secondary">zero data retention · not used for training</span>
-          : <>config <span className="text-ink-secondary">{info.configVersion}</span></>}
+          : /offline|no-network/.test(info.configVersion ?? '')
+            ? <span className="text-ink-secondary">offline · nothing leaves the platform</span>
+            : <>config <span className="text-ink-secondary">{info.configVersion}</span></>}
       </span>
       {tokens && (
         <span>

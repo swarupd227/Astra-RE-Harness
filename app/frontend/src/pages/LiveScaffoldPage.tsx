@@ -30,10 +30,11 @@ type LiveFile = {
 };
 
 const STAGES = [
-  { key: 'priming', label: 'Priming' },
-  { key: 'streaming', label: 'Streaming code' },
-  { key: 'validating', label: 'Validating' },
-  { key: 'committing', label: 'Persisting' },
+  // The same plain steps as extraction (StageIndicator), not the engine's priming / persisting.
+  { key: 'priming', label: 'Preparing' },
+  { key: 'streaming', label: 'Writing the code' },
+  { key: 'validating', label: 'Checking it' },
+  { key: 'committing', label: 'Saving' },
 ];
 
 export function LiveScaffoldPage() {
@@ -171,10 +172,11 @@ export function LiveScaffoldPage() {
             </span>
             <div>
               <p className="label">
-                Scaffold generation
+                {status === 'success' ? 'Code generated' : status === 'error' ? 'Generation failed' : 'Generating code'}
               </p>
               <h1 className="font-mono text-h-md font-semibold text-ink-primary">
-                {orderedPaths.length} {orderedPaths.length === 1 ? 'file' : 'files'} streaming
+                {orderedPaths.length} {orderedPaths.length === 1 ? 'file' : 'files'}
+                {status === 'streaming' ? ' so far' : ''}
               </h1>
             </div>
           </div>
@@ -184,11 +186,11 @@ export function LiveScaffoldPage() {
                 alone gives no signal to assistive tech. */}
             <p className="sr-only" role="status" aria-live="polite">
               {status === 'success'
-                ? 'Scaffold generation complete.'
+                ? 'Code generation complete.'
                 : status === 'error'
-                  ? 'Scaffold generation failed.'
+                  ? 'Code generation failed.'
                   : stage
-                    ? `Scaffold stage: ${stage}.`
+                    ? `Code generation stage: ${stage}.`
                     : ''}
             </p>
             {status === 'streaming' && (
