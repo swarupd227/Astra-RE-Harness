@@ -437,7 +437,9 @@ export function DependencyGraphPage() {
                 <li>{g.stats.externalCalleeCount} call{g.stats.externalCalleeCount === 1 ? '' : 's'} to outside code (listed below)</li>
               )}
               <li>
-                {g.stats.sharedStorageEdgeCount} shared worksheet / variable link{g.stats.sharedStorageEdgeCount === 1 ? '' : 's'} ·{' '}
+                <span title="Code units that share state: COMMON blocks in Fortran, worksheet cells in a workbook, globals or class fields elsewhere">
+                  {g.stats.sharedStorageEdgeCount} shared-state link{g.stats.sharedStorageEdgeCount === 1 ? '' : 's'}
+                </span>{' '}·{' '}
                 {g.moduleGraph.stats.moduleCount} module{g.moduleGraph.stats.moduleCount === 1 ? '' : 's'}
                 {g.moduleGraph.stats.cyclicGroupCount > 0 ? ` · ${g.moduleGraph.stats.cyclicGroupCount} module cycle(s)` : ''}
               </li>
@@ -475,7 +477,7 @@ export function DependencyGraphPage() {
                 onChange={(e) => setHideSharedStorage(e.target.checked)}
                 className="rounded border-line accent-volt"
               />
-              Hide shared worksheet / variable links
+              Hide shared-state links
             </label>
           </div>
 

@@ -536,10 +536,16 @@ export function PatternAnalysisPage() {
         <Card>
           <CardBody>
             <p className="text-body text-ink-secondary">
-              No pattern analysis has run for this project yet. Run it to survey every
-              code unit (minutes, not hours) and see how many distinct patterns this
+              No pattern analysis has run for this project yet. Running it surveys every
+              code unit (minutes, not hours) and shows how many distinct patterns this
               codebase actually contains.
             </p>
+            {/* The run button is Admin-only; say so instead of "Run it" with nothing to click. */}
+            {persona !== 'admin' && (
+              <p className="mt-2 text-caption text-ink-tertiary" data-testid="pattern-analysis-who">
+                An Admin runs it — switch persona in the menu at the top right, or ask Astra in the programme thread.
+              </p>
+            )}
           </CardBody>
         </Card>
       )}

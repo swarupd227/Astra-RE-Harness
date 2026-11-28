@@ -429,3 +429,6 @@ screen. Review it on the next spec an SME signs.
     now leave test projects out too); source code "parsed into routines"; the language picker said "PHP / Magento" and
     "Java 11" (the migration a schema was first written for). **Done:** hint names every place, "code units", "PHP",
     "Java".
+28. **Dependency graph** — a Fortran project read "15 shared worksheet / variable links". **Done:** "shared-state
+    links" with a tooltip naming what that is per language (COMMON blocks, worksheet cells, globals / class fields).
+29. **Pattern analysis** — "Run it" with no button for non-Admins. **Done:** says an Admin runs it, and how to ask.
