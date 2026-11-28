@@ -451,3 +451,19 @@ screen. Review it on the next spec an SME signs.
     on a followed spec reaches the follower's inbox ("commented on a spec you follow"), not only @-mentions; whoever
     comments follows the spec; a persona already @-mentioned is not notified twice. Checked on a local stack in both
     sign-in modes with two password users.
+
+## End-to-end UI run (2026-11-28, Azure, Engineer → SME → Engineer) — in progress
+Repo: janiceoliviagrace/SimpleBankProject (MIT, one `Main.java`, 4.5 KB), project "UX run - SimpleBankProject (Java)".
+Findings so far (open):
+E1. **Starting a project from Home** — the only above-the-fold way in is the small "New programme" link in the rail; the
+    estate summary has no "Add project". Add one beside the KPIs (empty-state already has "Add a programme").
+E2. **"Programme" vs "project"** — the rail, Home and the thread say programme; the nav, pages and forms say project.
+    Pick one word (project) for the user-facing UI.
+E3. **New project form order** — the project name comes before the Git URL and is not suggested from it. Put the source
+    first and pre-fill the name from the repository ("SimpleBankProject").
+E4. **Git URL hint** — "The API container must be able to reach this host" is platform jargon. Say "Public HTTPS URL, or a
+    host the platform can reach".
+E5. **Ten evidence kinds open on the form** — a first run only needs source code; fold "Other evidence" by default.
+E6. **No way to mark a project as test/scratch at creation** — only later in settings; offer it on the form.
+E7. **Rail agents list shows a test project's run** ("Programme · 1 active run — php-facts-e2e-…") — the agent list should
+    follow the same test-project rule as the rail's programmes.
