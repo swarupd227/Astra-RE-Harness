@@ -127,7 +127,7 @@ function CorporaTable({ rows }: { rows: PortfolioCorpusRow[] }) {
     <Card data-testid="portfolio-corpora-table">
       <CardBody className="space-y-3">
         <h2 className="label">
-          Per-corpus rollup
+          Per-project rollup
         </h2>
         {rows.length === 0 && (
           <p className="text-caption text-ink-secondary">No corpora yet.</p>
@@ -340,13 +340,13 @@ function PerCorpusProgressChart({ rows }: { rows: PortfolioCorpusRow[] }) {
     }),
     { signed: 0, scaffolded: 0, committed: 0, pending: 0 },
   );
-  const chartLabel = `Per-corpus migration progress for ${data.length} ${
-    data.length === 1 ? 'corpus' : 'corpora'
-  }. Totals: ${agg.signed} signed, ${agg.scaffolded} scaffolded, ${agg.committed} committed, ${agg.pending} pending.`;
+  const chartLabel = `Migration progress per project for ${data.length} ${
+    data.length === 1 ? 'project' : 'projects'
+  }. Totals: ${agg.signed} signed, ${agg.scaffolded} with code, ${agg.committed} committed, ${agg.pending} pending.`;
 
   return (
     <div className="card p-5">
-      <h2 className="label mb-3">Per-corpus migration progress</h2>
+      <h2 className="label mb-3">Migration progress per project</h2>
       {data.length === 0 ? (
         <p className="text-[12px] text-ink-secondary">No corpora yet.</p>
       ) : (

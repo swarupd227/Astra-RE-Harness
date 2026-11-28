@@ -9,7 +9,7 @@ import { api, getPersona, API_BASE } from '@/lib/api';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { ErrorBlock } from '@/components/ErrorBlock';
+import { ErrorBlock, ProjectLoadError } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { MermaidBlock } from '@/components/MermaidBlock';
 import { DocToc } from '@/components/DocToc';
@@ -68,9 +68,10 @@ const REQUIREMENTS_STAGES = ['capability-map', 'process-flow', 'functional-requi
 
 const STATE_LABELS: Record<string, string> = {
   'SIGNED':    'Signed',
-  'IN_REVIEW': 'In Review',
+  'IN_REVIEW': 'In review',
   'DRAFT':     'Draft',
   'REJECTED':  'Rejected',
+  'SUPERSEDED': 'Superseded',
 };
 
 type StateTone = 'draft' | 'review' | 'signed' | 'neutral' | 'failed';
@@ -330,7 +331,7 @@ export function DocsPage() {
   if (corpus.isError) {
     return (
       <div className="mx-auto max-w-[1700px] p-6">
-        <ErrorBlock title="Could not load project" message={corpus.error.message} />
+        <ProjectLoadError error={corpus.error} />
       </div>
     );
   }

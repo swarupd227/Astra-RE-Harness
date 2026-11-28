@@ -9,7 +9,7 @@ import { api, getPersona, API_BASE } from '@/lib/api';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { ErrorBlock } from '@/components/ErrorBlock';
+import { ProjectLoadError } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { PageHero } from '@/components/PageHero';
 import type { ArchetypeProposal, PatternAnalysisProgress, PatternCluster } from '@/lib/api';
@@ -333,7 +333,7 @@ export function PatternAnalysisPage() {
   if (corpus.isError) {
     return (
       <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
-        <ErrorBlock title="Could not load project" message={corpus.error.message} />
+        <ProjectLoadError error={corpus.error} />
       </div>
     );
   }

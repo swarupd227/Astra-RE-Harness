@@ -229,10 +229,12 @@ export function EvidencePage() {
                 {/* Say the file once: the label without its file prefix, then file name · what inside it. The full
                     path and locator are on hover; the kind tag only when every kind is listed. */}
                 <span className="min-w-0 flex-1" title={`${e.path} ${e.locator} · ${e.trustTier === 'structured' ? 'structured' : 'narrative'}`}>
-                  <span className="block truncate text-body text-ink-primary">{withoutFile(e.label, e.path)}</span>
+                  <span className="block truncate text-body text-ink-primary">{compressCells(withoutFile(e.label, e.path))}</span>
+                  {/* The file is the group heading above; this line says where inside it. */}
                   <span className="block truncate font-mono text-micro text-ink-tertiary">
-                    {e.path.split('/').pop()}
-                    {locatorPart(e.locator, e.path) && ` · ${locatorPart(e.locator, e.path)}`}
+                    {compressCells(locatorPart(e.locator, e.path)) || e.path.split('/').pop()}
+                    {/* Still in the row for screen readers (and text search), just not repeated on screen. */}
+                    {locatorPart(e.locator, e.path) && <span className="sr-only"> in {e.path.split('/').pop()}</span>}
                   </span>
                 </span>
                 {!kind && <Badge tone="neutral" className="hidden sm:inline-flex">{e.kindLabel}</Badge>}
@@ -290,6 +292,17 @@ function withoutFile(label: string, path: string): string {
     if (label.startsWith(prefix) && label.length > prefix.length) return label.slice(prefix.length);
   }
   return label;
+}
+
+/** "D5 D6 D7 … D38" → "D5:D38": a run of three or more consecutive cells in one column reads as a range. */
+export function compressCells(text: string): string {
+  return text.replace(/\b([A-Z]{1,3})(\d+)(?:\s+\1\d+){2,}\b/g, (run) => {
+    const cells = run.split(/\s+/).map((c) => /^([A-Z]{1,3})(\d+)$/.exec(c)!);
+    const col = cells[0][1];
+    const rows = cells.map((m) => Number(m[2]));
+    const consecutive = rows.every((n, i) => i === 0 || n === rows[i - 1] + 1);
+    return consecutive ? `${col}${rows[0]}:${col}${rows[rows.length - 1]}` : run;
+  });
 }
 
 /** The locator minus a repeated file prefix; empty when it says nothing beyond the file. */

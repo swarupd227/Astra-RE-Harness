@@ -417,3 +417,11 @@ screen. Review it on the next spec an SME signs.
 23. **Validation report** — "Back to scaffold"; raw provider config string under the trust chips; quality gate "passed"
     lower-case. **Done:** "Back to package", config string on hover, "Passed". ("Run 4th gate" and "Four independent
     gates" stay: demo specs click and read them.)
+24. **Project pages, missing project** — "Could not load project · Request failed (404)" with a Retry. **Done:**
+    `ProjectLoadError`: a 404 says "Project not found — it may have been removed, or this link points at something
+    else" with "All projects →"; other errors keep the message and Retry (project, docs, pattern analysis).
+25. **Docs / Migration plan / Portfolio** — "1 SUPERSEDED", "In Review"; "for this corpus", "what it CALLs",
+    "Per-corpus". **Done:** shared casing, "project" throughout.
+26. **Evidence** — every row repeated the workbook's long file name under its own file heading; "D5 D6 … D38".
+    **Done:** the second line says where inside the file (file name kept for screen readers); runs of three or more
+    consecutive cells read as a range ("D5:D38").

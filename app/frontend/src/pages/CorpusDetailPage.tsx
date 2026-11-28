@@ -9,7 +9,7 @@ import { nextStep } from '@/workspace/MissionControl';
 import { absoluteTime, formatInt, formatLanguage, relativeTime } from '@/workspace/format';
 import { api, getPersona } from '@/lib/api';
 import { Badge } from '@/components/Badge';
-import { ErrorBlock } from '@/components/ErrorBlock';
+import { ErrorBlock, ProjectLoadError } from '@/components/ErrorBlock';
 import { Skeleton } from '@/components/Skeleton';
 import { ReingestModal } from '@/components/ReingestModal';
 import { ArtefactSources } from '@/components/ArtefactSources';
@@ -73,11 +73,7 @@ export function CorpusDetailPage() {
   if (corpus.isError) {
     return (
       <div className="mx-auto max-w-[1200px] p-4 lg:p-6">
-        <ErrorBlock
-          title="Could not load project"
-          message={corpus.error.message}
-          onRetry={() => corpus.refetch()}
-        />
+        <ProjectLoadError error={corpus.error} onRetry={() => corpus.refetch()} />
       </div>
     );
   }

@@ -219,10 +219,10 @@ export function MigrationPlanPage() {
         <Card>
           <CardBody className="space-y-3 text-center">
             <Layers className="mx-auto h-8 w-8 text-ink-tertiary" />
-            <p className="text-body text-ink-primary">No migration plan yet for this corpus.</p>
+            <p className="text-body text-ink-primary">No migration plan yet for this project.</p>
             <p className="text-caption text-ink-secondary">
               The planner reads the dependency graph and assigns every code unit to a wave based
-              on what it CALLs. Same graph in → same plan out, every time.
+              on what it calls. Same graph in, same plan out, every time.
             </p>
             {isAdmin && (
               <Button
