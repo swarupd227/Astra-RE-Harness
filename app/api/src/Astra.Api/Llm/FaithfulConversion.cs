@@ -49,7 +49,7 @@ public static class FaithfulConversion
     {
         "unitName", "unitPath", "className", "namespace", "anchorRoutine",
         "routineCount", "signedCount", "unitRoutinesJson", "unitSpecsJson",
-        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource", "partNote", "partSuffix",
+        "unitSourceText", "mappingTable", "exemplarSource", "provenanceSource", "partNote", "partSuffix", "projectSymbols",
     };
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -117,7 +117,7 @@ public static class FaithfulConversion
     /// </summary>
     /// <summary>Bumped whenever the faithful prompts or a faithful archetype's runtime change, so a package made
     /// before the change is never reused for a sibling routine after it.</summary>
-    public const int UnitKeyVersion = 2;
+    public const int UnitKeyVersion = 3;
 
     public static string UnitKey(string sourceText, UnitContext unit, string targetStack)
     {
@@ -467,6 +467,7 @@ public static class FaithfulConversion
         new()
         {
             ["partNote"] = part?.Note ?? "",
+            ["projectSymbols"] = request.ProjectSymbols ?? "(no project symbol table for this language)",
             ["partSuffix"] = part is { Count: > 1, Number: > 1 } ? $"Part{part.Number}" : "",
             ["unitName"] = unit.UnitName,
             ["unitPath"] = unit.UnitPath,
@@ -539,7 +540,7 @@ public static class FaithfulConversion
                 var path = f.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()!.Replace('\\', '/') : "";
                 var content = f.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
                 if (!path.StartsWith("src/", StringComparison.OrdinalIgnoreCase)) continue;
-                if (path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase) || content.Length == 0) continue;
+                if (path.EndsWith("Provenance.cs", StringComparison.OrdinalIgnoreCase) || IsReserved(path) || content.Length == 0) continue;
                 sb.Append("\n\n### ").Append(path).Append("\n```csharp\n").Append(content.TrimEnd()).Append("\n```");
             }
         }
@@ -599,11 +600,20 @@ public static class FaithfulConversion
     /// test-pack generator anchors on). Archetype files are carried unless
     /// the model produced the same path or the file is the shape exemplar.
     /// </summary>
+    /// <summary>Files the archetype owns outright: the reviewed compatibility runtime and the provenance attributes.
+    /// A package always carries the archetype's current copy; a model's version of them is dropped.</summary>
+    public static bool IsReserved(string path)
+    {
+        var p = path.Replace('\\', '/');
+        return p.StartsWith("src/Vb6Runtime/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p, "src/Provenance.cs", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static List<PackageFile> MergeWithArchetype(
         IReadOnlyList<PackageFile> generated, ArchetypeRegistry.LoadedArchetype archetype)
     {
-        var result = new List<PackageFile>(generated);
-        var have = new HashSet<string>(generated.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+        var result = new List<PackageFile>(generated.Where(f => !IsReserved(f.Path)));
+        var have = new HashSet<string>(result.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         foreach (var f in archetype.Files)
         {
             var path = f.Path.Replace('\\', '/');

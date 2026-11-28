@@ -106,13 +106,18 @@ public class FaithfulConversionTests
         {
             new("src/IdScheduler.cs", "csharp", "// unit", new[] { "INV-2" }),
             new("src/Provenance.cs", "csharp", "// model rewrote it", Array.Empty<string>()),
+            new("src/Vb6Runtime/Controls.cs", "csharp", "// stale runtime copied from a previous package", Array.Empty<string>()),
         };
 
         var merged = FaithfulConversion.MergeWithArchetype(generated, archetype);
 
-        Assert.Equal(new[] { "src/IdScheduler.cs", "src/Provenance.cs", "Faithful.Unit.csproj", "tests/UnitTests.cs" }, merged.Select(f => f.Path));
-        Assert.Equal("// model rewrote it", merged[1].Content);
+        // The archetype owns the provenance attributes and the runtime: a model's copy never replaces them.
+        Assert.Equal(new[] { "src/IdScheduler.cs", "Faithful.Unit.csproj", "src/Provenance.cs", "tests/UnitTests.cs" }, merged.Select(f => f.Path));
+        Assert.Equal("// attrs", merged.Single(f => f.Path == "src/Provenance.cs").Content);
+        Assert.DoesNotContain(merged, f => f.Path.StartsWith("src/Vb6Runtime/"));
         Assert.DoesNotContain(merged, f => f.Path == FaithfulConversion.ExemplarPath);
+        Assert.True(FaithfulConversion.IsReserved("src/Vb6Runtime/Interaction.cs"));
+        Assert.False(FaithfulConversion.IsReserved("src/frmMain.cs"));
     }
 
     [Fact]

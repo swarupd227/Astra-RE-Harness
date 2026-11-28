@@ -1,6 +1,6 @@
 ---
 id: vb6-faithful-transform
-version: v1.1
+version: v1.2
 schemaId: vb6
 targetStack: dotnet10-faithful
 kind: faithful-transform
@@ -118,7 +118,12 @@ Rules:
     `Unload Me` → `Unload()`; `frmX.Show vbModal` (from anywhere) → `Forms.Get<frmX>().Show(Vb.vbModal);` followed by
     `// TODO(faithful): modal form — in VB6 the next statement waited for frmX to close; the web host shows it.`;
     `frmX.ctl.Text` from another unit → `Forms.Get<frmX>().ctl.Text`; `Set frmX = Nothing` → `Forms.Release<frmX>()`.
-11. **Calls into other units of this project.** VB6 calls a public member of any module without naming the module: add
+11. **Calls into other units of this project.** The PROJECT SYMBOLS section below says, for every name this unit uses
+    that another unit declares, which unit declares it and what it is (module routine, module variable, constant,
+    type, class, form). It is authoritative: a module routine (`Messages`, `SchedulingMenu`) is a static method of that
+    module's class (stub `src/Stubs/Units/<Module>.cs` → `public static partial class <Module> { public static … Messages(…) }`
+    and `using static Faithful.Vb6App.<Module>;`); a module variable is a static field of that module's class; a
+    class or form is a class of its own. NEVER create a stub class named after a routine or a variable. VB6 calls a public member of any module without naming the module: add
     `using static Faithful.Vb6App.<Module>;` for each module whose members this unit uses that way, so call sites read
     as in VB6. Every other unit the code uses (a module's routine or global variable, a class, a form) that is not this
     unit gets a stub file `src/Stubs/Units/<VB_Name>.cs` — `namespace Faithful.Vb6App;`, the kind the real conversion
@@ -179,6 +184,10 @@ Class: {{className}} · namespace {{namespace}}
 ```json
 {{unitSpecsJson}}
 ```
+
+## Project symbols this unit uses (declared in other units — where each lives, and what it is)
+
+{{projectSymbols}}
 
 ## COM/ActiveX mapping table
 

@@ -656,7 +656,8 @@ public sealed class AnthropicScaffoldProvider : IScaffoldProvider
 
         yield return Stage("validating", 3, "Parsing the converted unit");
 
-        var files = FaithfulConversion.MergeParts(written);
+        // Parts of one unit (and stubs several parts wrote) compile as one: a member or class attribute written twice is kept once.
+        var files = FaithfulParts.Dedupe(FaithfulConversion.MergeParts(written));
         var package = FaithfulConversion.MergeWithArchetype(files, archetype)
             .Select(f => new GeneratedFile(f.Path, f.Language, f.Content, f.DerivedFromClaimIds))
             .ToList();

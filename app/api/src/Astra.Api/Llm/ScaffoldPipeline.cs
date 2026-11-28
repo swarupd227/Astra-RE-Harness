@@ -184,7 +184,10 @@ public sealed class ScaffoldPipeline
             previousFiles,
             dataTables.Count == 0 ? null : WorkbookTables.DescribeForPrompt(dataTables),
             callTreeNote,
-            workbookInputsNote);
+            workbookInputsNote,
+            unit is not null && string.Equals(spec.Subroutine?.SourceLanguage, "vb6", StringComparison.OrdinalIgnoreCase)
+                ? await LoadVb6SymbolsAsync(spec.Subroutine!, originalSourceText, ct)
+                : null);
 
         object? finalPayload = null;
         var providerReportedError = false;
@@ -406,6 +409,40 @@ public sealed class ScaffoldPipeline
         _logger.LogInformation(
             "Scaffold complete: spec={Spec} scaffold={Scaffold} {Files} files {TodoCount} TODOs in {Ms}ms",
             spec.Id, scaffold.Id, fileCount, todoCount, latencyMs);
+    }
+
+    /// <summary>A version's VB6 symbol table, built once per source version (a version's code never changes).</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Lazy<Task<Vb6ProjectSymbols>>> Vb6Symbols = new();
+
+    /// <summary>The project names a VB6 unit uses that other units declare (see <see cref="Vb6ProjectSymbols"/>); null on any read problem.</summary>
+    private async Task<string?> LoadVb6SymbolsAsync(Subroutine sub, string unitText, CancellationToken ct)
+    {
+        if (sub.SourceFile is null) return null;
+        var versionId = sub.SourceFile.SourceVersionId;
+        try
+        {
+            var symbols = await Vb6Symbols.GetOrAdd(versionId, _ => new Lazy<Task<Vb6ProjectSymbols>>(async () =>
+            {
+                var files = await _db.SourceFiles.AsNoTracking()
+                    .Where(f => f.SourceVersionId == versionId && f.Kind == "code")
+                    .Select(f => new { f.RelativePath, f.BlobUri }).ToListAsync(CancellationToken.None);
+                var vb = files.Where(f => Evidence.Vb6Facts.IsVb6(f.RelativePath)).ToList();
+                var texts = new System.Collections.Concurrent.ConcurrentBag<(string, string)>();
+                await Parallel.ForEachAsync(vb, new ParallelOptions { MaxDegreeOfParallelism = 8 }, async (f, token) =>
+                    texts.Add((f.RelativePath, await _blob.GetTextAsync(f.BlobUri, token))));
+                var routines = await _db.Subroutines.AsNoTracking()
+                    .Where(s => s.SourceFile!.SourceVersionId == versionId)
+                    .Select(s => new { s.Name, s.Signature, Path = s.SourceFile!.RelativePath }).ToListAsync(CancellationToken.None);
+                return Vb6ProjectSymbols.Build(texts, routines.Select(r => (r.Name, r.Signature ?? "", r.Path)));
+            })).Value;
+            return symbols.RenderFor(unitText, FaithfulConversion.Vb6NameOf(unitText) ?? "");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Vb6Symbols.TryRemove(versionId, out _);
+            _logger.LogWarning(ex, "VB6 project symbols could not be built for version {Version}", versionId);
+            return null;
+        }
     }
 
     private sealed record ReusableUnit(Guid ScaffoldId, string Routine, string FilesJson);

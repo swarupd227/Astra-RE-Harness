@@ -47,7 +47,10 @@ public sealed record ScaffoldRequest(
     string? CallTreeSourceNote = null,
     // For a workbook routine: its host workbook's view (labels, controls) and the current values and allowed values of
     // the sheets its module reads (WorkbookInputs), so the form starts where the workbook was and offers real choices.
-    string? WorkbookInputsNote = null);
+    string? WorkbookInputsNote = null,
+    // For a faithful VB6 unit: the project names it uses that other units declare, and where (Vb6ProjectSymbols),
+    // so another module's routine is stubbed as a member of that module, not as a class of its own.
+    string? ProjectSymbols = null);
 
 public sealed record ScaffoldFile(
     string Path,
