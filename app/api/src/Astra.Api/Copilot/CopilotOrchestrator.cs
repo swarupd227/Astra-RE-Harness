@@ -798,6 +798,7 @@ public sealed class CopilotOrchestrator
         "review_claim" => "Recording the claim decision",
         "review_all_claims" => "Recording the claim decisions",
         "sign_spec" => "Signing the spec",
+        "sign_all_in_review" => "Signing the review queue in bulk",
         "generate_scaffold" => "Starting code generation",
         "run_gate" => "Starting the gate",
         "generate_docs" => "Starting documentation",

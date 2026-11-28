@@ -11,7 +11,7 @@ import type { ArtifactRenderProps } from './registry';
 
 type Props = Record<string, unknown>;
 
-export function ReviewQueueCard({ artifact, size }: ArtifactRenderProps) {
+export function ReviewQueueCard({ artifact, size, onIntent }: ArtifactRenderProps) {
   const pane = size === 'pane';
   const corpusId = str(artifact.props.corpusId);
   const [items, setItems] = useState<Props[]>(() => arr(artifact.props.items).map(obj));
@@ -66,6 +66,21 @@ export function ReviewQueueCard({ artifact, size }: ArtifactRenderProps) {
             );
           })}
         </ol>
+      )}
+      {items.length > 1 && corpusId && onIntent && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            type="button"
+            data-testid="review-queue-sign-all"
+            onClick={() => onIntent(`Accept and sign all ${items.length} specs in the review queue of ${str(items[0]?.corpusName, "this programme")}`)}
+            className="rounded-md border border-line px-2.5 py-1 text-caption text-ink-primary hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+          >
+            Accept and sign all ({items.length})
+          </button>
+          <span className="text-micro text-ink-tertiary">
+            SME only · accepts every unreviewed claim as drafted · recorded as a bulk sign-off
+          </span>
+        </div>
       )}
       {!pane && items.length > shown.length && (
         <div className="text-micro text-ink-tertiary">+{items.length - shown.length} more — open in the pane to see all</div>

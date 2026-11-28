@@ -163,6 +163,32 @@ public class QualityReportTests
         Assert.Matches("^[0-9a-f]{12}$", QualityRules.RuleSetFingerprint);
 
     [Theory]
+    [InlineData("Accept and sign all 51 specs in the review queue of Scheduling (VB6)")]
+    [InlineData("sign them all")]
+    [InlineData("bulk sign the review queue")]
+    [InlineData("Accept and sign all 3 specs in the review queue")]
+    public void The_mock_brain_routes_a_bulk_sign_off(string text)
+    {
+        var routed = MockCopilotBrain.RouteOrNull(text);
+        Assert.Equal("sign_all_in_review", routed?.Tool);
+    }
+
+    [Theory]
+    [InlineData("Accept every claim in the spec for `AgainAndAgain`", "review_all_claims")]
+    [InlineData("Sign the spec for `AgainAndAgain`", "sign_spec")]
+    public void Single_spec_review_still_routes_to_the_single_spec_tools(string text, string tool) =>
+        Assert.Equal(tool, MockCopilotBrain.RouteOrNull(text)?.Tool);
+
+    [Fact]
+    public void A_bulk_signed_spec_says_so_in_the_report()
+    {
+        var input = Input("react-python", Run("COMPILE", "PASSED", 1)) with { SignedInBulk = true };
+        var r = QualityReportBuilder.Build(input);
+        Assert.True(r.Spec.SignedInBulk);
+        Assert.Contains("signed in a bulk sign-off", QualityReportHtml.Render(r));
+    }
+
+    [Theory]
     [InlineData("Give me the quality report for `CalculateApiPremium`", "routine")]
     [InlineData("What checks have been done? quality report please", "routine")]
     [InlineData("quality report for the whole programme", "programme")]

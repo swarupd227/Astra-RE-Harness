@@ -39,6 +39,19 @@ public sealed partial class CopilotToolRegistry
         });
         _tools.Add(new CopilotTool
         {
+            Name = "sign_all_in_review",
+            Agent = "spec",
+            Mutating = true,
+            AllowedPersonas = new[] { Persona.Sme },
+            Description = "SME bulk sign-off for ONE programme's review queue (optionally one run's specs): accept every claim nobody has reviewed as drafted (an unanswered open question keeps the source's behaviour) and sign each spec, in one confirmation. Specs where an SME raised a question, or with no claims, are left alone and listed. Every signature is recorded as a bulk sign-off and reports say so. Use for 'sign them all', 'accept and sign everything in the review queue'. SME only.",
+            InputSchema = Obj(
+                ("corpusId", Str("Programme id or name. Optional in a programme thread; required in the global thread.")),
+                ("runId", Str("Optional: only the specs a given work run is waiting on (id or its first characters)."))),
+            Describe = DescribeBulkSignAsync,
+            Execute = BulkSignAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
             Name = "run_wave",
             Agent = "planning",
             Mutating = true,
@@ -61,11 +74,14 @@ public sealed partial class CopilotToolRegistry
             Agent = "spec",
             Mutating = true,
             AllowedPersonas = Drafters,
-            Description = "Draft specs for many un-specified routines in parallel; each draft then waits in the review queue for an SME. Select by names, a source-path substring, or just a count; with none of these it takes every un-specified routine. One confirmation covers the batch. Use for 'extract all', 'draft specs for these routines'. For ONE routine use extract_spec.",
+            Description = "Draft specs for many un-specified routines in parallel; each draft then waits in the review queue for an SME. Select by names, a source-path substring, or just a count; with none of these it takes every un-specified routine. withCallees=true adds everything the selection calls, directly or indirectly, from the call graph — use it for a feature slice ('ConflictMatrix and everything it calls'). throughGates=true queues the rest of the pipeline too (after each SME sign-off: generate, compile, test pack; engineer only). One confirmation covers the batch. Use for 'extract all', 'draft specs for these routines', 'migrate X and what it calls'. For ONE routine use extract_spec.",
             InputSchema = Obj(
                 ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
                 ("routines", Arr("Routine ids or exact names. Optional.")),
                 ("path", Str("Optional substring of the source file path.")),
+                ("withCallees", Bool("Also take every routine the selection calls, directly or indirectly. Default false.")),
+                ("throughGates", Bool("After sign-off, also generate, compile and run the test pack. Default false (drafting only).")),
+                ("targetStack", Str("Target stack id for the later stages. Optional (the project's target).")),
                 ("limit", Int("Max routines. Omit for every matching routine (a run takes at most 500).")),
                 ("budgetUsd", Str("Optional cost ceiling in USD.")),
                 ("maxParallel", Int("Optional ceiling on agents working at once."))),
@@ -142,6 +158,63 @@ public sealed partial class CopilotToolRegistry
             WorkRunArtifact(snapshot));
     }
 
+    private static async Task<(Corpus? Corpus, List<ReviewQueueItem> Items)> BulkSelectionAsync(JsonElement input, ToolContext ctx)
+    {
+        var corpus = await ResolveCorpusAsync(input, ctx);
+        if (corpus is null) return (null, new());
+        var run = Read(input, "runId");
+        var items = (await ctx.Services.GetRequiredService<WorkRunService>()
+                .ReviewQueueAsync(corpus.Id, Specs.SpecReviewService.MaxBulkSpecs + 1, ctx.Ct))
+            .Where(i => i.SpecState == "IN_REVIEW")
+            .Where(i => string.IsNullOrWhiteSpace(run) || (i.RunId?.ToString().StartsWith(run.Trim(), StringComparison.OrdinalIgnoreCase) ?? false))
+            .ToList();
+        return (corpus, items);
+    }
+
+    private static async Task<string> DescribeBulkSignAsync(JsonElement input, ToolContext ctx)
+    {
+        var (corpus, items) = await BulkSelectionAsync(input, ctx);
+        if (corpus is null) return "sign every spec in the review queue (name the programme first)";
+        var svc = ctx.Services.GetRequiredService<Specs.SpecReviewService>();
+        int untouched = 0, questions = 0;
+        foreach (var i in items.Take(Specs.SpecReviewService.MaxBulkSpecs))
+        {
+            var spec = await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine).FirstOrDefaultAsync(s => s.Id == i.SpecId, ctx.Ct);
+            if (spec is null) continue;
+            foreach (var f in await svc.CheckPreconditionsAsync(spec, ctx.Ct))
+            {
+                var path = (string?)f.GetType().GetProperty("claimPath")?.GetValue(f) ?? "";
+                if (path == "$") continue;
+                if (path.StartsWith("open_questions", StringComparison.Ordinal)) questions++; else untouched++;
+            }
+        }
+        return $"accept {untouched} unreviewed claims as drafted, keep the source's behaviour for {questions} open questions, and sign " +
+               $"{items.Count} spec(s) in {corpus.Name} as {ctx.Actor.DisplayName} — stating \"{Specs.SpecReviewService.BulkConfirmation}\". " +
+               "Each signature is recorded as a bulk sign-off.";
+    }
+
+    private static async Task<ToolResult> BulkSignAsync(JsonElement input, ToolContext ctx)
+    {
+        var (corpus, items) = await BulkSelectionAsync(input, ctx);
+        if (corpus is null) return NoCorpus(input);
+        if (items.Count == 0) return ToolResult.Failure("review_queue.empty", $"Nothing in {corpus.Name} is waiting for sign-off.");
+        var svc = ctx.Services.GetRequiredService<Specs.SpecReviewService>();
+        var (outcome, error) = await svc.BulkAcceptAndSignAsync(items.Select(i => i.SpecId).ToList(),
+            Specs.SpecReviewService.BulkConfirmation, ctx.Actor, null, ctx.Ct);
+        if (error is not null) return ToolResult.Failure(error.Code, error.Message, error.Details);
+        var left = await ctx.Services.GetRequiredService<WorkRunService>().ReviewQueueAsync(corpus.Id, 50, ctx.Ct);
+        return ToolResult.Success(new
+            {
+                outcome!.Signed,
+                outcome.Skipped,
+                outcome.ClaimsAccepted,
+                skippedSpecs = outcome.Items.Where(i => i.Outcome == "skipped").Select(i => new { i.Routine, i.Reason }),
+                note = "Signed specs release their waiting work: code generation, compile and tests start on their own.",
+            },
+            $"signed {outcome.Signed} spec(s) in bulk, accepted {outcome.ClaimsAccepted} claims, skipped {outcome.Skipped}",
+            ArtifactBuilders.ReviewQueue(corpus.Id, left));
+    }
+
     private static async Task<ToolResult> GetReviewQueueAsync(JsonElement input, ToolContext ctx)
     {
         var corpus = await ResolveCorpusAsync(input, ctx);
@@ -214,8 +287,11 @@ public sealed partial class CopilotToolRegistry
     }
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildExtractRequestAsync(JsonElement input, ToolContext ctx) =>
-        BuildListRequestAsync(input, ctx, "extract-many", "Spec drafts", new[] { "PARSED" },
-            new[] { WorkStages.Extract, WorkStages.Signoff }, "no un-specified code unit");
+        BuildListRequestAsync(input, ctx, "extract-many", ReadBool(input, "throughGates") ? "Migration" : "Spec drafts", new[] { "PARSED" },
+            ReadBool(input, "throughGates")
+                ? new[] { WorkStages.Extract, WorkStages.Signoff, WorkStages.Scaffold, WorkStages.Compile, WorkStages.TestPack }
+                : new[] { WorkStages.Extract, WorkStages.Signoff },
+            "no un-specified code unit");
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildGenerateRequestAsync(JsonElement input, ToolContext ctx) =>
         BuildListRequestAsync(input, ctx, "generate-many", "Code generation", new[] { "SIGNED" },
@@ -254,7 +330,23 @@ public sealed partial class CopilotToolRegistry
 
         List<Guid> ids;
         var matching = 0;
-        if (names.Count > 0)
+        if (ReadBool(input, "withCallees") && (names.Count > 0 || !string.IsNullOrEmpty(path)))
+        {
+            // A feature slice: the named routines (or everything under the path) and what they call, from the call graph.
+            var seeds = names.Count > 0
+                ? await q.Where(x => names.Contains(x.Name) || names.Contains(x.Id.ToString())).Select(x => x.Id).ToListAsync(ctx.Ct)
+                : await q.Select(x => x.Id).ToListAsync(ctx.Ct);
+            if (seeds.Count == 0)
+                return (null, ToolResult.Failure("routine.not_found", "Nothing matches that selection. Try search_routines or list_modules."));
+            var graph = await ctx.Services.GetRequiredService<Astra.Api.Llm.Dependency.DependencyGraphBuilder>()
+                .BuildForVersionAsync(corpus.Id, corpus.LatestVersionId!.Value, ctx.Ct);
+            var closure = Astra.Api.Llm.Dependency.CallClosure.Of(seeds, graph.Edges.Where(e => e.Type == "call").Select(e => (e.From, e.To)));
+            var all = (from s in ctx.Db.Subroutines.AsNoTracking() where closure.Contains(s.Id) select new { s.Id, s.State, s.SourceFileId, s.LineStart }).ToList();
+            matching = all.Count;
+            ids = all.Where(x => states.Contains(x.State)).OrderBy(x => x.SourceFileId).ThenBy(x => x.LineStart)
+                .Select(x => x.Id).Take(limit).ToList();
+        }
+        else if (names.Count > 0)
         {
             ids = new();
             var unknown = new List<string>();

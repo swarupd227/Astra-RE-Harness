@@ -36,7 +36,7 @@ public sealed class QualityReportService
             routine?.SourceFile?.SourceVersion?.Corpus?.Name, scaffold.TargetPlatform, scaffold.GeneratedAt,
             scaffold.FileCount, scaffold.TotalLines, scaffold.TodoCount, scaffold.GitCommitHash,
             spec?.State ?? "UNKNOWN", ClaimCount(spec?.SpecJson), signature?.SignerDisplay, signature?.SignedAt, signature?.SpecCanonicalHash,
-            runs, Endpoints.HealthEndpoints.Build, DateTimeOffset.UtcNow));
+            runs, Endpoints.HealthEndpoints.Build, DateTimeOffset.UtcNow, signature?.Bulk ?? false));
     }
 
     /// <summary>The latest package of every routine in a programme that has generated code, newest first.</summary>

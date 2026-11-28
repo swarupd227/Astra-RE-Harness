@@ -37,6 +37,30 @@ public class Vb6CallScopeTests
     }
 
     [Fact]
+    public void A_feature_slice_is_the_seeds_and_everything_they_call_once()
+    {
+        Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid(), d = Guid.NewGuid(), e = Guid.NewGuid();
+        var calls = new[] { (a, b), (b, c), (c, b), (d, e) };   // b and c call each other; d is not reached from a
+        var slice = Astra.Api.Llm.Dependency.CallClosure.Of([a], calls);
+        Assert.Equal(new HashSet<Guid> { a, b, c }, slice);
+        Assert.Equal(new HashSet<Guid> { a, b, c, d, e }, Astra.Api.Llm.Dependency.CallClosure.Of([a, d], calls));
+    }
+
+    [Theory]
+    [InlineData("Draft specs for ConflictMatrix and everything it calls", "ConflictMatrix", false)]
+    [InlineData("Migrate `SignUpLists` and what it calls", "SignUpLists", true)]
+    [InlineData("extract SimpleTallies and all it calls, end to end", "SimpleTallies", true)]
+    public void The_mock_brain_routes_a_feature_slice(string text, string path, bool throughGates)
+    {
+        var routed = Astra.Api.Copilot.MockCopilotBrain.RouteOrNull(text);
+        Assert.Equal("extract_many", routed?.Tool);
+        var input = routed!.Value.Input.ToString()!;
+        Assert.Contains($"path = {path}", input);
+        Assert.Contains("withCallees = True", input);
+        Assert.Contains($"throughGates = {throughGates}", input);
+    }
+
+    [Fact]
     public void A_name_two_modules_define_stays_unresolved()
     {
         var m1 = File("Module/One.bas");

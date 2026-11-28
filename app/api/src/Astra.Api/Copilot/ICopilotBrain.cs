@@ -239,6 +239,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "route_for_review" => "routing the spec",
         "generate_scaffold" => "generating the code",
         "run_gate" => "running the gate",
+        "sign_all_in_review" => "preparing the bulk sign-off",
         "get_quality_report" => "putting the quality report together",
         "list_programmes" => "listing the programmes",
         "read_routine" => "reading the code unit",
@@ -273,6 +274,10 @@ public sealed class MockCopilotBrain : ICopilotBrain
         var dottedMatch = Regex.Match(text, @"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\b").Groups[1].Value;
         string? name = quoted ?? (dottedMatch.Length > 0 ? dottedMatch : null);
 
+        // A bulk sign-off names the review queue too, so it must win over reading the queue.
+        if (Regex.IsMatch(t, @"\b(sign|accept and sign)\b.*\b(all|every|everything|them all)\b|\bbulk sign")
+            && !Regex.IsMatch(t, @"\bclaims? in the spec for\b"))
+            return ("sign_all_in_review", new { });
         if (RouteBatch(t, text) is { } batch) return batch;
         if (RouteTarget(t) is { } target) return target;
         if (Regex.IsMatch(t, @"\bassembl(e|ed|ing|y)\b|\bone (application|app|service)\b|\bmerge (these |the )?(code )?units\b"))
@@ -408,6 +413,17 @@ public sealed class MockCopilotBrain : ICopilotBrain
                 maxParallel,
             });
         }
+        // A feature slice: "Draft specs for ConflictMatrix and everything it calls", "Migrate X and what it calls".
+        var slice = Regex.Match(text, @"\b(?:for|migrate|convert|extract)\s+[`""']?([A-Za-z0-9_./\-]+)[`""']?\s+and\s+(?:everything|all|what)\s+(?:it|they)\s+calls?\b", RegexOptions.IgnoreCase);
+        if (slice.Success)
+            return ("extract_many", new
+            {
+                path = slice.Groups[1].Value,
+                withCallees = true,
+                throughGates = Regex.IsMatch(t, @"\b(migrate|convert|end[- ]to[- ]end|through the gates)\b"),
+                budgetUsd = money,
+                maxParallel,
+            });
         if (!many) return null;
         // The fix-until-green loop repairs one routine at a time; a batch of gates is not that loop.
         if (Regex.IsMatch(t, @"\buntil (it'?s |they'?re |all )?green\b|\bfix loop\b|\bauto[- ]?fix\b|\bmake (it|them) green\b"))

@@ -65,6 +65,7 @@ export function QualityReportCard({ artifact, size }: ArtifactRenderProps) {
           <span className="text-caption text-ink-secondary">
             Spec {str(spec.state).toLowerCase() || 'unknown'} · {num(spec.claimCount)} claims
             {str(spec.signedBy) && ` · signed by ${str(spec.signedBy)}`}
+            {spec.signedInBulk === true && ' · signed in bulk'}
           </span>
         </div>
         <p className="mt-1 text-body text-ink-primary">{str(verdict.reason)}</p>

@@ -74,8 +74,28 @@ public static class SpecReviewEndpoints
                 : Results.Ok(SignatureToDto(outcome!.Signature, outcome.SpecState, outcome.Idempotent));
         });
 
+        // ─── Bulk sign-off: accept as drafted and sign every spec in the review queue (SME) ──
+        app.MapPost("/api/v1/review-queue/accept-and-sign", async (
+            BulkSignRequest body,
+            SpecReviewService service,
+            Astra.Api.Work.WorkRunService work,
+            DevPersonaContext persona,
+            HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (persona.Persona != Persona.Sme)
+                return Forbid("auth.sme_required", "Only SMEs can sign specs.");
+            var ids = body.SpecIds?.ToList()
+                ?? (await work.ReviewQueueAsync(body.CorpusId, SpecReviewService.MaxBulkSpecs + 1, ct))
+                    .Where(i => body.RunId is null || i.RunId == body.RunId).Select(i => i.SpecId).ToList();
+            var (outcome, error) = await service.BulkAcceptAndSignAsync(ids, body.Confirmation, persona, ctx, ct);
+            return error is not null ? FromError(error) : Results.Ok(outcome);
+        });
+
         return app;
     }
+
+    public sealed record BulkSignRequest(Guid? CorpusId, Guid? RunId, Guid[]? SpecIds, string? Confirmation);
 
     private static object SignatureToDto(Signature sig, string specState, bool idempotent) => new
     {

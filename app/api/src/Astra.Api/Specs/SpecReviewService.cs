@@ -167,7 +167,7 @@ public sealed class SpecReviewService
     public sealed record SignOutcome(Signature Signature, string SpecState, bool Idempotent);
 
     public async Task<(SignOutcome? Ok, SpecReviewError? Error)> SignAsync(
-        Guid specId, string? confirmation, DevPersonaContext persona, HttpContext? ctx, CancellationToken ct)
+        Guid specId, string? confirmation, DevPersonaContext persona, HttpContext? ctx, CancellationToken ct, bool bulk = false)
     {
         var spec = await _db.Specs
             .Include(s => s.Subroutine).ThenInclude(s => s!.SourceFile)
@@ -231,6 +231,7 @@ public sealed class SpecReviewService
             ["signatureBase64"] = Convert.ToBase64String(signatureBytes),
             ["signedAt"] = DateTimeOffset.UtcNow,
             ["signerDisplay"] = persona.DisplayName,
+            ["bulk"] = bulk,
             ["specCanonical"] = canonical,
             ["spec"] = JsonDocument.Parse(canonical).RootElement,
         };
@@ -269,6 +270,7 @@ public sealed class SpecReviewService
             SignatureKeyId = _signer.ActiveKeyId,
             Algorithm = _signer.Algorithm,
             SignedBlobUri = blobUri,
+            Bulk = bulk,
         };
         await _db.Signatures.AddAsync(sig, ct);
 
@@ -320,10 +322,81 @@ public sealed class SpecReviewService
                 signedBlobUri = sig.SignedBlobUri,
                 fromState = "IN_REVIEW",
                 toState = "SIGNED",
+                bulk,
             },
             ctx, ct);
 
         return (new SignOutcome(sig, spec.State, false), null);
+    }
+
+    // ── Bulk sign-off ────────────────────────────────────────────────────
+
+    /// <summary>What a bulk sign-off asks the SME to state, word for word: it says what is being attested.</summary>
+    public const string BulkConfirmation = "I accept every listed claim as drafted and sign these specs";
+
+    /// <summary>Most specs one bulk sign-off may cover, so a request finishes well inside App Service's limit.</summary>
+    public const int MaxBulkSpecs = 200;
+
+    public sealed record BulkItem(Guid SpecId, string Routine, string Outcome, int Accepted, string? Reason);
+
+    public sealed record BulkOutcome(int Signed, int Skipped, int ClaimsAccepted, IReadOnlyList<BulkItem> Items);
+
+    /// <summary>
+    /// The SME signs many specs in one confirmation: in each IN_REVIEW spec every claim nobody has reviewed is
+    /// accepted as drafted (recorded as an ordinary claim review whose reason says it was a bulk sign-off), an open
+    /// question nobody answered is accepted, which keeps the source's behaviour; then the spec is signed through the
+    /// same path as a single sign-off, with the signature marked as bulk. A spec where the SME already raised a
+    /// question, or with no claims, is left alone and listed with the reason; nothing an SME decided is overwritten.
+    /// </summary>
+    public async Task<(BulkOutcome? Ok, SpecReviewError? Error)> BulkAcceptAndSignAsync(
+        IReadOnlyList<Guid> specIds, string? confirmation, DevPersonaContext persona, HttpContext? ctx, CancellationToken ct)
+    {
+        if (!string.Equals(confirmation?.Trim(), BulkConfirmation, StringComparison.OrdinalIgnoreCase))
+            return (null, new(400, "spec.bulk.confirmation_required", $"A bulk sign-off needs the sentence: \"{BulkConfirmation}\"."));
+        if (specIds.Count == 0) return (null, new(400, "spec.bulk.empty", "There are no specs to sign."));
+        if (specIds.Count > MaxBulkSpecs)
+            return (null, new(400, "spec.bulk.too_many", $"At most {MaxBulkSpecs} specs can be signed in one bulk sign-off; this asked for {specIds.Count}."));
+
+        var items = new List<BulkItem>();
+        int signed = 0, skipped = 0, accepted = 0;
+        foreach (var specId in specIds.Distinct())
+        {
+            ct.ThrowIfCancellationRequested();
+            var spec = await _db.Specs.Include(s => s.Subroutine).FirstOrDefaultAsync(s => s.Id == specId, ct);
+            var name = spec?.Subroutine?.Name ?? specId.ToString();
+            if (spec is null) { items.Add(new(specId, name, "skipped", 0, "spec not found")); skipped++; continue; }
+            if (spec.State == "SIGNED") { items.Add(new(specId, name, "already-signed", 0, null)); continue; }
+            if (spec.State != "IN_REVIEW") { items.Add(new(specId, name, "skipped", 0, $"it is {spec.State}, not in review")); skipped++; continue; }
+            if (!HasClaims(spec)) { items.Add(new(specId, name, "skipped", 0, "it has no claims; extract it again")); skipped++; continue; }
+
+            var failures = await CheckPreconditionsAsync(spec, ct);
+            if (failures.Any(f => (string?)f.GetType().GetProperty("issue")?.GetValue(f) == "unresolved"))
+            {
+                items.Add(new(specId, name, "skipped", 0, "an SME raised a question on it; answer it on its review page first"));
+                skipped++;
+                continue;
+            }
+            var count = 0;
+            foreach (var f in failures)
+            {
+                var path = (string?)f.GetType().GetProperty("claimPath")?.GetValue(f);
+                if (path is null || path == "$") continue;
+                var (_, err) = await ReviewClaimAsync(specId, new ClaimReviewRequest(path, "accept", "Accepted as drafted in a bulk sign-off.", null), persona, ctx, ct);
+                if (err is null) count++;
+            }
+            accepted += count;
+
+            var (outcome, error) = await SignAsync(specId, "I have reviewed every claim", persona, ctx, ct, bulk: true);
+            if (error is not null) { items.Add(new(specId, name, "skipped", count, error.Message)); skipped++; continue; }
+            items.Add(new(specId, name, outcome!.Idempotent ? "already-signed" : "signed", count, null));
+            if (!outcome.Idempotent) signed++;
+        }
+
+        await _audit.LogAsync(
+            "spec.bulk_signed", "spec", specIds[0], persona,
+            new { specs = specIds.Count, signed, skipped, claimsAccepted = accepted, items = items.Select(i => new { i.SpecId, i.Routine, i.Outcome, i.Accepted, i.Reason }) },
+            ctx, ct);
+        return (new BulkOutcome(signed, skipped, accepted, items), null);
     }
 
     /// <summary>Unreviewed / unresolved claims — what still blocks a sign-off.</summary>

@@ -579,6 +579,7 @@ using (var scope = app.Services.CreateScope())
         // reads as parameter placeholders (see the note above).
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE corpora ADD COLUMN IF NOT EXISTS settings_json jsonb NULL;
+            ALTER TABLE signatures ADD COLUMN IF NOT EXISTS bulk boolean NOT NULL DEFAULT false;
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS kind varchar(32) NOT NULL DEFAULT 'code';
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS content_type varchar(128) NULL;
             ALTER TABLE source_files ADD COLUMN IF NOT EXISTS size_bytes bigint NULL;

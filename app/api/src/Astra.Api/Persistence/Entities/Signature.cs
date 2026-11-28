@@ -26,5 +26,9 @@ public sealed class Signature
     /// <summary>Where the canonicalized signed JSON was archived.</summary>
     public string SignedBlobUri { get; set; } = "";
 
+    /// <summary>True when the SME signed this spec in a bulk sign-off (every untouched claim accepted as drafted,
+    /// many specs in one confirmation) rather than claim by claim; reports say so.</summary>
+    public bool Bulk { get; set; }
+
     public Spec? Spec { get; set; }
 }

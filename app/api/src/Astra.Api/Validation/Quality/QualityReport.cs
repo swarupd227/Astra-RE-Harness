@@ -31,7 +31,7 @@ public sealed record QualityReport(
         string Routine, string? SourceLanguage, string? SourceFile, string? Programme, Guid ScaffoldId, Guid SpecId,
         string TargetStack, DateTimeOffset PackageGeneratedAt, int FileCount, int TotalLines, int TodoCount, string? GitCommit);
 
-    public sealed record SpecInfo(string State, int ClaimCount, string? SignedBy, DateTimeOffset? SignedAt, string? SpecHash);
+    public sealed record SpecInfo(string State, int ClaimCount, string? SignedBy, DateTimeOffset? SignedAt, string? SpecHash, bool SignedInBulk = false);
 
     /// <summary>PASSED, FAILED or INCOMPLETE (a required gate has not run on this version of the code).</summary>
     public sealed record VerdictInfo(string Status, string Reason);
@@ -88,7 +88,7 @@ public sealed record QualityReportInput(
     Guid ScaffoldId, Guid SpecId, string Routine, string? SourceLanguage, string? SourceFile, string? Programme,
     string TargetStack, DateTimeOffset PackageGeneratedAt, int FileCount, int TotalLines, int TodoCount, string? GitCommit,
     string SpecState, int ClaimCount, string? SignedBy, DateTimeOffset? SignedAt, string? SpecHash,
-    IReadOnlyList<QualityReportInput.Run> Runs, string PlatformBuild, DateTimeOffset Now)
+    IReadOnlyList<QualityReportInput.Run> Runs, string PlatformBuild, DateTimeOffset Now, bool SignedInBulk = false)
 {
     public sealed record Run(Guid Id, string Stage, string Status, string Summary, string? MetricsJson, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt);
 }
@@ -188,7 +188,7 @@ public static class QualityReportBuilder
         return new QualityReport(QualityReport.SchemaId, i.Now, i.PlatformBuild,
             new(i.Routine, i.SourceLanguage, i.SourceFile, i.Programme, i.ScaffoldId, i.SpecId, i.TargetStack, i.PackageGeneratedAt,
                 i.FileCount, i.TotalLines, i.TodoCount, i.GitCommit),
-            new(i.SpecState, i.ClaimCount, i.SignedBy, i.SignedAt, i.SpecHash),
+            new(i.SpecState, i.ClaimCount, i.SignedBy, i.SignedAt, i.SpecHash, i.SignedInBulk),
             Verdict(gates, i.SpecState), gates, checks, findingsInfo, deps, tests, history);
     }
 
@@ -359,7 +359,7 @@ public static class QualityReportHtml
         Row(h, "Generated code", $"{s.FileCount} files · {s.TotalLines:N0} lines · {s.TodoCount} TODOs · generated {When(s.PackageGeneratedAt)}");
         Row(h, "Package id", s.ScaffoldId.ToString());
         if (s.GitCommit is not null) Row(h, "Commit", s.GitCommit);
-        Row(h, "Spec", $"{r.Spec.State} · {r.Spec.ClaimCount} claims" + (r.Spec.SignedBy is null ? "" : $" · signed by {r.Spec.SignedBy} on {When(r.Spec.SignedAt)}"));
+        Row(h, "Spec", $"{r.Spec.State} · {r.Spec.ClaimCount} claims" + (r.Spec.SignedBy is null ? "" : $" · signed by {r.Spec.SignedBy} on {When(r.Spec.SignedAt)}") + (r.Spec.SignedInBulk ? " · signed in a bulk sign-off (claims accepted as drafted, not reviewed one by one)" : ""));
         if (r.Spec.SpecHash is not null) Row(h, "Signed spec hash", r.Spec.SpecHash);
         Row(h, "Platform build", r.PlatformBuild);
         Row(h, "Report generated", When(r.GeneratedAt));

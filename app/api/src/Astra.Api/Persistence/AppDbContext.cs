@@ -462,6 +462,7 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.SignatureKeyId).HasColumnName("signature_key_id").HasMaxLength(120).IsRequired();
             b.Property(x => x.Algorithm).HasColumnName("algorithm").HasMaxLength(32).IsRequired();
             b.Property(x => x.SignedBlobUri).HasColumnName("signed_blob_uri").HasMaxLength(1024).IsRequired();
+            b.Property(x => x.Bulk).HasColumnName("bulk").HasDefaultValue(false);
             b.HasOne(x => x.Spec).WithMany().HasForeignKey(x => x.SpecId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(x => x.SpecId).IsUnique();  // one signature per spec
         });
