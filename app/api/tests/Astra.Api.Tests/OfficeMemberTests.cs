@@ -1,4 +1,4 @@
-using Astra.Api.Endpoints;
+using Astra.Api.Conversations;
 using Xunit;
 
 namespace Astra.Api.Tests;
@@ -16,5 +16,5 @@ public class OfficeMemberTests
     [InlineData("docs/readme.doc", false)]
     [InlineData("Forms/frmXlsImport.frm", false)]
     public void OfficeMember_MatchesFilesInsideOfficeDocuments(string path, bool expected) =>
-        Assert.Equal(expected, ConversationEndpoints.OfficeMember.IsMatch(path));
+        Assert.Equal(expected, ConversationService.OfficeMember.IsMatch(path));
 }

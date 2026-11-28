@@ -186,7 +186,7 @@ public sealed class ConversationService
             if (corpus is not null)
             {
                 var (routines, files, language) = await ProgrammeStatsAsync(corpus, ct);
-                programme = new ProgrammeSummaryDto(corpus.Name, language, routines, files);
+                programme = new ProgrammeSummaryDto(corpus.Name, await DisplayLanguageAsync(corpus, language, ct), routines, files);
             }
         }
         return new ConversationDto(conv.Id, conv.CorpusId, conv.Kind, conv.RefId, conv.Title, conv.CreatedAt, conv.UpdatedAt,
@@ -354,7 +354,7 @@ public sealed class ConversationService
     {
         var (routines, files, language) = await ProgrammeStatsAsync(corpus, ct);
         var funnel = await FunnelAsync(corpus, ct);
-        var lang = LanguageLabel(language);
+        var lang = LanguageLabel(await DisplayLanguageAsync(corpus, language, ct));
 
         var lines = new List<string>
         {
@@ -404,6 +404,29 @@ public sealed class ConversationService
         "abl" => "Progress ABL",
         "java" => "Java",
         "csharp" => "C#",
+        "vba" => "VBA",
+        "php" => "PHP",
         _ => schemaId,
     };
+
+    /// <summary>A file inside an Office document: "Rating.xlsm/Module1.bas", "Report.docm/ThisDocument.cls".</summary>
+    internal static readonly System.Text.RegularExpressions.Regex OfficeMember = new(
+        @"\.(xls[mbx]?|xlam|docm?|dotm|pptm?|accdb|mdb)/",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// The language to <em>show</em> for a project: VBA is read with the VB6 grammar ("vb6"), and what tells it apart
+    /// is that it lives inside an Office document — so "vb6" with a file under one reads "vba", as the project list
+    /// says. Display only: stats, assessment targets and prompt routing keep the grammar id.
+    /// </summary>
+    public async Task<string?> DisplayLanguageAsync(Corpus corpus, string? language, CancellationToken ct)
+    {
+        if (language != "vb6" || corpus.LatestVersionId is not { } vid) return language;
+        var candidates = await _db.SourceFiles.AsNoTracking()
+            .Where(f => f.SourceVersionId == vid
+                && (f.RelativePath.Contains(".xls") || f.RelativePath.Contains(".doc") || f.RelativePath.Contains(".dot")
+                    || f.RelativePath.Contains(".ppt") || f.RelativePath.Contains(".accdb/") || f.RelativePath.Contains(".mdb/")))
+            .Select(f => f.RelativePath).Take(50).ToListAsync(ct);
+        return candidates.Any(p => OfficeMember.IsMatch(p)) ? "vba" : language;
+    }
 }

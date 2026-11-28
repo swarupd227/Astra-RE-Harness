@@ -191,13 +191,14 @@ public sealed class Narrator
                 if (state == "SUCCEEDED" && corpus is not null)
                 {
                     int N(string name) => item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
-                    var (_, _, language) = await conversations.ProgrammeStatsAsync(corpus, ct);
+                    var (_, _, statsLanguage) = await conversations.ProgrammeStatsAsync(corpus, ct);
+                    var language = await conversations.DisplayLanguageAsync(corpus, statsLanguage, ct);
                     var bits = new List<string> { $"{N("fileCount"):N0} files", $"{N("totalLoc"):N0} lines", $"{N("subroutineCount"):N0} code units" };
                     if (N("carriedForwardCount") > 0) bits.Add($"{N("carriedForwardCount"):N0} specs carried forward");
                     if (N("supersededCount") > 0) bits.Add($"{N("supersededCount"):N0} superseded");
                     markdown = $"{verb} done for **{corpus.Name}**" + (string.IsNullOrWhiteSpace(language) ? "" : $" ({ConversationService.LanguageLabel(language)})") +
                                $": {string.Join(", ", bits)}." +
-                               (N("warningCount") > 0 ? $" {N("warningCount"):N0} parse warning(s) are recorded on the corpus." : "") +
+                               (N("warningCount") > 0 ? $" {N("warningCount"):N0} parse warning{(N("warningCount") == 1 ? " is" : "s are")} recorded on the project." : "") +
                                " Next: survey it to find the shared patterns.";
                     var (funnel, _) = await ArtifactBuilders.FunnelAsync(db, conversations, corpus, ct);
                     artifacts.Add(funnel);

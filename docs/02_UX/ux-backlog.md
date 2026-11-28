@@ -400,3 +400,7 @@ screen. Review it on the next spec an SME signs.
     hiding messages (each Admin-only on the server). Display only; ids unchanged.
 18. **Validation policy** — "Three independent gates" above four; the quality gate's retry read "Regenerate the tests".
     **Done:** count from the policy, "Regenerate, then run again", "generated code" instead of "scaffold".
+19. **Programme thread** — a workbook project's header and agent messages said "VB6"; the ingest note said "5 parse
+    warning(s) are recorded on the corpus". **Done:** `ConversationService.DisplayLanguageAsync` (one rule: VB6
+    grammar inside an Office document reads VBA) used by the thread header, the welcome, the ingest narration and Home;
+    "5 parse warnings are recorded on the project".
