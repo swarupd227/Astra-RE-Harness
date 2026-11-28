@@ -160,7 +160,8 @@ function TargetCard({
         )}
         {!selectable && <Lock className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />}
       </div>
-      <span className="text-body text-ink-secondary">{headline.displayName}</span>
+      {/* A locked card in the compact picker names no archetype: its sample (e.g. a C++ one) is not this code's. */}
+      {(selectable || !compact) && <span className="text-body text-ink-secondary">{headline.displayName}</span>}
       {!compact && otherVariants.length > 0 && (
         <span
           className="text-caption text-ink-tertiary"

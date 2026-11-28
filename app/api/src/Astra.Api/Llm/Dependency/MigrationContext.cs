@@ -203,7 +203,8 @@ public sealed class MigrationContextService
         if (hasSharedBlocks)
         {
             classification = "coordinated-only";
-            reasons.Add($"References shared storage block(s) {string.Join(", ", sharedBlockNames.Select(b => $"/{b}/"))} also touched by other code units in this project. Migration must co-locate or replicate the shared-state contract.");
+            // Plain words: the blocks are COMMON blocks in Fortran, but class fields or globals elsewhere.
+            reasons.Add($"Shares state ({string.Join(", ", sharedBlockNames)}) with other code units in this project, so it moves together with them, or the shared state is replicated.");
         }
         else
         {

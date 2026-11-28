@@ -228,7 +228,8 @@ function TargetStackCard({ sourceLanguage, preferred }: { sourceLanguage: string
             Target stack
           </span>
         }
-        description={`Generated code for this code unit will be ${prettyStack(targetStack)}.`}
+        description="The stack this code unit's generated code is built on."
+
       />
       <CardBody className="space-y-2">
         <TargetSelector
@@ -274,27 +275,37 @@ function StructurePanel({
 }: {
   sub: NonNullable<Awaited<ReturnType<typeof api.getSubroutine>>>;
 }) {
+  // The parser files shared state under one field for every language; name it the way that language does, and show
+  // the I/O groups only where they apply (ISAM is UniBasic/Pick) instead of "—" rows on a Java method.
+  const reads = sub.ioPatterns?.isam_reads ?? [];
+  const writes = sub.ioPatterns?.isam_writes ?? [];
+  const notes = sub.ioPatterns?.notifications ?? [];
   return (
     <Card>
       <CardHeader title="Structure" />
       <CardBody className="space-y-5">
-        <Group title="COMMON blocks" items={sub.commonBlockRefs ?? []} />
+        <Group title={sharedStateLabel(sub.sourceLanguage)} items={sub.commonBlockRefs ?? []} />
         <Group title="Calls" items={sub.calledSubroutines ?? []} />
-        <Group
-          title="ISAM reads"
-          items={sub.ioPatterns?.isam_reads ?? []}
-        />
-        <Group
-          title="ISAM writes"
-          items={sub.ioPatterns?.isam_writes ?? []}
-        />
-        <Group
-          title="Notifications"
-          items={sub.ioPatterns?.notifications ?? []}
-        />
+        {reads.length > 0 && <Group title="File reads (ISAM)" items={reads} />}
+        {writes.length > 0 && <Group title="File writes (ISAM)" items={writes} />}
+        {notes.length > 0 && <Group title="Notifications" items={notes} />}
       </CardBody>
     </Card>
   );
+}
+
+function sharedStateLabel(lang: string | null | undefined): string {
+  switch ((lang ?? '').toLowerCase()) {
+    case 'fortran-f77':
+    case 'fortran':
+      return 'COMMON blocks';
+    case 'cobol':
+      return 'Shared records (copybooks)';
+    case 'unibasic':
+      return 'COMMON variables';
+    default:
+      return 'Shared state';
+  }
 }
 
 function Group({ title, items }: { title: string; items: string[] }) {
@@ -406,7 +417,7 @@ function WaveCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType<type
         {q.isPending && <Skeleton className="h-5 w-32" />}
         {noPlan && (
           <p className="font-mono text-caption text-ink-tertiary">
-            No migration plan for this corpus yet.
+            No migration plan for this project yet.
           </p>
         )}
         {q.data && (
@@ -439,14 +450,16 @@ function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType
         )}
         {q.data && (
           <>
-            <Badge tone={readinessTone(q.data.classification)}>{q.data.classification}</Badge>
+            <Badge tone={readinessTone(q.data.classification)} title={q.data.classification}>
+              {READINESS_WORD[q.data.classification] ?? q.data.classification}
+            </Badge>
             <ul className="space-y-1 text-caption text-ink-secondary">
               {q.data.reasons.map((r) => <li key={r}>{r}</li>)}
             </ul>
-            <p className="font-mono text-caption text-ink-tertiary">
-              callees: {q.data.calleeCount} · callers: {q.data.callerCount}
+            <p className="text-caption text-ink-tertiary">
+              Calls {q.data.calleeCount} · called by {q.data.callerCount}
               {q.data.sharedBlockNames.length > 0 && (
-                <> · shared: {q.data.sharedBlockNames.map((b) => `/${b}/`).join(', ')}</>
+                <> · shares <span className="font-mono">{q.data.sharedBlockNames.join(', ')}</span></>
               )}
             </p>
             {q.data.blockingRoutineIds.length > 0 && (
@@ -460,6 +473,14 @@ function ReadinessCard({ q }: { q: ReturnType<typeof useQuery<Awaited<ReturnType
     </Card>
   );
 }
+
+/** The classifier's ids (kept in the API and the e2e suite), in words. */
+const READINESS_WORD: Record<string, string> = {
+  'safe-leaf': 'Ready on its own',
+  'safe-with-deps-done': 'Ready — its dependencies are done',
+  'coordinated-only': 'Moves with others',
+  'blocked-on-deps': 'Waiting on its dependencies',
+};
 
 function readinessTone(c: string): 'success' | 'review' | 'failed' | 'neutral' {
   switch (c) {

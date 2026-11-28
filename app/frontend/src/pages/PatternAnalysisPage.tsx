@@ -536,7 +536,7 @@ export function PatternAnalysisPage() {
         <Card>
           <CardBody>
             <p className="text-body text-ink-secondary">
-              No pattern analysis has run for this corpus yet. Run it to survey every
+              No pattern analysis has run for this project yet. Run it to survey every
               code unit (minutes, not hours) and see how many distinct patterns this
               codebase actually contains.
             </p>

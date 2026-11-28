@@ -404,3 +404,9 @@ screen. Review it on the next spec an SME signs.
     warning(s) are recorded on the corpus". **Done:** `ConversationService.DisplayLanguageAsync` (one rule: VB6
     grammar inside an Office document reads VBA) used by the thread header, the welcome, the ingest narration and Home;
     "5 parse warnings are recorded on the project".
+20. **Code unit page** — a Java method showed Fortran/Pick panels ("COMMON blocks", "ISAM reads/writes" with "—"), a raw
+    readiness id ("coordinated-only"), "shared storage block(s) /BookController/ … co-locate or replicate the shared-state
+    contract", "No migration plan for this corpus", and a locked .NET 10 card titled with a C++ sample under "Generated code
+    … will be .NET 10". **Done:** shared state named per language (COMMON blocks only for Fortran), I/O groups only when
+    present, readiness in words ("Moves with others"; ids kept in the API), a plain reason, "project", a neutral target
+    description, and no archetype sample on a locked compact card.
