@@ -39,6 +39,7 @@ public sealed class CrossRuntimeValidator
     private readonly GppClient _gpp;
     private readonly PhpClient _php;
     private readonly MavenClient _maven;
+    private readonly PhpEquivalence.EquivalenceSeedWriter? _seeds;
     private readonly ILogger<CrossRuntimeValidator> _log;
 
     public CrossRuntimeValidator(
@@ -54,8 +55,10 @@ public sealed class CrossRuntimeValidator
         GppClient gpp,
         PhpClient php,
         MavenClient maven,
-        ILogger<CrossRuntimeValidator> log)
+        ILogger<CrossRuntimeValidator> log,
+        PhpEquivalence.EquivalenceSeedWriter? seeds = null)
     {
+        _seeds = seeds;
         _php = php;
         _maven = maven;
         _db = db;
@@ -682,7 +685,7 @@ public sealed class CrossRuntimeValidator
         IReadOnlyList<System.Text.Json.Nodes.JsonObject>? engineerVectors,
         CancellationToken ct)
     {
-        var runner = new PhpEquivalence.PhpEquivalenceRunner(_db, _blob, _php, _maven, _log);
+        var runner = new PhpEquivalence.PhpEquivalenceRunner(_db, _blob, _php, _maven, _log, _seeds, _storage.Buckets.Scaffolds);
         var outcome = await runner.RunAsync(scaffold, engineerVectors, ct);
 
         var logKey = $"validation/{run.Id:N}/equivalence.log";

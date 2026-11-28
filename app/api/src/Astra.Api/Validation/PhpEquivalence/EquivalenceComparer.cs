@@ -23,6 +23,11 @@ public static partial class EquivalenceComparer
     [GeneratedRegex(@"Argument #\d+ .*must be of type|Too few arguments|Unknown named parameter|must be of type .* given, called in", RegexOptions.IgnoreCase)]
     private static partial Regex SignatureMismatch();
 
+    // "array_walk_recursive(): Argument #1 ($array) must be of type array, false given": a built-in the code unit calls
+    // rejected a value — the code unit's own behaviour, not inputs that do not fit its signature.
+    [GeneratedRegex(@"^[a-z_][a-z0-9_]*\(\): Argument #\d+")]
+    private static partial Regex BuiltinCall();
+
     [GeneratedRegex(@"Call to undefined (?:function|method) ([\w\\:]+)|Class ""?([\w\\]+)""? not found|Interface ""?([\w\\]+)""? not found", RegexOptions.IgnoreCase)]
     private static partial Regex MissingSymbol();
 
@@ -31,10 +36,22 @@ public static partial class EquivalenceComparer
     [GeneratedRegex(@"Call to a member function (\w+)\(\) on null|Undefined constant ""?([\w\\]+)""?|Call to undefined method ([\w\\]+::\w+)", RegexOptions.IgnoreCase)]
     private static partial Regex MissingEnvironment();
 
+    // A file the application loads at run time (config, language strings) that the run does not have or cannot open.
+    [GeneratedRegex(@"Failed opening required '([^']+)'|failed to open stream|Failed to open stream", RegexOptions.IgnoreCase)]
+    private static partial Regex MissingFile();
+
     // The Java side reached a collaborator the harness cannot wire: a Spring bean left null, a DataSource or
     // EntityManager, a repository. Not a difference in behaviour — the vector cannot be judged here.
     [GeneratedRegex(@"DataSource|EntityManager|JdbcTemplate|ApplicationContext|SessionFactory|Repository|\bNo \w+ (set|configured|available|bound)\b|not (been )?initiali[sz]ed", RegexOptions.IgnoreCase)]
     private static partial Regex JavaEnvironment();
+
+    // A seeded run where the PHP code asks for a table, column or SQL function the generated package's schema (or
+    // SQLite) does not have: the schemas differ — worth knowing, not a behavioural difference.
+    [GeneratedRegex(@"no such (table|column|function)|has no column named|this run has no database", RegexOptions.IgnoreCase)]
+    private static partial Regex PhpSchemaGap();
+
+    [GeneratedRegex(@"(Table|Column) ""?[\w.]+""? not found|bad SQL grammar|Syntax error in SQL statement", RegexOptions.IgnoreCase)]
+    private static partial Regex JavaSchemaGap();
 
     public static Verdict Compare(JsonObject? php, JsonObject? java)
     {
@@ -52,7 +69,9 @@ public static partial class EquivalenceComparer
         {
             var msg = Str(phpEx, "message") ?? "";
             var cls = Str(phpEx, "class") ?? "Error";
-            if ((cls is "TypeError" or "ArgumentCountError") && SignatureMismatch().IsMatch(msg))
+            if (cls == "PDOException" && PhpSchemaGap().IsMatch(msg))
+                return new(Skipped, $"The schemas differ: the PHP code unit's SQL needs something the generated package's schema does not have ({Shorten(msg, 160)}).", null, notes);
+            if ((cls is "TypeError" or "ArgumentCountError") && SignatureMismatch().IsMatch(msg) && !(BuiltinCall().IsMatch(msg) && !msg.Contains("called in", StringComparison.Ordinal)))
                 return new(Skipped, $"The inputs do not fit the PHP signature ({cls}: {msg}).", null, notes);
             if (MissingEnvironment().Match(msg) is { Success: true } me)
             {
@@ -61,6 +80,8 @@ public static partial class EquivalenceComparer
                     : $"`{me.Groups[3].Value}()`, which a base class outside the supplied files would provide";
                 return new(Skipped, $"The PHP code unit reaches {what}; the run cannot supply it.", null, notes);
             }
+            if (MissingFile().Match(msg) is { Success: true } mf)
+                return new(Skipped, $"The PHP code unit loads a file at run time that the run cannot open ({(mf.Groups[1].Success ? mf.Groups[1].Value : Shorten(msg, 120))}).", null, notes);
             if (MissingSymbol().Match(msg) is { Success: true } ms)
             {
                 var sym = ms.Groups.Cast<Group>().Skip(1).FirstOrDefault(g => g.Success)?.Value ?? "a symbol";
@@ -78,6 +99,8 @@ public static partial class EquivalenceComparer
         {
             var jc = Str(javaEx, "class") ?? "";
             var jm = Str(javaEx, "message") ?? "";
+            if (JavaSchemaGap().IsMatch(jm))
+                return new(Skipped, $"The schemas differ: the Java method's SQL does not fit the package's own schema ({jc}: {Shorten(jm, 160)}).", null, notes);
             if (jc == "NullPointerException" || JavaEnvironment().IsMatch(jm))
                 return new(Skipped, $"The Java method reached a collaborator the run does not wire ({jc}: {Shorten(jm, 140)}).", null, notes);
         }
@@ -85,9 +108,24 @@ public static partial class EquivalenceComparer
         var phpCode = Int(php, "responseCode") ?? 200;
         if (Bool(php, "exited")) notes.Add("PHP ended the request with exit/die");
 
+        // ── the seeded tables and the session after the call ──
+        var tableDiff = EquivalenceDatabase.CompareTables(php["db"] as JsonObject, java["db"] as JsonObject);
+        if (php["db"] is JsonObject && java["db"] is JsonObject) notes.Add("the seeded tables are compared after the call");
+        if ((php["dbSetup"] as JsonObject)?["errors"] is JsonArray se && se.Count > 0)
+            notes.Add($"PHP: {se.Count} schema/seed statement(s) failed on SQLite, first: {se[0]}");
+        if ((java["dbSetup"] as JsonObject)?["errors"] is JsonArray je && je.Count > 0)
+            notes.Add($"Java: {je.Count} schema/seed statement(s) failed on H2, first: {je[0]}");
+        string? sessionDiff = null;
+        if (java["session"] is JsonObject js && php["session"] is JsonObject ps)
+            sessionDiff = Diff(ps, js, "$_SESSION", notes);
+
         // ── exceptions ──
         if (phpEx is not null && javaEx is not null)
+        {
+            if (tableDiff is not null)
+                return new(Failed, $"Both reject the input (PHP {Str(phpEx, "class")}, Java {Str(javaEx, "class")}), but the tables differ afterwards.", tableDiff, notes);
             return new(Passed, $"Both reject the input (PHP {Str(phpEx, "class")}, Java {Str(javaEx, "class")}).", null, notes);
+        }
         if (phpEx is not null)
             return new(Failed, $"PHP throws {Str(phpEx, "class")} ({Str(phpEx, "message")}); Java returns {Show(JavaValue(java, out _))}.", null, notes);
         if (javaEx is not null)
@@ -110,12 +148,25 @@ public static partial class EquivalenceComparer
             var loc = (php["headers"] as JsonArray)?.Select(h => h?.ToString()).FirstOrDefault(h => h?.StartsWith("Location:", StringComparison.OrdinalIgnoreCase) == true);
             return new(Skipped, $"PHP answers HTTP {phpCode}{(loc is null ? "" : $" ({loc})")}; the Java method returns a plain value, so the status cannot be compared here (the HTTP parity replay compares it).", null, notes);
         }
-        if (Bool(php, "sessionChanged")) notes.Add("PHP wrote to $_SESSION; session writes are not compared");
+        if (Bool(php, "sessionChanged") && java["session"] is not JsonObject) notes.Add("PHP wrote to $_SESSION; the Java method takes no session, so session writes are not compared");
         if (fromOutput) notes.Add("PHP's echoed output is compared with the Java return value");
 
+        // PDO's fetch() answers false for "no row"; the faithful Java answer is null (or an empty Optional).
+        if (phpVal is JsonValue pf && pf.TryGetValue<bool>(out var pb) && !pb && javaVal is null
+            && Str(java, "declaredType") is { } dt && dt is not ("boolean" or "Boolean"))
+        {
+            notes.Add($"PHP false (no row) read as Java null ({dt})");
+            phpVal = null;
+        }
         var diff = Diff(phpVal, javaVal, "$", notes, fromOutput);
         if (diff is null)
-            return new(Passed, phpVal is null && javaVal is null ? "Neither returns a value." : $"Both give {Show(phpVal)}.", null, notes);
+        {
+            var same = phpVal is null && javaVal is null ? "Neither returns a value" : $"Both give {Show(phpVal)}";
+            if (tableDiff is not null) return new(Failed, $"{same}, but the tables differ afterwards.", tableDiff, notes);
+            if (sessionDiff is not null) return new(Failed, $"{same}, but the session differs afterwards.", sessionDiff, notes);
+            return new(Passed, same + (php["db"] is JsonObject && java["db"] is JsonObject ? ", and the tables match." : "."), null, notes);
+        }
+        if (tableDiff is not null) notes.Add(tableDiff);
         return new(Failed, $"PHP gives {Show(phpVal)}; Java gives {Show(javaVal)}.", diff, notes);
     }
 
@@ -178,6 +229,12 @@ public static partial class EquivalenceComparer
             }
             if (av.TryGetValue<bool>(out var ab) && bv.TryGetValue<bool>(out var bb))
                 return ab == bb ? null : $"{path}: PHP {ab.ToString().ToLowerInvariant()} ≠ Java {bb.ToString().ToLowerInvariant()}";
+            // A MySQL TINYINT flag reads as 0/1 in PHP and as false/true in Java: the same value.
+            if (bv.TryGetValue<bool>(out var jb) && an is (0m or 1m))
+            {
+                if ((an == 1m) == jb) { notes?.Add($"{path}: PHP {an} read as Java {jb.ToString().ToLowerInvariant()}"); return null; }
+                return $"{path}: PHP {Show(a)} ≠ Java {jb.ToString().ToLowerInvariant()}";
+            }
             var asS = av.ToString();
             var bsS = bv.ToString();
             if (av.TryGetValue<string>(out var sa) && bv.TryGetValue<string>(out var sb))

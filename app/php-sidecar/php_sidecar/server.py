@@ -129,6 +129,8 @@ class Vector(BaseModel):
     named: Optional[dict[str, Any]] = None
     superglobals: Optional[dict[str, Any]] = None
     ctorArgs: Optional[list[Any]] = None
+    # A seeded database for this vector: {schema: [SQLite DDL], seed: {table: [rows]}, tables: [names to dump]}.
+    db: Optional[dict[str, Any]] = None
 
 
 class InspectRequest(BaseModel):
@@ -270,6 +272,8 @@ def _vector(v: Vector, i: int) -> dict:
         d["superglobals"] = v.superglobals
     if v.ctorArgs is not None:
         d["ctorArgs"] = v.ctorArgs
+    if v.db is not None:
+        d["db"] = v.db
     return d
 
 

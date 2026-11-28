@@ -22,7 +22,7 @@ public static class PhpEquivalenceVectors
 {
     public const int MaxVectors = 24;
 
-    public sealed record EqVector(string Id, string Source, string Label, JsonObject Named, JsonObject? Superglobals)
+    public sealed record EqVector(string Id, string Source, string Label, JsonObject Named, JsonObject? Superglobals, JsonObject? Db = null)
     {
         /// <summary>What the Java method is given: the named inputs plus every request parameter.</summary>
         public JsonObject JavaNamed()
@@ -46,9 +46,11 @@ public static class PhpEquivalenceVectors
         foreach (var ev in engineerVectors ?? Array.Empty<JsonObject>())
         {
             var named = ev["named"] as JsonObject ?? (ev["superglobals"] is null && ev["args"] is null ? ev : new JsonObject());
+            if (ReferenceEquals(named, ev)) { named = (JsonObject)ev.DeepClone(); named.Remove("db"); named.Remove("label"); }
             var sg = ev["superglobals"] as JsonObject;
+            // `db`: seed rows the engineer supplies for this vector ({table: [rows]}); they win over written seeds.
             all.Add(new EqVector(NextId(), "engineer", ev["label"]?.GetValue<string>() ?? "supplied with the request",
-                (JsonObject)named.DeepClone(), (JsonObject?)sg?.DeepClone()));
+                (JsonObject)named.DeepClone(), (JsonObject?)sg?.DeepClone(), (JsonObject?)(ev["db"] as JsonObject)?.DeepClone()));
         }
 
         if (spec.ValueKind == JsonValueKind.Object)
@@ -89,7 +91,7 @@ public static class PhpEquivalenceVectors
         var result = new List<EqVector>();
         foreach (var v in all)
         {
-            var key = v.Named.ToJsonString() + "|" + (v.Superglobals?.ToJsonString() ?? "");
+            var key = v.Named.ToJsonString() + "|" + (v.Superglobals?.ToJsonString() ?? "") + "|" + (v.Db?.ToJsonString() ?? "");
             if (!seen.Add(key)) continue;
             result.Add(v);
             if (result.Count >= MaxVectors) break;

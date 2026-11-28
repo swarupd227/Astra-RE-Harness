@@ -21,6 +21,8 @@
 
 namespace AstraEquivalenceDriver;
 
+require_once __DIR__ . '/seeded_pdo.php';
+
 final class State
 {
     public static string $resultPath = '';
@@ -344,7 +346,7 @@ function prepare(array $req): array
             foreach ($block['items'] as $item) {
                 if ($item['kind'] === 'class') {
                     $snippet = $dir . '/.astra-decl-' . (++$n) . '.php';
-                    file_put_contents($snippet, $head . $item['code'] . "\n");
+                    file_put_contents($snippet, seeded_pdo($head . $item['code'] . "\n"));
                     $key = strtolower(fqn($block['ns'], $item['name']));
                     if (!isset($index['classes'][$key])) $index['classes'][$key] = $snippet;
                     $index['routines'][] = ['kind' => 'class', 'path' => $rel, 'fqn' => fqn($block['ns'], $item['name']),
@@ -369,7 +371,7 @@ function prepare(array $req): array
         }
         if ($fnCode !== '') {
             $snippet = $dir . '/.astra-decl-' . (++$n) . '.php';
-            file_put_contents($snippet, "<?php\n" . $fnCode);
+            file_put_contents($snippet, seeded_pdo("<?php\n" . $fnCode));
             $index['functionFiles'][] = ['path' => $rel, 'snippet' => $snippet];
         }
     }
@@ -377,6 +379,35 @@ function prepare(array $req): array
     $lint = [];
     return ['ok' => true, 'classes' => count($index['classes']), 'functionFiles' => count($index['functionFiles']),
             'routines' => count($index['routines']), 'skippedFiles' => $index['skippedFiles'], 'lint' => $lint];
+}
+
+/**
+ * `new PDO(…)` / `new \PDO(…)` in the code under test becomes `new \AstraSeededPdo(…)`: whatever DSN the application
+ * builds, a seeded run gives it the vector's SQLite database (see seeded_pdo.php); an unseeded run refuses to connect.
+ * Token-based, so a "new PDO(" inside a string or comment is left alone.
+ */
+function seeded_pdo(string $code): string
+{
+    if (stripos($code, 'pdo') === false) return $code;
+    $toks = \PhpToken::tokenize($code);
+    $out = '';
+    $n = count($toks);
+    for ($i = 0; $i < $n; $i++) {
+        $out .= $toks[$i]->text;
+        if ($toks[$i]->id !== T_NEW) continue;
+        $j = $i + 1;
+        $ws = '';
+        while ($j < $n && $toks[$j]->id === T_WHITESPACE) $ws .= $toks[$j++]->text;
+        if ($j >= $n) continue;
+        $name = ltrim($toks[$j]->text, '\\');
+        if (!in_array($toks[$j]->id, [T_STRING, T_NAME_FULLY_QUALIFIED], true) || strcasecmp($name, 'PDO') !== 0) continue;
+        $k = $j + 1;
+        while ($k < $n && $toks[$k]->id === T_WHITESPACE) $k++;
+        if ($k >= $n || $toks[$k]->text !== '(') continue;
+        $out .= ($ws === '' ? ' ' : $ws) . '\\AstraSeededPdo';
+        $i = $j;
+    }
+    return $out;
 }
 
 function load_index(): void
@@ -665,6 +696,20 @@ function run_vector(array $req): void
     State::$result['routine'] = describe($f);
     State::$result['stubs'] = State::$stubs;
     apply_superglobals(isset($vector['superglobals']) ? (array) $vector['superglobals'] : []);
+    // Applications include their config and language files relative to the document root (`../application/config/…`
+    // from public/index.php): run from it when the supplied files have one.
+    foreach (['public', 'public_html', 'htdocs', 'web', 'www'] as $docroot) {
+        if (is_dir(State::$root . '/' . $docroot)) { @chdir(State::$root . '/' . $docroot); State::$result['cwd'] = $docroot; break; }
+    }
+    // A seeded run: the vector's own SQLite file with the package's schema and the seed rows (see seeded_pdo.php).
+    $db = isset($vector['db']) && is_array($vector['db']) ? $vector['db'] : null;
+    $dbFile = null;
+    if ($db !== null) {
+        $dbFile = State::$root . '/.astra-db-' . getmypid() . '.sqlite';
+        $errors = \AstraSeededPdo::prepareFile($dbFile, (array) ($db['schema'] ?? []), (array) ($db['seed'] ?? []));
+        \AstraSeededPdo::$file = $dbFile;
+        State::$result['dbSetup'] = ['errors' => array_slice($errors, 0, 20), 'tables' => array_values((array) ($db['tables'] ?? []))];
+    }
     $refs = [];
     $notes = [];
     try {
@@ -710,6 +755,10 @@ function run_vector(array $req): void
     $byRef = [];
     foreach ($f->getParameters() as $p) if ($p->isPassedByReference() && array_key_exists($p->getPosition(), $refs)) $byRef[$p->getName()] = normalize($refs[$p->getPosition()]);
     State::$result['byRef'] = (object) $byRef;
+    if ($dbFile !== null) {
+        State::$result['db'] = normalize(\AstraSeededPdo::dump($dbFile, (array) ($db['tables'] ?? [])));
+        State::$result['dbConnections'] = \AstraSeededPdo::$opened;
+    }
     $sessionAfter = normalize($_SESSION ?? []);
     State::$result['session'] = $sessionAfter;
     State::$result['sessionChanged'] = json_encode($sessionAfter) !== $sessionBefore;

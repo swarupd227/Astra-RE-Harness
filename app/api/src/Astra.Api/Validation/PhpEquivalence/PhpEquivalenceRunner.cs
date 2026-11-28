@@ -12,10 +12,13 @@ namespace Astra.Api.Validation.PhpEquivalence;
 /// EQUIVALENCE for a PHP routine and the java-spring package generated from it. Vectors come from the signed spec
 /// (<see cref="PhpEquivalenceVectors"/>); the PHP source runs in the php sidecar, the Java method (found by
 /// <see cref="JavaTargetLocator"/>) runs in the maven sidecar through a JUnit harness added for this run only, and
-/// <see cref="EquivalenceComparer"/> decides each vector. Routines that need a database, uploaded files or the network
-/// are skipped with the reason, as are routines that read request superglobals when the spec names no parameters.
+/// <see cref="EquivalenceComparer"/> decides each vector. A routine that reaches a database through PDO runs SEEDED:
+/// both sides get the generated package's schema.sql (H2 for Java, SQLite for PHP — the PHP code's own `new PDO(...)`
+/// is redirected) and each vector's seed rows (<see cref="EquivalenceSeedWriter"/>, or the engineer's), and the tables
+/// after the call are compared too. mysqli/pg_* routines, uploaded files and the network are still skipped with the
+/// reason, as are routines that read request superglobals when the spec names no parameters.
 /// </summary>
-public sealed class PhpEquivalenceRunner
+public sealed partial class PhpEquivalenceRunner
 {
     public const string HarnessClass = "AstraEquivalenceHarnessTest";
     private const string Marker = "@@ASTRA-EQ@@ ";
@@ -29,15 +32,23 @@ public sealed class PhpEquivalenceRunner
     private readonly PhpClient _php;
     private readonly MavenClient _maven;
     private readonly ILogger _log;
+    private readonly EquivalenceSeedWriter? _seeds;
+    private readonly string? _cacheBucket;
 
-    public PhpEquivalenceRunner(AppDbContext db, IBlobClient blob, PhpClient php, MavenClient maven, ILogger log)
+    public PhpEquivalenceRunner(AppDbContext db, IBlobClient blob, PhpClient php, MavenClient maven, ILogger log,
+        EquivalenceSeedWriter? seeds = null, string? cacheBucket = null)
     {
         _db = db;
         _blob = blob;
         _php = php;
         _maven = maven;
         _log = log;
+        _seeds = seeds;
+        _cacheBucket = cacheBucket;
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\bmysqli\b|\bmysqli_\w+\s*\(|\bpg_\w+\s*\(|\boci_\w+\s*\(|\bsqlsrv_\w+\s*\(", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex NativeDriver();
 
     public async Task<Outcome> RunAsync(Scaffold scaffold, IReadOnlyList<JsonObject>? engineerVectors, CancellationToken ct)
     {
@@ -69,15 +80,21 @@ public sealed class PhpEquivalenceRunner
         var traits = PhpRoutineTraits.Analyze(routineSource, spec);
         t.AppendLine($"routine: {file.RelativePath}:{sub.LineStart}-{sub.LineEnd}");
         t.AppendLine($"superglobals read: {(traits.Superglobals.Count == 0 ? "none" : string.Join(", ", traits.Superglobals.Select(s => "$" + s)))}");
-        if (traits.TouchesDatabase)
+        var needsDb = traits.TouchesDatabase;
+        if (needsDb && NativeDriver().IsMatch(routineSource))
             return Skip("equivalence.needs_database",
-                $"`{routine}` reads or writes a database ({traits.DatabaseEvidence}); a PHP run here has no database to give it. " +
-                "The HTTP parity replay (the legacy app and the Spring service against one database) is where it is compared.");
+                $"`{routine}` talks to its database through a native driver ({traits.DatabaseEvidence}); a seeded run gives PDO a database, " +
+                "not mysqli/pg/oci connections. The HTTP parity replay (the legacy app and the Spring service against one database) is where it is compared.");
+        if (needsDb) t.AppendLine($"database: {traits.DatabaseEvidence} — the run is seeded");
         if (traits.Unsuppliable.Count > 0)
             return Skip("equivalence.needs_outside_world", $"`{routine}` {traits.Unsuppliable[0]}.");
 
         // ── vectors from the signed spec ──
         var vectors = PhpEquivalenceVectors.Build(spec, engineerVectors);
+        // A database routine often takes no inputs at all (it reads the session and its tables): one call against seeded
+        // tables is still a real comparison. If it does need inputs, the PHP side reports which and the vector is skipped.
+        if (vectors.Count == 0 && needsDb)
+            vectors.Add(new PhpEquivalenceVectors.EqVector("V1", "seeded", "called against seeded tables", new JsonObject(), null));
         t.AppendLine($"vectors: {vectors.Count} ({string.Join(", ", vectors.GroupBy(v => v.Source).Select(g => $"{g.Count()} from {g.Key}"))})");
         if (vectors.Count == 0)
             return Skip("equivalence.no_vectors",
@@ -110,10 +127,40 @@ public sealed class PhpEquivalenceRunner
         if (!javaSources.Any(s => s.Path == "pom.xml"))
             return Skip("equivalence.no_pom", "The generated package has no pom.xml, so the Java side cannot be built.");
 
+        // ── the seeded database ──
+        List<string>? schemaStatements = null, sqliteSchema = null, tables = null;
+        string? schemaSql = null;
+        SeedPlan? plan = null;
+        if (needsDb)
+        {
+            schemaSql = javaSources.FirstOrDefault(s => s.Path == "src/main/resources/schema.sql")?.Content;
+            if (string.IsNullOrWhiteSpace(schemaSql))
+                return Skip("equivalence.needs_database",
+                    $"`{routine}` reads or writes a database ({traits.DatabaseEvidence}), and the generated package has no src/main/resources/schema.sql to build the seeded database from.");
+            schemaStatements = EquivalenceDatabase.Statements(schemaSql);
+            sqliteSchema = EquivalenceDatabase.ToSqlite(schemaStatements);
+            tables = EquivalenceDatabase.Tables(schemaStatements);
+            plan = await SeedsAsync(scaffold, routine, routineSource, spec.GetRawText(), schemaSql, vectors, ct);
+            var seededPlan = plan;
+            vectors = vectors.Select(v =>
+            {
+                if (!seededPlan.Session.TryGetValue(v.Id, out var s) || v.Superglobals?["session"] is not null) return v;
+                var sg = (JsonObject?)v.Superglobals?.DeepClone() ?? new JsonObject();
+                sg["session"] = s.DeepClone();
+                return v with { Superglobals = sg };
+            }).ToList();
+            t.AppendLine($"seeded database: {tables.Count} table(s) from schema.sql ({string.Join(", ", tables)}); seeds: {plan.Source}" +
+                         (plan.Model is null ? "" : $" ({plan.Model}, ${plan.CostUsd:0.####})") + (plan.Note is null ? "" : $" — {plan.Note}"));
+            foreach (var v in vectors)
+                t.AppendLine($"  {v.Id} seed: {SeedFor(v, plan).ToJsonString()}");
+        }
+
         // ── run both sides at once ──
         var phpFiles = await PhpFilesAsync(file, content, ct);
-        var phpTask = RunPhpAsync(phpFiles, routine, file.RelativePath, sub.LineStart, phpClass, vectors, ct);
-        var javaTask = RunJavaAsync(javaSources, javaTarget, vectors, ct);
+        Func<PhpEquivalenceVectors.EqVector, JsonObject?>? phpDb = plan is null ? null : v => PhpDb(v, plan, sqliteSchema!, tables!);
+        var javaDb = plan is null ? null : JavaDb(schemaStatements!, tables!, schemaSql!);
+        var phpTask = RunPhpAsync(phpFiles, routine, file.RelativePath, sub.LineStart, phpClass, vectors, ct, phpDb);
+        var javaTask = RunJavaAsync(javaSources, javaTarget, vectors, ct, javaDb, plan);
         await Task.WhenAll(phpTask, javaTask);
         var (phpResp, phpError) = phpTask.Result;
         var java = javaTask.Result;
@@ -165,8 +212,9 @@ public sealed class PhpEquivalenceRunner
                 reason = verdict.Reason,
                 diff = verdict.Diff,
                 notes = verdict.Notes,
-                php = p is null ? (JsonElement?)null : Pick(p, "returnValue", "output", "responseCode", "headers", "exception", "byRef", "sessionChanged", "exited"),
-                java = j is null ? (JsonElement?)null : Pick(j, "returnValue", "exception", "returnType"),
+                php = p is null ? (JsonElement?)null : Pick(p, "returnValue", "output", "responseCode", "headers", "exception", "byRef", "sessionChanged", "exited", "session", "db", "dbSetup"),
+                java = j is null ? (JsonElement?)null : Pick(j, "returnValue", "exception", "returnType", "session", "db", "dbSetup"),
+                seed = plan is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(SeedFor(v, plan).ToJsonString()),
             });
         }
 
@@ -209,6 +257,7 @@ public sealed class PhpEquivalenceRunner
             java = new { compileMs = java.CompileMs, testMs = java.TestMs },
             vectorCount = vectors.Count,
             passed, failed, skipped, errored,
+            seeded = plan is null ? null : new { tables, seeds = JsonSerializer.Deserialize<JsonElement>(EquivalenceSeedWriter.ToJson(plan).ToJsonString()) },
             vectors = rows,
         };
         return new Outcome(status, errorCode, summary, metrics, t.ToString());
@@ -257,9 +306,10 @@ public sealed class PhpEquivalenceRunner
         return files;
     }
 
-    private async Task<(JsonObject? Response, string? Error)> RunPhpAsync(
+    public async Task<(JsonObject? Response, string? Error)> RunPhpAsync(
         List<PhpClient.Source> files, string routine, string path, int line, string? phpClass,
-        List<PhpEquivalenceVectors.EqVector> vectors, CancellationToken ct)
+        List<PhpEquivalenceVectors.EqVector> vectors, CancellationToken ct,
+        Func<PhpEquivalenceVectors.EqVector, JsonObject?>? dbFor = null)
     {
         if (await _php.HealthAsync(ct) is null)
             return (null, $"PHP sidecar unreachable at {_php.Endpoint} (Validation:PhpEndpoint).");
@@ -269,7 +319,7 @@ public sealed class PhpEquivalenceRunner
             var req = new PhpClient.RunRequest(files,
                 new PhpClient.Entry(routine, path, line > 0 ? line : null, shortClass),
                 vectors.Select(v => new PhpClient.Vector(v.Id, (JsonObject)v.Named.DeepClone(), null,
-                    (JsonObject?)v.Superglobals?.DeepClone())).ToList());
+                    (JsonObject?)v.Superglobals?.DeepClone(), dbFor?.Invoke(v))).ToList());
             return (await _php.RunAsync(req, ct), null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -280,8 +330,8 @@ public sealed class PhpEquivalenceRunner
 
     public sealed record JavaRun(Dictionary<string, JsonObject> Results, string? Fatal, string Log, int CompileMs, int TestMs);
 
-    private async Task<JavaRun> RunJavaAsync(List<MavenClient.JavaSource> sources, JavaTargetLocator.Target target,
-        List<PhpEquivalenceVectors.EqVector> vectors, CancellationToken ct)
+    public async Task<JavaRun> RunJavaAsync(List<MavenClient.JavaSource> sources, JavaTargetLocator.Target target,
+        List<PhpEquivalenceVectors.EqVector> vectors, CancellationToken ct, JsonObject? db = null, SeedPlan? plan = null)
     {
         if (!await _maven.PingAsync(ct))
             return new JavaRun(new(), "maven sidecar unreachable (Validation:MavenEndpoint).", "", 0, 0);
@@ -290,11 +340,18 @@ public sealed class PhpEquivalenceRunner
             ["className"] = target.ClassName,
             ["methodName"] = target.MethodName,
             ["paramCount"] = target.ParamCount,
-            ["vectors"] = new JsonArray(vectors.Select(v => (JsonNode)new JsonObject { ["id"] = v.Id, ["named"] = v.JavaNamed() }).ToArray()),
+            ["vectors"] = new JsonArray(vectors.Select(v =>
+            {
+                var o = new JsonObject { ["id"] = v.Id, ["named"] = v.JavaNamed() };
+                if (v.Superglobals?["session"] is JsonObject s) o["session"] = s.DeepClone();
+                if (plan is not null) o["seed"] = SeedFor(v, plan);
+                return (JsonNode)o;
+            }).ToArray()),
         };
+        if (db is not null) request["db"] = db.DeepClone();
         var all = sources
             .Where(s => !s.Path.EndsWith($"{HarnessClass}.java", StringComparison.Ordinal))
-            .Select(s => s.Path == "pom.xml" ? s with { Content = EnsureJUnit(s.Content) } : s)
+            .Select(s => s.Path == "pom.xml" ? s with { Content = db is null ? EnsureJUnit(s.Content) : EnsureH2(EnsureJUnit(s.Content)) } : s)
             .ToList();
         all.Add(new MavenClient.JavaSource($"src/test/java/astra/equivalence/{HarnessClass}.java", HarnessSource()));
         all.Add(new MavenClient.JavaSource("src/test/resources/astra-equivalence/request.json", request.ToJsonString()));
@@ -351,6 +408,66 @@ public sealed class PhpEquivalenceRunner
         if (at >= 0) return pom.Insert(at, dep);
         at = pom.LastIndexOf("</project>", StringComparison.Ordinal);
         return at < 0 ? pom : pom.Insert(at, $"<dependencies>{dep}</dependencies>");
+    }
+
+    /// <summary>The seeded database needs H2 on the test classpath (generated packages usually have it already).</summary>
+    public static string EnsureH2(string pom)
+    {
+        if (pom.Contains("com.h2database", StringComparison.Ordinal)) return pom;
+        var managed = pom.Contains("spring-boot-starter-parent", StringComparison.Ordinal) || pom.Contains("spring-boot-dependencies", StringComparison.Ordinal);
+        var dep = "<dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId>" + (managed ? "" : "<version>2.2.224</version>") + "<scope>test</scope></dependency>";
+        var at = pom.LastIndexOf("</dependencies>", StringComparison.Ordinal);
+        if (at >= 0) return pom.Insert(at, dep);
+        at = pom.LastIndexOf("</project>", StringComparison.Ordinal);
+        return at < 0 ? pom : pom.Insert(at, $"<dependencies>{dep}</dependencies>");
+    }
+
+    /// <summary>What the PHP sidecar gets for one vector of a seeded run: the SQLite schema, the seed, the tables to dump.</summary>
+    public static JsonObject PhpDb(PhpEquivalenceVectors.EqVector v, SeedPlan plan, IReadOnlyList<string> sqliteSchema, IReadOnlyList<string> tables) => new()
+    {
+        ["schema"] = new JsonArray(sqliteSchema.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
+        ["seed"] = SeedFor(v, plan),
+        ["tables"] = new JsonArray(tables.Select(x => (JsonNode)JsonValue.Create(x)!).ToArray()),
+    };
+
+    /// <summary>What the Java harness gets for a seeded run: the package's schema as written, the tables, H2's keyword list.</summary>
+    public static JsonObject JavaDb(IReadOnlyList<string> schemaStatements, IReadOnlyList<string> tables, string schemaSql) => new()
+    {
+        ["schema"] = new JsonArray(schemaStatements.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
+        ["tables"] = new JsonArray(tables.Select(x => (JsonNode)JsonValue.Create(x)!).ToArray()),
+        ["nonKeywords"] = EquivalenceDatabase.H2NonKeywords(schemaSql),
+    };
+
+    /// <summary>A vector's seed rows: the engineer's, else the written ones, else empty tables.</summary>
+    public static JsonObject SeedFor(PhpEquivalenceVectors.EqVector v, SeedPlan plan) =>
+        (JsonObject)(v.Db ?? (plan.Tables.TryGetValue(v.Id, out var t) ? t : new JsonObject())).DeepClone();
+
+    /// <summary>Seeds for the vectors without an engineer's seed: from the cache when the same spec, schema and vectors
+    /// were seeded before, else written now (and cached).</summary>
+    private async Task<SeedPlan> SeedsAsync(Scaffold scaffold, string routine, string routineSource, string specJson, string schemaSql,
+        List<PhpEquivalenceVectors.EqVector> vectors, CancellationToken ct)
+    {
+        if (vectors.All(v => v.Db is not null)) return SeedPlan.Empty("engineer");
+        if (_seeds is null) return SeedPlan.Empty("none", "No seed writer here: every vector without an engineer's seed starts from empty tables.");
+        var key = _seeds.CacheKey(specJson, schemaSql, vectors);
+        var objectName = $"equivalence/seeds/{scaffold.Id:N}/{key}.json";
+        if (_cacheBucket is not null)
+        {
+            try
+            {
+                if (await _blob.ExistsAsync(_cacheBucket, objectName, ct)
+                    && EquivalenceSeedWriter.FromJson(await _blob.GetTextAsync($"minio://{_cacheBucket}/{objectName}", ct)) is { } cached)
+                    return cached;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogWarning(ex, "Seed cache read failed for {Routine}", routine); }
+        }
+        var plan = await _seeds.WriteAsync(_db, routine, routineSource, specJson, schemaSql, vectors, ct);
+        if (plan.Source == "model" && _cacheBucket is not null)
+        {
+            try { await _blob.PutTextAsync(_cacheBucket, objectName, EquivalenceSeedWriter.ToJson(plan).ToJsonString(), "application/json", ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogWarning(ex, "Seed cache write failed for {Routine}", routine); }
+        }
+        return plan;
     }
 
     private static string? _harness;

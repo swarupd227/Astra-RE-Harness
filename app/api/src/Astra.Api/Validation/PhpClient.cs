@@ -42,7 +42,8 @@ public sealed class PhpClient
         string Id,
         JsonObject? Named = null,
         JsonArray? Args = null,
-        JsonObject? Superglobals = null);
+        JsonObject? Superglobals = null,
+        JsonObject? Db = null);   // seeded run: {schema: [SQLite DDL], seed: {table: [rows]}, tables: [names]}
 
     public sealed record RunRequest(
         IReadOnlyList<Source> Files,

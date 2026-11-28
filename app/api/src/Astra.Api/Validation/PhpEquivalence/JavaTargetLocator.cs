@@ -24,6 +24,12 @@ public static partial class JavaTargetLocator
     [GeneratedRegex(@"(?m)(?:^|(?<=[{;}]))[ \t]*(?:@[\w.]+(?:\([^()]*\))?\s+)*((?:(?:public|protected|private|static|final|synchronized|abstract|default|native|strictfp)\s+)*)(?:<[^>{};()]+>\s*)?[\w.$]+(?:\s*<[^{};()]*>)?(?:\s*\[\s*\])*\s+(\w+)\s*\(")]
     private static partial Regex MethodHead();
 
+    [GeneratedRegex(@"(Dto|DTO|Request|Response|Payload|Form|Data|Status|Result|Record|Entity|Config|Settings)$")]
+    private static partial Regex DataName();
+
+    [GeneratedRegex(@"(Service|Repository|Repo|Manager|Handler|Facade|Model|Helper|Validator|Calculator|Gateway)$")]
+    private static partial Regex BehaviourName();
+
     private static readonly HashSet<string> NotMethods = new(StringComparer.Ordinal)
         { "if", "for", "while", "switch", "catch", "return", "new", "else", "do", "try", "synchronized", "throw", "assert" };
 
@@ -51,12 +57,21 @@ public static partial class JavaTargetLocator
             var fileMentions = MentionsRoutine(commentsAndStrings, phpRoutine);
             var classBonus = phpClassNorm is not null && (Norm(type.Value.Name) == phpClassNorm
                 || Norm(type.Value.Name).StartsWith(phpClassNorm) || Norm(type.Value.Name).EndsWith(phpClassNorm)) ? 4 : 0;
+            // A record header or a constructor reads like a method named after the type: never a target.
+            var typeNames = new HashSet<string>(TypeDecl().Matches(code).Select(x => x.Groups[2].Value), StringComparer.Ordinal);
+            // Behaviour lives in services, controllers, repositories; a record or DTO named like the routine is data.
+            var kindBonus = type.Value.Kind == "record" ? -2
+                : DataName().IsMatch(type.Value.Name) ? -1
+                : type.Value.Name.EndsWith("Service", StringComparison.Ordinal) ? 2
+                : BehaviourName().IsMatch(type.Value.Name) ? 1 : 0;
             foreach (var m in Methods(code))
             {
+                if (typeNames.Contains(m.Name)) continue;
                 int score = 0;
                 var why = new List<string>();
                 if (wanted.Contains(m.Name)) { score += 10; why.Add("same name"); }
                 else if (Norm(m.Name) == wantedNorm) { score += 8; why.Add("same name ignoring case"); }
+                else if (VerbOnNoun(wantedNorm, Norm(m.Name), Norm(type.Value.Name))) { score += 7; why.Add("the routine's verb on a class named for its noun"); }
                 // What sits between the previous member and this header: its javadoc and annotations.
                 var from = Math.Max(0, m.Offset - 800);
                 var codeBefore = code[from..m.Offset];
@@ -66,7 +81,9 @@ public static partial class JavaTargetLocator
                 else if (score > 0 && fileMentions) { score += 2; why.Add("the class names the PHP routine"); }
                 if (score > 0 && classBonus > 0) { score += classBonus; why.Add("class named like the PHP class"); }
                 if (score == 0) continue;
-                results.Add(new Target(cls, m.Name, m.ParamCount, p, score, string.Join(", ", why)));
+                if (kindBonus < 0) why.Add(type.Value.Kind == "record" ? "a record (data), ranked lower" : "a data class, ranked lower");
+                else if (kindBonus > 0) why.Add("a service-like class");
+                results.Add(new Target(cls, m.Name, m.ParamCount, p, score + kindBonus, string.Join(", ", why)));
             }
         }
         return results.OrderByDescending(r => r.Score).ThenBy(r => r.Path, StringComparer.Ordinal).ToList();
@@ -159,6 +176,11 @@ public static partial class JavaTargetLocator
 
     private static bool MentionsRoutine(string text, string routine) =>
         Regex.IsMatch(text, $@"(?<![A-Za-z0-9_$]){Regex.Escape(routine)}(?![A-Za-z0-9_])");
+
+    /// <summary>createNote → NoteService.create: the method is the routine's verb and the class carries the rest.</summary>
+    public static bool VerbOnNoun(string routineNorm, string methodNorm, string classNorm) =>
+        methodNorm.Length >= 3 && routineNorm.Length > methodNorm.Length && routineNorm.StartsWith(methodNorm, StringComparison.Ordinal)
+        && routineNorm[methodNorm.Length..] is { Length: >= 3 } noun && classNorm.Contains(noun, StringComparison.Ordinal);
 
     public static string Camel(string s)
     {

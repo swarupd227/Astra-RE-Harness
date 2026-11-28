@@ -266,3 +266,79 @@ def test_inspect_describes_the_routine():
 def test_the_driver_never_evaluates_request_data():
     driver = Path(server.DRIVER).read_text(encoding="utf-8")
     assert "eval(" not in driver.replace("eval().", "")   # the docblock says "passed to eval()" only
+
+
+# ── a seeded database: `new PDO(...)` gets the vector's SQLite file with the schema and seed rows ──
+
+NOTES = """<?php
+class DatabaseFactory {
+    private static $factory;
+    private $database;
+    public static function getFactory() { if (!self::$factory) { self::$factory = new DatabaseFactory(); } return self::$factory; }
+    public function getConnection() {
+        if (!$this->database) {
+            $this->database = new PDO('mysql:host=127.0.0.1;dbname=huge;charset=utf8', 'root', 'secret',
+                [PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ, PDO::ATTR_ERRMODE => PDO::ERRMODE_WARNING]);
+        }
+        return $this->database;
+    }
+}
+class NoteModel {
+    public static function getAllNotes() {
+        $db = DatabaseFactory::getFactory()->getConnection();
+        $q = $db->prepare("SELECT user_id, note_id, note_text FROM notes WHERE user_id = :user_id ORDER BY note_id");
+        $q->execute([':user_id' => $_SESSION['user_id']]);
+        return $q->fetchAll();
+    }
+    public static function createNote($note_text) {
+        if (!$note_text || strlen($note_text) == 0) { return false; }
+        $db = DatabaseFactory::getFactory()->getConnection();
+        $q = $db->prepare("INSERT INTO notes (note_text, user_id) VALUES (:note_text, :user_id)");
+        $q->execute([':note_text' => $note_text, ':user_id' => $_SESSION['user_id']]);
+        return $q->rowCount() == 1;
+    }
+    public static function stamp() {
+        return DatabaseFactory::getFactory()->getConnection()->query("SELECT CONCAT('n', UNIX_TIMESTAMP() > 0) AS s")->fetch()->s;
+    }
+}
+"""
+
+NOTES_DB = {
+    "schema": ["CREATE TABLE notes (note_id INTEGER PRIMARY KEY AUTOINCREMENT, note_text TEXT NOT NULL, user_id INT NOT NULL)"],
+    "seed": {"notes": [{"note_id": 1, "note_text": "first", "user_id": 7}, {"note_id": 2, "note_text": "other", "user_id": 8}]},
+    "tables": ["notes"],
+}
+
+
+def run_notes(name: str, vectors: list[dict]) -> list[dict]:
+    body = {"files": [{"path": "application/model/NoteModel.php", "content": NOTES}],
+            "entry": {"name": name, "path": "application/model/NoteModel.php"}, "vectors": vectors}
+    r = client.post("/run", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()["results"]
+
+
+def test_a_seeded_vector_reads_its_rows_through_the_applications_own_pdo():
+    r = run_notes("getAllNotes", [{"id": "s", "args": [], "superglobals": {"session": {"user_id": 7}}, "db": NOTES_DB}])[0]
+    assert r.get("exception") is None, r
+    assert r["returnValue"] == [{"__class": "stdClass", "user_id": 7, "note_id": 1, "note_text": "first"}]
+    assert r["dbSetup"]["errors"] == []
+    assert r["dbConnections"] == 1
+
+
+def test_writes_show_in_the_tables_dumped_after_the_call():
+    r = run_notes("createNote", [{"id": "w", "named": {"note_text": "new"}, "superglobals": {"session": {"user_id": 7}}, "db": NOTES_DB}])[0]
+    assert r["returnValue"] is True
+    assert {"note_id": 3, "note_text": "new", "user_id": 7} in r["db"]["notes"]
+    assert len(r["db"]["notes"]) == 3
+
+
+def test_mysql_functions_are_available_and_each_vector_starts_fresh():
+    rs = run_notes("stamp", [{"id": "a", "args": [], "db": NOTES_DB}, {"id": "b", "args": [], "db": NOTES_DB}])
+    assert [r["returnValue"] for r in rs] == ["n1", "n1"]
+
+
+def test_without_a_seed_the_application_cannot_connect():
+    r = run_notes("getAllNotes", [{"id": "n", "args": [], "superglobals": {"session": {"user_id": 7}}}])[0]
+    assert r["exception"]["class"] == "PDOException"
+    assert "no database" in r["exception"]["message"]

@@ -20,10 +20,24 @@ import org.junit.jupiter.api.Test;
  * value (a Spring ResponseEntity as {status, body, headers}) or the exception thrown. Collaborators the method's class
  * needs in its constructor are given as stand-ins that throw when called, so a vector that reaches a repository or a
  * remote port is reported as "needs a dependency" instead of passing by accident. Depends on JUnit 5 only.
+ *
+ * A SEEDED run (request.json has "db"): each vector gets its own in-memory H2 database (MySQL mode) built from the
+ * package's schema and the vector's seed rows. A DataSource, JdbcTemplate, NamedParameterJdbcTemplate or JdbcClient the
+ * class (or a collaborator it builds, such as a repository) needs is a real one over that database — made by reflection,
+ * so packages without Spring JDBC still compile — and every table is dumped after the call. A vector's "session" values
+ * reach an HttpSession parameter (a map-backed stand-in) or a Map parameter named session; what the method leaves in
+ * the session is reported. Without "db" nothing of this happens and the harness behaves as before.
  */
 public class AstraEquivalenceHarnessTest {
 
     private static final String MARK = "@@ASTRA-EQ@@ ";
+
+    // ── the seeded run's state (one vector at a time) ──
+    private static Map<String, Object> DB_CONF;
+    private static javax.sql.DataSource CURRENT_DS;
+    private static Map<String, Object> CURRENT_SESSION;
+    private static boolean SESSION_USED;
+    private static int DB_COUNTER;
 
     @Test
     void runVectors() throws Exception {
@@ -33,6 +47,7 @@ public class AstraEquivalenceHarnessTest {
             json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
         Map<String, Object> req = asMap(new Json(json).parse());
+        DB_CONF = req.get("db") instanceof Map<?, ?> d ? asMap(d) : null;
         String className = (String) req.get("className");
         String methodName = (String) req.get("methodName");
         Number arity = (Number) req.get("paramCount");
@@ -62,6 +77,14 @@ public class AstraEquivalenceHarnessTest {
         out.put("id", vector.get("id"));
         List<String> notes = new ArrayList<>();
         List<String> unsupplied = new ArrayList<>();
+        CURRENT_SESSION = vector.get("session") instanceof Map<?, ?> s ? sessionValues(asMap(s)) : null;
+        SESSION_USED = false;
+        CURRENT_DS = null;
+        if (DB_CONF != null) {
+            List<String> dbErrors = new ArrayList<>();
+            CURRENT_DS = seededDatabase(vector.get("seed") instanceof Map<?, ?> sd ? asMap(sd) : Map.of(), dbErrors);
+            out.put("dbSetup", map("errors", dbErrors));
+        }
         Object[] args;
         try {
             args = bind(m, vector, notes);
@@ -87,6 +110,7 @@ public class AstraEquivalenceHarnessTest {
             out.put("ok", true);
             out.put("returnValue", value(ret, 0, new IdentityHashMap<>()));
             out.put("returnType", m.getReturnType() == void.class ? "void" : (ret == null ? "null" : ret.getClass().getSimpleName()));
+            out.put("declaredType", m.getReturnType().getSimpleName());
         } catch (InvocationTargetException ite) {
             Throwable c = ite.getCause() == null ? ite : ite.getCause();
             out.put("ok", true);
@@ -103,9 +127,185 @@ public class AstraEquivalenceHarnessTest {
             out.put("inputError", "call failed: " + e);
         }
         out.put("durationMs", (System.nanoTime() - t0) / 1_000_000);
+        if (CURRENT_DS != null) out.put("db", dump(CURRENT_DS));
+        if (SESSION_USED && CURRENT_SESSION != null) out.put("session", value(CURRENT_SESSION, 0, new IdentityHashMap<>()));
         out.put("notes", notes);
         out.put("unsupplied", unsupplied);
+        CURRENT_DS = null;
         return out;
+    }
+
+    // ── the seeded database ─────────────────────────────────────────────────
+
+    /** A fresh in-memory H2 database for one vector: the package's schema, then the seed rows; identities restarted above them. */
+    private static javax.sql.DataSource seededDatabase(Map<String, Object> seed, List<String> errors) {
+        try { Class.forName("org.h2.Driver"); } catch (Throwable e) { errors.add("H2 is not on the test classpath: " + e); return null; }
+        String nonKeywords = DB_CONF.get("nonKeywords") instanceof String s && !s.isBlank() ? ";NON_KEYWORDS=" + s : "";
+        String url = "jdbc:h2:mem:astraeq" + (++DB_COUNTER) + "_" + System.nanoTime()
+            + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1" + nonKeywords;
+        javax.sql.DataSource ds = new SimpleDataSource(url);
+        try (java.sql.Connection c = ds.getConnection(); java.sql.Statement st = c.createStatement()) {
+            for (Object s : (List<?>) DB_CONF.getOrDefault("schema", List.of())) {
+                try { st.execute(String.valueOf(s)); }
+                catch (Exception e) { errors.add("schema: " + e.getMessage()); }
+            }
+            for (Map.Entry<String, Object> t : seed.entrySet()) {
+                if (!t.getKey().matches("[A-Za-z_][A-Za-z0-9_]*") || !(t.getValue() instanceof List<?> rows)) continue;
+                for (Object r : rows) {
+                    if (!(r instanceof Map<?, ?> rm) || rm.isEmpty()) continue;
+                    Map<String, Object> row = asMap(rm);
+                    List<String> cols = new ArrayList<>(row.keySet());
+                    if (cols.stream().anyMatch(k -> !k.matches("[A-Za-z_][A-Za-z0-9_]*"))) continue;
+                    String sql = "INSERT INTO \"" + t.getKey().toLowerCase(Locale.ROOT) + "\" (" + String.join(", ", cols.stream().map(k -> "\"" + k.toLowerCase(Locale.ROOT) + "\"").toList())
+                        + ") VALUES (" + String.join(", ", Collections.nCopies(cols.size(), "?")) + ")";
+                    try (java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+                        for (int i = 0; i < cols.size(); i++) {
+                            Object v = row.get(cols.get(i));
+                            ps.setObject(i + 1, v instanceof Boolean b ? (b ? 1 : 0) : v);
+                        }
+                        ps.executeUpdate();
+                    } catch (Exception e) { errors.add("seed " + t.getKey() + ": " + e.getMessage()); }
+                }
+            }
+            // identity columns continue after the seeded ids, as SQLite's AUTOINCREMENT does on the PHP side
+            List<String[]> ids = new ArrayList<>();
+            try (java.sql.ResultSet rs = st.executeQuery(
+                    "SELECT table_name, column_name FROM information_schema.columns WHERE is_identity = 'YES' AND table_schema = 'public'")) {
+                while (rs.next()) ids.add(new String[] {rs.getString(1), rs.getString(2)});
+            } catch (Exception e) { errors.add("identity lookup: " + e.getMessage()); }
+            for (String[] id : ids) {
+                try (java.sql.ResultSet rs = st.executeQuery("SELECT MAX(\"" + id[1] + "\") FROM \"" + id[0] + "\"")) {
+                    long next = rs.next() ? rs.getLong(1) + 1 : 1;
+                    st.execute("ALTER TABLE \"" + id[0] + "\" ALTER COLUMN \"" + id[1] + "\" RESTART WITH " + Math.max(1, next));
+                } catch (Exception e) { errors.add("identity restart " + id[0] + "." + id[1] + ": " + e.getMessage()); }
+            }
+        } catch (Exception e) {
+            errors.add("database: " + e);
+            return null;
+        }
+        return ds;
+    }
+
+    /** Every row of the schema's tables after the call, columns lower-cased. */
+    private static Map<String, Object> dump(javax.sql.DataSource ds) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        try (java.sql.Connection c = ds.getConnection(); java.sql.Statement st = c.createStatement()) {
+            for (Object t : (List<?>) DB_CONF.getOrDefault("tables", List.of())) {
+                String table = String.valueOf(t);
+                if (!table.matches("[A-Za-z_][A-Za-z0-9_]*")) continue;
+                List<Object> rows = new ArrayList<>();
+                try (java.sql.ResultSet rs = st.executeQuery("SELECT * FROM \"" + table.toLowerCase(Locale.ROOT) + "\"")) {
+                    java.sql.ResultSetMetaData md = rs.getMetaData();
+                    while (rs.next()) {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        for (int i = 1; i <= md.getColumnCount(); i++) {
+                            Object v = rs.getObject(i);
+                            if (v instanceof java.sql.Timestamp ts) v = ts.toLocalDateTime().toString().replace('T', ' ');
+                            else if (v instanceof java.sql.Date d) v = d.toString();
+                            else if (v instanceof java.sql.Clob cl) v = cl.getSubString(1, (int) Math.min(cl.length(), 100_000));
+                            row.put(md.getColumnLabel(i).toLowerCase(Locale.ROOT), value(v, 0, new IdentityHashMap<>()));
+                        }
+                        rows.add(row);
+                    }
+                    out.put(table.toLowerCase(Locale.ROOT), rows);
+                } catch (Exception e) {
+                    out.put(table.toLowerCase(Locale.ROOT), map("__error", String.valueOf(e.getMessage())));
+                }
+            }
+        } catch (Exception e) {
+            out.put("__error", String.valueOf(e));
+        }
+        return out;
+    }
+
+    static final class SimpleDataSource implements javax.sql.DataSource {
+        private final String url;
+        SimpleDataSource(String url) { this.url = url; }
+        public java.sql.Connection getConnection() throws java.sql.SQLException { return java.sql.DriverManager.getConnection(url, "sa", ""); }
+        public java.sql.Connection getConnection(String u, String p) throws java.sql.SQLException { return getConnection(); }
+        public java.io.PrintWriter getLogWriter() { return null; }
+        public void setLogWriter(java.io.PrintWriter out) { }
+        public void setLoginTimeout(int seconds) { }
+        public int getLoginTimeout() { return 0; }
+        public java.util.logging.Logger getParentLogger() { return java.util.logging.Logger.getGlobal(); }
+        public <T> T unwrap(Class<T> iface) throws java.sql.SQLException { if (iface.isInstance(this)) return iface.cast(this); throw new java.sql.SQLException("not a wrapper"); }
+        public boolean isWrapperFor(Class<?> iface) { return iface.isInstance(this); }
+        @Override public String toString() { return "seeded H2 " + url; }
+    }
+
+    /** A real collaborator over the seeded database for a JDBC type, or null when the type is not one (or there is no database). */
+    private static Object jdbcFor(Class<?> t) {
+        if (CURRENT_DS == null) return null;
+        String n = t.getName();
+        try {
+            if (n.equals("javax.sql.DataSource")) return CURRENT_DS;
+            if (n.equals("org.springframework.jdbc.core.JdbcTemplate") || n.equals("org.springframework.jdbc.core.JdbcOperations"))
+                return Class.forName("org.springframework.jdbc.core.JdbcTemplate").getConstructor(javax.sql.DataSource.class).newInstance(CURRENT_DS);
+            if (n.equals("org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate") || n.equals("org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations"))
+                return Class.forName("org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate").getConstructor(javax.sql.DataSource.class).newInstance(CURRENT_DS);
+            if (n.equals("org.springframework.jdbc.core.simple.JdbcClient"))
+                return t.getMethod("create", javax.sql.DataSource.class).invoke(null, CURRENT_DS);
+        } catch (Throwable e) {
+            return null;
+        }
+        return null;
+    }
+
+    // ── the session ─────────────────────────────────────────────────────────
+
+    /** Session values as the Java code reads them: whole numbers as Long (JSON numbers parse as BigDecimal), nested maps kept. */
+    private static Map<String, Object> sessionValues(Map<String, Object> raw) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : raw.entrySet()) out.put(e.getKey(), javaNumber(e.getValue()));
+        return out;
+    }
+
+    private static Object javaNumber(Object v) {
+        if (v instanceof BigDecimal d) {
+            try { return d.longValueExact(); } catch (ArithmeticException ignored) { return d.doubleValue(); }
+        }
+        if (v instanceof BigInteger b) return b.longValue();
+        if (v instanceof Map<?, ?> m) return sessionValues(asMap(m));
+        if (v instanceof List<?> l) { List<Object> o = new ArrayList<>(); for (Object x : l) o.add(javaNumber(x)); return o; }
+        return v;
+    }
+
+    private static boolean isSessionParam(Parameter p) {
+        if (CURRENT_SESSION == null) return false;
+        Class<?> t = p.getType();
+        if (t.isInterface() && t.getName().endsWith(".HttpSession")) return true;
+        String k = norm(nameOf(p));
+        return Map.class.isAssignableFrom(t) && (k.equals("session") || k.equals("sessiondata") || k.equals("sessionattributes"));
+    }
+
+    private static Object sessionFor(Parameter p) {
+        SESSION_USED = true;
+        Class<?> t = p.getType();
+        if (Map.class.isAssignableFrom(t)) return CURRENT_SESSION;
+        return sessionProxy(t);
+    }
+
+    private static Object sessionProxy(Class<?> t) {
+        return Proxy.newProxyInstance(t.getClassLoader(), new Class<?>[] {t}, (proxy, method, a) -> {
+            switch (method.getName()) {
+                case "getAttribute": case "getValue": return CURRENT_SESSION.get(String.valueOf(a[0]));
+                case "setAttribute": case "putValue": CURRENT_SESSION.put(String.valueOf(a[0]), a[1]); return null;
+                case "removeAttribute": case "removeValue": CURRENT_SESSION.remove(String.valueOf(a[0])); return null;
+                case "getAttributeNames": return Collections.enumeration(new ArrayList<>(CURRENT_SESSION.keySet()));
+                case "getValueNames": return CURRENT_SESSION.keySet().toArray(new String[0]);
+                case "invalidate": CURRENT_SESSION.clear(); return null;
+                case "getId": return "astra-equivalence";
+                case "isNew": return false;
+                case "getCreationTime": case "getLastAccessedTime": return 0L;
+                case "getMaxInactiveInterval": return 1800;
+                case "toString": return "session " + CURRENT_SESSION;
+                case "hashCode": return System.identityHashCode(proxy);
+                case "equals": return proxy == a[0];
+                default:
+                    Class<?> r = method.getReturnType();
+                    return r.isPrimitive() ? defaultOf(r) : null;
+            }
+        });
     }
 
     private static Method pick(Class<?> cls, String name, int arity) {
@@ -138,18 +338,33 @@ public class AstraEquivalenceHarnessTest {
         if (named != null) {
             Map<String, Object> byNorm = new LinkedHashMap<>();
             for (Map.Entry<String, Object> e : named.entrySet()) byNorm.put(norm(e.getKey()), e.getValue());
+            // a seeded run: what PHP reads from $_SESSION (user_id …) is what the Java method takes as a parameter
+            if (CURRENT_SESSION != null)
+                for (Map.Entry<String, Object> e : CURRENT_SESSION.entrySet())
+                    if (!(e.getValue() instanceof Map<?, ?>)) byNorm.putIfAbsent(norm(e.getKey()), e.getValue());
             List<Integer> real = new ArrayList<>();
             int matched = 0;
             for (int i = 0; i < ps.length; i++) {
-                if (isInfrastructure(ps[i].getType())) continue;
+                if (isInfrastructure(ps[i].getType()) || isSessionParam(ps[i])) continue;
                 real.add(i);
                 if (byNorm.containsKey(norm(nameOf(ps[i])))) matched++;
             }
             if (matched > 0) {
+                Set<String> used = new HashSet<>();
+                for (Parameter p : ps) if (byNorm.containsKey(norm(nameOf(p)))) used.add(norm(nameOf(p)));
                 for (int i = 0; i < ps.length; i++) {
                     String k = norm(nameOf(ps[i]));
-                    if (byNorm.containsKey(k)) args[i] = convert(byNorm.get(k), ps[i].getParameterizedType(), nameOf(ps[i]));
-                    else { args[i] = missing(ps[i]); if (!isInfrastructure(ps[i].getType())) notes.add(nameOf(ps[i]) + " not supplied; passed " + args[i]); }
+                    Class<?> t = ps[i].getType();
+                    if (isSessionParam(ps[i])) args[i] = missing(ps[i]);
+                    else if (byNorm.containsKey(k)) args[i] = convert(byNorm.get(k), ps[i].getParameterizedType(), nameOf(ps[i]));
+                    else if (!isInfrastructure(t) && (Map.class.isAssignableFrom(t) || t.isRecord() || !isSimple(t))) {
+                        // createNote(userId, CreateNoteRequest request): the request is built from the inputs nothing else took
+                        Map<String, Object> rest = new LinkedHashMap<>();
+                        for (Map.Entry<String, Object> e : named.entrySet()) if (!used.contains(norm(e.getKey()))) rest.put(e.getKey(), e.getValue());
+                        if (!rest.isEmpty()) { args[i] = convert(rest, ps[i].getParameterizedType(), nameOf(ps[i])); notes.add("inputs " + rest.keySet() + " passed as the fields of " + nameOf(ps[i])); }
+                        else { args[i] = missing(ps[i]); notes.add(nameOf(ps[i]) + " not supplied; passed " + args[i]); }
+                    }
+                    else { args[i] = missing(ps[i]); if (!isInfrastructure(t)) notes.add(nameOf(ps[i]) + " not supplied; passed " + args[i]); }
                 }
                 return args;
             }
@@ -186,7 +401,7 @@ public class AstraEquivalenceHarnessTest {
         if (positional != null) {
             int k = 0;
             for (int i = 0; i < ps.length; i++) {
-                if (isInfrastructure(ps[i].getType())) { args[i] = missing(ps[i]); continue; }
+                if (isInfrastructure(ps[i].getType()) || isSessionParam(ps[i])) { args[i] = missing(ps[i]); continue; }
                 args[i] = k < positional.size() ? convert(positional.get(k++), ps[i].getParameterizedType(), nameOf(ps[i])) : missing(ps[i]);
             }
             return args;
@@ -224,6 +439,7 @@ public class AstraEquivalenceHarnessTest {
     }
 
     private static Object missing(Parameter p) {
+        if (isSessionParam(p)) return sessionFor(p);
         Class<?> t = p.getType();
         if (t == Optional.class) return Optional.empty();
         return t.isPrimitive() ? defaultOf(t) : null;
@@ -414,14 +630,39 @@ public class AstraEquivalenceHarnessTest {
         Class<?>[] types = best.getParameterTypes();
         for (int i = 0; i < args.length; i++) {
             Class<?> t = types[i];
+            Object jdbc = jdbcFor(t);
+            if (jdbc != null) { args[i] = jdbc; notes.add(cls.getSimpleName() + " given a real " + t.getSimpleName() + " over the seeded database"); continue; }
+            if (t.isInterface() && t.getName().endsWith(".HttpSession")) {
+                // a collaborator that keeps the session (feedback messages …) gets the vector's session, not a throwing stand-in
+                if (CURRENT_SESSION == null) CURRENT_SESSION = new LinkedHashMap<>();
+                SESSION_USED = true;
+                args[i] = sessionProxy(t);
+                notes.add(cls.getSimpleName() + " given the vector's session");
+                continue;
+            }
             if (t.isPrimitive()) args[i] = defaultOf(t);
             else if (t == String.class) args[i] = "";
             else if (t.isInterface()) { args[i] = standIn(t); notes.add(cls.getSimpleName() + " given a stand-in " + t.getSimpleName()); }
-            else if (depth < 2 && !isSimple(t) && !Modifier.isAbstract(t.getModifiers())) {
+            else if (depth < (CURRENT_DS == null ? 2 : 3) && !isSimple(t) && !Modifier.isAbstract(t.getModifiers())) {
                 try { args[i] = instantiate(t, notes, unsupplied, depth + 1); } catch (Exception e) { args[i] = null; }
             } else args[i] = null;
         }
-        return best.newInstance(args);
+        Object made = best.newInstance(args);
+        if (CURRENT_DS != null) {
+            // field injection (@Autowired private JdbcTemplate jdbc;): fill JDBC fields the constructor left empty
+            for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (Modifier.isStatic(f.getModifiers())) continue;
+                    Object jdbc = jdbcFor(f.getType());
+                    if (jdbc == null) continue;
+                    try {
+                        f.setAccessible(true);
+                        if (f.get(made) == null) { f.set(made, jdbc); notes.add(cls.getSimpleName() + "." + f.getName() + " given a real " + f.getType().getSimpleName()); }
+                    } catch (Exception ignored) { }
+                }
+            }
+        }
+        return made;
     }
 
     static final class NotSupplied extends RuntimeException {
