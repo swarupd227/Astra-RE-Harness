@@ -303,6 +303,25 @@ public class ModuleAssemblerTests
     }
 
     [Fact]
+    public void The_primary_key_most_units_declare_wins_and_the_others_become_plain_columns()
+    {
+        // Seen on a real estate (HUGE): the first unit keyed users on `id`, most keyed it on `user_id`; with the first
+        // unit's key every insert from the majority failed ("NULL not allowed for column ID").
+        var first = "CREATE TABLE IF NOT EXISTS users (\n id BIGINT AUTO_INCREMENT PRIMARY KEY,\n user_name VARCHAR(64)\n);";
+        var second = "CREATE TABLE IF NOT EXISTS users (\n user_id INT AUTO_INCREMENT PRIMARY KEY,\n user_name VARCHAR(64) NOT NULL\n);";
+        var third = "CREATE TABLE IF NOT EXISTS users (\n user_id INT NOT NULL AUTO_INCREMENT,\n user_email VARCHAR(254),\n PRIMARY KEY (user_id)\n);";
+        var conflicts = new List<AssemblyConflict>();
+        var schema = SchemaMerger.Merge(new[] { ("a", first), ("b", second), ("c", third) }, conflicts, new List<SharedItem>(), new List<string>());
+
+        var users = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS users \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(users, "PRIMARY KEY"));
+        Assert.Contains("user_id INT AUTO_INCREMENT PRIMARY KEY", users);                       // the majority's key
+        Assert.Contains("id BIGINT,", users.Replace("\r", ""));                                   // a's key column: plain and nullable, no second identity
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(users, "AUTO_INCREMENT"));
+        Assert.Contains(conflicts, c => c.Kind == "primary-key" && c.Name == "users" && c.Detail.Contains("(user_id)"));
+    }
+
+    [Fact]
     public void A_foreign_key_stays_only_when_every_unit_that_declares_the_table_has_it()
     {
         // Seen on a real estate: one unit's llx_societe_rib referenced llx_societe; another unit's had no key and its

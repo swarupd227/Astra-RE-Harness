@@ -99,45 +99,64 @@ public static class SchemaMerger
         var others = new List<string>();
         var seenOthers = new HashSet<string>(StringComparer.Ordinal);
 
+        // A table has one primary key: the one most units declare (inline on a column or a PRIMARY KEY (...) clause),
+        // the first unit's on a tie. Counting first matters: on a real estate the first unit keyed users on `id` while
+        // most keyed it on `user_id`, and every insert from the majority failed against the first unit's key.
+        var keyVotes = new Dictionary<string, List<(string Key, HashSet<string> Units)>>(StringComparer.OrdinalIgnoreCase);
         foreach (var (unit, text) in files)
             foreach (var stmt in Statements(text))
             {
-                var m = CreateTable.Match(stmt);
-                if (!m.Success)
+                if (Parse(stmt) is not { } p || DescribeKey(p.Columns, p.Constraints) is not { } k) continue;
+                if (!keyVotes.TryGetValue(p.Key, out var list)) keyVotes[p.Key] = list = new();
+                var entry = list.FirstOrDefault(e => string.Equals(e.Key, k, StringComparison.OrdinalIgnoreCase));
+                if (entry.Units is null) list.Add((k, new HashSet<string>(StringComparer.Ordinal) { unit }));
+                else entry.Units.Add(unit);
+            }
+        var winningKey = keyVotes.ToDictionary(kv => kv.Key,
+            kv => kv.Value.Select((e, i) => (e.Key, e.Units.Count, i)).OrderByDescending(x => x.Count).ThenBy(x => x.i).First().Key,
+            StringComparer.OrdinalIgnoreCase);
+        var keyReported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (unit, text) in files)
+            foreach (var stmt in Statements(text))
+            {
+                if (Parse(stmt) is not { } parsed)
                 {
                     if (seenOthers.Add(Squash(stmt))) others.Add(stmt);
                     continue;
                 }
-                var key = Bare(m.Groups[1].Value);
-                var parts = SplitTopLevel(m.Groups[2].Value);
-                var columns = new List<(string Name, string Def)>();
-                var constraints = new List<string>();
-                foreach (var p in parts)
-                {
-                    var first = Regex.Match(p, @"^[`""\[]?(\w+)").Groups[1].Value;
-                    if (first.Length == 0 || ConstraintWords.Contains(first)) constraints.Add(p.Trim());
-                    else columns.Add((first, p.Trim()));
-                }
+                var (key, displayName, tail, columns, constraints) = parsed;
 
                 if (!tables.TryGetValue(key, out var t))
                 {
-                    t = new Table { Name = key, DisplayName = m.Groups[1].Value, Tail = m.Groups[3].Value.Trim() };
+                    t = new Table { Name = key, DisplayName = displayName, Tail = tail };
                     tables[key] = t;
                     tableOrder.Add(key);
                 }
                 if (!t.Units.Contains(unit)) t.Units.Add(unit);
-                // A table has one primary key. The first unit's key (inline on a column or a PRIMARY KEY (...) clause)
-                // is kept; a later unit's different key is dropped and reported, never added beside it.
-                var hadKey = HasPrimaryKey(t);
                 var incomingKey = DescribeKey(columns, constraints);
-                if (hadKey && incomingKey is not null && !string.Equals(incomingKey, DescribeKey(t), StringComparison.OrdinalIgnoreCase))
-                    conflicts.Add(new AssemblyConflict("primary-key", t.DisplayName,
-                        $"one unit keys it on {DescribeKey(t)} and another on {incomingKey}; the first is kept.", t.Units.ToList()));
+                var winner = winningKey.GetValueOrDefault(key);
+                var isWinner = incomingKey is not null && string.Equals(incomingKey, winner, StringComparison.OrdinalIgnoreCase);
+                var keepKey = isWinner && !HasPrimaryKey(t);
+                if (incomingKey is not null && !isWinner && keyReported.Add(key))
+                {
+                    var losers = keyVotes[key].Where(e => !string.Equals(e.Key, winner, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var won = keyVotes[key].First(e => string.Equals(e.Key, winner, StringComparison.OrdinalIgnoreCase));
+                    conflicts.Add(new AssemblyConflict("primary-key", displayName,
+                        $"{won.Units.Count} unit(s) key it on {winner}, which is kept; others key it on {string.Join(" / ", losers.Select(l => $"{l.Key} ({l.Units.Count})"))} — those columns stay as ordinary nullable columns.",
+                        keyVotes[key].SelectMany(e => e.Units).Distinct().ToList()));
+                }
                 foreach (var (name, rawDef) in columns)
                 {
                     var def = rawDef;
-                    if ((hadKey || HasPrimaryKey(t)) && Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase))
-                        def = Regex.Replace(def, @"\s+PRIMARY\s+KEY\b", " NOT NULL", RegexOptions.IgnoreCase);
+                    var inlineKey = Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
+                    if (inlineKey && !keepKey)
+                        def = Demote(def);   // not the table's key here: an ordinary column, no second identity
+                    else if (inlineKey && keepKey && t.Columns.ContainsKey(name))
+                        t.Columns[name] = def;   // the winning key's column, added earlier by a unit that did not key on it
+                    if (!inlineKey && !isWinner && winner is not null && !string.Equals(winner, $"({name.ToLowerInvariant()})", StringComparison.Ordinal)
+                        && Regex.IsMatch(def, @"\b(AUTO_INCREMENT|IDENTITY)\b", RegexOptions.IgnoreCase))
+                        def = Demote(def);
                     var notNull = Regex.IsMatch(def, @"\bNOT\s+NULL\b", RegexOptions.IgnoreCase) || Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
                     if (!t.NotNullVotes.TryGetValue(name, out var voters)) t.NotNullVotes[name] = voters = new HashSet<string>(StringComparer.Ordinal);
                     if (notNull) voters.Add(unit);   // per unit: a unit that declares the table twice still has one say
@@ -160,7 +179,7 @@ public static class SchemaMerger
                 foreach (var c in constraints)
                 {
                     var isPk = IsKeyClause(c);
-                    if (isPk && (hadKey || HasPrimaryKey(t))) continue;
+                    if (isPk && (!keepKey || HasPrimaryKey(t))) continue;
                     // Spacing is not a difference: "REFERENCES t (id)" and "REFERENCES t(id)" are one constraint.
                     if (!t.Constraints.Any(x => Tight(x) == Tight(c))) t.Constraints.Add(c);
                     if (!isPk)
@@ -306,6 +325,28 @@ public static class SchemaMerger
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static string Tight(string s) => Regex.Replace(s, @"\s+", "").ToLowerInvariant();
+
+    /// <summary>A key column that is not the table's key in the merge: no PRIMARY KEY, no identity (a table has one).</summary>
+    private static string Demote(string def) =>
+        Regex.Replace(Regex.Replace(def, @"\s+PRIMARY\s+KEY\b", "", RegexOptions.IgnoreCase),
+            @"\s+(AUTO_INCREMENT|IDENTITY(\s*\([^)]*\))?|GENERATED\s+(ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY(\s*\([^)]*\))?)", "", RegexOptions.IgnoreCase);
+
+    private sealed record ParsedCreate(string Key, string DisplayName, string Tail, List<(string Name, string Def)> Columns, List<string> Constraints);
+
+    private static ParsedCreate? Parse(string stmt)
+    {
+        var m = CreateTable.Match(stmt);
+        if (!m.Success) return null;
+        var columns = new List<(string Name, string Def)>();
+        var constraints = new List<string>();
+        foreach (var p in SplitTopLevel(m.Groups[2].Value))
+        {
+            var first = Regex.Match(p, @"^[`""\[]?(\w+)").Groups[1].Value;
+            if (first.Length == 0 || ConstraintWords.Contains(first)) constraints.Add(p.Trim());
+            else columns.Add((first, p.Trim()));
+        }
+        return new ParsedCreate(Bare(m.Groups[1].Value), m.Groups[1].Value, m.Groups[3].Value.Trim(), columns, constraints);
+    }
 
     /// <summary>The unquoted column names of every CREATE TABLE in a schema, in order.</summary>
     public static IEnumerable<string> ColumnNames(string schema)
