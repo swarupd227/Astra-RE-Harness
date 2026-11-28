@@ -467,3 +467,57 @@ E5. **Ten evidence kinds open on the form** — a first run only needs source co
 E6. **No way to mark a project as test/scratch at creation** — only later in settings; offer it on the form.
 E7. **Rail agents list shows a test project's run** ("Programme · 1 active run — php-facts-e2e-…") — the agent list should
     follow the same test-project rule as the rail's programmes.
+Run 1 — Java (SimpleBankProject, `Bank.withdraw`): created, extracted (58 s), routed, reviewed (5 accept, 2 reject with
+reasons, 3 questions answered), signed. **Blocked at code generation**: no target stack can build Java today.
+E8.  **Same-named units are indistinguishable** — "deposit / withdraw / transfer" appear twice (abstract declarations in
+     `Account` and bodies in `Bank`) with no class prefix; C++ shows `Calculator::divide`, Java does not.
+E9.  **Project summary missing right after creation** — the progress/next-step header appeared for the C++ project but not
+     for the Java one a few minutes after creation (overview cache).
+E10. **Non-convertible units listed as work** — a Java constructor labelled "method", one-line abstract declarations
+     (L20–20); C++ destructors / empty constructors (E31). Mark them as declarations, or leave them out of the to-do count.
+E11. **"@Override" shown as the signature** under the unit name instead of `void withdraw(double amt)`.
+E12. **"Extract spec" three times on one screen** (button, stepper, Up next card) — keep the button.
+E13. **Java summary mixes behaviour with upgrade advice** ("For Java 21 + Spring Boot 3, no breaking changes…") — the Java
+     prompt is an upgrade prompt; behaviour first, migration notes in their own section.
+E14. **Provider shown twice** on the draft spec and spec review (call strip + provider card).
+E15. **Line ranges disagree** — code unit L42–53, spec "lines 43-53".
+E16. **Routing asks nothing** — "Route to SME for review" goes straight through: offer the reviewer (assignment now
+     exists) and confirm "Sent to <who>".
+E17. **Persona menu items have no accessible name** (four unnamed menuitemradio).
+E18. **Switching persona reloads the whole app** (2.5 MB script again) — switch in place.
+E19. **Citations off by one line** on the Java spec (INV-2 cites 45–48 for code at 46–49; "Insufficient balance" at 51
+     cited 49–50) — extraction accuracy; the sign dialog then reports "Every citation resolves to a valid range" (E24).
+E20. **Review thread intro is wrong** — "This is the review thread for — 15 claims drafted…" (name missing; spec has 10).
+E21. **Accept gives no immediate feedback** — the processed count updates a few seconds later.
+E22. **Rejecting is confirmed with "Save"** — label it "Reject".
+E23. **Open questions are "answered" by overwriting the question** (Edit, or "Resolve in spec" which opens the same box) —
+     give questions an Answer field that keeps the question.
+E24. **Citation-integrity check only checks that lines exist**, not that they hold the claim (see E19).
+E25. **Sign dialog does not fit a narrow window** — its Sign button sits below the viewport and the dialog does not scroll.
+E26. **Java project defaults to ".NET 10"**, which cannot build Java; every stack card says "No Java archetype…" and Java
+     Spring says "Preview — available on request".
+E27. **The dead end is only visible after sign-off** — say at project creation / before extraction that Java can be
+     specified but not converted yet.
+E28. **"Generate scaffold · .NET 10" is offered although it cannot work** — disable it with the reason.
+E29. **Failure copy** — "…contact your Nous representative" (third-party brand), and after the failure the page still says
+     "Negotiating provider… Awaiting first file… Streaming…".
+Run 2 — C++ (cpp-calculator, `Calculator::divide`): created (5 s), extracted (1 min 8 s, live rows shown while writing),
+routed, reviewed (13 accepted via "Accept every claim except …" in the review thread, 3 claims corrected, 4 questions
+answered), signed, code generated (6 files, .NET 10), Build passed, Quality passed, test pack errored → Fix until green.
+E30. **"Next: Survey the patterns, then extract specs"** for a 25-unit project — the survey is an Admin step and overkill
+     here; suggest extracting directly under ~50 units.
+E32. **20 claims for a 9-line function** — six side-effect claims restate the invariants; the reviewer reads it twice.
+E33. **Spec review does not refresh after the thread acts** — "Accept every claim except …" was done (13 accepted) but the
+     page said 0 / 20 until reloaded.
+E34. **Code generation shows "0 files so far" for ~85 s** with no sign of life — show the "Claude is writing … characters"
+     line extraction has.
+E35. **A cut stream ends in "Scaffold failed — network error"** with no retry and no word on whether the server finished
+     (an API restart cut it here; nothing was saved). Offer Retry and say what happened.
+E36. **Checks do not start after generation** — Build / Tests / Quality all "not run"; start them (or offer one button).
+E37. **The test card's only action is "Regenerate + run"**, even on a first run.
+E38. **"dotnet test exited 1; no test summary parsed"** — the log shows 23 compile errors (missing `using System.IO;`);
+     say "Tests did not compile: 23 errors — StringReader/StringWriter not found".
+E39. **"Compile passed" while the test project does not compile** — the compile gate builds src only.
+Fixed during the run: the Java spec was written by the model as a JSON *string* inside a wrapper key
+(`additionalProperties`), so the Extract page's readable rows stayed empty until the end; the reader now unwraps it the
+same way the API's `SpecShape.Unwrap` does (plain, nested object and nested string replayed from the real spec).

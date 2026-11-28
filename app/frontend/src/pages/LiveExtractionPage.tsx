@@ -3,7 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, AlertTriangle, X, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
-import { parsePartialJson } from '@/lib/partialSpec';
+import { parsePartialSpec } from '@/lib/partialSpec';
 import {
   applyPatch,
   streamExtraction,
@@ -168,7 +168,7 @@ export function LiveExtractionPage() {
   const deferredText = useDeferredValue(streamedText);
   const shownDraft: DraftSpec = useMemo(() => {
     if (Object.keys(draft).length > 0 || !deferredText) return draft;
-    const partial = parsePartialJson(deferredText);
+    const partial = parsePartialSpec(deferredText);
     return partial && typeof partial === 'object' ? (partial as DraftSpec) : {};
   }, [draft, deferredText]);
   const claimsSoFar =

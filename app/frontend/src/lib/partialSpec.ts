@@ -19,6 +19,63 @@ export function parsePartialJson(text: string): unknown {
   }
 }
 
+const CLAIM_KEYS = ['summary', 'inputs', 'outputs', 'invariants', 'side_effects', 'edge_cases', 'open_questions'];
+const WRAPPER_KEYS = ['additionalProperties', 'spec'];
+
+function looksLikeSpec(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v) && CLAIM_KEYS.some((k) => k in (v as object));
+}
+
+/**
+ * The spec being written, also when the model nests it — under `additionalProperties`, `spec` or a sole key, as an
+ * object or as that object written out as a JSON string (the same shapes the API's SpecShape.Unwrap lifts at the end).
+ * A spec still being written as a string is decoded as far as it goes and read like any other partial JSON.
+ */
+export function parsePartialSpec(text: string): Record<string, unknown> | undefined {
+  const top = parsePartialJson(text);
+  if (looksLikeSpec(top)) return top;
+  const start = text.indexOf('{');
+  if (start < 0) return undefined;
+  const m = /^\{\s*"([^"\\]+)"\s*:\s*/.exec(text.slice(start));
+  if (!m) return undefined;
+  const key = m[1];
+  const obj = top && typeof top === 'object' ? (top as Record<string, unknown>) : {};
+  if (!WRAPPER_KEYS.includes(key) && Object.keys(obj).length > 1) return undefined;
+  const nested = obj[key];
+  if (looksLikeSpec(nested)) return nested;
+  const rest = text.slice(start + m[0].length);
+  if (rest.startsWith('"')) {
+    const inner = parsePartialJson(decodeJsonStringPrefix(rest.slice(1)));
+    return looksLikeSpec(inner) ? inner : undefined;
+  }
+  return undefined;
+}
+
+/** The text of a JSON string literal written so far (without its opening quote), escapes decoded; stops at its end. */
+function decodeJsonStringPrefix(s: string): string {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"') break;
+    if (c !== '\\') {
+      out += c;
+      continue;
+    }
+    const n = s[i + 1];
+    if (n === undefined) break; // an escape cut off by the stream
+    if (n === 'u') {
+      const hex = s.slice(i + 2, i + 6);
+      if (hex.length < 4) break;
+      out += String.fromCharCode(parseInt(hex, 16));
+      i += 5;
+      continue;
+    }
+    out += ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' } as Record<string, string>)[n] ?? n;
+    i += 1;
+  }
+  return out;
+}
+
 const INCOMPLETE = Symbol('incomplete');
 type Value = unknown | typeof INCOMPLETE;
 
