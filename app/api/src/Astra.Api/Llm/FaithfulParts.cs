@@ -18,6 +18,7 @@ public static class FaithfulParts
     {
         var seenMembers = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);   // type → member keys
         var typesWithAttributes = new HashSet<string>(StringComparer.Ordinal);
+        var wholeTypes = new HashSet<string>(StringComparer.Ordinal);   // non-partial types (enums, structs …) already declared
         var result = new List<FaithfulConversion.PackageFile>(files.Count);
         foreach (var f in files)
         {
@@ -35,6 +36,18 @@ public static class FaithfulParts
             }
 
             var changed = false;
+            // A type that cannot be partial (an enum, a struct or class written without `partial`) declared again in a
+            // later file — typically a stub two parts both wrote — is kept once: the first declaration wins.
+            var duplicates = root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
+                .Where(t => t.Parent is BaseNamespaceDeclarationSyntax or CompilationUnitSyntax)
+                .Where(t => t is EnumDeclarationSyntax || (t is TypeDeclarationSyntax td && !td.Modifiers.Any(SyntaxKind.PartialKeyword)))
+                .Where(t => !wholeTypes.Add(WholeTypeKey(t)))
+                .ToList();
+            if (duplicates.Count > 0)
+            {
+                root = root.RemoveNodes(duplicates, SyntaxRemoveOptions.KeepNoTrivia)!;
+                changed = true;
+            }
             var newRoot = root.ReplaceNodes(
                 root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(t => t.Modifiers.Any(SyntaxKind.PartialKeyword)),
                 (original, rewritten) =>
@@ -62,6 +75,12 @@ public static class FaithfulParts
             result.Add(changed ? f with { Content = newRoot.ToFullString() } : f);
         }
         return result;
+    }
+
+    private static string WholeTypeKey(BaseTypeDeclarationSyntax t)
+    {
+        var ns = t.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString() ?? "";
+        return $"{ns}|{t.Identifier.Text}";
     }
 
     private static string TypeKey(TypeDeclarationSyntax t)

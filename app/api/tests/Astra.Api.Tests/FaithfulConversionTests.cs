@@ -273,6 +273,37 @@ public class FaithfulConversionTests
     }
 
     [Fact]
+    public void A_short_unit_with_large_signed_specs_is_split_and_each_part_carries_only_its_specs()
+    {
+        var unit = Vb6Unit("Form/frmSpec.frm", ("A", 10, 20), ("B", 21, 30), ("C", 31, 40)) with { ClassName = "frmSpec" };
+        var big = "{\"invariants\":[{\"id\":\"INV-1\",\"statement\":\"" + new string('x', 900) + "\"}]}";
+        unit = unit with { SignedSpecs = [new("A", big), new("B", big), new("C", big)] };
+        var text = string.Join('\n', Enumerable.Range(1, 40).Select(i => $"' {i}"));
+
+        Assert.Single(FaithfulConversion.PlanParts(unit, text, maxLines: 1200, maxSpecChars: 10_000));
+        var parts = FaithfulConversion.PlanParts(unit, text, maxLines: 1200, maxSpecChars: 2_000);
+        Assert.Equal(3, parts.Count);   // declarations, A+B, C
+        Assert.Equal("[]", parts[0].SpecsJson);
+        Assert.Equal(["A", "B"], parts[1].RoutineNames);
+        Assert.Contains("\"routine\":\"A\"", parts[1].SpecsJson);
+        Assert.DoesNotContain("\"routine\":\"C\"", parts[1].SpecsJson);
+        Assert.Contains("\"routine\":\"C\"", parts[2].SpecsJson);
+    }
+
+    [Fact]
+    public void A_stub_enum_two_parts_both_wrote_is_kept_once()
+    {
+        var a = new FaithfulConversion.PackageFile("src/Stubs/Units/ScheduleMod.cs", "csharp",
+            "namespace Faithful.Vb6App;\npublic enum ReturnFolderPathType { GetExactFolder = 0 }\npublic static partial class ScheduleMod { public static int X; }\n", []);
+        var b = new FaithfulConversion.PackageFile("src/Stubs/Units/ScheduleMod.Part3.cs", "csharp",
+            "namespace Faithful.Vb6App;\npublic enum ReturnFolderPathType { GetExactFolder = 0 }\npublic static partial class ScheduleMod { public static int Y; }\n", []);
+        var r = FaithfulParts.Dedupe([a, b]);
+        Assert.Contains("enum ReturnFolderPathType", r[0].Content);
+        Assert.DoesNotContain("enum ReturnFolderPathType", r[1].Content);
+        Assert.Contains("Y;", r[1].Content);
+    }
+
+    [Fact]
     public void Later_parts_may_add_files_but_never_replace_one()
     {
         var p1 = new List<FaithfulConversion.PackageFile> { new("src/modBig.cs", "csharp", "decl", ["INV-1"]), new("src/Stubs/Units/Globals.cs", "csharp", "g1", []) };

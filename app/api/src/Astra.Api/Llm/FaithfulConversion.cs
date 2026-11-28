@@ -179,11 +179,11 @@ public static class FaithfulConversion
             }),
             JsonOpts);
 
-        /// <summary>The signed specs, each labelled with its routine.</summary>
-        public string SpecsJson()
+        /// <summary>The signed specs, each labelled with its routine; with <paramref name="routines"/>, only theirs.</summary>
+        public string SpecsJson(IReadOnlyCollection<string>? routines = null)
         {
             var items = new List<object>(SignedSpecs.Count);
-            foreach (var s in SignedSpecs)
+            foreach (var s in SignedSpecs.Where(s => routines is null || routines.Contains(s.Routine)))
             {
                 JsonElement spec;
                 try { using var doc = JsonDocument.Parse(s.SpecJson); spec = doc.RootElement.Clone(); }
@@ -320,7 +320,11 @@ public static class FaithfulConversion
     /// </summary>
     public sealed record UnitPart(
         int Number, int Count, string Note, string SourceText, string RoutinesJson,
-        IReadOnlyList<string> RoutineNames, string MainFile);
+        IReadOnlyList<string> RoutineNames, string MainFile, string? SpecsJson = null);
+
+    /// <summary>Most characters of signed specs one call carries (about 45k tokens): a unit whose specs are larger is
+    /// split into parts even when its source is short, and each part carries only its own routines' specs.</summary>
+    public const int MaxSpecCharsPerPart = 160_000;
 
     /// <summary>Languages whose unit is one class, so a part can be a partial-class file (VB6 today).</summary>
     public static bool SupportsParts(string? sourceSchema) =>
@@ -331,11 +335,13 @@ public static class FaithfulConversion
     /// (a routine is never split; one longer than the budget is a part of its own). Pure: the same unit always gives
     /// the same parts, so a retry or a repair asks the same questions.
     /// </summary>
-    public static IReadOnlyList<UnitPart> PlanParts(UnitContext unit, string sourceText, int maxLines = MaxUnitLines)
+    public static IReadOnlyList<UnitPart> PlanParts(UnitContext unit, string sourceText, int maxLines = MaxUnitLines, int maxSpecChars = MaxSpecCharsPerPart)
     {
         var lines = sourceText.Replace("\r\n", "\n").Split('\n');
         var main = $"src/{unit.ClassName}.cs";
-        if (lines.Length <= maxLines || unit.Routines.Count == 0)
+        var specChars = unit.SignedSpecs.GroupBy(s => s.Routine, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Sum(s => s.SpecJson.Length), StringComparer.Ordinal);
+        if ((lines.Length <= maxLines && specChars.Values.Sum() <= maxSpecChars) || unit.Routines.Count == 0)
             return [new UnitPart(1, 1, "", sourceText, unit.RoutinesJson(), unit.Routines.Select(r => r.Name).ToList(), main)];
 
         var routines = unit.Routines.OrderBy(r => r.LineStart).ToList();
@@ -345,17 +351,21 @@ public static class FaithfulConversion
         var groups = new List<List<UnitRoutine>>();
         var current = new List<UnitRoutine>();
         var size = 0;
+        var specSize = 0;
         foreach (var r in routines)
         {
             var len = Math.Max(1, r.LineEnd - r.LineStart + 1);
-            if (current.Count > 0 && size + len > maxLines)
+            var spec = specChars.GetValueOrDefault(r.Name);
+            if (current.Count > 0 && (size + len > maxLines || specSize + spec > maxSpecChars))
             {
                 groups.Add(current);
                 current = new List<UnitRoutine>();
                 size = 0;
+                specSize = 0;
             }
             current.Add(r);
             size += len;
+            specSize += spec;
         }
         if (current.Count > 0) groups.Add(current);
 
@@ -387,7 +397,7 @@ public static class FaithfulConversion
                 $"the declarations only — {(isForm ? "the control fields, the constructor (Caption and size) and the page src/View_" + unit.ClassName + ".razor" : "module-level variables, constants, Types, Enums and Declares")} — " +
                 $"as `{main}` declaring `{kind}` with NO routines (parts 2–{count} write them, each in its own partial file; " +
                 "the inventory's `part` says which). Stub every other unit or library the declarations use. The source below is the unit's declarations section.",
-                declarations, inventory, Array.Empty<string>(), main),
+                declarations, inventory, Array.Empty<string>(), main, "[]"),
         };
         for (var g = 0; g < groups.Count; g++)
         {
@@ -408,7 +418,7 @@ public static class FaithfulConversion
                 "with those members only (same modifiers as part 1). The declarations are already written in part 1 (its C# is shown below " +
                 "with every stub written so far): use them, never redeclare them. Stub only members that are still missing, in NEW files named " +
                 $"`src/Stubs/…/<Name>.Part{number}.cs` that declare the same partial type with only the new members.",
-                body.ToString(), inventory, names, file));
+                body.ToString(), inventory, names, file, unit.SpecsJson(names)));
         }
         return parts;
     }
@@ -477,7 +487,7 @@ public static class FaithfulConversion
             ["routineCount"] = unit.Routines.Count.ToString(),
             ["signedCount"] = unit.SignedCount.ToString(),
             ["unitRoutinesJson"] = part?.RoutinesJson ?? unit.RoutinesJson(),
-            ["unitSpecsJson"] = unit.SpecsJson(),
+            ["unitSpecsJson"] = part?.SpecsJson ?? unit.SpecsJson(),
             ["unitSourceText"] = part?.SourceText ?? request.OriginalSourceText,
             ["mappingTable"] = mappingTable ?? "(no curated mapping table is registered for this source language — map types and idioms using standard knowledge of the language and cite an open question for anything ambiguous)",
             ["exemplarSource"] = exemplarSource,

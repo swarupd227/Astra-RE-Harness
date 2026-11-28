@@ -452,6 +452,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
             {
                 routines = names, path, limit, budgetUsd = money, maxParallel,
                 thenGates = Regex.IsMatch(t, @"\bgates?\b|\bcompile\b|\btest\b"),
+                regenerate = Regex.IsMatch(t, @"\bregenerate\b|\bgenerate (?:\w+ )?again\b"),
             });
         return null;
     }

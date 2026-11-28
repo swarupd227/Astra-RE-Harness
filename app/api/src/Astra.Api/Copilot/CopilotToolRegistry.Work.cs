@@ -94,7 +94,7 @@ public sealed partial class CopilotToolRegistry
             Agent = "migration",
             Mutating = true,
             AllowedPersonas = Builders,
-            Description = "Generate target code in parallel for many routines whose specs are SIGNED; set thenGates to also compile and test each. One confirmation covers the batch. For ONE routine use generate_scaffold. Engineer only.",
+            Description = "Generate target code in parallel for many routines whose specs are SIGNED; set thenGates to also compile and test each; set regenerate to generate again for routines that already have code (after a prompt or runtime improvement — 'regenerate the X module'). One confirmation covers the batch. For ONE routine use generate_scaffold. Engineer only.",
             InputSchema = Obj(
                 ("corpusId", Str("Programme id or name. Optional in a programme thread.")),
                 ("routines", Arr("Routine ids or exact names. Optional; default every signed routine.")),
@@ -102,6 +102,7 @@ public sealed partial class CopilotToolRegistry
                 ("limit", Int("Max routines. Omit for every matching routine (a run takes at most 500).")),
                 ("targetStack", Str("Target stack id. Optional.")),
                 ("thenGates", Bool("True to run compile and test-pack on each package afterwards.")),
+                ("regenerate", Bool("True to generate again for routines that already have generated code. Default false.")),
                 ("budgetUsd", Str("Optional cost ceiling in USD.")),
                 ("maxParallel", Int("Optional ceiling on agents working at once."))),
             Describe = (input, ctx) => DescribeBatchAsync(input, ctx, BuildGenerateRequestAsync),
@@ -294,7 +295,8 @@ public sealed partial class CopilotToolRegistry
             "no un-specified code unit");
 
     private static Task<(WorkRunRequest?, ToolResult?)> BuildGenerateRequestAsync(JsonElement input, ToolContext ctx) =>
-        BuildListRequestAsync(input, ctx, "generate-many", "Code generation", new[] { "SIGNED" },
+        BuildListRequestAsync(input, ctx, "generate-many", ReadBool(input, "regenerate") ? "Code regeneration" : "Code generation",
+            ReadBool(input, "regenerate") ? new[] { "SIGNED", "SCAFFOLDED" } : new[] { "SIGNED" },
             ReadBool(input, "thenGates")
                 ? new[] { WorkStages.Scaffold, WorkStages.Compile, WorkStages.TestPack }
                 : new[] { WorkStages.Scaffold },
@@ -373,7 +375,8 @@ public sealed partial class CopilotToolRegistry
 
         var label = BatchSentence.ListLabel(title, ids.Distinct().Count(), matching, corpus.Name);
         return (new WorkRunRequest(kind, corpus.Id, ids.Distinct().Select(i => (i, 0)).ToList(), stages, label,
-            Read(input, "targetStack"), ReadMoney(input, "budgetUsd"), ReadCaps(input), ctx.ConversationId), null);
+            Read(input, "targetStack"), ReadMoney(input, "budgetUsd"), ReadCaps(input), ctx.ConversationId,
+            Regenerate: kind == "generate-many" && ReadBool(input, "regenerate")), null);
     }
 
     private static async Task<ToolResult> ControlWorkRunAsync(JsonElement input, ToolContext ctx)

@@ -97,15 +97,18 @@ public sealed record PlanResult(IReadOnlyList<PlannedItem> Items, IReadOnlyList<
 /// </summary>
 public static class WorkPlanner
 {
-    public static PlanResult Expand(IEnumerable<RoutineSnapshot> routines, IReadOnlyList<string> stages, Func<Guid>? newId = null)
+    /// <param name="regenerate">Generate the code again for routines that already have it (after a prompt or runtime
+    /// change): a SCAFFOLDED routine enters at scaffold instead of compile, when the run asks for scaffold.</param>
+    public static PlanResult Expand(IEnumerable<RoutineSnapshot> routines, IReadOnlyList<string> stages, Func<Guid>? newId = null, bool regenerate = false)
     {
         newId ??= Guid.NewGuid;
         var items = new List<PlannedItem>();
         var skipped = new List<SkippedRoutine>();
+        var again = regenerate && stages.Contains(WorkStages.Scaffold);
 
         foreach (var r in routines)
         {
-            var entry = EntryStage(r.State);
+            var entry = again && r.State == "SCAFFOLDED" ? WorkStages.Scaffold : EntryStage(r.State);
             if (entry is null)
             {
                 skipped.Add(new(r.Id, r.Name, BusyOrDoneReason(r.State)));
@@ -119,7 +122,7 @@ public static class WorkPlanner
                 skipped.Add(new(r.Id, r.Name, $"already past the requested stages ({Words(r.State)})"));
                 continue;
             }
-            if (!CanStartAt(r.State, chain[0]))
+            if (!(again && r.State == "SCAFFOLDED" && chain[0] == WorkStages.Scaffold) && !CanStartAt(r.State, chain[0]))
             {
                 skipped.Add(new(r.Id, r.Name, $"{Words(r.State)}, so not ready for {chain[0]}"));
                 continue;

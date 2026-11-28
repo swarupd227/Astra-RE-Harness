@@ -36,6 +36,18 @@ public class WorkPlannerTests
         Assert.Empty(plan.Items[0].DependsOn);
     }
 
+    [Fact]
+    public void Regenerating_sends_a_routine_with_code_back_through_generation()
+    {
+        var stages = new[] { WorkStages.Scaffold, WorkStages.Compile, WorkStages.TestPack };
+        var again = WorkPlanner.Expand(new[] { R("SCAFFOLDED"), R("SIGNED") }, stages, regenerate: true);
+        Assert.Equal(new[] { "scaffold", "compile", "test-pack", "scaffold", "compile", "test-pack" }, again.Items.Select(i => i.Kind));
+        // Without the flag a routine with code only re-runs its gates; without scaffold in the stages there is nothing to regenerate.
+        Assert.Equal("compile", WorkPlanner.Expand(new[] { R("SCAFFOLDED") }, stages).Items[0].Kind);
+        Assert.Equal("compile", WorkPlanner.Expand(new[] { R("SCAFFOLDED") }, new[] { WorkStages.Compile }, regenerate: true).Items[0].Kind);
+        Assert.Empty(WorkPlanner.Expand(new[] { R("SCAFFOLDING") }, stages, regenerate: true).Items);
+    }
+
     [Theory]
     [InlineData("EXTRACTING")]
     [InlineData("SCAFFOLDING")]

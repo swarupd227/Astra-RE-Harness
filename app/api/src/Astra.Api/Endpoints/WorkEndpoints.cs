@@ -50,7 +50,7 @@ public static class WorkEndpoints
             }
 
             var (run, preview, startError) = await work.StartAsync(new WorkRunRequest(
-                kind, corpus.Id, routines, stages, label, body.TargetStack, body.BudgetUsd, body.Caps, body.ConversationId, waveId), actor, ct);
+                kind, corpus.Id, routines, stages, label, body.TargetStack, body.BudgetUsd, body.Caps, body.ConversationId, waveId, body.Regenerate), actor, ct);
             if (startError is not null) return Error(startError);
             return Results.Accepted($"/api/v1/work-runs/{run!.Id}", new
             {
@@ -114,7 +114,8 @@ public sealed record WorkRunBody(
     string? TargetStack = null,
     decimal? BudgetUsd = null,
     Dictionary<string, int>? Caps = null,
-    Guid? ConversationId = null);
+    Guid? ConversationId = null,
+    bool Regenerate = false);
 
 /// <param name="Caps">On resume: new per-stage concurrency (extract, scaffold, compile, test-pack), merged into the run's own.</param>
 public sealed record WorkControlBody(decimal? BudgetUsd = null, Dictionary<string, int>? Caps = null);

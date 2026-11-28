@@ -20,7 +20,8 @@ public sealed record WorkRunRequest(
     decimal? BudgetUsd = null,
     IReadOnlyDictionary<string, int>? Caps = null,
     Guid? ConversationId = null,
-    Guid? MigrationWaveId = null);
+    Guid? MigrationWaveId = null,
+    bool Regenerate = false);
 
 public sealed record WorkRunPreview(PlanResult Plan, IReadOnlyDictionary<string, int> Caps, IReadOnlyList<string> Warnings);
 
@@ -156,7 +157,7 @@ public sealed class WorkRunService
             select new { w.SubjectId, r.Label }).ToListAsync(ct);
         var busyById = busy.GroupBy(b => b.SubjectId).ToDictionary(g => g.Key, g => g.First().Label);
 
-        var plan = WorkPlanner.Expand(snapshots.Where(s => !busyById.ContainsKey(s.Id)), request.Stages);
+        var plan = WorkPlanner.Expand(snapshots.Where(s => !busyById.ContainsKey(s.Id)), request.Stages, regenerate: request.Regenerate);
         var skipped = plan.Skipped.Concat(snapshots.Where(s => busyById.ContainsKey(s.Id))
             .Select(s => new SkippedRoutine(s.Id, s.Name, $"already queued in \"{busyById[s.Id]}\""))).ToList();
         plan = plan with { Skipped = skipped };
