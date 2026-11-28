@@ -123,8 +123,8 @@ public static class QualityReportBuilder
         new("checkstyle", "Checkstyle", "tool", "10.20.1", "Java conventions", IsJava),
         new("ruff", "ruff", "tool", "0.8.4", "Python bugs, undefined names, complexity", IsPython),
         new("bandit", "bandit", "tool", "1.8.0", "Python security", IsPython),
-        new("eslint", "ESLint", "tool", "", "TypeScript lint", HasTypeScript, Available: false),
-        new("dotnet-analyzers", ".NET analyzers", "tool", "", "C# code analysis", IsDotnet, Available: false),
+        new("eslint", "ESLint", "tool", "10.14.0 · typescript-eslint 8.72.1", "TypeScript and React: likely bugs, rules of hooks, eval and other unsafe calls, complexity", HasTypeScript),
+        new("dotnet-analyzers", ".NET analyzers", "tool", "SDK analyzers · latest", "C#: security (injection, weak crypto), reliability and the recommended code-analysis rules", IsDotnet),
         new("dependencies", "Known-vulnerability check (OSV.dev)", "dependencies", "OSV.dev API", "Every declared library and version against published advisories", _ => true),
         new("sbom", "Software bill of materials", "sbom", "CycloneDX 1.5", "The libraries the package declares, with versions", _ => true),
     ];
@@ -261,7 +261,7 @@ public static class QualityReportBuilder
                     else
                     {
                         // A tool group that could not start (java-tools / python-tools) says why.
-                        var group = IsJava(stack) ? "java-tools" : IsPython(stack) ? "python-tools" : null;
+                        var group = d.Id == "eslint" ? "js-tools" : IsJava(stack) ? "java-tools" : IsPython(stack) ? "python-tools" : null;
                         string? why = group is not null && tools is { } tg && tg.TryGetProperty(group, out var gr) ? Trim(Str(gr, "error")) : null;
                         list.Add(new(d.Id, d.Name, d.Kind, version, d.Covers, why is null ? "not-run" : "failed-to-run", null, null,
                             why ?? (d.Id == "dependencies" ? "The package declares no libraries" : "Not reported by this run")));

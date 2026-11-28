@@ -1,0 +1,16 @@
+{
+  "name": "astra-jstools",
+  "description": "ESLint and its plugins for the QUALITY gate (Validation/Quality/JsTools.cs). Exact pins; keep the version in QualityReport.cs in step.",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-security": "4.2.1",
+    "globals": "17.13.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
+  }
+}

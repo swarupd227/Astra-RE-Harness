@@ -89,6 +89,8 @@ public sealed class QualityValidator
             // its own time limit.
             var toolsTask = RunJavaToolsAsync(scaffold.TargetPlatform, files, ct);
             var pythonTask = PythonTools.RunAsync(files, ct);
+            var jsTask = JsTools.RunAsync(files, ct);
+            var dotnetTask = DotnetAnalyzers.RunAsync(scaffold.TargetPlatform, files, ct);
             var deps = Dependencies.Read(files);
             var depsTask = CheckDependenciesAsync(deps, ct);
             Task<QualityReviewResult>? reviewTask = null;
@@ -106,6 +108,12 @@ public sealed class QualityValidator
             var (pyFindings, pyRuns) = await pythonTask;
             findings.AddRange(pyFindings);
             foreach (var (k, v) in pyRuns) runs[k] = v;
+            var (jsFindings, jsRuns) = await jsTask;
+            findings.AddRange(jsFindings);
+            foreach (var (k, v) in jsRuns) runs[k] = v;
+            var (dnFindings, dnRuns) = await dotnetTask;
+            findings.AddRange(dnFindings);
+            foreach (var (k, v) in dnRuns) runs[k] = v;
             var (depFindings, depRan, depError) = await depsTask;
             findings.AddRange(depFindings);
             if (deps.Count > 0)

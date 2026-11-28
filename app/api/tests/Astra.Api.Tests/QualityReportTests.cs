@@ -86,7 +86,8 @@ public class QualityReportTests
         Assert.Equal("claude-sonnet", r.Checks.Single(c => c.Id == "ai-review").Version);
         Assert.Equal("not-applicable", Status("spotbugs"));
         Assert.Equal("not-applicable", Status("dotnet-analyzers"));
-        Assert.Equal("not-available", Status("eslint"));
+        Assert.Equal("not-run", Status("eslint"));
+        Assert.Equal("Not reported by this run", r.Checks.Single(c => c.Id == "eslint").Note);
         Assert.Contains(QualityRules.RuleSetFingerprint, r.Checks.Single(c => c.Id == "rules").Version);
     }
 
@@ -156,6 +157,30 @@ public class QualityReportTests
         var ai = r.Checks.Single(c => c.Id == "ai-review");
         Assert.Equal("failed-to-run", ai.Status);
         Assert.Equal("The AI review could not run: Anthropic returned 401: invalid x-api-key", ai.Note);
+    }
+
+    [Fact]
+    public void Eslint_and_the_dotnet_analyzers_are_reported_like_any_tool()
+    {
+        var react = QualityReportBuilder.Build(Input("react-python", Run("QUALITY", "PASSED", 3, """
+            {"total":0,"blocking":0,"findings":[],"tools":{"eslint":{"ok":true,"count":4,"durationMs":900,"error":null}}}
+            """)));
+        var eslint = react.Checks.Single(c => c.Id == "eslint");
+        Assert.Equal("ran", eslint.Status);
+        Assert.Equal(4, eslint.Findings);
+        Assert.StartsWith("10.", eslint.Version);
+
+        var missing = QualityReportBuilder.Build(Input("react-python", Run("QUALITY", "PASSED", 3, """
+            {"total":0,"blocking":0,"findings":[],"tools":{"js-tools":{"ok":false,"count":0,"durationMs":0,"error":"ESLint is not installed at /opt/astra-jstools"}}}
+            """)));
+        Assert.Equal("failed-to-run", missing.Checks.Single(c => c.Id == "eslint").Status);
+
+        var dotnet = QualityReportBuilder.Build(Input("dotnet10", Run("QUALITY", "PASSED", 3, """
+            {"total":1,"blocking":0,"findings":[],"tools":{"dotnet-analyzers":{"ok":true,"count":1,"durationMs":40000,"error":null}}}
+            """)));
+        Assert.Equal("ran", dotnet.Checks.Single(c => c.Id == "dotnet-analyzers").Status);
+        Assert.Equal("not-applicable", dotnet.Checks.Single(c => c.Id == "eslint").Status);
+        Assert.DoesNotContain(dotnet.Checks, c => c.Status == "not-available");
     }
 
     [Fact]

@@ -111,6 +111,13 @@ RUN python3 -m venv /opt/astra-pytools \
     && /opt/astra-pytools/bin/pip install --no-cache-dir "ruff==0.8.4" "bandit==1.8.0" \
     && /opt/astra-pytools/bin/ruff --version && /opt/astra-pytools/bin/bandit --version
 
+# TypeScript / JavaScript static analysis for the QUALITY gate (Validation/Quality/JsTools.cs): ESLint with
+# typescript-eslint, React's rules of hooks and eslint-plugin-security, exact pins in quality-tools/package.json,
+# installed in their own folder beside the config the gate copies into each package it reads.
+COPY quality-tools/package.json quality-tools/eslint.config.mjs /opt/astra-jstools/
+RUN cd /opt/astra-jstools && npm install --omit=dev --no-audit --no-fund --loglevel=error \
+    && node node_modules/eslint/bin/eslint.js --version
+
 COPY --from=build /app .
 # The archetype templates come straight from the source tree: `dotnet publish`
 # strips *.razor files (the Razor SDK treats them as component inputs, not
