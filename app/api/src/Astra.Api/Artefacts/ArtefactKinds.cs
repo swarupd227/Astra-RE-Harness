@@ -49,7 +49,7 @@ public static class ArtefactKinds
     public static IReadOnlyList<ArtefactKind> All { get; } = new ArtefactKind[]
     {
         new(Code, "Source code",
-            "Application source code. Parsed into routines; always part of a project.",
+            "Application source code. Parsed into code units; always part of a project.",
             SourceLanguageDetector.AllowedExtensions.Distinct().OrderBy(e => e, StringComparer.Ordinal).ToArray(),
             TrustTier.Structured, TextCap, true, Core: true),
         new(Sql, "Database scripts",

@@ -264,7 +264,7 @@ export function ProjectSettingsPage() {
             <span>
               <span className="font-medium">Test project</span>
               <span className="block text-caption text-ink-secondary">
-                A QA or scratch project. The Projects list hides it unless “Show test projects” is on. Nothing is deleted.
+                A QA or scratch project. Home, the rail, the Dashboard and its totals leave it out; the Projects list shows it under “Show test projects”. Nothing is deleted.
               </span>
             </span>
           </label>

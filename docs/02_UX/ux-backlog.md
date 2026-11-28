@@ -425,3 +425,7 @@ screen. Review it on the next spec an SME signs.
 26. **Evidence** — every row repeated the workbook's long file name under its own file heading; "D5 D6 … D38".
     **Done:** the second line says where inside the file (file name kept for screen readers); runs of three or more
     consecutive cells read as a range ("D5:D38").
+27. **Project settings / New project** — the Test-project hint only mentioned the Projects list (Home, rail and Dashboard
+    now leave test projects out too); source code "parsed into routines"; the language picker said "PHP / Magento" and
+    "Java 11" (the migration a schema was first written for). **Done:** hint names every place, "code units", "PHP",
+    "Java".

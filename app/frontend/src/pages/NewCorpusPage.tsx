@@ -25,6 +25,16 @@ function isAcceptable(name: string, exts: string[]): boolean {
   return exts.some((e) => lower.endsWith(e));
 }
 
+/**
+ * The language, not one version or framework of it: a schema's displayName describes the migration it was written for
+ * ("PHP / Magento → …", "Java 11 → …"), which reads as if only that flavour were accepted.
+ */
+const SOURCE_NAME: Record<string, string> = {
+  vb6: 'VB6 / Office VBA (.bas, .frm, .xlsm, .docm …)',
+  php: 'PHP',
+  java: 'Java',
+};
+
 export function NewCorpusPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -225,7 +235,7 @@ export function NewCorpusPage() {
                 .filter((s) => s.id !== 'doc')
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.id === 'vb6' ? 'VB6 / Office VBA (.bas, .frm, .xlsm, .docm …)' : s.displayName.split('→')[0].trim()}
+                    {SOURCE_NAME[s.id] ?? s.displayName.split('→')[0].trim()}
                   </option>
                 ))}
             </select>
