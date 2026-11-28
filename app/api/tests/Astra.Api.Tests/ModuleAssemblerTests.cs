@@ -322,6 +322,19 @@ public class ModuleAssemblerTests
     }
 
     [Fact]
+    public void The_key_is_numbered_by_the_database_when_any_unit_relies_on_that()
+    {
+        // HUGE again: the kept definition of users.user_id came from a unit that writes the id itself; others insert
+        // users without one and failed with "NULL not allowed for column USER_ID".
+        var explicitIds = "CREATE TABLE IF NOT EXISTS users (\n user_id INT PRIMARY KEY,\n user_name VARCHAR(64)\n);";
+        var generated = "CREATE TABLE IF NOT EXISTS users (\n user_id INT NOT NULL AUTO_INCREMENT,\n user_email VARCHAR(254),\n PRIMARY KEY (user_id)\n);";
+        var schema = SchemaMerger.Merge(new[] { ("a", explicitIds), ("b", generated) }, new List<AssemblyConflict>(), new List<SharedItem>(), new List<string>());
+        var users = System.Text.RegularExpressions.Regex.Match(schema, @"CREATE TABLE IF NOT EXISTS users \((.*?)\);", System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        Assert.Contains("user_id INT AUTO_INCREMENT PRIMARY KEY", users);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(users, "PRIMARY KEY"));
+    }
+
+    [Fact]
     public void A_foreign_key_stays_only_when_every_unit_that_declares_the_table_has_it()
     {
         // Seen on a real estate: one unit's llx_societe_rib referenced llx_societe; another unit's had no key and its

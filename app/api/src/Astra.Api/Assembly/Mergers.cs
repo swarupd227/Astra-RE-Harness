@@ -89,6 +89,7 @@ public static class SchemaMerger
         public Dictionary<string, HashSet<string>> ConstraintVoters { get; } = new(StringComparer.Ordinal);       // tight text → units that declare it
         public Dictionary<string, HashSet<string>> ReferenceVoters { get; } = new(StringComparer.OrdinalIgnoreCase); // column → units whose column REFERENCES another table
         public List<string> Units { get; } = new();
+        public HashSet<string> IdentityColumns { get; } = new(StringComparer.OrdinalIgnoreCase);   // columns some unit lets the database number
         public List<string> Added { get; } = new();
     }
 
@@ -149,6 +150,7 @@ public static class SchemaMerger
                 foreach (var (name, rawDef) in columns)
                 {
                     var def = rawDef;
+                    if (Regex.IsMatch(rawDef, @"\b(AUTO_INCREMENT|IDENTITY)\b", RegexOptions.IgnoreCase)) t.IdentityColumns.Add(name);
                     var inlineKey = Regex.IsMatch(def, @"\bPRIMARY\s+KEY\b", RegexOptions.IgnoreCase);
                     if (inlineKey && !keepKey)
                         def = Demote(def);   // not the table's key here: an ordinary column, no second identity
@@ -225,6 +227,11 @@ public static class SchemaMerger
                     def = InlineReference.Replace(def, "");
                     dropped.Add($"{col} REFERENCES …");
                 }
+                // The table's single-column key is numbered by the database when any unit relies on that: units that insert
+                // without the key then work, and an identity column still takes the explicit ids other units supply.
+                if (winningKey.TryGetValue(key, out var wk) && string.Equals(wk, $"({col.ToLowerInvariant()})", StringComparison.Ordinal)
+                    && t.IdentityColumns.Contains(col) && !Regex.IsMatch(def, @"\b(AUTO_INCREMENT|IDENTITY)\b", RegexOptions.IgnoreCase))
+                    def = Regex.Replace(def, @"^(\S+\s+[A-Za-z]+(?:\s*\([^)]*\))?)", "$1 AUTO_INCREMENT");
                 if (H2Keywords.IsReleasable(col)) def = Regex.Replace(def, @"^\w+", "\"" + col.ToUpperInvariant() + "\"");
                 lines.Add("    " + def);
             }
