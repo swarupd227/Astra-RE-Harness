@@ -230,6 +230,27 @@ public sealed partial class CopilotToolRegistry
         });
         _tools.Add(new CopilotTool
         {
+            Name = "assign_review",
+            Agent = "spec",
+            Mutating = true,
+            AllowedPersonas = new[] { Persona.Engineer, Persona.Admin },
+            Description = "Assign a spec's review to one SME or Admin from the Users list (by name), or clear the assignment " +
+                          "(reviewer empty). Engineer or Admin. The person sees it under 'Assigned to me' in My reviews.",
+            InputSchema = Obj(
+                ("subroutineId", Str("Routine id or exact name.")),
+                ("specId", Str("Spec id (alternative).")),
+                ("reviewer", Str("Reviewer's display name or e-mail; empty to unassign."))),
+            Describe = async (input, ctx) =>
+            {
+                var unit = (await ResolveSpecAsync(input, ctx))?.Subroutine?.Name ?? "the code unit";
+                return Read(input, "reviewer") is { Length: > 0 } who
+                    ? $"assign the review of `{unit}` to {who}"
+                    : $"clear the reviewer of `{unit}`";
+            },
+            Execute = AssignReviewAsync,
+        });
+        _tools.Add(new CopilotTool
+        {
             Name = "review_claim",
             Agent = "spec",
             Mutating = true,
@@ -982,6 +1003,29 @@ public sealed partial class CopilotToolRegistry
         var fresh = await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine).FirstAsync(s => s.Id == spec.Id, ctx.Ct);
         var (artifact, payload, _) = await ArtifactBuilders.SpecSummaryAsync(ctx.Db, schemas, fresh, ctx.Ct);
         return ToolResult.Success(new { routed = ok, spec = payload }, $"routed {fresh.Subroutine?.Name} for review", artifact);
+    }
+
+    private static async Task<ToolResult> AssignReviewAsync(JsonElement input, ToolContext ctx)
+    {
+        var spec = await ResolveSpecAsync(input, ctx);
+        if (spec is null) return NoSpec(input);
+        var svc = ctx.Services.GetRequiredService<Specs.ReviewAssignmentService>();
+        Guid? userId = null;
+        if (Read(input, "reviewer") is { Length: > 0 } name)
+        {
+            var (found, notFound) = await svc.FindReviewerAsync(name, ctx.Ct);
+            if (notFound is not null) return ToolResult.Failure(notFound.Code, notFound.Message);
+            userId = found!.Id;
+        }
+        var (who, error) = await svc.AssignAsync(spec.Id, userId, ctx.Actor, null, ctx.Ct);
+        if (error is not null) return ToolResult.Failure(error.Code, error.Message);
+        // The spec's card, as route_for_review returns, so the reply has something to show.
+        var schemas = ctx.Services.GetRequiredService<SpecSchemaProvider>();
+        var fresh = await ctx.Db.Specs.AsNoTracking().Include(s => s.Subroutine).FirstAsync(s => s.Id == spec.Id, ctx.Ct);
+        var (artifact, payload, _) = await ArtifactBuilders.SpecSummaryAsync(ctx.Db, schemas, fresh, ctx.Ct);
+        var unit = fresh.Subroutine?.Name ?? "the code unit";
+        return ToolResult.Success(new { specId = spec.Id, assignee = who, spec = payload },
+            who is null ? $"cleared the reviewer of {unit}" : $"assigned {unit} to {who.DisplayName}", artifact);
     }
 
     private static async Task<ToolResult> ReviewClaimAsync(JsonElement input, ToolContext ctx)

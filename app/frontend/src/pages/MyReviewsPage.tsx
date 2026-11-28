@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, ChevronRight, MessageSquare, ShieldCheck, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
-import { myReviewsApi, type MyReviewItem } from '@/lib/api';
+import { getPersona, myReviewsApi, type MyReviewItem, type Reviewer } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
 import { ErrorBlock } from '@/components/ErrorBlock';
 import { absoluteTime, formatInt, relativeTime } from '@/workspace/format';
@@ -26,14 +26,18 @@ function waitedDays(item: MyReviewItem): number {
 
 /**
  * The review queue: specs waiting for an SME. The count pills filter, the oldest unstarted spec is one click away,
- * and each card says how long it has waited and how much is left. (Assignment to a named reviewer is a separate
- * feature — this page is honest that it lists every review, not "yours".)
+ * and each card says how long it has waited, how much is left and who it is assigned to. An Engineer or Admin assigns
+ * a review to a person from the Users list; "Assigned to me" appears for someone signed in as one of those people.
  */
 export function MyReviewsPage() {
   const reviews = useQuery({ queryKey: ['my-reviews'], queryFn: myReviewsApi.list });
   const [params, setParams] = useSearchParams();
   const view = (params.get('view') ?? 'open') as View;
   const sort = (params.get('sort') ?? 'age') as Sort;
+  // Who: '' everyone, 'me', 'none' (unassigned) or a reviewer id.
+  const who = params.get('who') ?? '';
+  const canAssign = ['engineer', 'admin'].includes(getPersona());
+  const reviewers = useQuery({ queryKey: ['reviewers'], queryFn: myReviewsApi.reviewers, enabled: canAssign, staleTime: 60_000 });
   const navigate = useNavigate();
   const set = (k: string, v: string | null) =>
     setParams(
@@ -49,8 +53,11 @@ export function MyReviewsPage() {
   const r = reviews.data;
   const open = useMemo(() => {
     if (!r) return [];
-    const items =
+    const all =
       view === 'awaiting' ? r.awaiting : view === 'progress' ? r.inProgress : view === 'signed' ? [] : [...r.awaiting, ...r.inProgress];
+    const items = all.filter((i) =>
+      !who ? true : who === 'none' ? !i.assignee : who === 'me' ? !!r.me && i.assignee?.id === r.me.id : i.assignee?.id === who,
+    );
     const cmp: Record<Sort, (a: MyReviewItem, b: MyReviewItem) => number> = {
       age: (a, b) => waitedDays(b) - waitedDays(a),
       effort: (a, b) =>
@@ -59,7 +66,7 @@ export function MyReviewsPage() {
       project: (a, b) => a.corpusName.localeCompare(b.corpusName) || waitedDays(b) - waitedDays(a),
     };
     return [...items].sort(cmp[sort]);
-  }, [r, view, sort]);
+  }, [r, view, sort, who]);
 
   if (reviews.isPending) {
     return (
@@ -90,7 +97,10 @@ export function MyReviewsPage() {
         <div>
           <p className="label">Work</p>
           <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">My reviews</h1>
-          <p className="mt-1 text-body text-ink-secondary">Specs waiting for an SME to review and sign — every reviewer sees the same queue.</p>
+          <p className="mt-1 text-body text-ink-secondary">
+            Specs waiting for an SME to review and sign.{' '}
+            {r.me ? 'Filter to the ones assigned to you, or see everyone’s.' : 'Each can be assigned to a reviewer from the Users list.'}
+          </p>
         </div>
         {next && (
           <button
@@ -115,6 +125,22 @@ export function MyReviewsPage() {
         </div>
         {view !== 'signed' && (
           <select
+            value={who}
+            onChange={(e) => set('who', e.target.value || null)}
+            aria-label="Assigned to"
+            className="h-8 rounded-md border border-line-subtle bg-raised px-2 text-caption text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+            data-testid="reviews-who"
+          >
+            <option value="">Assigned to anyone</option>
+            {r.me && <option value="me">Assigned to me</option>}
+            <option value="none">Unassigned</option>
+            {assigneesOf([...r.awaiting, ...r.inProgress], reviewers.data?.data).map((p) => (
+              <option key={p.id} value={p.id}>Assigned to {p.displayName}</option>
+            ))}
+          </select>
+        )}
+        {view !== 'signed' && (
+          <select
             value={sort}
             onChange={(e) => set('sort', e.target.value === 'age' ? null : e.target.value)}
             aria-label="Sort"
@@ -137,7 +163,7 @@ export function MyReviewsPage() {
           <ul className="space-y-2" data-testid="reviews-open">
             {open.map((it) => (
               <li key={it.specId}>
-                <ReviewRow item={it} />
+                <ReviewRow item={it} canAssign={canAssign} reviewers={reviewers.data?.data ?? []} />
               </li>
             ))}
           </ul>
@@ -165,7 +191,43 @@ function Pill({ active, onClick, n, label, testid }: { active: boolean; onClick:
   );
 }
 
-function ReviewRow({ item }: { item: MyReviewItem }) {
+/** Reviewers to filter by: everyone the directory lists plus anyone already assigned, by name. */
+function assigneesOf(items: MyReviewItem[], directory: Reviewer[] | undefined): Reviewer[] {
+  const byId = new Map<string, Reviewer>();
+  for (const p of directory ?? []) byId.set(p.id, p);
+  for (const i of items) if (i.assignee) byId.set(i.assignee.id, i.assignee);
+  return [...byId.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+function AssignControl({ item, reviewers }: { item: MyReviewItem; reviewers: Reviewer[] }) {
+  const qc = useQueryClient();
+  const assign = useMutation({
+    mutationFn: (userId: string | null) => myReviewsApi.assign(item.specId, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-reviews'] }),
+  });
+  const options = assigneesOf([item], reviewers);
+  return (
+    <label className="inline-flex items-center gap-1 text-caption text-ink-secondary">
+      <span className="sr-only">Assign {item.subroutineName} to</span>
+      <select
+        value={item.assignee?.id ?? ''}
+        onChange={(e) => assign.mutate(e.target.value || null)}
+        disabled={assign.isPending || options.length === 0}
+        title={options.length === 0 ? 'Add an SME under Platform → Roles & Permissions to assign reviews' : 'Assign this review'}
+        className="h-7 max-w-[11rem] rounded-md border border-line-subtle bg-canvas px-1.5 text-caption text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-volt disabled:opacity-60"
+        data-testid={`assign-${item.specId}`}
+      >
+        <option value="">Unassigned</option>
+        {options.map((p) => (
+          <option key={p.id} value={p.id}>{p.displayName}</option>
+        ))}
+      </select>
+      {assign.isError && <span className="text-status-failed" role="alert">{(assign.error as Error).message}</span>}
+    </label>
+  );
+}
+
+function ReviewRow({ item, canAssign, reviewers }: { item: MyReviewItem; canAssign: boolean; reviewers: Reviewer[] }) {
   const days = waitedDays(item);
   const pct = item.totalClaims ? Math.round((item.processedClaims / item.totalClaims) * 100) : 0;
   const file = item.relativePath.split('/').pop() ?? item.relativePath;
@@ -203,6 +265,13 @@ function ReviewRow({ item }: { item: MyReviewItem }) {
       >
         {days === 0 ? 'Today' : `Waiting ${days} d`}
       </span>
+      {canAssign ? (
+        <AssignControl item={item} reviewers={reviewers} />
+      ) : (
+        <span className="text-caption text-ink-secondary" data-testid={`assignee-${item.specId}`}>
+          {item.assignee ? `Assigned to ${item.assignee.displayName}` : 'Unassigned'}
+        </span>
+      )}
       <Link
         to={`/subroutines/${item.subroutineId}/review`}
         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-caption text-ink-secondary hover:bg-sunken hover:text-ink-primary"

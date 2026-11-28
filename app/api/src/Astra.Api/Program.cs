@@ -174,6 +174,7 @@ else
     builder.Services.AddSingleton<Astra.Api.Copilot.ICopilotBrain, Astra.Api.Copilot.MockCopilotBrain>();
 builder.Services.AddScoped<Astra.Api.Conversations.ConversationService>();
 builder.Services.AddScoped<Astra.Api.Specs.SpecReviewService>();
+builder.Services.AddScoped<Astra.Api.Specs.ReviewAssignmentService>();
 builder.Services.AddScoped<Astra.Api.Copilot.CopilotToolRegistry>();
 builder.Services.AddScoped<Astra.Api.Copilot.CopilotOrchestrator>();
 builder.Services.AddSingleton<Astra.Api.Copilot.BackgroundRunService>();
@@ -1180,6 +1181,13 @@ using (var scope = app.Services.CreateScope())
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS hidden_at timestamptz NULL;
             ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS hidden_by varchar(160) NULL;
+            """);
+
+        // Review assignment: a spec in review can be assigned to a person from the Users directory.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE specs ADD COLUMN IF NOT EXISTS assigned_user_id uuid NULL;
+            ALTER TABLE specs ADD COLUMN IF NOT EXISTS assigned_at timestamptz NULL;
+            ALTER TABLE specs ADD COLUMN IF NOT EXISTS assigned_by varchar(160) NULL;
             """);
 
         // WS2 Increment 2 — spec review threads reference their spec.

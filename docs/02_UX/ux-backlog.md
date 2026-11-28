@@ -13,7 +13,7 @@ commit.
 | 4 | Routines | `/subroutines` | Live, incl. search over spec summaries |
 | 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification live (78f1a93) |
 | 6 | Generated code | `/scaffolds` | Live (gates per package, live previews) |
-| 7 | My reviews | `/my-reviews` | Live; real assignment = separate feature |
+| 7 | My reviews | `/my-reviews` | Live; review assignment live (Users directory; "Assigned to me" with password sign-in) |
 | 8 | Comments | `/comments` | Live; per-user read state + following open (API) |
 | 9 | Compliance | `/compliance` | Live |
 | 10 | System health | `/system` | Live (deployed builds, services, model, recent problems) |
@@ -439,3 +439,8 @@ screen. Review it on the next spec an SME signs.
     per kind in one plain sentence ("9 citations point at lines outside this code unit — check those claims in review"),
     details folded; "Generating code" → "Code generated · 8 files", Preparing · Writing the code · Checking it · Saving,
     the prompt shown only when there is one, "offline · nothing leaves the platform". "Open scaffold" kept (demo specs).
+31. **My reviews — assignment** (was "separate feature"). **Done:** an Engineer or Admin assigns a spec's review to an SME
+    or Admin from the Users directory (Roles & Permissions) — on the row, or by saying "Assign `X` to Priya" in a thread
+    (`assign_review`, Confirm card); each change audited (`spec.assigned` / `spec.unassigned`). The queue filters by
+    assignee ("Assigned to me" when someone signs in with a password and is in the directory, "Unassigned", a person).
+    `/my-reviews` now loads only specs in review or signed and counts claim decisions in the database.

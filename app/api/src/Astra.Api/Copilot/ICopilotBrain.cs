@@ -237,6 +237,7 @@ public sealed class MockCopilotBrain : ICopilotBrain
         "extract_spec" => "drafting the spec",
         "sign_spec" => "preparing the sign-off",
         "route_for_review" => "routing the spec",
+        "assign_review" => "assigning the review",
         "generate_scaffold" => "generating the code",
         "run_gate" => "running the gate",
         "sign_all_in_review" => "preparing the bulk sign-off",
@@ -306,6 +307,12 @@ public sealed class MockCopilotBrain : ICopilotBrain
                 : ("get_migration_plan", new { });
         if (Regex.IsMatch(t, @"\bflow board\b|\bthe board\b|\bpipeline\b|\bstuck\b|\bwhere are we\b|\bhow far along\b|\bnot (yet )?verified\b"))
             return ("get_flow_board", new { });
+        // "Assign `X` to Priya" / "unassign `X`" — before "accept", which a reviewer's name could contain.
+        if (Regex.IsMatch(t, @"\b(un)?assign\b"))
+        {
+            var reviewer = t.Contains("unassign") ? "" : Regex.Match(text, @"\bto\s+@?([A-Za-z][\w.'-]*(?:\s+[A-Z][\w.'-]*)?)").Groups[1].Value;
+            return ("assign_review", new { subroutineId = name ?? "", reviewer });
+        }
         if (Regex.IsMatch(t, @"\baccept\b")) return ("review_all_claims", new { subroutineId = name ?? "" });
         if (Regex.IsMatch(t, @"\b(riskiest|most (called|depended)|biggest|largest|hotspots?)\b"))
             return ("rank_routines", new { by = t.Contains("called") || t.Contains("depended") ? "fan_in" : t.Contains("biggest") || t.Contains("largest") ? "size" : "risk", limit = 10 });

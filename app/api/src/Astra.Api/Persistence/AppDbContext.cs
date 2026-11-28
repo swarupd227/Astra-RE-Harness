@@ -412,6 +412,9 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             b.Property(x => x.PreviousSpecId).HasColumnName("previous_spec_id");
+            b.Property(x => x.AssignedUserId).HasColumnName("assigned_user_id");
+            b.Property(x => x.AssignedAt).HasColumnName("assigned_at");
+            b.Property(x => x.AssignedBy).HasColumnName("assigned_by").HasMaxLength(160);
 
             b.HasOne(x => x.Subroutine).WithMany()
              .HasForeignKey(x => x.SubroutineId).OnDelete(DeleteBehavior.Cascade);

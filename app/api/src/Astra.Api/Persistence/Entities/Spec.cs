@@ -27,6 +27,12 @@ public sealed class Spec
     /// </summary>
     public Guid? PreviousSpecId { get; set; }
 
+    /// <summary>The reviewer this spec is assigned to (a row of the Users directory); null = anyone's.</summary>
+    public Guid? AssignedUserId { get; set; }
+    public DateTimeOffset? AssignedAt { get; set; }
+    /// <summary>Display name of whoever assigned it.</summary>
+    public string? AssignedBy { get; set; }
+
     public Subroutine? Subroutine { get; set; }
     public LlmCall? LlmCall { get; set; }
 }

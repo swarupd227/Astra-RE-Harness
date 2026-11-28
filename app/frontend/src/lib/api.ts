@@ -2383,10 +2383,16 @@ export type MyReviewItem = {
     algorithm: string;
     specCanonicalHash: string;
   } | null;
+  /** The reviewer it is assigned to (Users directory); null = anyone's. Absent from older APIs. */
+  assignee?: Reviewer | null;
 };
+
+export type Reviewer = { id: string; displayName: string };
 
 export type MyReviewsResponse = {
   persona: string;
+  /** The signed-in person in the Users directory (password sign-in only); null with the shared dev personas. */
+  me?: Reviewer | null;
   counts: { awaiting: number; inProgress: number; signed: number };
   awaiting: MyReviewItem[];
   inProgress: MyReviewItem[];
@@ -2395,6 +2401,13 @@ export type MyReviewsResponse = {
 
 export const myReviewsApi = {
   list: () => apiFetch<MyReviewsResponse>(`/api/v1/my-reviews`),
+  reviewers: () => apiFetch<{ data: Reviewer[] }>(`/api/v1/reviewers`),
+  /** Assign a spec's review to a reviewer, or clear it with null. Engineer / Admin. */
+  assign: (specId: string, userId: string | null) =>
+    apiFetch<{ specId: string; assignee: Reviewer | null }>(`/api/v1/specs/${specId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
 };
 
 // ─── Phase 11.0 — Documentation types ────────────────────────────────
