@@ -232,13 +232,17 @@ public static class RolesEndpoints
         new ActionDef("extract_spec",         "Extract a behavioural spec",        "Trigger a Claude call against a parsed subroutine to produce a structured spec.", "Pipeline",    new[] { "engineer", "admin" }),
         new ActionDef("review_claim",         "Review claims (accept / edit / reject)", "Walk every claim in a DRAFT spec and apply a decision.",                  "Review",      new[] { "sme", "admin" }),
         new ActionDef("sign_spec",            "Sign a spec",                       "Cryptographically bind every signed claim to the exact source revision.",         "Review",      new[] { "sme", "admin" }),
-        new ActionDef("generate_scaffold",    "Generate a scaffold",               "Stream target-stack code from the signed spec (.NET 8, Java Spring, …).",         "Pipeline",    new[] { "engineer", "admin" }),
-        new ActionDef("run_validation",       "Run validation gates",              "Trigger compile / test pack / equivalence checks for a scaffold.",                "Pipeline",    new[] { "engineer", "admin" }),
-        new ActionDef("commit_scaffold",      "Commit a scaffold to Git",          "Record a Git commit + URL on the scaffold; downstream pipeline picks it up.",     "Pipeline",    new[] { "engineer", "admin" }),
+        new ActionDef("generate_scaffold",    "Generate code",                     "Generate a target-stack package from the signed spec (.NET 10, Java Spring, …).",         "Pipeline",    new[] { "engineer", "admin" }),
+        new ActionDef("run_validation",       "Run validation gates",              "Run the build, test-pack and equivalence checks on generated code.",                "Pipeline",    new[] { "engineer", "admin" }),
+        new ActionDef("commit_scaffold",      "Commit generated code to Git",      "Record a Git commit + URL on the package; downstream pipeline picks it up.",     "Pipeline",    new[] { "engineer", "admin" }),
         new ActionDef("export_compliance",    "Export SOX / HIPAA / PCI feed",     "Download the audit log as an evidence bundle; the export itself is audited.",     "Audit",       new[] { "engineer", "sme", "observer", "admin" }),
         new ActionDef("read_audit_trail",     "Read the audit trail",              "Browse the immutable append-only log of every state transition.",                 "Audit",       new[] { "engineer", "sme", "observer", "admin" }),
         new ActionDef("manage_prompts",       "Configure prompts & archetypes",    "Pin prompt versions, register new archetypes, edit calibration metadata.",        "Platform",    new[] { "admin" }),
         new ActionDef("manage_validation",    "Configure validation policy",       "Toggle gates per project, set test-coverage thresholds, retry policy.",            "Platform",    new[] { "admin" }),
         new ActionDef("manage_roles",         "Manage roles & permissions",        "Assign personas to users; edit the capability matrix.",                            "Platform",    new[] { "admin" }),
+        // Admin-only on the server too (DocsEndpoints, MigrationPlanEndpoints, LlmSettingsEndpoints, ConversationEndpoints).
+        new ActionDef("generate_docs_plans",  "Write documents & migration plans", "Generate a project's documents and approve or recompute its migration plan.",     "Pipeline",    new[] { "admin" }),
+        new ActionDef("manage_model_key",     "Manage the model key",              "Set or remove the Anthropic API key (Platform → Model provider); every change is audited.", "Platform", new[] { "admin" }),
+        new ActionDef("hide_messages",        "Hide conversation messages",        "Archive a message from a thread — kept, never deleted, and audited.",              "Platform",    new[] { "admin" }),
     };
 }

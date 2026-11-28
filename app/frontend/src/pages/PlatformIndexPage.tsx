@@ -58,7 +58,7 @@ const tiles: Tile[] = [
     to: '/platform/validation',
     title: 'Validation Policy',
     description:
-      'Three independent gates (compile / test pack / equivalence), coverage thresholds, retry/flake policy, commit-blocking guarantee.',
+      'Independent gates (build, test pack, quality, equivalence), coverage thresholds, retry/flake policy, commit-blocking guarantee.',
     icon: SlidersHorizontal,
     status: 'live',
   },

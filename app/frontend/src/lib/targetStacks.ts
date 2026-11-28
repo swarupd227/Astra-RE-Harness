@@ -133,6 +133,17 @@ export function prettyStack(s: string): string {
     case 'angular-dotnet8': return 'Angular + .NET 8';
     case 'angular-java':    return 'Angular + Java';
     case 'react-python':    return 'React + Python';
+    // .NET 10 variants by application shape (prompts are filed under these).
+    case 'dotnet10-blazor':        return '.NET 10 · Blazor';
+    case 'dotnet10-minimalapi':
+    case 'dotnet10-minapi':        return '.NET 10 · Minimal API';
+    case 'dotnet10-webapi':        return '.NET 10 · Web API';
+    case 'dotnet10-workerservice': return '.NET 10 · Worker service';
+    case 'dotnet10-winforms':      return '.NET 10 · WinForms';
+    case 'dotnet10-csharp':        return '.NET 10 · C#';
+    // Prompt folders that are not a target stack.
+    case 'office-vba':      return 'Office VBA';
+    case 'quality':         return 'Quality review';
     default:                return s;
   }
 }
@@ -157,7 +168,9 @@ export function prettySchema(s: string): string {
 /** Compact display — strip everything after the first " · ". */
 export function prettyStatus(s: string): string {
   const idx = (s ?? '').indexOf(' · ');
-  return idx > 0 ? s.slice(0, idx) : (s ?? '');
+  const head = idx > 0 ? s.slice(0, idx) : (s ?? '');
+  // "preview" → "Preview", matching the "Production" badge beside it.
+  return head ? head.charAt(0).toUpperCase() + head.slice(1) : head;
 }
 
 /**

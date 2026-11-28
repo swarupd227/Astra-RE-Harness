@@ -391,3 +391,12 @@ screen. Review it on the next spec an SME signs.
     labels). **Done:** "By project", horizontal bars with readable names, drifted first, on its own row under the tiles.
 14. **Golden Dataset** — "Schema" filter listed raw ids (fortran-f77, vbnet). **Done:** "Language" with names (values
     unchanged).
+15. **Prompt Catalog** — target filter and cards showed raw ids (dotnet10-blazor, office-vba, quality, code-review;
+    "cobol → dotnet10 · extract @ v0.1"). **Done:** names for every .NET 10 variant and prompt folder, "Code review";
+    cards read "COBOL → .NET 10 · Extract specs · v0.1" (raw ids in the tooltip).
+16. **Languages / target cards** — "preview" lower-case beside "Production". **Done:** "Preview".
+17. **Roles** — "Generate a scaffold", "Commit a scaffold"; Admin's list missed what only an Admin can do. **Done:**
+    "Generate code", "Commit generated code to Git"; Admin rows for documents & migration plans, the model key and
+    hiding messages (each Admin-only on the server). Display only; ids unchanged.
+18. **Validation policy** — "Three independent gates" above four; the quality gate's retry read "Regenerate the tests".
+    **Done:** count from the policy, "Regenerate, then run again", "generated code" instead of "scaffold".

@@ -211,8 +211,8 @@ function PromptCard({ prompt, onOpen }: { prompt: PromptSummary; onOpen: () => v
           </span>
         }
         description={
-          <span className="font-mono text-[11px] text-ink-tertiary">
-            {prompt.sourceSchema} → {prompt.targetStack} · {prompt.kind} @ {prompt.version}
+          <span className="text-[11px] text-ink-tertiary" title={`${prompt.sourceSchema} → ${prompt.targetStack} · ${prompt.kind} @ ${prompt.version}`}>
+            {sourceLabel(prompt.sourceSchema)} → {targetLabel(prompt.targetStack)} · {kindLabel(prompt.kind)} · {prompt.version}
           </span>
         }
       />
@@ -544,6 +544,7 @@ function kindLabel(v: string): string {
     'propose-archetype': 'Propose archetype',
     'copilot-orchestrator': 'Agent (orchestrator)',
     harmonise: 'Harmonise specs',
+    'code-review': 'Code review',
     'faithful-transform': 'Faithful 1:1 conversion',
     'inplace-transform': 'In-place conversion',
   };

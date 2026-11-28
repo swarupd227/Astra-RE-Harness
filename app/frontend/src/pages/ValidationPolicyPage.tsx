@@ -115,9 +115,8 @@ export function ValidationPolicyPage() {
           </p>
           <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Validation Policy</h1>
           <p className="mt-2 max-w-2xl text-body text-ink-secondary">
-            Three independent gates run against every generated scaffold.
-            The commit-to-Git action is blocked until each required gate
-            reports PASSED on the same scaffold revision.
+            {q.data.gates.length} independent gates run against all generated code. Committing to Git is blocked
+            until every required gate passes on the same revision of the package.
           </p>
           {q.data.overrideActive && !editing && (
             <p className="mt-2 inline-flex items-center gap-2 text-caption text-status-failed">
@@ -402,6 +401,7 @@ function readableDuration(iso: string): string {
 
 const RETRY_LABEL: Record<string, string> = {
   manual: 'An engineer re-runs it',
-  'regenerate-then-run': 'Regenerate the tests, then run them',
+  // Test pack: regenerate the tests; quality: regenerate the code with the findings — either way, regenerate and re-run.
+  'regenerate-then-run': 'Regenerate, then run again',
   auto: 'Retried automatically',
 };

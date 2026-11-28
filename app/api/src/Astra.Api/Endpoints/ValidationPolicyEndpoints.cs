@@ -207,7 +207,7 @@ public static class ValidationPolicyEndpoints
     public sealed record CommitGateRecord(bool RequireAllGreen, string Description);
     private static readonly CommitGateRecord CanonicalCommitGate = new(
         true,
-        "A scaffold cannot be committed to Git until every required gate reports PASSED on the same scaffold revision.");
+        "Generated code cannot be committed to Git until every required gate reports PASSED on the same revision of the package.");
 
     public sealed record RetryDefaultsRecord(string TransientFlakeWindow, int AutoRetryCount, string Note);
     private static readonly RetryDefaultsRecord CanonicalRetryDefaults = new(
