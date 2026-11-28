@@ -152,16 +152,14 @@ export function ProviderSettingsCard({
           <div className="text-caption uppercase tracking-wide text-ink-tertiary">
             Data residency &amp; training posture
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          {/* The raw config string ("anthropic:zdr=true:…") is for audits: on hover, not on the page. */}
+          <div className="mt-2 flex flex-wrap items-center gap-2" title={residency.configVersion}>
             {trustChips.map((c) => (
               <Badge key={c.label} tone={c.tone}>
                 {c.icon}
                 {c.label}
               </Badge>
             ))}
-          </div>
-          <div className="mt-2 font-mono text-[11px] text-ink-tertiary">
-            {residency.configVersion}
           </div>
         </div>
 

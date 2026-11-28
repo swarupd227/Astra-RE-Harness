@@ -94,7 +94,7 @@ export function ReviewableClaimCard({
       data-review={review?.action ?? 'none'}
     >
       <header className="flex flex-wrap items-center gap-2">
-        <span id={`claim-${id}-heading`} className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-micro uppercase text-ink-secondary">
+        <span id={`claim-${id}-heading`} className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-micro text-ink-secondary">
           {id}
         </span>
         {claim.confidence && (

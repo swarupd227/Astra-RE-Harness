@@ -216,7 +216,7 @@ export function ValidationReportPage() {
               to={`/scaffolds/${id}`}
               className="inline-flex items-center gap-1 text-ink-tertiary hover:text-ink-primary"
             >
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to scaffold
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to package
             </Link>
             <span aria-hidden="true">·</span>
             Post-migration validation

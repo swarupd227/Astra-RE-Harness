@@ -17,7 +17,7 @@ const SCAFFOLDS = { label: 'Generated code', href: '/scaffolds' };
 const PLATFORM = { label: 'Platform', href: '/platform' };
 const PROJECT = { label: 'Project', href: '/projects/:id' };
 const ROUTINE = { label: 'Code unit', href: '/subroutines/:id' };
-const SCAFFOLD = { label: 'Scaffold artifact', href: '/scaffolds/:id' };
+const SCAFFOLD = { label: 'Generated package', href: '/scaffolds/:id' };
 
 // Order matters only where patterns overlap; matchPath is exact (end: true)
 // so `/projects` never swallows `/projects/new`.
@@ -58,7 +58,7 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: '/specs/:id/scaffold', title: 'Generate scaffold', crumbs: [ROUTINES, { label: 'Spec' }, { label: 'Generate scaffold' }] },
 
   { pattern: '/scaffolds', title: 'Generated code', crumbs: [{ label: 'Generated code' }] },
-  { pattern: '/scaffolds/:id', title: 'Scaffold artifact', crumbs: [SCAFFOLDS, { label: 'Scaffold artifact' }] },
+  { pattern: '/scaffolds/:id', title: 'Generated package', crumbs: [SCAFFOLDS, { label: 'Generated package' }] },
   { pattern: '/scaffolds/:id/validation', title: 'Validation', crumbs: [SCAFFOLDS, SCAFFOLD, { label: 'Validation' }] },
 
   { pattern: '/my-reviews', title: 'My reviews', crumbs: [{ label: 'My reviews' }] },

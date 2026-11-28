@@ -410,3 +410,10 @@ screen. Review it on the next spec an SME signs.
     … will be .NET 10". **Done:** shared state named per language (COMMON blocks only for Fortran), I/O groups only when
     present, readiness in words ("Moves with others"; ids kept in the API), a plain reason, "project", a neutral target
     description, and no archetype sample on a locked compact card.
+21. **Spec review** — outline counters read "0 accept · 0 q · 10 untouched"; claim ids shouted in capitals.
+    **Done:** "accepted · edited · rejected · questioned · not reviewed"; ids in their own case.
+22. **Generated package** — tab titled "Scaffold artifact"; opened on a 3-line schema.sql. **Done:** "Generated package";
+    opens the service / controller / handler that cites the spec (config, SQL and tests ranked after).
+23. **Validation report** — "Back to scaffold"; raw provider config string under the trust chips; quality gate "passed"
+    lower-case. **Done:** "Back to package", config string on hover, "Passed". ("Run 4th gate" and "Four independent
+    gates" stay: demo specs click and read them.)

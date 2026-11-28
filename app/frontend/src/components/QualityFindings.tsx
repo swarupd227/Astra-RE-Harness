@@ -1,3 +1,4 @@
+import { formatState } from '@/workspace/format';
 import { useMemo, useState } from 'react';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { API_BASE, type QualityCategory, type QualityFinding, type QualityMetrics, type QualitySeverity, type ValidationRun } from '@/lib/api';
@@ -98,7 +99,7 @@ export function QualityFindingsCard({
           <div className="flex items-center gap-2">
             {run && (
               <Badge tone={run.status === 'PASSED' ? 'signed' : run.status === 'RUNNING' ? 'draft' : 'failed'}>
-                {run.status === 'PASSED' ? 'passed' : run.status.toLowerCase()}
+                {formatState(run.status)}
               </Badge>
             )}
             <Button variant="secondary" onClick={onRun} disabled={isRunning} data-testid="run-quality">

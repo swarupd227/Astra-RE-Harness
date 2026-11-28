@@ -63,7 +63,19 @@ export function ScaffoldArtifactPage() {
     // makes the "Derived from" panel show "0 signed-spec claims" on first
     // load even when the package is fully traceable, which reads as broken
     // rather than as "you happen to be looking at the one file with none."
-    const defaultPath = files.find((f) => f.derivedFromClaimIds.length > 0)?.path ?? files[0].path;
+    // Among those, open the code that carries the behaviour — a service / controller / handler in main source —
+    // rather than a schema.sql or properties file that happens to cite a claim too.
+    const rank = (p: string) => {
+      const name = p.split('/').pop() ?? p;
+      let r = 0;
+      if (/\.(sql|properties|xml|json|ya?ml|md|txt|csproj|toml|cfg|ini)$/i.test(name)) r += 4;
+      if (/(^|\/)(test|tests|__tests__)\//i.test(p) || /tests?\.\w+$/i.test(name)) r += 2;
+      if (!/(service|controller|handler|calculator|logic|api)/i.test(name)) r += 1;
+      return r;
+    };
+    const cited = files.filter((f) => f.derivedFromClaimIds.length > 0);
+    const pool = cited.length ? cited : files;
+    const defaultPath = [...pool].sort((a, b) => rank(a.path) - rank(b.path))[0].path;
     const path = activePath ?? defaultPath;
     return files.find((f) => f.path === path) ?? files[0];
   }, [files, activePath]);

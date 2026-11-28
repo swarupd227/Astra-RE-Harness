@@ -110,11 +110,11 @@ function CountStrip({
   counts: { untouched: number; accepted: number; edited: number; rejected: number; questioned: number };
 }) {
   const items: { key: keyof typeof counts; label: string; tone: string }[] = [
-    { key: 'accepted', label: 'accept', tone: 'text-status-review' },
-    { key: 'edited', label: 'edit', tone: 'text-status-draft' },
-    { key: 'rejected', label: 'reject', tone: 'text-status-failed' },
-    { key: 'questioned', label: 'q', tone: 'text-status-scaffolded' },
-    { key: 'untouched', label: 'untouched', tone: 'text-ink-tertiary' },
+    { key: 'accepted', label: 'accepted', tone: 'text-status-review' },
+    { key: 'edited', label: 'edited', tone: 'text-status-draft' },
+    { key: 'rejected', label: 'rejected', tone: 'text-status-failed' },
+    { key: 'questioned', label: 'questioned', tone: 'text-status-scaffolded' },
+    { key: 'untouched', label: 'not reviewed', tone: 'text-ink-tertiary' },
   ];
   return (
     <div className="mt-2 flex flex-wrap gap-2 font-mono text-[11px]">
