@@ -452,7 +452,7 @@ screen. Review it on the next spec an SME signs.
     comments follows the spec; a persona already @-mentioned is not notified twice. Checked on a local stack in both
     sign-in modes with two password users.
 
-## End-to-end UI run (2026-11-28, Azure, Engineer → SME → Engineer) — in progress
+## End-to-end UI run (2026-11-28, Azure, Engineer → SME → Engineer)
 Repo: janiceoliviagrace/SimpleBankProject (MIT, one `Main.java`, 4.5 KB), project "UX run - SimpleBankProject (Java)".
 Findings so far (open):
 E1. **Starting a project from Home** — the only above-the-fold way in is the small "New programme" link in the rail; the
@@ -521,3 +521,16 @@ E39. **"Compile passed" while the test project does not compile** — the compil
 Fixed during the run: the Java spec was written by the model as a JSON *string* inside a wrapper key
 (`additionalProperties`), so the Extract page's readable rows stayed empty until the end; the reader now unwraps it the
 same way the API's `SpecShape.Unwrap` does (plain, nested object and nested string replayed from the real spec).
+E41. **The fix loop's progress is invisible** — after round 1 nothing on the validation page or in the project thread says
+     what the loop is doing or that it stopped; "Fixing…" is a 30-minute browser timer, not the server's state.
+E42. **Bug: tests that do not compile stop the fix loop as a "platform" error** — the test pack reports ERRORED (not FAILED)
+     when the generated tests do not compile, and AutoFixService stops with "the gate could not run … That is the
+     platform, not the code". Compile errors in the test project are the code's fault: report FAILED and regenerate with
+     the compiler errors in hand.
+E43. **Bug: the .NET test project template has no `<ImplicitUsings>enable</ImplicitUsings>`** (e.g.
+     `Archetypes/dotnet10/canonical-cpp-fmt/tests/Demo.Fmt.Tests.csproj`), while the model writes tests that rely on it —
+     every StringReader/StringWriter test fails with CS0246; "Regenerate + run" reproduces it (46 errors). Add it to the
+     test csproj of the .NET archetypes, or have the test-pack prompt write explicit usings.
+**Outcome:** C++ reached a signed spec, generated .NET 10 code (follows the SME's answers: injected TextReader/TextWriter,
+no new divide-by-zero guard), build passed, quality passed (no findings); the test pack is blocked by E43 and the fix
+loop by E42. Java could not get past sign-off (E26–E28). Both exercise projects are marked Test.
