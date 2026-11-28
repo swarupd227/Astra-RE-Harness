@@ -1190,6 +1190,27 @@ using (var scope = app.Services.CreateScope())
             ALTER TABLE specs ADD COLUMN IF NOT EXISTS assigned_by varchar(160) NULL;
             """);
 
+        // Per-person inbox: notifications addressed to one person, their read marks, and the specs they follow.
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE notifications ADD COLUMN IF NOT EXISTS recipient_user_key varchar(80) NULL;
+            CREATE INDEX IF NOT EXISTS ix_notifications_recipient_user_key ON notifications (recipient_user_key);
+            CREATE TABLE IF NOT EXISTS notification_reads (
+                notification_id uuid         NOT NULL,
+                user_key        varchar(80)  NOT NULL,
+                read_at         timestamptz  NOT NULL,
+                PRIMARY KEY (notification_id, user_key)
+            );
+            CREATE INDEX IF NOT EXISTS ix_notification_reads_user_key ON notification_reads (user_key);
+            CREATE TABLE IF NOT EXISTS spec_follows (
+                spec_id           uuid         NOT NULL,
+                user_key          varchar(80)  NOT NULL,
+                recipient_persona varchar(32)  NOT NULL,
+                created_at        timestamptz  NOT NULL,
+                PRIMARY KEY (spec_id, user_key)
+            );
+            CREATE INDEX IF NOT EXISTS ix_spec_follows_user_key ON spec_follows (user_key);
+            """);
+
         // WS2 Increment 2 — spec review threads reference their spec.
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ref_id uuid NULL;

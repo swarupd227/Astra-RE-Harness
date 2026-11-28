@@ -51,8 +51,9 @@ export function CommentsPage() {
           <p className="label">Work</p>
           <h1 className="mt-1 text-h-lg font-semibold tracking-tight text-ink-primary">Comments</h1>
           <p className="mt-1 max-w-2xl text-body text-ink-secondary">
-            Discussion on spec claims. Mentions of{' '}
-            <span className="font-mono">@{persona ?? '…'}</span> land in Mentions for everyone in that role.
+            Discussion on spec claims. Mentions of <span className="font-mono">@{persona ?? '…'}</span> and new comments on
+            specs you follow land in the inbox
+            {inbox.data?.personal ? ' — read marks are yours.' : ' for everyone in that role.'}
           </p>
         </div>
         {tab === 'mentions' && (
@@ -210,7 +211,9 @@ function InboxRow({ n, qc }: { n: NotificationItem; qc: ReturnType<typeof useQue
               {n.payload.authorPersona ?? 'unknown'}
             </span>
             <span className="font-medium text-ink-primary">{n.payload.authorDisplay ?? '—'}</span>
-            <span className="font-mono text-ink-tertiary">mentioned you</span>
+            <span className="font-mono text-ink-tertiary">
+              {n.type === 'comment.followed' ? 'commented on a spec you follow' : 'mentioned you'}
+            </span>
             {n.payload.claimPath && (
               <Badge tone="neutral" className="text-[10px]">
                 on claim

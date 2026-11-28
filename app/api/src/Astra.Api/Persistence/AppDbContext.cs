@@ -30,6 +30,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<ModuleAssembly> ModuleAssemblies => Set<ModuleAssembly>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationRead> NotificationReads => Set<NotificationRead>();
+    public DbSet<SpecFollow> SpecFollows => Set<SpecFollow>();
     public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
     public DbSet<GoldenDatasetEntry> GoldenDatasetEntries => Set<GoldenDatasetEntry>();
     public DbSet<GoldenDatasetRun> GoldenDatasetRuns => Set<GoldenDatasetRun>();
@@ -611,6 +613,29 @@ public sealed class AppDbContext : DbContext
             // Inbox query: WHERE recipient_persona = :p AND read_at IS NULL ORDER BY created_at DESC.
             b.HasIndex(x => new { x.RecipientPersona, x.ReadAt, x.CreatedAt });
             b.HasIndex(x => new { x.TargetType, x.TargetId });
+            b.Property(x => x.RecipientUserKey).HasColumnName("recipient_user_key").HasMaxLength(80);
+            b.HasIndex(x => x.RecipientUserKey);
+        });
+
+        modelBuilder.Entity<NotificationRead>(b =>
+        {
+            b.ToTable("notification_reads");
+            b.HasKey(x => new { x.NotificationId, x.UserKey });
+            b.Property(x => x.NotificationId).HasColumnName("notification_id");
+            b.Property(x => x.UserKey).HasColumnName("user_key").HasMaxLength(80);
+            b.Property(x => x.ReadAt).HasColumnName("read_at");
+            b.HasIndex(x => x.UserKey);
+        });
+
+        modelBuilder.Entity<SpecFollow>(b =>
+        {
+            b.ToTable("spec_follows");
+            b.HasKey(x => new { x.SpecId, x.UserKey });
+            b.Property(x => x.SpecId).HasColumnName("spec_id");
+            b.Property(x => x.UserKey).HasColumnName("user_key").HasMaxLength(80);
+            b.Property(x => x.RecipientPersona).HasColumnName("recipient_persona").HasMaxLength(32);
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasIndex(x => x.UserKey);
         });
 
         modelBuilder.Entity<AuditEvent>(b =>

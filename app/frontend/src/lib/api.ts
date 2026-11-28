@@ -2096,6 +2096,11 @@ export const notificationsApi = {
     apiFetch<{ id: string; readAt: string }>(`/api/v1/notifications/${id}/read`, { method: 'POST' }),
   markAllRead: () =>
     apiFetch<{ markedRead: number; persona: string }>(`/api/v1/notifications/read-all`, { method: 'POST' }),
+  /** Following a spec: every new comment on it reaches your inbox. */
+  followState: (specId: string) =>
+    apiFetch<{ following: boolean; followers: number; personal: boolean }>(`/api/v1/specs/${specId}/follow`),
+  follow: (specId: string) => apiFetch<{ following: boolean }>(`/api/v1/specs/${specId}/follow`, { method: 'PUT' }),
+  unfollow: (specId: string) => apiFetch<{ following: boolean }>(`/api/v1/specs/${specId}/follow`, { method: 'DELETE' }),
   /** Newest comments across every spec — the Comments page's "Recent threads". */
   recentComments: (limit = 50) => apiFetch<{ data: RecentComment[] }>(`/api/v1/comments/recent?limit=${limit}`),
 };
@@ -2158,6 +2163,8 @@ export type NotificationInbox = {
   total: number;
   unread: number;
   persona: string;
+  /** True when someone signed in with a password: read marks and follows are theirs, not the persona's. */
+  personal?: boolean;
 };
 
 // ─── Phase C.1 types ─────────────────────────────────────────────────

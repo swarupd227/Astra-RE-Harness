@@ -87,6 +87,32 @@ public static class CommentEndpoints
             return Results.Ok(new { data = rows });
         });
 
+        // ── Following a spec: every new comment on it reaches your inbox, not only @-mentions ──
+        app.MapGet("/api/v1/specs/{specId:guid}/follow", async (
+            Guid specId, AppDbContext db, DevPersonaContext persona, HttpContext http, CancellationToken ct) =>
+        {
+            var inbox = InboxScope.For(http, persona);
+            var following = await db.SpecFollows.AnyAsync(f => f.SpecId == specId && f.UserKey == inbox.Key, ct);
+            var followers = await db.SpecFollows.CountAsync(f => f.SpecId == specId, ct);
+            return Results.Ok(new { following, followers, personal = inbox.Personal });
+        });
+        app.MapPut("/api/v1/specs/{specId:guid}/follow", async (
+            Guid specId, AppDbContext db, DevPersonaContext persona, HttpContext http, CancellationToken ct) =>
+        {
+            if (!await db.Specs.AsNoTracking().AnyAsync(s => s.Id == specId, ct))
+                return Results.NotFound(new { error = new { code = "spec.not_found" } });
+            await FollowAsync(db, specId, InboxScope.For(http, persona), ct);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { following = true });
+        });
+        app.MapDelete("/api/v1/specs/{specId:guid}/follow", async (
+            Guid specId, AppDbContext db, DevPersonaContext persona, HttpContext http, CancellationToken ct) =>
+        {
+            var key = InboxScope.For(http, persona).Key;
+            await db.SpecFollows.Where(f => f.SpecId == specId && f.UserKey == key).ExecuteDeleteAsync(ct);
+            return Results.Ok(new { following = false });
+        });
+
         // ── Post a comment (top-level or reply) ──────────────────────
         app.MapPost("/api/v1/specs/{specId:guid}/comments", async (
             Guid specId,
@@ -94,6 +120,7 @@ public static class CommentEndpoints
             AppDbContext db,
             DevPersonaContext persona,
             IAuditLogger audit,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Body))
@@ -162,6 +189,40 @@ public static class CommentEndpoints
                     ActorDisplay = comment.AuthorDisplay,
                 });
             }
+
+            // Followers hear about every comment on the spec (not the author, and not a persona its @-mention already
+            // reached); whoever comments follows the spec from then on.
+            var authorScope = InboxScope.For(http, persona);
+            var followers = await db.SpecFollows.AsNoTracking().Where(f => f.SpecId == specId).ToListAsync(ct);
+            foreach (var f in followers)
+            {
+                if (f.UserKey == authorScope.Key) continue;
+                var personal = f.UserKey.StartsWith("user:", StringComparison.Ordinal);
+                if (!personal && mentions.Contains(f.RecipientPersona, StringComparer.OrdinalIgnoreCase)) continue;
+                db.Notifications.Add(new Notification
+                {
+                    Id = Guid.NewGuid(),
+                    RecipientPersona = f.RecipientPersona,
+                    RecipientUserKey = personal ? f.UserKey : null,
+                    Type = "comment.followed",
+                    TargetType = "comment",
+                    TargetId = comment.Id,
+                    Payload = JsonDocument.Parse(JsonSerializer.Serialize(new
+                    {
+                        specId,
+                        claimPath = comment.ClaimPath,
+                        commentId = comment.Id,
+                        parentCommentId = comment.ParentCommentId,
+                        excerpt = Excerpt(comment.Body, 240),
+                        authorPersona = comment.AuthorPersona,
+                        authorDisplay = comment.AuthorDisplay,
+                    })),
+                    CreatedAt = now,
+                    ActorPersona = comment.AuthorPersona,
+                    ActorDisplay = comment.AuthorDisplay,
+                });
+            }
+            await FollowAsync(db, specId, authorScope, ct);
 
             await db.SaveChangesAsync(ct);
 
@@ -383,4 +444,12 @@ public static class CommentEndpoints
     public sealed record PostCommentRequest(string Body, string? ClaimPath, Guid? ParentCommentId);
     public sealed record EditCommentRequest(string Body);
     public sealed record ResolveCommentRequest(bool Unresolve);
+
+    /// <summary>Follow a spec (idempotent; saved by the caller).</summary>
+    private static async Task FollowAsync(AppDbContext db, Guid specId, InboxScope who, CancellationToken ct)
+    {
+        if (db.SpecFollows.Local.Any(f => f.SpecId == specId && f.UserKey == who.Key)) return;
+        if (await db.SpecFollows.AnyAsync(f => f.SpecId == specId && f.UserKey == who.Key, ct)) return;
+        db.SpecFollows.Add(new SpecFollow { SpecId = specId, UserKey = who.Key, RecipientPersona = who.Persona, CreatedAt = DateTimeOffset.UtcNow });
+    }
 }

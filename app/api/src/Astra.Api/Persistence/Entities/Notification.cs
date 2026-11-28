@@ -28,7 +28,32 @@ public sealed class Notification
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ReadAt { get; set; }
 
+    /// <summary>
+    /// Set when the notification is for one person ("user:&lt;id&gt;", see <c>InboxScope</c>) rather than a whole persona —
+    /// e.g. a comment on a spec they follow. Null = the persona's inbox.
+    /// </summary>
+    public string? RecipientUserKey { get; set; }
+
     /// <summary>Persona that *caused* the notification — for inbox grouping.</summary>
     public string? ActorPersona { get; set; }
     public string? ActorDisplay { get; set; }
+}
+
+/// <summary>One person's "I have read this" for a notification (password sign-in; personas keep <see cref="Notification.ReadAt"/>).</summary>
+public sealed class NotificationRead
+{
+    public Guid NotificationId { get; set; }
+    public string UserKey { get; set; } = "";
+    public DateTimeOffset ReadAt { get; set; }
+}
+
+/// <summary>Someone following a spec: every new comment on it reaches their inbox, not only @-mentions.</summary>
+public sealed class SpecFollow
+{
+    public Guid SpecId { get; set; }
+    /// <summary>"user:&lt;id&gt;" or "persona:&lt;persona&gt;" (see <c>InboxScope</c>).</summary>
+    public string UserKey { get; set; } = "";
+    /// <summary>The follower's persona, which addresses the notification.</summary>
+    public string RecipientPersona { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
 }

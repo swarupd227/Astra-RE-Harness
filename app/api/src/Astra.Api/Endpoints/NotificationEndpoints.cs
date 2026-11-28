@@ -1,5 +1,6 @@
 using Astra.Api.Auth;
 using Astra.Api.Persistence;
+using Astra.Api.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Astra.Api.Endpoints;
@@ -14,27 +15,26 @@ public static class NotificationEndpoints
     {
         var grp = app.MapGroup("/api/v1/notifications");
 
-        // ── List: current persona's inbox ────────────────────────────
+        // ── List: this inbox (a persona's, or a signed-in person's — see InboxScope) ──
         grp.MapGet("", async (
             bool? unreadOnly,
             int? limit,
             int? offset,
             AppDbContext db,
             DevPersonaContext persona,
+            HttpContext http,
             CancellationToken ct) =>
         {
-            var p = persona.Persona.ToString().ToLowerInvariant();
+            var inbox = InboxScope.For(http, persona);
+            var key = inbox.Key;
             var take = Math.Clamp(limit ?? 50, 1, 200);
             var skip = Math.Max(0, offset ?? 0);
 
-            var q = db.Notifications.AsNoTracking().Where(n => n.RecipientPersona == p);
-            if (unreadOnly == true) q = q.Where(n => n.ReadAt == null);
+            var q = unreadOnly == true ? inbox.Unread(db) : inbox.Mine(db);
+            var totalCount = await q.AsNoTracking().CountAsync(ct);
+            var unreadCount = await inbox.Unread(db).CountAsync(ct);
 
-            var totalCount = await q.CountAsync(ct);
-            var unreadCount = await db.Notifications.CountAsync(
-                n => n.RecipientPersona == p && n.ReadAt == null, ct);
-
-            var rows = await q
+            var rows = await q.AsNoTracking()
                 .OrderByDescending(n => n.CreatedAt)
                 .Skip(skip).Take(take)
                 .Select(n => new
@@ -46,7 +46,11 @@ public static class NotificationEndpoints
                     targetId = n.TargetId,
                     payload = n.Payload,
                     createdAt = n.CreatedAt,
-                    readAt = n.ReadAt,
+                    // A person's read mark is theirs; a persona's is on the row.
+                    readAt = inbox.Personal
+                        ? db.NotificationReads.Where(r => r.NotificationId == n.Id && r.UserKey == key)
+                            .Select(r => (DateTimeOffset?)r.ReadAt).FirstOrDefault() ?? n.ReadAt
+                        : n.ReadAt,
                     actorPersona = n.ActorPersona,
                     actorDisplay = n.ActorDisplay,
                 })
@@ -57,7 +61,8 @@ public static class NotificationEndpoints
                 data = rows,
                 total = totalCount,
                 unread = unreadCount,
-                persona = p,
+                persona = inbox.Persona,
+                personal = inbox.Personal,
             });
         });
 
@@ -65,44 +70,66 @@ public static class NotificationEndpoints
         grp.MapGet("unread-count", async (
             AppDbContext db,
             DevPersonaContext persona,
+            HttpContext http,
             CancellationToken ct) =>
         {
-            var p = persona.Persona.ToString().ToLowerInvariant();
-            var count = await db.Notifications
-                .CountAsync(n => n.RecipientPersona == p && n.ReadAt == null, ct);
-            return Results.Ok(new { unread = count, persona = p });
+            var inbox = InboxScope.For(http, persona);
+            var count = await inbox.Unread(db).CountAsync(ct);
+            return Results.Ok(new { unread = count, persona = inbox.Persona });
         });
 
         grp.MapPost("{id:guid}/read", async (
             Guid id,
             AppDbContext db,
             DevPersonaContext persona,
+            HttpContext http,
             CancellationToken ct) =>
         {
-            var p = persona.Persona.ToString().ToLowerInvariant();
-            var n = await db.Notifications.FirstOrDefaultAsync(
-                x => x.Id == id && x.RecipientPersona == p, ct);
+            var inbox = InboxScope.For(http, persona);
+            var n = await inbox.Mine(db).FirstOrDefaultAsync(x => x.Id == id, ct);
             if (n is null)
                 return Results.NotFound(new { error = new { code = "notification.not_found" } });
-            if (n.ReadAt is null)
+            var now = DateTimeOffset.UtcNow;
+            if (!inbox.Personal)
             {
-                n.ReadAt = DateTimeOffset.UtcNow;
+                if (n.ReadAt is null)
+                {
+                    n.ReadAt = now;
+                    await db.SaveChangesAsync(ct);
+                }
+                return Results.Ok(new { id = n.Id, readAt = n.ReadAt });
+            }
+            var mark = await db.NotificationReads.FirstOrDefaultAsync(r => r.NotificationId == id && r.UserKey == inbox.Key, ct);
+            if (mark is null)
+            {
+                mark = new NotificationRead { NotificationId = id, UserKey = inbox.Key, ReadAt = now };
+                db.NotificationReads.Add(mark);
                 await db.SaveChangesAsync(ct);
             }
-            return Results.Ok(new { id = n.Id, readAt = n.ReadAt });
+            return Results.Ok(new { id = n.Id, readAt = (DateTimeOffset?)mark.ReadAt });
         });
 
         grp.MapPost("read-all", async (
             AppDbContext db,
             DevPersonaContext persona,
+            HttpContext http,
             CancellationToken ct) =>
         {
-            var p = persona.Persona.ToString().ToLowerInvariant();
+            var inbox = InboxScope.For(http, persona);
             var now = DateTimeOffset.UtcNow;
-            var marked = await db.Notifications
-                .Where(n => n.RecipientPersona == p && n.ReadAt == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadAt, now), ct);
-            return Results.Ok(new { markedRead = marked, persona = p });
+            int marked;
+            if (!inbox.Personal)
+            {
+                marked = await inbox.Unread(db).ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadAt, now), ct);
+            }
+            else
+            {
+                var ids = await inbox.Unread(db).Select(n => n.Id).ToListAsync(ct);
+                db.NotificationReads.AddRange(ids.Select(id => new NotificationRead { NotificationId = id, UserKey = inbox.Key, ReadAt = now }));
+                await db.SaveChangesAsync(ct);
+                marked = ids.Count;
+            }
+            return Results.Ok(new { markedRead = marked, persona = inbox.Persona });
         });
 
         return app;

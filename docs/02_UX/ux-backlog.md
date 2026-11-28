@@ -14,7 +14,7 @@ commit.
 | 5 | Routine + spec review | `/subroutines/:id`, `/review` | Live (parts 1–2); stepper unification live (78f1a93) |
 | 6 | Generated code | `/scaffolds` | Live (gates per package, live previews) |
 | 7 | My reviews | `/my-reviews` | Live; review assignment live (Users directory; "Assigned to me" with password sign-in) |
-| 8 | Comments | `/comments` | Live; per-user read state + following open (API) |
+| 8 | Comments | `/comments` | Live; per-person read state + following live (password sign-in; personas unchanged) |
 | 9 | Compliance | `/compliance` | Live |
 | 10 | System health | `/system` | Live (deployed builds, services, model, recent problems) |
 | 11 | Platform group | `/platform/*` | Live (dead ends, Golden Dataset, Signature Health) |
@@ -444,3 +444,10 @@ screen. Review it on the next spec an SME signs.
     (`assign_review`, Confirm card); each change audited (`spec.assigned` / `spec.unassigned`). The queue filters by
     assignee ("Assigned to me" when someone signs in with a password and is in the directory, "Unassigned", a person).
     `/my-reviews` now loads only specs in review or signed and counts claim decisions in the database.
+32. **Comments — per-person read state and following** (was open, "needs SSO"). **Done:** `InboxScope` decides whose inbox a
+    request reads — a person signed in with a password ("user:<id>") or the shared persona ("persona:sme", exactly as
+    before). A person's read marks are theirs (`notification_reads`; an old read mark on the row still counts, so
+    switching to password sign-in does not bring history back as unread). **Follow** on spec review: every new comment
+    on a followed spec reaches the follower's inbox ("commented on a spec you follow"), not only @-mentions; whoever
+    comments follows the spec; a persona already @-mentioned is not notified twice. Checked on a local stack in both
+    sign-in modes with two password users.

@@ -7,12 +7,12 @@
  * conversation. Restyled to the v2 tokens and stamped with the real theme so
  * it reads dark-first even while the route still sits in the legacy wrapper.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { AlertTriangle, ArrowLeft, ArrowRight, Code2, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
-import { api, ApiError, claimPathFor, commentsApi, type ClaimReview, type SpecClaim } from '@/lib/api';
+import { AlertTriangle, ArrowLeft, ArrowRight, Bell, BellOff, Code2, Cog, History, MessageSquare, ShieldCheck } from 'lucide-react';
+import { api, ApiError, claimPathFor, commentsApi, notificationsApi, type ClaimReview, type SpecClaim } from '@/lib/api';
 import { conversationsApi } from '@/lib/conversations';
 import { useTheme } from '@/theme';
 import { CommentsThread } from '@/components/CommentsThread';
@@ -340,6 +340,7 @@ export function SpecReviewPage() {
               <History className="h-3.5 w-3.5" aria-hidden="true" />
               Audit trail
             </Link>
+            <FollowToggle specId={sp.id} />
             {inReview && (
               // Rendered for every persona. Hiding it from non-SMEs left an
               // engineer staring at a read-only page with no explanation; a
@@ -737,4 +738,30 @@ function parseRange(s: string): [number, number] | null {
   const single = /^(\d+)/.exec(s.trim());
   if (single) return [Number(single[1]), Number(single[1])];
   return null;
+}
+
+/** Follow this spec: every new comment on it reaches your inbox, not only @-mentions. Commenting follows it too. */
+function FollowToggle({ specId }: { specId: string }) {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ['spec-follow', specId], queryFn: () => notificationsApi.followState(specId), retry: 0 });
+  const toggle = useMutation({
+    mutationFn: () => (state.data?.following ? notificationsApi.unfollow(specId) : notificationsApi.follow(specId)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spec-follow', specId] }),
+  });
+  if (state.isError || !state.data) return null; // an older API without follows: say nothing
+  const following = state.data.following;
+  return (
+    <button
+      type="button"
+      onClick={() => toggle.mutate()}
+      disabled={toggle.isPending}
+      aria-pressed={following}
+      title={following ? 'New comments on this spec reach your inbox. Click to stop.' : 'Get every new comment on this spec in your inbox'}
+      className="inline-flex items-center gap-1.5 rounded-md border border-line-subtle bg-canvas px-2.5 py-1.5 text-ink-secondary hover:bg-sunken hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt disabled:opacity-60"
+      data-testid="follow-spec"
+    >
+      {following ? <BellOff className="h-3.5 w-3.5" aria-hidden="true" /> : <Bell className="h-3.5 w-3.5" aria-hidden="true" />}
+      {following ? 'Following' : 'Follow'}
+    </button>
+  );
 }

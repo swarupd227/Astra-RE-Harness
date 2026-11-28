@@ -133,7 +133,7 @@ public static class MyReviewsEndpoints
     /// </summary>
     private static async Task<object?> MeAsync(AppDbContext db, HttpContext http, CancellationToken ct)
     {
-        if (http.Items["user"] is not AppUser signedIn) return null;
+        if (http.Items["user"] is not SignedInUser signedIn) return null;
         var key = signedIn.Username.ToLower();
         var name = signedIn.DisplayName.ToLower();
         var match = await db.Users.AsNoTracking()
